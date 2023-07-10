@@ -17,7 +17,7 @@ import torch.nn.functional as F
 from gem.DQN_utils import save_models, load_models, make_video
 
 
-from examples.RPG.elements import EmptyObject, Wall
+from examples.RPG.entities import EmptyObject, Wall
 
 
 import random

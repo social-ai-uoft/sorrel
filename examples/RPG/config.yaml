@@ -1,0 +1,74 @@
+
+experiment:
+  name: rpg
+  epochs: 10000
+  max_turns: 100
+
+env:
+  dimensions:
+    length: 15
+    width: 15
+    layers: 1
+    tile_size: [1, 1]
+  spawn_prob:
+    gem1p: 0.110
+    gem2p: 0.04
+    wolf1p: 0.005
+
+model:
+  human_cnn:
+    type: Model_CNN_LSTM_DQN
+    num: 1
+    device: cpu
+    parameters:
+      epsilon: 0.99
+      in_channels: 3
+      num_filters: 5
+      lr: 0.001
+      replay_size: 2048
+      in_size: 650
+      hid_size1: 75
+      hid_size2: 30
+      out_size: 4
+      priority_replay: False
+
+      sync_freq: 500
+      inepoch_training_freq: 25
+      gamma: 0.9
+  
+  wolf_cnn:  
+    type: Model_CNN_LSTM_DQN
+    num: 1
+    device: cpu
+    parameters:
+      epsilon: 0.99
+      in_channels: 3
+      num_filters: 5
+      lr: 0.001
+      replay_size: 2048
+      in_size: 2570
+      hid_size1: 150
+      hid_size2: 30
+      out_size: 4
+      priority_replay: False
+    
+      sync_freq: 500
+      inepoch_training_freq: 25
+      gamma: 0.9
+
+agent:
+  num: 1
+  model: human_cnn
+  num_memories: 3
+  visual_depth: 6
+  appearance: (0.0, 0.0, 255.0)
+  tile_size: (16, 16)
+  pov_size: 9
+  health: 10
+
+entity:
+  Gem:
+    num: 3
+
+
+save_dir: 'your save dir'
