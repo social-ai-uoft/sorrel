@@ -6,6 +6,8 @@ import torch
 
 # TODO: 
 # make sure dead agent should change model to None
+# probably need to add die into particular circumstances in transition
+# touch base with Eric about adding in new pov code
 
 class Agent:
     def __init__(self, model, cfg):
@@ -44,6 +46,14 @@ class Agent:
         exp = (priority, (image, blank, blank, image, blank))
         self.episode_memory.append(exp)
 
+    def reset(self):
+        '''
+        resets agent init_rnn_state, replay, and reward
+        '''
+        self.init_rnn_state = None
+        self.init_replay()
+        self.reward = 0
+
     def die(
         self, models, world, attempted_locaton_1, attempted_locaton_2, extra_reward=True
     ):
@@ -80,6 +90,52 @@ class Agent:
         self.episode_memory = deque([], maxlen=5)
         self.has_transitions = False
 
+    def pov(self, env):
+        """
+        env: instance of environment that agent perceives
+        TODO: refactor all the code so that this is here
+        """
+        from utils import make_pov_image
+        # pdb.set_trace()
+
+        previous_state = self.episode_memory[-1][1][0]
+        current_state = previous_state.clone()
+
+        current_state[:, 0:-1, :, :, :] = previous_state[:, 1:, :, :, :]
+
+        state_now = torch.tensor([])
+ 
+        # img = create_pov_image(env, 0, self)
+        # transform = T.Compose([T.PILToTensor()])
+        # input = transform(img).unsqueeze(0).permute(0, 3, 1, 2).float()
+        img = make_pov_image(env, self)
+        input = torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2).float()
+        state_now = torch.cat((state_now, input.unsqueeze(0)), dim=2)
+        # pdb.set_trace()
+
+        # hack: add empty inventory var
+        inventory_var = torch.tensor([])
+        tmp = (current_state[:, -1, -1, :, :] * 0) + 0
+        inventory_var = torch.cat((inventory_var, tmp), dim=0)
+        inventory_var = inventory_var.unsqueeze(0).unsqueeze(0)
+        state_now = torch.cat((state_now, inventory_var), dim=2)
+
+        # if len(inventory) > 0:
+        #     """
+        #     Loops through each additional piece of information and places into one layer
+        #     """
+        #     inventory_var = torch.tensor([])
+        #     for item in range(len(inventory)):
+        #         tmp = (current_state[:, -1, -1, :, :] * 0) + inventory[item]
+        #         inventory_var = torch.cat((inventory_var, tmp), dim=0)
+        #     inventory_var = inventory_var.unsqueeze(0).unsqueeze(0)
+        #     state_now = torch.cat((state_now, inventory_var), dim=2)
+
+        current_state[:, -1, :, :, :] = state_now
+        # current_state = state_now
+
+        return current_state
+
     def movement(self, action):
         """
         Takes an action and returns a new location
@@ -98,7 +154,6 @@ class Agent:
         """
         Changes the world based on the action taken
         """
-        done = 0
         reward = 0
         state = self.pov(env)
         action, self.init_rnn_state = self.model.take_action(state, self.init_rnn_state)
@@ -117,7 +172,8 @@ class Agent:
         # elif isinstance(target_object, Wall):  # Replacing comparison with string 'kind'
         #         reward = -0.1
 
-        # movement logic - will move unless can't
+        # movement logic - will move unless can't,
+        # gathers reward/penalty of target object
         if not env.move(self, attempted_location):
             reward = target_object.value
         else:
@@ -126,5 +182,5 @@ class Agent:
         next_state = self.pov(env)
         self.reward += reward
 
-        return env.world, reward, next_state, done, new_loc
+        return state, action, reward, next_state
         

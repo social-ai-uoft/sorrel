@@ -1,7 +1,9 @@
-from examples.RPG.elements import Agent, Gem, Coin, Food, Bone, EmptyObject, Wall
+from examples.RPG.entities import Gem, Coin, Food, Bone, EmptyObject, Wall
+from examples.RPG.agents import Agent
 
 import numpy as np
 from astropy.visualization import make_lupton_rgb
+from ast import literal_eval as make_tuple
 import matplotlib.pyplot as plt
 # from gem.models.perception_singlePixel import agent_visualfield
 import random
@@ -12,43 +14,93 @@ from PIL import Image
 
 
 class RPG:
-    def __init__(
-        self,
-        height=15,
-        width=15,
-        layers=1,
-        defaultObject=EmptyObject(),
-        item_spawn_prob=0.15,
-        item_choice_prob=[0.1, 0.3, 0.4, 0.2], # gem, coin, food, bone
-        tile_size=(16, 16),
-    ):
-        self.item_spawn_prob = item_spawn_prob
-        self.item_choice_prob = item_choice_prob
-        self.height = height
-        self.width = width
-        self.layers = layers
-        self.defaultObject = defaultObject
-        self.create_world(self.height, self.width, self.layers)
+    def __init__(self, cfg):
+        self.length = cfg.env.dimensions.length
+        self.width = cfg.env.dimensions.width
+        self.layers = cfg.env.dimensions.layers
+        self.tile_size = make_tuple(cfg.env.dimensions.tile_size)
+
+        self.item_spawn_prob = cfg.env.prob.item_spawn
+        self.item_choice_prob = make_tuple(cfg.env.prob.item_choice)
+
+        self.create_world()
         self.init_elements()
-        self.populate(self.item_spawn_prob, self.item_choice_prob)
-        self.insert_walls(self.height, self.width)
-        self.tile_size = tile_size
+        self.populate()
+        self.insert_walls()
 
     def create_world(self, height=15, width=15, layers=1):
         """
         Creates a world of the specified size with a default object
         """
         self.world = np.full((height, width, layers), self.defaultObject)
+        for i in range(self.length):
+            for j in range(self.width):
+                for k in range(self.layers):
+                    self.world[i, j, k] = EmptyObject(self.cfg)
 
-    def reset_env(
-        self, height=15, width=15, layers=1, item_spawn_prob=0.110, item_choice_prob=[0.1, 0.3, 0.4, 0.2]
-    ):
+    def reset_world(self, agents, entities):
         """
         Resets the environment and repopulates it
         """
-        self.create_world(height, width, layers)
-        self.populate(item_spawn_prob, item_choice_prob)
-        self.insert_walls(height, width)
+        self.create_world()
+        self.populate(agents, entities)
+        self.insert_walls()
+
+    def add(self, object, target_location):
+        """
+        Adds an object to the world at a location
+        Will replace any existing object at that location
+        """
+        self.world[target_location] = object
+
+    def spawn(self, object_type, target_location, rand=False):
+        """
+        Create and add an object to the world at a location
+        Will replace any existing object at that location
+        If random, will place the object at a random empty location
+        """
+        if random:
+            while True:
+                target_location = (
+                    random.randint(1, self.x - 2),
+                    random.randint(1, self.y - 2),
+                    0,
+                )
+                if isinstance(self.world[target_location], EmptyObject):
+                    break
+        
+        object = object_type(self.cfg)
+        self.world[target_location] = object
+        return object
+    
+    def observe(self, target_location):
+        """
+        Observes the object at a location
+        """
+        return self.world[target_location]
+    
+    def remove(self, target_location):
+        """
+        Remove the type of object at a location and return it
+        """
+        object = self.world[target_location]
+        self.world[target_location] = EmptyObject(self.cfg)
+        return object
+    
+    def move(self, object, new_location):
+        """
+        Moves an object from previous_location to new_location 
+        Returns True if successful, False otherwise
+        """
+        if self.world[new_location].passable == 1:
+            self.remove(new_location)
+            previous_location = object.location
+            object.location = new_location
+            self.world[new_location] = object
+            self.world[previous_location] = EmptyObject(self.cfg)
+            return True
+        else:
+            return False
 
     def plot(self, layer):  # is this defined in the master?
         """
@@ -136,29 +188,6 @@ class RPG:
 
         image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
         return image
-    
-    def remove(self, target_location):
-        """
-        Remove the type of object at a location and return it
-        """
-        object = self.world[target_location]
-        self.world[target_location] = EmptyObject(self.cfg)
-        return object
-    
-    def move(self, object, new_location):
-        """
-        Moves an object from previous_location to new_location 
-        Returns True if successful, False otherwise
-        """
-        if self.world[new_location].passable == 1:
-            self.remove(new_location)
-            previous_location = object.location
-            object.location = new_location
-            self.world[new_location] = object
-            self.world[previous_location] = EmptyObject(self.cfg)
-            return True
-        else:
-            return False
     
     def init_elements(self):
         """
@@ -259,16 +288,17 @@ class RPG:
                 0,
             ] = Agent(0)
 
-    def insert_walls(self, height, width):
+    def insert_walls(self):
         """
         Inserts walls into the world.
         Assumes that the world is square - fixme.
         """
-        for i in range(height):
-            self.world[0, i, 0] = Wall()
-            self.world[height - 1, i, 0] = Wall()
-            self.world[i, 0, 0] = Wall()
-            self.world[i, height - 1, 0] = Wall()
+        for i in range(self.height):
+            self.add(Wall(), (0, i, 0))
+            self.add(Wall(), (self.length - 1, i, 0))
+            # self.add(Wall(self.cfg), (self.x - 1, 0, 0)) -- additonal dimension in taxicab code that was not here
+            self.add(Wall(), (i, 0, 0))
+            self.add(Wall(), (i, self.length - 1, 0))
 
     def step(self, models, loc, epsilon=0.85, device=None):
         """
@@ -324,3 +354,26 @@ class RPG:
         additional_output = []
 
         return state, action, reward, next_state, done, new_loc, additional_output
+
+    def is_valid_location(self, location):
+        """
+        Checks whether a location is valid
+        """
+        if (
+            location[0] < 0
+            or location[0] >= self.x
+            or location[1] < 0
+            or location[1] >= self.y
+        ):
+            return False
+        else:
+            return True
+        
+    def has_instance(self, class_type, location):
+        """
+        Checks whether a location has an instance of a class
+        """
+        for instance in self.world[location]:
+            if isinstance(instance, class_type):
+                return True
+        return False
