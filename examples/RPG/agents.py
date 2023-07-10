@@ -108,22 +108,20 @@ class Agent:
 
         # if type entity, collect value
 
-        if isinstance(target_object, Collectable):
-            reward = target_object.value
-        # ____ should be covered by move____    
-        if target_object.passable == 1:
-            self.location = EmptyObject()
-            reward = target_object.value
-            env.world[attempted_location] = self
-            new_loc = attempted_location
+        # if isinstance(target_object, Collectable):
+        #     reward = target_object.value
+        # # ____ should be covered by move____    
+        # if target_object.passable == 1:
+        #     reward = target_object.value
 
-        else:
-            if isinstance(target_object, Wall):  # Replacing comparison with string 'kind'
-                reward = -0.1
+        # elif isinstance(target_object, Wall):  # Replacing comparison with string 'kind'
+        #         reward = -0.1
 
         # movement logic - will move unless can't
         if not env.move(self, attempted_location):
-            reward = -2
+            reward = target_object.value
+        else:
+            reward = target_object.value
 
         next_state = self.pov(env)
         self.reward += reward

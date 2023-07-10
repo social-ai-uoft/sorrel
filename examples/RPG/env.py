@@ -137,6 +137,29 @@ class RPG:
         image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
         return image
     
+    def remove(self, target_location):
+        """
+        Remove the type of object at a location and return it
+        """
+        object = self.world[target_location]
+        self.world[target_location] = EmptyObject(self.cfg)
+        return object
+    
+    def move(self, object, new_location):
+        """
+        Moves an object from previous_location to new_location 
+        Returns True if successful, False otherwise
+        """
+        if self.world[new_location].passable == 1:
+            self.remove(new_location)
+            previous_location = object.location
+            object.location = new_location
+            self.world[new_location] = object
+            self.world[previous_location] = EmptyObject(self.cfg)
+            return True
+        else:
+            return False
+    
     def init_elements(self):
         """
         Creates objects that survive from game to game
