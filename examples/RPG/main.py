@@ -135,7 +135,7 @@ def run(turn, cfg):
                     """
                     Train the neural networks within a eposide at rate of modelUpdate_freq
                     """
-                    loss = agent.model.training(cfg.model.agent_cnn.parameters.inepoch_batch, cfg.model.agent_cnn.paramters.gamma)
+                    loss = agent.model.training(cfg.model.agent_cnn.parameters.inepoch_batch, cfg.model.agent_cnn.parameters.gamma)
         
                     losses = losses + loss.detach().cpu().numpy()
 
@@ -145,7 +145,7 @@ def run(turn, cfg):
             Train the neural networks at the end of eac epoch
             reduced to 64 so that the new memories ~200 are slowly added with the priority ones
             """
-            loss = agent.model.training(cfg.model.agent_cnn.parameters.postepoch_batch, cfg.model.agent_cnn.paramters.gamma)
+            loss = agent.model.training(cfg.model.agent_cnn.parameters.postepoch_batch, cfg.model.agent_cnn.parameters.gamma)
             # agent.episode_mempory.clear() -- in taxicab
             losses = losses + loss.detach().cpu().numpy()
 

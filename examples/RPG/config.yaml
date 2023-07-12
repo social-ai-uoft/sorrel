@@ -20,11 +20,11 @@ model:
     num: 1
     device: cpu
     parameters:
-      in_channels: 3
+      in_channels: 4 #3
       num_filters: 5
       lr: 0.001
       replay_size: 2048
-      in_size: 1450 #650
+      in_size: 650 #1450
       hid_size1: 75
       hid_size2: 30
       out_size: 4
@@ -32,7 +32,7 @@ model:
 
       epochs: 1000
       sync_freq: 500
-      inepoch_training_freq: 25
+      modelUpdate_freq: 25
       epsilon: 0.99
       gamma: 0.9
       inepoch_batch: 128

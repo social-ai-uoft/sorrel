@@ -84,7 +84,7 @@ class RPG:
         Remove the type of object at a location and return it
         """
         object = self.world[target_location]
-        self.world[target_location] = EmptyObject(self.cfg)
+        self.world[target_location] = EmptyObject()
         return object
     
     def move(self, object, new_location):
@@ -97,7 +97,7 @@ class RPG:
             previous_location = object.location
             object.location = new_location
             self.world[new_location] = object
-            self.world[previous_location] = EmptyObject(self.cfg)
+            self.world[previous_location] = EmptyObject()
             return True
         else:
             return False
