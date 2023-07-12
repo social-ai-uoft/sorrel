@@ -58,14 +58,22 @@ def run(turn, cfg):
     # entities = create_entities(cfg)
     env = RPG(cfg, agents)
     # env.game_test()
-    losses = 0
-    game_points = [0, 0]
+
+    # losses = 0
+
+    # game_points = [0, 0]
+    # shouldn't we be resetting game_points every epoch?
+    # also same for loss... correct?
 
     for epoch in range(cfg.model.agent_cnn.parameters.epochs):
         """
         Move each agent once and then update the world
         Creates new gamepoints, resets agents, and runs one episode
         """
+
+        game_points = [0, 0]
+        losses = 0
+        # like this
 
         done, withinturn = 0, 0
 
@@ -118,6 +126,8 @@ def run(turn, cfg):
 
                     # logging
                     game_points[0] = game_points[0] + reward
+                if epoch > 120:
+                    print(reward)
 
             # determine whether the game is finished (either max length or all agents are dead)
             if (withinturn > cfg.experiment.max_turns or len(agents) == 0): #prob don't need second condition
@@ -133,7 +143,7 @@ def run(turn, cfg):
             for agent in agents:
                 if withinturn % cfg.model.agent_cnn.parameters.inepoch_sync_freq == 0:
                     """
-                    Train the neural networks within a eposide at rate of modelUpdate_freq
+                    Train the neural networks within a eposide at rate of inepoch_sync_freq
                     """
                     loss = agent.model.training(cfg.model.agent_cnn.parameters.inepoch_batch, cfg.model.agent_cnn.parameters.gamma)
         
@@ -155,12 +165,12 @@ def run(turn, cfg):
         if epoch != 0:
             for agent in agents:
             # epsilon = update_epsilon(epsilon, turn, epoch)
-                epsilon = max(agent.model.epsilon - 0.00003, 0.2)
+                agent.model.epsilon = max(agent.model.epsilon - 0.00003, 0.2)
 
         # output values following 10 epochs
         if epoch % 10 == 0 and len(agents) > 0: # do not think second condition is needed
             # print the state and update the counters. This should be made to be tensorboard instead
-            print(f"Epoch {epoch}: average loss = {round(losses / 10, 2)}, average points = {(round(game_points[0] / 10, 2), round(game_points[1] / 10, 2))}, epsilon = {agent.model.epsilon}")
+            print(f"Epoch {epoch}: average loss = {round(losses / 10, 2)}, average points = {(round(game_points[0] / 10, 2), round(game_points[1] / 10, 2))}, epsilon = {round(agent.model.epsilon, 4)}")
             print(withinturn)
 
     return models, env, turn, epsilon
