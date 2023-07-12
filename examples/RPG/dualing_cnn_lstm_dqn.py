@@ -106,8 +106,8 @@ class Model_CNN_LSTM_DQN:
         hid_size2 = cfg.parameters.hid_size2
         out_size = cfg.parameters.out_size
         priority_replay = cfg.parameters.priority_replay
-        self.sync_freq = cfg.parameters.modelUpdate_freq
-        self.inepoch_training_freq = cfg.parameters.inepoch_batch # was inepoch_training_freq
+        self.sync_freq = cfg.parameters.sync_freq
+        self.inepoch_training_freq = cfg.parameters.inepoch_sync_freq
         self.gamma = cfg.parameters.gamma
 
         self.model1 = Combine_CLD(

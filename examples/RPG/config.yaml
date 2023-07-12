@@ -32,7 +32,7 @@ model:
 
       epochs: 1000
       sync_freq: 500
-      modelUpdate_freq: 25
+      inepoch_sync_freq: 25
       epsilon: 0.99
       gamma: 0.9
       inepoch_batch: 128

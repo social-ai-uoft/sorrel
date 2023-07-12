@@ -131,7 +131,7 @@ def run(turn, cfg):
 
             # end_epoch_action
             for agent in agents:
-                if withinturn % cfg.model.agent_cnn.parameters.modelUpdate_freq == 0:
+                if withinturn % cfg.model.agent_cnn.parameters.inepoch_sync_freq == 0:
                     """
                     Train the neural networks within a eposide at rate of modelUpdate_freq
                     """
@@ -150,8 +150,9 @@ def run(turn, cfg):
             losses = losses + loss.detach().cpu().numpy()
 
         # Special action: update epsilon
-        updateEps = False
-        if updateEps == True:
+        # updateEps = False
+        # if updateEps == True:
+        if epoch != 0:
             for agent in agents:
             # epsilon = update_epsilon(epsilon, turn, epoch)
                 epsilon = max(agent.model.epsilon - 0.00003, 0.2)
@@ -206,7 +207,7 @@ run_params = (
 
 # the version below needs to have the keys from above in it
 for modRun in range(len(run_params)):
-    models, env, turn, epsilon = run_game(
+    models, env, turn, epsilon = run(
         models,
         env,
         turn,

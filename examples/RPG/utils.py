@@ -240,11 +240,11 @@ def make_pov_image(env, agent, wall_app=[0.0, 0.0, 0.0]):
                 image_g[i - bounds[0], j - bounds[2]] = world[i][j][layer].appearance[1]
                 image_b[i - bounds[0], j - bounds[2]] = world[i][j][layer].appearance[2]
 
-    image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
-    # image = np.zeros((image_r.shape[0], image_r.shape[1], 3))
-    # image[:, :, 0] = image_r
-    # image[:, :, 1] = image_g
-    # image[:, :, 2] = image_b
+    #image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
+    image = np.zeros((image_r.shape[0], image_r.shape[1], 3))
+    image[:, :, 0] = image_r
+    image[:, :, 1] = image_g
+    image[:, :, 2] = image_b
     # display image
     # plt.imshow(image)
     # plt.show()
