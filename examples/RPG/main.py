@@ -1,11 +1,10 @@
 # from tkinter.tix import Tree
-from gem.utils import (
-    update_epsilon,
+from examples.RPG.utils import (
+    init_log, parse_args, load_config,
+    create_models,
+    create_agents,
     update_memories,
-    find_moveables,
-    transfer_world_memories,
-    find_agents,
-    find_instance,
+    transfer_world_memories
 )
 
 from gem.models.dualing_cnn_lstm_dqn import Model_CNN_LSTM_DQN
@@ -23,81 +22,46 @@ from examples.RPG.entities import EmptyObject, Wall
 import random
 import torch
 
-save_dir = "/Users/yumozi/Projects/gem_data/sprite_data/"
-# save_dir = "/Users/socialai/Dropbox/M1_ultra/"
-# save_dir = "C:/Users/wilcu/OneDrive/Documents/gemout/"
+# TODO:
+# - not sure if want to initialize entities here or wait for them to be populated
+# - reset agent entirely or just replay in each new epoch?
 
-# choose device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# def create_models():
+#     """
+#     Should make the sequence length of the LSTM part of the model and an input here
+#     Should also set up so that the number of hidden laters can be added to dynamically
+#     in this function. Below should fully set up the NN in a flexible way for the studies
+#     """
 
-# if torch.backends.mps.is_available():
-#    device = torch.device("mps")
+#     models = []
+#     models.append(
+#         Model_CNN_LSTM_DQN(
+#             tile_size=(16, 16),
+#         )
+#     )  # agent model
 
-
-def create_models():
-    """
-    Should make the sequence length of the LSTM part of the model and an input here
-    Should also set up so that the number of hidden laters can be added to dynamically
-    in this function. Below should fully set up the NN in a flexible way for the studies
-    """
-
-    models = []
-    models.append(
-        Model_CNN_LSTM_DQN(
-            in_channels=3,
-            num_filters=5,
-            lr=0.001,
-            replay_size=2048,
-            in_size=1450, #650 
-            hid_size1=75,
-            hid_size2=30,
-            out_size=4,
-            tile_size=(16, 16),
-            priority_replay=False,
-            device=device,
-        )
-    )  # agent model
-
-    # convert to device
-    for model in range(len(models)):
-        models[model].model1.to(device)
-        models[model].model2.to(device)
-    return models
-
-world_size = 15
-trainable_models = [0]
-sync_freq = 500
-modelUpdate_freq = 25
-epsilon = 0.99
+#     # convert to device
+#     for model in range(len(models)):
+#         models[model].model1.to(device)
+#         models[model].model2.to(device)
+#     return models
 
 turn = 1
 
-models = create_models()
-env = RPG(
-    height=world_size,
-    width=world_size,
-    layers=1,
-    defaultObject=EmptyObject(),
-    item_spawn_prob=0.15,
-    item_choice_prob=[0.1, 0.3, 0.4, 0.2],
-)
-env.game_test()
-
-
-def run_game(
-    models,
-    env,
-    turn,
-    epsilon,
-    epochs,
-    max_turns=100,
-):
+def run(turn, cfg):
     """
     This is the main loop of the game
     """
+    # Initialize the environment and get the agents
+    models = create_models(cfg)
+    agents = create_agents(cfg, models)
+    # entities = create_entities(cfg)
+    env = RPG(cfg, agents)
+    # env.game_test()
     losses = 0
     game_points = [0, 0]
-    for epoch in range(epochs):
+
+    for epoch in range(cfg.model.agent_cnn.parameters.epochs):
         """
         Move each agent once and then update the world
         Creates new gamepoints, resets agents, and runs one episode
@@ -107,17 +71,9 @@ def run_game(
 
         # create a new gameboard for each epoch and repopulate
         # the resset does allow for different params, but when the world size changes, odd
-        env.reset_env(
-            height=world_size,
-            width=world_size,
-            layers=1,
-            item_spawn_prob=0.15,
-            item_choice_prob=[0.1, 0.3, 0.4, 0.2],
-        )
-        for loc in find_instance(env.world, "neural_network"):
-            # reset the memories for all agents
-            # the parameter sets the length of the sequence for LSTM
-            env.world[loc].init_replay(3)
+        env.reset_world(cfg, agents)
+        for agent in agents:
+            agent.init_replay() # this is reset in taxicab
 
         while done == 0:
             """
@@ -126,116 +82,98 @@ def run_game(
             turn = turn + 1
             withinturn = withinturn + 1
 
-            if epoch % sync_freq == 0:
+            if epoch % cfg.model.agent_cnn.parameters.sync_freq == 0:
                 # update the double DQN model ever sync_frew
-                for mods in trainable_models:
+                for mods in models:
                     models[mods].model2.load_state_dict(
                         models[mods].model1.state_dict()
                     )
 
-            agentList = find_instance(env.world, "neural_network")
+            random.shuffle(agents)
 
-            random.shuffle(agentList)
-
-            for loc in agentList:
+            for agent in agents:
                 """
                 Reset the rewards for the trial to be zero for all agents
                 """
-                env.world[loc].reward = 0
+                agent.reward = 0
 
-            for loc in agentList:
-                if env.world[loc].kind != "deadAgent":
+            for agent in agents:
+                if not agent.death: # can probably remove this condition
 
-                    (
-                        state,
+                    (state,
+                    action,
+                    reward,
+                    next_state
+                    ) = agent.transition(env)
+
+                    # these can be included on one replay
+                    exp = (
+                        agent.model.max_priority,
+                        (state,
                         action,
                         reward,
                         next_state,
-                        done,
-                        new_loc,
-                        info,
-                    ) = env.step(models, loc, epsilon)
+                        done))
+                    agent.episode_memory.append(exp)
 
-                    # these can be included on one replay
-
-                    exp = (
-                        models[env.world[new_loc].policy].max_priority,
-                        (
-                            state,
-                            action,
-                            reward,
-                            next_state,
-                            done,
-                        ),
-                    )
-
-                    env.world[new_loc].episode_memory.append(exp)
-
-                    if env.world[new_loc].kind == "agent":
-                        game_points[0] = game_points[0] + reward
-                    if env.world[new_loc].kind == "wolf":
-                        game_points[1] = game_points[1] + reward
+                    # logging
+                    game_points[0] = game_points[0] + reward
 
             # determine whether the game is finished (either max length or all agents are dead)
-            if (
-                withinturn > max_turns
-                or len(find_instance(env.world, "neural_network")) == 0
-            ):
+            if (withinturn > cfg.experiment.max_turns or len(agents) == 0): #prob don't need second condition
                 done = 1
 
-            if len(trainable_models) > 0:
-                """
-                Update the next state and rewards for the agents after all have moved
-                And then transfer the local memory to the model memory
-                """
-                # this updates the last memory to be the final state of the game board
-                env.world = update_memories(
-                    env,
-                    find_instance(env.world, "neural_network"),
-                    done,
-                    end_update=True,
-                )
+            for agent in agents:
+                update_memories(env, agent, done, end_update=True)
+            
+            # transfer the events for each agent into the appropriate model after all have moved
+            transfer_world_memories(agents)
 
-                # transfer the events for each agent into the appropriate model after all have moved
-                models = transfer_world_memories(
-                    models, env.world, find_instance(env.world, "neural_network")
-                )
-
-            if withinturn % modelUpdate_freq == 0:
-                """
-                Train the neural networks within a eposide at rate of modelUpdate_freq
-                """
-                for mods in trainable_models:
-                    loss = models[mods].training(128, 0.9)
+            # end_epoch_action
+            for agent in agents:
+                if withinturn % cfg.model.agent_cnn.parameters.modelUpdate_freq == 0:
+                    """
+                    Train the neural networks within a eposide at rate of modelUpdate_freq
+                    """
+                    loss = agent.model.training(cfg.model.agent_cnn.parameters.inepoch_batch, cfg.model.agent_cnn.paramters.gamma)
+        
                     losses = losses + loss.detach().cpu().numpy()
 
-        for mods in trainable_models:
+        # Train each agent after an epoch
+        for agent in agents:
             """
             Train the neural networks at the end of eac epoch
             reduced to 64 so that the new memories ~200 are slowly added with the priority ones
             """
-            loss = models[mods].training(256, 0.9)
+            loss = agent.model.training(cfg.model.agent_cnn.parameters.postepoch_batch, cfg.model.agent_cnn.paramters.gamma)
+            # agent.episode_mempory.clear() -- in taxicab
             losses = losses + loss.detach().cpu().numpy()
 
+        # Special action: update epsilon
         updateEps = False
-        # TODO: the update_epsilon often does strange things. Needs to be reconceptualized
         if updateEps == True:
+            for agent in agents:
             # epsilon = update_epsilon(epsilon, turn, epoch)
-            epsilon = max(epsilon - 0.00003, 0.2)
+                epsilon = max(agent.model.epsilon - 0.00003, 0.2)
 
-        if epoch % 10 == 0 and len(trainable_models) > 0:
+        # output values following 10 epochs
+        if epoch % 10 == 0 and len(agents) > 0: # do not think second condition is needed
             # print the state and update the counters. This should be made to be tensorboard instead
-            print(
-                epoch,
-                withinturn,
-                round(game_points[0]),
-                round(game_points[1]),
-                losses,
-                epsilon,
-            )
-            game_points = [0, 0]
-            losses = 0
+            print(f"Epoch {epoch}: average loss = {round(losses / 10, 2)}, average points = {(round(game_points[0] / 10, 2), round(game_points[1] / 10, 2))}, epsilon = {agent.model.epsilon}")
+            print(withinturn)
+
     return models, env, turn, epsilon
+
+def main():
+    import sys
+    print(sys.path)
+    args = parse_args()
+    cfg = load_config(args)
+    init_log(cfg)
+    run(1, cfg)
+
+if __name__ == '__main__':
+    main()
 
 
 # needs a dictionary with the following keys:

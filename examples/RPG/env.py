@@ -14,36 +14,36 @@ from PIL import Image
 
 
 class RPG:
-    def __init__(self, cfg):
-        self.length = cfg.env.dimensions.length
-        self.width = cfg.env.dimensions.width
-        self.layers = cfg.env.dimensions.layers
+    def __init__(self, cfg, agents):
+        self.x = cfg.env.dimensions.x
+        self.y = cfg.env.dimensions.y
+        self.z = cfg.env.dimensions.z
         self.tile_size = make_tuple(cfg.env.dimensions.tile_size)
 
         self.item_spawn_prob = cfg.env.prob.item_spawn
-        self.item_choice_prob = make_tuple(cfg.env.prob.item_choice)
+        self.item_choice_prob = [float(num_str) for num_str in make_tuple(cfg.env.prob.item_choice)]
 
-        self.create_world()
-        self.init_elements()
-        self.populate()
-        self.insert_walls()
+        # self.create_world()
+        # self.init_elements()
+        # self.populate(cfg, agents)
+        # self.insert_walls()
 
-    def create_world(self, height=15, width=15, layers=1):
+    def create_world(self, cfg):
         """
         Creates a world of the specified size with a default object
         """
-        self.world = np.full((height, width, layers), self.defaultObject)
-        for i in range(self.length):
-            for j in range(self.width):
-                for k in range(self.layers):
-                    self.world[i, j, k] = EmptyObject(self.cfg)
+        self.world = np.empty((cfg.env.dimensions.x, cfg.env.dimensions.y, cfg.env.dimensions.z), dtype=object)
+        for i in range(self.x):
+            for j in range(self.y):
+                for k in range(self.z):
+                    self.world[i, j, k] = EmptyObject()
 
-    def reset_world(self, agents, entities):
+    def reset_world(self, cfg, agents):
         """
         Resets the environment and repopulates it
         """
-        self.create_world()
-        self.populate(agents, entities)
+        self.create_world(cfg)
+        self.populate(cfg, agents)
         self.insert_walls()
 
     def add(self, object, target_location):
@@ -102,7 +102,7 @@ class RPG:
         else:
             return False
 
-    def plot(self, layer):  # is this defined in the master?
+    def plot(self, z):  # is this defined in the master?
         """
         Creates an RGB image of the whole world
         """
@@ -112,14 +112,14 @@ class RPG:
 
         for i in range(self.world.shape[0]):
             for j in range(self.world.shape[1]):
-                image_r[i, j] = self.world[i, j, layer].appearance[0]
-                image_g[i, j] = self.world[i, j, layer].appearance[1]
-                image_b[i, j] = self.world[i, j, layer].appearance[2]
+                image_r[i, j] = self.world[i, j, z].appearance[0]
+                image_g[i, j] = self.world[i, j, z].appearance[1]
+                image_b[i, j] = self.world[i, j, z].appearance[2]
 
         image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
         return image
     
-    def plot_alt(self, layer):
+    def plot_alt(self, z):
         """
         Creates an RGB image of the whole world
         """
@@ -130,7 +130,7 @@ class RPG:
 
         for i in range(world_shape[0]):
             for j in range(world_shape[1]):
-                tile_appearance = self.world[i, j, layer].sprite
+                tile_appearance = self.world[i, j, z].sprite
                 tile_image = Image.open(tile_appearance).resize(self.tile_size).convert('RGBA')
                 tile_image_array = np.array(tile_image)
 
@@ -150,9 +150,9 @@ class RPG:
         Create an agent visual field of size (2k + 1, 2k + 1) tiles
         """
         if len(location) > 2:
-            layer = location[2]
+            z = location[2]
         else:
-            layer = 0
+            z = 0
 
         # world_shape = self.world.shape
 
@@ -171,7 +171,7 @@ class RPG:
                     # Tile is out of bounds, use wall_app
                     tile_image = Image.open(wall_sprite).resize(self.tile_size).convert('RGBA')
                 else:
-                    tile_appearance = world[i, j, layer].sprite
+                    tile_appearance = world[i, j, z].sprite
                     tile_image = Image.open(tile_appearance).resize(self.tile_size).convert('RGBA')
 
                 tile_image_array = np.array(tile_image)
@@ -186,7 +186,11 @@ class RPG:
             image_j = 0
         
 
-        image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
+        # image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
+        image = np.zeros((image_r.shape[0], image_r.shape[1], 3))
+        image[:, :, 0] = image_r
+        image[:, :, 1] = image_g
+        image[:, :, 2] = image_b
         return image
     
     def init_elements(self):
@@ -196,11 +200,11 @@ class RPG:
         self.emptyObject = EmptyObject()
         self.walls = Wall()
 
-    def game_test(self, layer=0):
+    def game_test(self, z=0):
         """
         Prints one frame to check game instance parameters
         """
-        image = self.plot_alt(layer)
+        image = self.plot_alt(z)
 
         moveList = find_instance(self.world, "neural_network")
 
@@ -212,7 +216,7 @@ class RPG:
         plt.imshow(img)
         plt.show()
 
-    def pov(self, location, inventory=[], layers=[0]):
+    def pov(self, location, inventory=[], z=[0]):
         """
         Creates outputs of a single frame, and also a multiple image sequence
         TODO: get rid of the holdObject input throughout the code
@@ -225,7 +229,7 @@ class RPG:
         current_state[:, 0:-1, :, :, :] = previous_state[:, 1:, :, :, :]
 
         state_now = torch.tensor([])
-        for layer in layers:
+        for layer in z:
             """
             Loops through each layer to get full visual field
             """
@@ -249,56 +253,56 @@ class RPG:
 
         return current_state
 
-    def populate(self, item_spawn_prob, item_choice_prob):
+    def populate(self, cfg, agents):
         """
         Populates the game board with elements
         TODO: test whether the probabilites above are working
         """
-
         for i in range(self.world.shape[0]):
             for j in range(self.world.shape[1]):
                 # check spawn probability
-                if random.random() < item_spawn_prob:
+                if random.random() < cfg.env.prob.item_spawn:
 
                     # check which item to spawn
                     obj = np.random.choice(
                         [0, 1, 2, 3],
-                        p=item_choice_prob,
+                        p=self.item_choice_prob
+                        #p=cfg.env.prob.item_choice,
                     )
 
                     if obj == 0:
-                        self.world[i, j, 0] = Gem(10, [0.0, 255.0, 0.0]) # gem is green, worth 10
+                        new_entity = Gem(cfg)
                     if obj == 1:
-                        self.world[i, j, 0] = Coin(2, [255.0, 255.0, 0.0]) # coin is yellow, worth 2
+                        new_entity = Coin(cfg)
                     if obj == 2:
-                        self.world[i, j, 0] = Food(1, [255.0, 0.0, 0.0]) # food is red, worth 1
+                        new_entity = Food(cfg)
                     if obj == 3:
-                        self.world[i, j, 0] = Bone(-4, [0, 0, 0]) # bomb is black, worth -4
-        
-        cBal = np.random.choice([0, 1])
-        if cBal == 0:
-            self.world[
-                round(self.world.shape[0] / 2), round(self.world.shape[1] / 2), 0
-            ] = Agent(0)
+                        new_entity = Bone(cfg)
 
-        if cBal == 1:
-            self.world[
-                round(self.world.shape[0] / 2) + 1,
-                round(self.world.shape[1] / 2) - 1,
-                0,
-            ] = Agent(0)
+                    # add new entity to env
+                    self.add(new_entity, (i, j, 0))
+        
+        # initialize and place new agent
+        for agent in agents:
+            cBal = np.random.choice([0, 1])
+            if cBal == 0:
+                start_loc = (round(self.world.shape[0] / 2), round(self.world.shape[1] / 2), 0)
+            if cBal == 1:
+                start_loc = (round(self.world.shape[0] / 2) + 1, round(self.world.shape[1] / 2) - 1, 0)
+            self.add(agent, start_loc)
+            agent.location = start_loc
 
     def insert_walls(self):
         """
         Inserts walls into the world.
         Assumes that the world is square - fixme.
         """
-        for i in range(self.height):
+        for i in range(self.x):
             self.add(Wall(), (0, i, 0))
-            self.add(Wall(), (self.length - 1, i, 0))
+            self.add(Wall(), (self.x - 1, i, 0))
             # self.add(Wall(self.cfg), (self.x - 1, 0, 0)) -- additonal dimension in taxicab code that was not here
             self.add(Wall(), (i, 0, 0))
-            self.add(Wall(), (i, self.length - 1, 0))
+            self.add(Wall(), (i, self.x - 1, 0))
 
     def step(self, models, loc, epsilon=0.85, device=None):
         """

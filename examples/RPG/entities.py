@@ -1,4 +1,5 @@
 from collections import deque
+from ast import literal_eval as make_tuple
 
 # TODO: 
 # get rid of dead agent and just make it a function of an agent
@@ -29,53 +30,53 @@ class Wall:
         self.has_transitions = False
         self.action_type = "static"  # rays disappear after one turn
 
-class Gem(Collectable):
-    def __init__(self, value, color):
+class Gem():
+    def __init__(self, cfg):
         super().__init__()
         self.health = 1  # for the gen, whether it has been mined or not
-        self.appearance = color  # gems are green
+        self.appearance = make_tuple(cfg.entities.Gem.appearance)  # gems are green
         self.sprite = 'examples/RPG/assets/gem.png'
         self.vision = 1  # gems can see one radius around them
-        self.value = value  # the value of this gem
+        self.value = cfg.entities.Gem.value  # the value of this gem
         self.static = 1  # whether the object gets to take actions or not
         self.passable = 1  # whether the object blocks movement
         self.has_transitions = False
         self.action_type = "static"
 
-class Coin(Collectable):
-    def __init__(self, value, color):
+class Coin():
+    def __init__(self, cfg):
         super().__init__()
         self.health = 1  # for the gen, whether it has been mined or not
-        self.appearance = color  # gems are green
+        self.appearance = make_tuple(cfg.entities.Coin.appearance)  # gems are green
         self.sprite = 'examples/RPG/assets/coin.png'
         self.vision = 1  # gems can see one radius around them
         self.policy = "NA"  # gems do not do anything
-        self.value = value  # the value of this gem
+        self.value = cfg.entities.Coin.value  # the value of this gem
         self.passable = 1  # whether the object blocks movement
         self.has_transitions = False
         self.action_type = "static"
 
-class Food(Collectable):
-    def __init__(self, value, color):
+class Food():
+    def __init__(self, cfg):
         super().__init__()
         self.health = 1  # for the gen, whether it has been mined or not
-        self.appearance = color  # gems are green
+        self.appearance = make_tuple(cfg.entities.Food.appearance)  # gems are green
         self.sprite = 'examples/RPG/assets/food.png'
         self.vision = 1  # gems can see one radius around them
-        self.value = value  # the value of this gem
+        self.value = cfg.entities.Food.value  # the value of this gem
         self.passable = 1  # whether the object blocks movement
         self.has_transitions = False
         self.action_type = "static"
 
-class Bone(Collectable):
-    def __init__(self, value, color):
+class Bone():
+    def __init__(self, cfg):
         super().__init__()
         self.health = 1  # for the gen, whether it has been mined or not
-        self.appearance = color  # gems are green
+        self.appearance = make_tuple(cfg.entities.Bone.appearance)
         self.sprite = 'examples/RPG/assets/bone.png'
         self.vision = 1  # gems can see one radius around them
         self.policy = "NA"  # gems do not do anything
-        self.value = value  # the value of this gem
+        self.value = cfg.entities.Bone.value  # the value of this gem
         self.passable = 1  # whether the object blocks movement
         self.has_transitions = False
         self.action_type = "static"

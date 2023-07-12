@@ -14,13 +14,13 @@ class Agent:
         # basic features shared with other entities
         self.type = "agent"
                 
-        self.appearance = make_tuple(cfg.agent.appearance)  # agents are blue
-        self.tile_size = make_tuple(cfg.agent.tile_size)
+        self.appearance = make_tuple(cfg.agent.agent.appearance)  # agents are blue
+        self.tile_size = make_tuple(cfg.agent.agent.tile_size)
         self.sprite = 'examples/RPG/assets/hero.png'
         
         self.passable = 0  # whether the object blocks movement
         self.value = 0  # agents have no value
-        self.health = cfg.agent.health  # for the agents, this is how hungry they are
+        self.health = cfg.agent.agent.health  # for the agents, this is how hungry they are
         self.death = False
         self.location = None
         self.trainable = 1  # whether there is a network to be optimized
@@ -30,17 +30,17 @@ class Agent:
         # training-related features
         self.model = model  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
         self.episode_memory = deque([], maxlen=100)  # we should read in these maxlens
-        self.num_memories = cfg.agent.num_memories
+        self.num_memories = cfg.agent.agent.num_memories
         self.init_rnn_state = None
-        self.visual_depth = cfg.agent.visual_depth  # agents can see three radius around them
-        self.pov_size = cfg.agent.pov_size
+        self.visual_depth = cfg.agent.agent.visual_depth  # agents can see three radius around them
+        self.pov_size = cfg.agent.agent.pov_size
 
     def init_replay(self): 
         """
         Fills in blank images for the LSTM before game play.
         Impicitly defines the number of sequences that the LSTM will be trained on.
         """
-        image = torch.zeros(1, self.num_memories, 3, self.tile_size[0] * (2 * self.visual_depth + 1), self.tile_size[1] * (2 * self.visual_depth + 1)).float()
+        image = torch.zeros(1, self.num_memories, self.visual_depth, self.tile_size[0] * (2 * self.visual_depth + 1), self.tile_size[1] * (2 * self.visual_depth + 1)).float()
         priority = torch.tensor(0.1)
         blank = torch.tensor(0.0)
         exp = (priority, (image, blank, blank, image, blank))
@@ -174,10 +174,8 @@ class Agent:
 
         # movement logic - will move unless can't,
         # gathers reward/penalty of target object
-        if not env.move(self, attempted_location):
-            reward = target_object.value
-        else:
-            reward = target_object.value
+        env.move(self, attempted_location)
+        reward = target_object.value
 
         next_state = self.pov(env)
         self.reward += reward

@@ -6,69 +6,62 @@ experiment:
 
 env:
   dimensions:
-    length: 15
-    width: 15
-    layers: 1
-    tile_size: [1, 1]
-  spawn_prob:
-    gem1p: 0.110
-    gem2p: 0.04
-    wolf1p: 0.005
+    x: 15
+    y: 15
+    z: 1
+    tile_size: (1, 1)
+  prob:
+    item_spawn: 0.15
+    item_choice: (0.1, 0.3, 0.4, 0.2) # gem, coin, food, bone
 
 model:
-  human_cnn:
+  agent_cnn:
     type: Model_CNN_LSTM_DQN
     num: 1
     device: cpu
     parameters:
-      epsilon: 0.99
       in_channels: 3
       num_filters: 5
       lr: 0.001
       replay_size: 2048
-      in_size: 650
+      in_size: 1450 #650
       hid_size1: 75
       hid_size2: 30
       out_size: 4
       priority_replay: False
 
+      epochs: 1000
       sync_freq: 500
       inepoch_training_freq: 25
-      gamma: 0.9
-  
-  wolf_cnn:  
-    type: Model_CNN_LSTM_DQN
-    num: 1
-    device: cpu
-    parameters:
       epsilon: 0.99
-      in_channels: 3
-      num_filters: 5
-      lr: 0.001
-      replay_size: 2048
-      in_size: 2570
-      hid_size1: 150
-      hid_size2: 30
-      out_size: 4
-      priority_replay: False
-    
-      sync_freq: 500
-      inepoch_training_freq: 25
       gamma: 0.9
+      inepoch_batch: 128
+      postepoch_batch: 256
 
 agent:
-  num: 1
-  model: human_cnn
-  num_memories: 3
-  visual_depth: 6
-  appearance: (0.0, 0.0, 255.0)
-  tile_size: (16, 16)
-  pov_size: 9
-  health: 10
+  agent:
+    num: 1
+    model: agent_cnn
+    num_memories: 3
+    visual_depth: 4
+    appearance: (0.0, 0.0, 255.0)
+    tile_size: (1, 1)
+    pov_size: 9
+    health: 10
 
-entity:
+entities:
   Gem:
-    num: 3
+    value: 10
+    appearance: (0.0, 255.0, 0.0)
+  Coin:
+    value: 2
+    appearance: (255.0, 255.0, 0.0)
+  Food:
+    value: 1
+    appearance: (255.0, 0.0, 0.0)
+  Bone:
+    value: -4
+    appearance: (0, 0, 0)
 
 
 save_dir: 'your save dir'
