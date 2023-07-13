@@ -1,4 +1,4 @@
-from examples.RPG.entities import Wall, EmptyObject, Collectable
+from examples.RPG.entities import Wall, EmptyObject
 
 from ast import literal_eval as make_tuple
 from collections import deque
@@ -11,20 +11,15 @@ import torch
 
 class Agent:
     def __init__(self, model, cfg):
-        # basic features shared with other entities
-        self.type = "agent"
-                
+        self.type = "Agent"
+        self.cfg = cfg      
         self.appearance = make_tuple(cfg.agent.agent.appearance)  # agents are blue
         self.tile_size = make_tuple(cfg.agent.agent.tile_size)
         self.sprite = 'examples/RPG/assets/hero.png'
-        
         self.passable = 0  # whether the object blocks movement
         self.value = 0  # agents have no value
         self.health = cfg.agent.agent.health  # for the agents, this is how hungry they are
-        self.death = False
         self.location = None
-        self.trainable = 1  # whether there is a network to be optimized
-        self.has_transitions = True
         self.action_type = "neural_network"
         
         # training-related features
@@ -32,7 +27,7 @@ class Agent:
         self.episode_memory = deque([], maxlen=100)  # we should read in these maxlens
         self.num_memories = cfg.agent.agent.num_memories
         self.init_rnn_state = None
-        self.visual_depth = cfg.agent.agent.visual_depth  # agents can see three radius around them
+        self.visual_depth = cfg.agent.agent.visual_depth 
         self.pov_size = cfg.agent.agent.pov_size
 
     def init_replay(self): 
@@ -54,47 +49,7 @@ class Agent:
         self.init_replay()
         self.reward = 0
 
-    def die(
-        self, models, world, attempted_locaton_1, attempted_locaton_2, extra_reward=True
-    ):
-        """
-        Replaces the last memory with a memory that has a reward of -25 and the image of its
-        death. This is to encourage the agent to not die.
-        TODO: this is failing at the moment. Need to fix.
-        """
-        lastexp = world[attempted_locaton_1, attempted_locaton_2, 0].episode_memory[-1]
-        world[attempted_locaton_1, attempted_locaton_2, 0].episode_memory[-1] = (
-            lastexp[0],
-            lastexp[1],
-            -25,
-            lastexp[3],
-            1,
-        )
-
-        # TODO: Below is very clunky and a more principles solution needs to be found
-
-        models[
-            world[attempted_locaton_1, attempted_locaton_2, 0].policy
-        ].transfer_memories(
-            world, (attempted_locaton_1, attempted_locaton_2, 0), extra_reward=True
-        )
-
-        # this can only be used it seems if all agents have a different id
-        self.death = True  # label the agents death
-        self.reward = 0
-        self.appearance = [130.0, 130.0, 130.0]  # dead agents are grey
-        self.model = None
-        self.trainable = 0  # whether there is a network to be optimized
-        self.action_type = "static"
-        self.visual_depth = 4
-        self.episode_memory = deque([], maxlen=5)
-        self.has_transitions = False
-
     def pov(self, env):
-        """
-        env: instance of environment that agent perceives
-        TODO: refactor all the code so that this is here
-        """
         from utils import make_pov_image
         # pdb.set_trace()
 
@@ -108,31 +63,19 @@ class Agent:
         # img = create_pov_image(env, 0, self)
         # transform = T.Compose([T.PILToTensor()])
         # input = transform(img).unsqueeze(0).permute(0, 3, 1, 2).float()
+
         img = make_pov_image(env, self)
         input = torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2).float()
         state_now = torch.cat((state_now, input.unsqueeze(0)), dim=2)
-        # pdb.set_trace()
 
         # hack: add empty inventory var
-        inventory_var = torch.tensor([])
-        tmp = (current_state[:, -1, -1, :, :] * 0) + 0
-        inventory_var = torch.cat((inventory_var, tmp), dim=0)
-        inventory_var = inventory_var.unsqueeze(0).unsqueeze(0)
-        state_now = torch.cat((state_now, inventory_var), dim=2)
-
-        # if len(inventory) > 0:
-        #     """
-        #     Loops through each additional piece of information and places into one layer
-        #     """
-        #     inventory_var = torch.tensor([])
-        #     for item in range(len(inventory)):
-        #         tmp = (current_state[:, -1, -1, :, :] * 0) + inventory[item]
-        #         inventory_var = torch.cat((inventory_var, tmp), dim=0)
-        #     inventory_var = inventory_var.unsqueeze(0).unsqueeze(0)
-        #     state_now = torch.cat((state_now, inventory_var), dim=2)
+        # inventory_var = torch.tensor([])
+        # tmp = (current_state[:, -1, -1, :, :] * 0) + 0
+        # inventory_var = torch.cat((inventory_var, tmp), dim=0)
+        # inventory_var = inventory_var.unsqueeze(0).unsqueeze(0)
+        # state_now = torch.cat((state_now, inventory_var), dim=2)
 
         current_state[:, -1, :, :, :] = state_now
-        # current_state = state_now
 
         return current_state
 
@@ -160,20 +103,6 @@ class Agent:
 
         attempted_location = self.movement(action)
         target_object = env.observe(attempted_location)
-
-        # if type entity, collect value
-
-        # if isinstance(target_object, Collectable):
-        #     reward = target_object.value
-        # # ____ should be covered by move____    
-        # if target_object.passable == 1:
-        #     reward = target_object.value
-
-        # elif isinstance(target_object, Wall):  # Replacing comparison with string 'kind'
-        #         reward = -0.1
-
-        # movement logic - will move unless can't,
-        # gathers reward/penalty of target object
         env.move(self, attempted_location)
         reward = target_object.value
 

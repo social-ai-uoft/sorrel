@@ -9,10 +9,8 @@ from PIL import Image, ImageDraw, ImageOps
 from astropy.visualization import make_lupton_rgb
 import numpy as np
 import matplotlib.pyplot as plt
-
-# TODO:
-# might not be able to initialize entities without populate fn
-# see where entities given value and if it makes sense to connect to here
+import matplotlib.animation as animation
+import random
 
 DEVICES = ['cpu', 'cuda']
 MODELS = {
@@ -48,12 +46,6 @@ def load_config(args):
         config = yaml.safe_load(f)
 
     config = Cfg(config)
-
-    # if config.device not in DEVICES:
-    #     raise ValueError(f"Device {config.device} not supported, please use one of {DEVICES}")
-
-    # if config.model.name not in MODELS:
-    #     raise ValueError(f"Model {config.model.name} not supported, please use one of {MODELS}")
     
     return config
 
@@ -91,7 +83,6 @@ def create_agents(cfg, models):
 
             if not has_model:
                 raise ValueError(f"Model {agent_model_name} not found, please make sure it is defined in the config file.")
-            print(agent_model)
             agents.append(AGENT_TYPE(
                 agent_model,
                 cfg
@@ -105,12 +96,16 @@ def create_entities(cfg):
     entities = []
     for entity_type in vars(cfg.entity):
         ENTITY_TYPE = ENTITIES[entity_type]
-        for _ in range(vars(vars(cfg.entity)[entity_type])['num']):
-            entities.append(ENTITY_TYPE(
-                cfg
-            ))
+
+        # NOTE: Assumes only entities with num and num > 1 need to be initialized at the start
+        if 'start_num' in vars(vars(cfg.entity)[entity_type]):
+            for _ in range(vars(vars(cfg.entity)[entity_type])['start_num']):
+                entities.append(ENTITY_TYPE(
+                    cfg
+                ))
 
     return entities
+
 
 def update_memories(env, agent, done, end_update=True):
     exp = agent.episode_memory[-1]
@@ -127,84 +122,8 @@ def update_memories(env, agent, done, end_update=True):
 def transfer_world_memories(agents, extra_reward = True):
     # transfer the events from agent memory to model replay
     for agent in agents:
-        # this moves the specific form of the replay memory into the model class
-        # where it can be setup exactly for the model
+        # this moves the specific form of the replay memory into the model class where it can be setup exactly for the model
         agent.model.transfer_memories(agent, extra_reward)
-
-def create_image(env, z = 0):
-    """
-    Create an RGB image for the given layer
-    Each grid has 64 pixels, where each object takes up one pixel
-    By default, an empty grid pixel is white
-    The color of the object should be defined in the object class
-    """
-    layer = env.world[:, :, z] # Get the layer
-    x, y, _ = layer.shape # Get the width and height of the layer
-    print(x, y)
-
-    image_size = (x * 65 - 1, y * 65 - 1) # Size of image, including the gridlines
-    image = Image.new('RGB', image_size, 'black') # Create a new image with black color
-    draw = ImageDraw.Draw(image)
-
-    for i in range(x):
-        for j in range(y):
-            for idx, obj in enumerate(layer[i][j]):
-                x_pixel = idx % 64 + i * 65 
-                y_pixel = idx // 64 + j * 65 
-
-                # Draw the pixel with the appearance attribute of the object
-                draw.point((x_pixel, y_pixel), fill=obj.appearance)
-    
-    for i in range(x):
-        for j in range(y):
-            for x_pixel in range(i * 65 + 1, (i+1) * 65):
-                for y_pixel in range(j * 65 + 1, (j+1) * 65):
-                    draw.point((x_pixel, y_pixel), fill=(255, 255, 255)) # Fill it with white
-
-    # Fill remaining pixels in each grid with white color
-    for i in range(x):
-        for j in range(y):
-            for x_pixel in range(i * 65 + 1, (i+1) * 65 - 1): # for x_pixel in range(i * 65 + 1, (i+1) * 65): 
-                for y_pixel in range(j * 65 + 1, (j+1) * 65 - 1):
-                    if image.getpixel((x_pixel, y_pixel)) == (0, 0, 0): # If pixel is still black
-                        draw.point((x_pixel, y_pixel), fill=(255, 255, 255)) # Fill it with white
-    return image
-
-def create_pov_image(env, z, agent):
-    """
-    Create an RGB image for the given layer centered around the agent
-    Each grid has 64 pixels, where each object takes up one pixel
-    By default, an empty grid pixel is white
-    The color of the object should be defined in the object class
-    """
-    img = create_image(env, z)
-    pov = transform_image(env, z, agent, img)
-    return pov
-
-def transform_image(env, z, agent, image):
-    layer = env.world[:, :, z] # Get the layer
-    x, y, _ = agent.location # Get the width and  height of the layer
-    width, height, _ = layer.shape
-    k = agent.vision # radius of the agent's vision
-
-    left = max(0, (x-k)*65)
-    top = max(0, (y-k)*65)
-    right = min(width*65-1, (x+k+1)*65-1)
-    bottom = min(height*65-1, (y+k+1)*65-1)
-
-    # Crop the original image to the region of interest
-    cropped = image.crop((left, top, right, bottom))
-
-    # Calculate the number of pixels to add to each side
-    left_pad = max(0, (x-k)*65 - left)
-    top_pad = max(0, (y-k)*65 - top)
-    right_pad = max(0, ((x+k+1)*65 - 1) - right)
-    bottom_pad = max(0, ((y+k+1)*65 - 1) - bottom)
-
-    # Add border of black grids if necessary
-    bordered = ImageOps.expand(cropped, (left_pad, top_pad, right_pad, bottom_pad), fill='black')
-
-    return bordered
 
 def make_pov_image(env, agent, wall_app=[0.0, 0.0, 0.0]):
     """
@@ -249,6 +168,118 @@ def make_pov_image(env, agent, wall_app=[0.0, 0.0, 0.0]):
     # plt.imshow(image)
     # plt.show()
     return image
+
+def create_world_image(env, layer=0, use_sprites=False):
+        """
+        Creates an RGB image of the whole world
+        """
+        world_shape = env.world.shape
+        image_r = np.zeros((world_shape[0] * env.tile_size[0], world_shape[1] * env.tile_size[1]))
+        image_g = np.zeros((world_shape[0] * env.tile_size[0], world_shape[1] * env.tile_size[1]))
+        image_b = np.zeros((world_shape[0] * env.tile_size[0], world_shape[1] * env.tile_size[1]))
+
+        for i in range(world_shape[0]):
+            for j in range(world_shape[1]):
+
+                if use_sprites:
+                    tile_appearance = env.world[i, j, layer].sprite
+                    tile_image = Image.open(tile_appearance).resize(env.tile_size).convert('RGBA')
+                    tile_image_array = np.array(tile_image)
+
+                    # Set transparent pixels to white
+                    alpha = tile_image_array[:, :, 3]
+                    tile_image_array[alpha == 0, :3] = 255
+
+                    image_r[i * env.tile_size[0]: (i + 1) * env.tile_size[0], j * env.tile_size[1]: (j + 1) * env.tile_size[1]] = tile_image_array[:, :, 0]
+                    image_g[i * env.tile_size[0]: (i + 1) * env.tile_size[0], j * env.tile_size[1]: (j + 1) * env.tile_size[1]] = tile_image_array[:, :, 1]
+                    image_b[i * env.tile_size[0]: (i + 1) * env.tile_size[0], j * env.tile_size[1]: (j + 1) * env.tile_size[1]] = tile_image_array[:, :, 2]
+                
+                else:
+                    tile_appearance = env.world[i, j, layer].appearance
+                    image_r[i * env.tile_size[0]: (i + 1) * env.tile_size[0], j * env.tile_size[1]: (j + 1) * env.tile_size[1]] = tile_appearance[0]
+                    image_g[i * env.tile_size[0]: (i + 1) * env.tile_size[0], j * env.tile_size[1]: (j + 1) * env.tile_size[1]] = tile_appearance[1]
+                    image_b[i * env.tile_size[0]: (i + 1) * env.tile_size[0], j * env.tile_size[1]: (j + 1) * env.tile_size[1]] = tile_appearance[2]
+
+        image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
+        return image
+
+def create_replays(**kwargs):
+        cfg = kwargs['cfg']
+        cur_epoch = kwargs['epoch']
+
+        if cfg.replay.save == True and cur_epoch % cfg.replay.replay_frequency == 0:
+            for i in range(cfg.replay.num_replays):
+                # Create save directory
+                save_dir = cfg.save_dir
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)   
+                
+                replay_dir = save_dir + 'replay/'
+                if not os.path.exists(replay_dir):
+                    os.makedirs(replay_dir)   
+
+                # Format filename
+                filename = (
+                    replay_dir
+                    + cfg.experiment.name
+                    + "_epoch"
+                    + str(cur_epoch)
+                    + "_num"
+                    + str(i)
+                    + ".gif"
+                )
+
+                # Create inputs for create_replay
+                agents = kwargs['agents']
+                entities = kwargs['entities']
+                env = kwargs['env']
+
+                create_replay(cfg, agents, entities, env, filename)
+
+def create_replay(cfg, agents, entities, env, filename):
+
+    fig = plt.figure()
+    ims = []
+    env.reset_world(agents, entities)
+    turns = cfg.replay.turns
+    done = 0
+    turn = 0
+
+    for agent in agents:
+        agent.reset()
+
+        # Save agents' epsilon to recover after the replay
+        agent.temp_eps = agent.model.epsilon
+        agent.model.epsilon = cfg.replay.epsilon
+
+    while not done:
+        if turn > turns:
+            done = 1
+
+        image = create_world_image(env, use_sprites=cfg.replay.use_sprites)
+        # left_label = "Turn: " + str(turn)
+        # cv2.putText(image, left_label, (10, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+
+        im = plt.imshow(image, animated=True)
+        ims.append([im])
+
+        for entity in entities:
+            entity.transition(env)
+
+        random.shuffle(agents)
+
+        for agent in agents:
+            agent.transition(env)
+
+        turn += 1
+
+    ani = animation.ArtistAnimation(fig, ims)
+    ani.save(filename, writer="PillowWriter", fps=cfg.replay.fps)
+
+    # Recover the agents' epsilon
+    for agent in agents:
+        agent.model.epsilon = agent.temp_eps
+
 
 
 

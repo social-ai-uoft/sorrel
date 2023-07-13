@@ -14,36 +14,32 @@ from PIL import Image
 
 
 class RPG:
-    def __init__(self, cfg, agents):
-        self.x = cfg.env.dimensions.x
-        self.y = cfg.env.dimensions.y
-        self.z = cfg.env.dimensions.z
-        self.tile_size = make_tuple(cfg.env.dimensions.tile_size)
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.x = cfg.env.length
+        self.y = cfg.env.width
+        self.z = cfg.env.height
+        self.tile_size = make_tuple(cfg.env.tile_size)
 
         self.item_spawn_prob = cfg.env.prob.item_spawn
         self.item_choice_prob = [float(num_str) for num_str in make_tuple(cfg.env.prob.item_choice)]
 
-        # self.create_world()
-        # self.init_elements()
-        # self.populate(cfg, agents)
-        # self.insert_walls()
-
-    def create_world(self, cfg):
+    def create_world(self):
         """
         Creates a world of the specified size with a default object
         """
-        self.world = np.empty((cfg.env.dimensions.x, cfg.env.dimensions.y, cfg.env.dimensions.z), dtype=object)
+        self.world = np.empty((self.x, self.y, self.z), dtype=object)
         for i in range(self.x):
             for j in range(self.y):
                 for k in range(self.z):
-                    self.world[i, j, k] = EmptyObject()
+                    self.world[i, j, k] = EmptyObject(self.cfg)
 
-    def reset_world(self, cfg, agents):
+    def reset_world(self, agents, entities):
         """
         Resets the environment and repopulates it
         """
-        self.create_world(cfg)
-        self.populate(cfg, agents)
+        self.create_world()
+        self.populate(self.cfg, agents, entities)
         self.insert_walls()
 
     def add(self, object, target_location):
@@ -81,23 +77,30 @@ class RPG:
     
     def remove(self, target_location):
         """
-        Remove the type of object at a location and return it
+        Remove the object at a location and return it
+
+        Args:
+            target_location: the location of the object
         """
         object = self.world[target_location]
-        self.world[target_location] = EmptyObject()
+        self.world[target_location] = EmptyObject(self.cfg)
         return object
     
     def move(self, object, new_location):
         """
-        Moves an object from previous_location to new_location 
-        Returns True if successful, False otherwise
+        Move an object from a location to a new location
+        Return True if successful, False otherwise
+
+        Args:
+            object: object to be moved
+            new_location: location to move the object
         """
         if self.world[new_location].passable == 1:
             self.remove(new_location)
             previous_location = object.location
             object.location = new_location
             self.world[new_location] = object
-            self.world[previous_location] = EmptyObject()
+            self.world[previous_location] = EmptyObject(self.cfg)
             return True
         else:
             return False
@@ -253,17 +256,15 @@ class RPG:
 
         return current_state
 
-    def populate(self, cfg, agents):
+    def populate(self, cfg, agents, entities):
         """
         Populates the game board with elements
         TODO: test whether the probabilites above are working
         """
         for i in range(self.world.shape[0]):
             for j in range(self.world.shape[1]):
-                # check spawn probability
-                if random.random() < cfg.env.prob.item_spawn:
+                if random.random() < self.item_spawn_prob:
 
-                    # check which item to spawn
                     obj = np.random.choice(
                         [0, 1, 2, 3],
                         p=self.item_choice_prob
@@ -298,66 +299,10 @@ class RPG:
         Assumes that the world is square - fixme.
         """
         for i in range(self.x):
-            self.add(Wall(), (0, i, 0))
-            self.add(Wall(), (self.x - 1, i, 0))
-            # self.add(Wall(self.cfg), (self.x - 1, 0, 0)) -- additonal dimension in taxicab code that was not here
-            self.add(Wall(), (i, 0, 0))
-            self.add(Wall(), (i, self.x - 1, 0))
-
-    def step(self, models, loc, epsilon=0.85, device=None):
-        """
-        This is an example script for an alternative step function
-        It does not account for the fact that an agent can die before
-        it's next turn in the moveList. If that can be solved, this
-        may be preferable to the above function as it is more like openAI gym
-
-        The solution may come from the agent.died() function if we can get that to work
-
-        location = (i, j, 0)
-
-        Uasge:
-            for i, j, k = agents
-                location = (i, j, k)
-                state, action, reward, next_state, done, additional_output = env.stepSingle(models, (0, 0, 0), epsilon)
-                env.world[0, 0, 0].updateMemory(state, action, reward, next_state, done, additional_output)
-            env.WorldUpdate()
-
-        """
-        holdObject = self.world[loc]
-        device = models[holdObject.policy].device
-
-        if holdObject.kind != "deadAgent":
-            """
-            This is where the agent will make a decision
-            If done this way, the pov statement may be about to be part of the action
-            Since they are both part of the same class
-
-            if going for this, the pov statement needs to know about location rather than separate
-            i and j variables
-            """
-            state = models[holdObject.policy].pov(self, loc, holdObject)
-            params = (state.to(device), epsilon, None)
-            action, init_rnn_state = models[holdObject.policy].take_action(params)
-
-        if holdObject.has_transitions == True:
-            """
-            Updates the world given an action
-            TODO: does this need self.world in here, or can it be figured out by passing self?
-            """
-            (
-                self.world,
-                reward,
-                next_state,
-                done,
-                new_loc,
-            ) = holdObject.transition(self, models, action, loc)
-        else:
-            reward = 0
-            next_state = state
-
-        additional_output = []
-
-        return state, action, reward, next_state, done, new_loc, additional_output
+            self.add(Wall(self.cfg), (0, i, 0))
+            self.add(Wall(self.cfg), (self.x - 1, i, 0))
+            self.add(Wall(self.cfg), (i, 0, 0))
+            self.add(Wall(self.cfg), (i, self.x - 1, 0))
 
     def is_valid_location(self, location):
         """

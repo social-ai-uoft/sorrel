@@ -3,13 +3,13 @@ experiment:
   name: rpg
   epochs: 10000
   max_turns: 100
+  epsilon_decay: 0.00006
 
 env:
-  dimensions:
-    x: 15
-    y: 15
-    z: 1
-    tile_size: (1, 1)
+  length: 7
+  width: 7
+  height: 1
+  tile_size: (1, 1)
   prob:
     item_spawn: 0.15
     item_choice: (0.1, 0.3, 0.4, 0.2) # gem, coin, food, bone
@@ -20,48 +20,57 @@ model:
     num: 1
     device: cpu
     parameters:
-      in_channels: 4 #3
+      in_channels: 3
       num_filters: 5
       lr: 0.001
       replay_size: 2048
-      in_size: 650 #1450
+      in_size: 370 #1450
       hid_size1: 75
       hid_size2: 30
       out_size: 4
       priority_replay: False
 
-      epochs: 1000
       sync_freq: 500
       inepoch_sync_freq: 25
       epsilon: 0.99
       gamma: 0.9
-      inepoch_batch: 128
-      postepoch_batch: 256
+      batch_size: 128
 
 agent:
   agent:
     num: 1
     model: agent_cnn
     num_memories: 3
-    visual_depth: 4
+    visual_depth: 3
     appearance: (0.0, 0.0, 255.0)
     tile_size: (1, 1)
     pov_size: 9
     health: 10
 
-entities:
+entity:
   Gem:
     value: 10
-    appearance: (0.0, 255.0, 0.0)
+    appearance: (0.0, 255.0, 0.0) # Green
   Coin:
     value: 2
-    appearance: (255.0, 255.0, 0.0)
+    appearance: (255.0, 255.0, 0.0) # Yellow
   Food:
     value: 1
-    appearance: (255.0, 0.0, 0.0)
+    appearance: (255.0, 0.0, 0.0) # Red
   Bone:
     value: -4
-    appearance: (0, 0, 0)
+    appearance: (0, 0, 0) # Black
+
+replay:
+  use_sprites: False
+  save: True
+  replay_frequency: 500
+  num_replays: 3
+  end_update: True
+  epsilon: 0.01
+  blit: False
+  fps: 2
+  turns: 100
 
 
-save_dir: 'your save dir'
+save_dir: "/Users/yumozi/Projects/gem_data/rpg_gem1.5/"

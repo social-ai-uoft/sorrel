@@ -109,6 +109,7 @@ class Model_CNN_LSTM_DQN:
         self.sync_freq = cfg.parameters.sync_freq
         self.inepoch_training_freq = cfg.parameters.inepoch_sync_freq
         self.gamma = cfg.parameters.gamma
+        self.batch_size = cfg.parameters.batch_size
 
         self.model1 = Combine_CLD(
             in_channels, num_filters, in_size, hid_size1, hid_size2, out_size
@@ -167,11 +168,13 @@ class Model_CNN_LSTM_DQN:
         
         return action, (c, h)
 
-    def training(self, batch_size, gamma):
+    def training(self):
         """
         DQN batch learning
         """
         loss = torch.tensor(0.0)
+        batch_size = self.batch_size
+        gamma = self.gamma
 
         current_replay_size = batch_size + 1
 
@@ -269,4 +272,4 @@ class Model_CNN_LSTM_DQN:
     def end_epoch_action(self, **kwargs):
         # loss gets discarded
         if kwargs['turn'] % self.inepoch_training_freq == 0:
-            loss = self.training(batch_size = 128, gamma = self.gamma)
+            loss = self.training()
