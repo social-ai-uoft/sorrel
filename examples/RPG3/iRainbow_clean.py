@@ -1,4 +1,8 @@
-"""Rainbow DQN agent with an Implicit Quantile Network (IQN) for value distribution estimation."""
+"""Rainbow DQN agent with an Implicit Quantile Network (IQN) for value distribution estimation.
+
+Source code is based on Dittert, Sebastian. "Implicit Quantile Networks (IQN) for Distributional
+Reinforcement Learning and Extensions." https://github.com/BY571/IQN. (2020).
+"""
 import random
 from typing import Optional
 from collections import deque, namedtuple
@@ -13,8 +17,7 @@ from gem.models.layers import NoisyLinear
 
 
 class IQN(nn.Module):
-    """Implicit Quantile Network.
-    """
+    """Implicit Quantile Network."""
 
     def __init__(
         self,
