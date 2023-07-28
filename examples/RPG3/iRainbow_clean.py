@@ -1,29 +1,4 @@
-"""
-Implicit Quantile Network Implementation.
-
-The IQN learns an estimate of the entire distribution of possible rewards (Q-values) for taking
-some action.
-
-Source code is based on Dittert, Sebastian. "Implicit Quantile Networks (IQN) for Distributional
-Reinforcement Learning and Extensions." https://github.com/BY571/IQN. (2020). 
-
-Structure:
-
-IQN
- - calc_cos: calculate the cos values
- - forward: input pass through linear layer, get modified by cos values, pass through NOISY linear layer, and calculate output based on value and advantage
- - get_qvalues: set action probabilities as the mean of the quantiles 
-
-ReplayBuffer
- - add: add new experience to memory (multistep return is disabled for now)
- - sample: sample a batch of experiences from memory
-
-iRainbowModel (contains two IQN networks; one for local and one for target)
- - take_action: standard epsilon greedy action selection
- - learn: train the model using quantile huber loss from IQN
- - soft_update: set weights of target network to be a mixture of weights from local and target network
- - transfer_memories: transfer memories from the agent to the model
-"""
+"""Rainbow DQN agent with an Implicit Quantile Network (IQN) for value distribution estimation."""
 import random
 from typing import Optional
 from collections import deque, namedtuple
@@ -36,8 +11,10 @@ from torch.nn.utils import clip_grad_norm_
 
 from gem.models.layers import NoisyLinear
 
+
 class IQN(nn.Module):
-    """The IQN Q-network."""
+    """Implicit Quantile Network.
+    """
 
     def __init__(
         self,
@@ -134,116 +111,109 @@ class IQN(nn.Module):
         actions = quantiles.mean(dim=1)
         return actions
 
-class ReplayBuffer:
-    """Fixed-size buffer to store experience tuples."""
 
-    def __init__(self, buffer_size, batch_size, device, seed, gamma, n_step=1):
-        """Initialize a ReplayBuffer object.
-        Params
-        ======
-            buffer_size (int): maximum size of buffer
-            batch_size (int): size of each training batch
-            seed (int): random seed
-        """
-        self.device = device
-        self.memory = deque(maxlen=buffer_size)
+class PrioritizedReplay(object):
+    """Fixed-size experience replay buffer with proportional prioritization."""
+    def __init__(
+        self,
+        capacity,
+        batch_size,
+        seed,
+        gamma=0.99,
+        n_step=1,
+        alpha=0.6,
+        beta_start = 0.4,
+        beta_frames=100000
+    ) -> None:
+        self.alpha = alpha
+        self.beta_start = beta_start
+        self.beta_frames = beta_frames
+        self.frame = 1 #for beta calculation
         self.batch_size = batch_size
-        self.experience = namedtuple(
-            "Experience",
-            field_names=["state", "action", "reward", "next_state", "done"],
-        )
-        self.seed = random.seed(seed)
+        self.capacity   = capacity
+        self.buffer     = []
+        self.pos        = 0
+        self.priorities = np.zeros((capacity,), dtype=np.float32)
+        self.seed = np.random.seed(seed)
+        self.n_step = n_step
+        self.n_step_buffer = deque(maxlen=self.n_step)  # buffer of (s, a, r, s', d) tuples
         self.gamma = gamma
-        # self.n_step = n_step
-        # self.n_step_buffer = deque(maxlen=self.n_step)
+
+    def calc_multistep_return(self,n_step_buffer):
+        Return = 0
+        for idx in range(self.n_step):
+            Return += self.gamma**idx * n_step_buffer[idx][2]
+
+        # return (s_t, a_t, s_{t+n+1}, d_{t+n+1}) where n is the multi-step interval
+        return n_step_buffer[0][0], n_step_buffer[0][1], Return, n_step_buffer[-1][3], n_step_buffer[-1][4]
+
+    def beta_by_frame(self, frame_idx):
+        """
+        Linearly increases beta from beta_start to 1 over time from 1 to beta_frames.
+
+        3.4 ANNEALING THE BIAS (Paper: PER)
+        We therefore exploit the flexibility of annealing the amount of importance-sampling
+        correction over time, by defining a schedule on the exponent
+        that reaches 1 only at the end of learning. In practice, we linearly anneal from its initial value 0 to 1
+        """
+        return min(1.0, self.beta_start + frame_idx * (1.0 - self.beta_start) / self.beta_frames)
 
     def add(self, state, action, reward, next_state, done):
-        """
-        Add a new experience to memory.
-        """
-        # # Add the new experience to buffer
-        # self.n_step_buffer.append((state, action, reward, next_state, done))
+        assert state.ndim == next_state.ndim
+        state      = np.expand_dims(state, 0)
+        next_state = np.expand_dims(next_state, 0)
 
-        # # If there are enough steps in the buffer, append to the memory
-        # if len(self.n_step_buffer) == self.n_step:
+        # n_step calc
+        self.n_step_buffer.append((state, action, reward, next_state, done))
+        if len(self.n_step_buffer) == self.n_step:
+            state, action, reward, next_state, done = self.calc_multistep_return(self.n_step_buffer)
 
-        #     # Set the experience as the return and state change over multiple steps 
-        #     state, action, reward, next_state, done = self.calc_multistep_return(self.n_step_buffer)
-        #     e = self.experience(state, action, reward, next_state, done)
+        max_prio = self.priorities.max() if self.buffer else 1.0 # gives max priority if buffer is not empty else 1
 
-        #     # Add the experience to the memory
-        #     self.memory.append(e)
+        if len(self.buffer) < self.capacity:
+            self.buffer.append((state, action, reward, next_state, done))
+        else:
+            # puts the new data on the position of the oldes since it circles via pos variable
+            # since if len(buffer) == capacity -> pos == 0 -> oldest memory (at least for the first round?)
+            self.buffer[self.pos] = (state, action, reward, next_state, done)
 
-        # NOTE: multistep return seem to have little/negative effect on the performance
-        # NOTE: removing multistep return also bounds the loss to a lower number
-        e = self.experience(state, action, reward, next_state, done)
-        self.memory.append(e)
-
-    # def calc_multistep_return(self, n_step_buffer):
-    #     Return = 0
-    #     for idx in range(self.n_step):
-    #         Return += self.gamma**idx * n_step_buffer[idx][2]
-
-    #     # There are 3 steps in the buffer
-    #     # - state = state of first step
-    #     # - action = action of first step
-    #     # - reward = sum of rewards of all steps
-    #     # - next_state = state of last step
-    #     # - done = done of last step
-    
-    #     return (
-    #         n_step_buffer[0][0],
-    #         n_step_buffer[0][1],
-    #         Return,
-    #         n_step_buffer[-1][3],
-    #         n_step_buffer[-1][4],
-    #     )
+        self.priorities[self.pos] = max_prio
+        self.pos = (self.pos + 1) % self.capacity # lets the pos circle in the ranges of capacity if pos+1 > cap --> new posi = 0
 
     def sample(self):
-        """Randomly sample a batch of experiences from memory."""
-        experiences = random.sample(self.memory, k=self.batch_size)
+        N = len(self.buffer)
+        if N == self.capacity:
+            prios = self.priorities
+        else:
+            prios = self.priorities[:self.pos]
 
-        states = (
-            torch.from_numpy(np.stack([e.state for e in experiences if e is not None]))
-            .float()
-            .to(self.device)
-        )
-        actions = (
-            torch.from_numpy(
-                np.vstack([e.action for e in experiences if e is not None])
-            )
-            .long()
-            .to(self.device)
-        )
-        rewards = (
-            torch.from_numpy(
-                np.vstack([e.reward for e in experiences if e is not None])
-            )
-            .float()
-            .to(self.device)
-        )
-        next_states = (
-            torch.from_numpy(
-                np.stack([e.next_state for e in experiences if e is not None])
-            )
-            .float()
-            .to(self.device)
-        )
-        dones = (
-            torch.from_numpy(
-                np.vstack([e.done for e in experiences if e is not None]).astype(
-                    np.uint8
-                )
-            )
-            .float()
-            .to(self.device)
-        )
+        # calc P = p^a/sum(p^a)
+        probs  = prios ** self.alpha
+        P = probs/probs.sum()
 
-        return (states, actions, rewards, next_states, dones)
+        #gets the indices depending on the probability p
+        indices = np.random.choice(N, self.batch_size, p=P)
+        samples = [self.buffer[idx] for idx in indices]
+
+        beta = self.beta_by_frame(self.frame)
+        self.frame+=1
+
+        #Compute importance-sampling weight
+        weights  = (N * P[indices]) ** (-beta)
+        # normalize weights
+        weights /= weights.max()
+        weights  = np.array(weights, dtype=np.float32)
+
+        states, actions, rewards, next_states, dones = zip(*samples)
+        return np.concatenate(states), actions, rewards, np.concatenate(next_states), dones, indices, weights
+
+    def update_priorities(self, batch_indices, batch_priorities):
+        for idx, prio in zip(batch_indices, batch_priorities):
+            self.priorities[idx] = prio
 
     def __len__(self):
-        """Return the current size of internal memory."""
-        return len(self.memory)
+        return len(self.buffer)
+
 
 class iRainbowModel:
     """Interacts with and learns from the environment."""
@@ -317,14 +287,12 @@ class iRainbowModel:
         ).to(device)
 
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
-
-        self.memory = ReplayBuffer(
+        self.memory = PrioritizedReplay(
             BUFFER_SIZE,
             self.BATCH_SIZE,
-            self.device,
-            seed,
-            self.GAMMA,
-            n_step,
+            seed=seed,
+            gamma=self.GAMMA,
+            n_step=n_step
         )
 
     def take_action(self, state, eps=0.0, eval=False):
@@ -337,10 +305,10 @@ class iRainbowModel:
 
         """
         # Epsilon-greedy action selection
-        if (random.random() > eps):  
+        if (random.random() > eps):
             state = np.array(state)
-            state = (torch.from_numpy(state).float().to(self.device)) 
-            
+            state = (torch.from_numpy(state).float().to(self.device))
+
             self.qnetwork_local.eval()
             with torch.no_grad():
                 action_values = self.qnetwork_local.get_qvalues(state)  # .mean(0)
@@ -360,47 +328,60 @@ class iRainbowModel:
             gamma (float): discount factor
         """
         self.optimizer.zero_grad()
-        
-        states, actions, rewards, next_states, dones = experiences
+
+        states, actions, rewards, next_states, dones, idx, weights = experiences
+
+        # Unpack experiences, convert them to float, and move them to proper device
+        states = torch.FloatTensor(states).to(self.device)
+        next_states = torch.FloatTensor(np.float32(next_states)).to(self.device)
+        actions = torch.LongTensor(actions).to(self.device).unsqueeze(1)
+        rewards = torch.FloatTensor(rewards).to(self.device).unsqueeze(1)
+        dones = torch.FloatTensor(dones).to(self.device).unsqueeze(1)
+        weights = torch.FloatTensor(weights).unsqueeze(1).to(self.device)
 
         # Get max predicted Q values (for next states) from target model
         Q_targets_next, _ = self.qnetwork_target(next_states, self.N)
         Q_targets_next = Q_targets_next.detach().cpu()
         action_indx = torch.argmax(Q_targets_next.mean(dim=1), dim=1, keepdim=True)
         Q_targets_next = Q_targets_next.gather(
-            2, action_indx.unsqueeze(-1).expand(self.BATCH_SIZE, self.N, 1)
-        ).transpose(1, 2)
+                2, action_indx.unsqueeze(-1).expand(self.BATCH_SIZE, self.N, 1)
+        ).transpose(1,2)
 
         # Compute Q targets for current states
         Q_targets = rewards.unsqueeze(-1) + (
-            self.GAMMA**self.n_step
-            * Q_targets_next.to(self.device)
-            * (1.0 - dones.unsqueeze(-1))
+                self.GAMMA**self.n_step
+                * Q_targets_next.to(self.device)
+                * (1. - dones.unsqueeze(-1))
         )
 
         # Get expected Q values from local model
         Q_expected, taus = self.qnetwork_local(states, self.N)
         Q_expected = Q_expected.gather(
-            2, actions.unsqueeze(-1).expand(self.BATCH_SIZE, self.N, 1)
+                2, actions.unsqueeze(-1).expand(self.BATCH_SIZE, self.N, 1)
         )
 
         # Quantile Huber loss
         td_error = Q_targets - Q_expected
-        assert td_error.shape == (self.BATCH_SIZE, self.N, self.N,), "wrong td error shape"
+        assert td_error.shape == (self.BATCH_SIZE, self.N, self.N), "wrong td error shape"
         huber_l = calculate_huber_loss(td_error, 1.0)
-        quantil_l = abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
+        quantil_l = abs(taus -(td_error.detach() < 0).float()) * huber_l / 1.0
 
-        loss = quantil_l.sum(dim=1).mean(dim=1)  # , keepdim=True if per weights get multipl
+        loss = quantil_l.sum(dim=1).mean(dim=1, keepdim=True)* weights # , keepdim=True if per weights get multipl
         loss = loss.mean()
 
         # Minimize the loss
         loss.backward()
-        clip_grad_norm_(self.qnetwork_local.parameters(), 1)
+        clip_grad_norm_(self.qnetwork_local.parameters(),1)
 
         self.optimizer.step()
 
         # ------------------- update target network ------------------- #
         self.soft_update(self.qnetwork_local, self.qnetwork_target)
+
+        # update priorities
+        td_error = td_error.sum(dim=1).mean(dim=1,keepdim=True) # not sure about this -> test
+        self.memory.update_priorities(idx, abs(td_error.data.cpu().numpy()))
+
         return loss.detach().cpu().numpy()
 
     def soft_update(self, local_model, target_model):
