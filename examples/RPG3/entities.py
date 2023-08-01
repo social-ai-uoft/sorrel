@@ -8,8 +8,9 @@ from ast import literal_eval as make_tuple
 
 class EmptyObject:
     def __init__(self, cfg):
-        self.appearance = [255, 255, 255]  # empty is white
-        self.sprite = 'examples/RPG/assets/white.png'
+        self.apperance = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        # self.appearance = [255, 255, 255]  # empty is white
+        # self.sprite = 'examples/RPG/assets/white.png'
         self.vision = 1  # empty stuff is basically empty
         self.value = 0  # empty stuff is basically empty
         self.passable = 1  # whether the object blocks movement
@@ -18,8 +19,9 @@ class EmptyObject:
 
 class Wall:
     def __init__(self, cfg):
-        self.appearance = [153.0, 51.0, 102.0]  # walls are purple
-        self.sprite = 'examples/RPG/assets/pink.png'
+        self.appearance = [0.0, 255.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        # self.appearance = [153.0, 51.0, 102.0]  # walls are purple
+        # self.sprite = 'examples/RPG/assets/pink.png'
         self.vision = 0  # wall stuff is basically empty
         self.value = -0.1  # wall stuff is basically empty
         self.static = 1  # wall stuff is basically empty
