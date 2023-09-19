@@ -1,30 +1,59 @@
+'''
+pov
+transition
+have transition keep track of number of gems collected
+'''
+
+from examples.RPG.entities import Wall, EmptyObject
+
+from ast import literal_eval as make_tuple
+from collections import deque
+import torch
+
+# TODO: 
+# make sure dead agent should change model to None
+# probably need to add die into particular circumstances in transition
+# touch base with Eric about adding in new pov code
+
 class Agent:
-    kind = "agent"  # class variable shared by all instances
-
-    def __init__(self, model):
-        self.health = 10  # for the agents, this is how hungry they are
-        self.appearance = [0.0, 0.0, 255.0, 0.0, 0.0, 0.0, 0.0]  # agents are blue
-        self.vision = 4  # agents can see three radius around them
-        self.model = model  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
-        self.value = 0  # agents have no value
-        self.reward = 0  # how much reward this agent has collected
-        self.location = None
+    def __init__(self, model, cfg):
+        self.type = "Agent"
+        self.cfg = cfg      
+        self.appearance = make_tuple(cfg.agent.agent.appearance)  # agents are blue
+        self.tile_size = make_tuple(cfg.agent.agent.tile_size)
+        self.sprite = 'examples/RPG/assets/hero.png'
         self.passable = 0  # whether the object blocks movement
-        self.episode_memory = deque([], maxlen=100)  # we should read in these maxlens
-        self.has_transitions = True
+        self.value = 0  # agents have no value
+        self.health = cfg.agent.agent.health  # for the agents, this is how hungry they are
+        self.location = None
         self.action_type = "neural_network"
-
-    def init_replay(self, numberMemories, pov_size=9, visual_depth=3):
+        
+        # training-related features
+        self.model = model  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
+        self.episode_memory = deque([], maxlen=100)  # we should read in these maxlens
+        self.num_memories = cfg.agent.agent.num_memories
+        self.init_rnn_state = None
+        self.visual_depth = cfg.agent.agent.visual_depth 
+        self.pov_size = cfg.agent.agent.pov_size
+    
+    def init_replay(self): 
         """
         Fills in blank images for the LSTM before game play.
-        Implicitly defines the number of sequences that the LSTM will be trained on.
+        Impicitly defines the number of sequences that the LSTM will be trained on.
         """
-        # pov_size = 9 # this should not be needed if in the input above
-        image = torch.zeros(1, numberMemories, 7, pov_size, pov_size).float()
+        image = torch.zeros(1, self.num_memories, self.visual_depth, self.pov_size, self.pov_size).float()
         priority = torch.tensor(0.1)
         blank = torch.tensor(0.0)
         exp = (priority, (image, blank, blank, image, blank))
         self.episode_memory.append(exp)
+    
+    def reset(self):
+        '''
+        resets agent init_rnn_state, replay, and reward
+        '''
+        self.init_rnn_state = None
+        self.init_replay()
+        self.reward = 0
 
     def movement(self, action):
         """
@@ -39,6 +68,54 @@ class Agent:
         if action == 3:
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
         return new_location
+    
+    def pov(self, env):
+        from utils import make_pov_image
+        # pdb.set_trace()
+
+        previous_state = self.episode_memory[-1][1][0]
+        current_state = previous_state.clone()
+
+        current_state[:, 0:-1, :, :, :] = previous_state[:, 1:, :, :, :]
+
+        state_now = torch.tensor([])
+ 
+        # img = create_pov_image(env, 0, self)
+        # transform = T.Compose([T.PILToTensor()])
+        # input = transform(img).unsqueeze(0).permute(0, 3, 1, 2).float()
+
+        img = make_pov_image(env, self)
+        input = torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2).float()
+        state_now = torch.cat((state_now, input.unsqueeze(0)), dim=2)
+
+        # hack: add empty inventory var
+        # inventory_var = torch.tensor([])
+        # tmp = (current_state[:, -1, -1, :, :] * 0) + 0
+        # inventory_var = torch.cat((inventory_var, tmp), dim=0)
+        # inventory_var = inventory_var.unsqueeze(0).unsqueeze(0)
+        # state_now = torch.cat((state_now, inventory_var), dim=2)
+
+        current_state[:, -1, :, :, :] = state_now
+
+        return current_state
+    
+    def transition(self, env):
+        """
+        Changes the world based on the action taken
+        """
+        reward = 0
+        state = self.pov(env)
+        action, self.init_rnn_state = self.model.take_action(state, self.init_rnn_state)
+
+        attempted_location = self.movement(action)
+        target_object = env.observe(attempted_location)
+        env.move(self, attempted_location)
+        reward = target_object.value
+
+        next_state = self.pov(env)
+        self.reward += reward
+
+        return state, action, reward, next_state
 
     def transition(self, env, models, action, location):
         """

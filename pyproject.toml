@@ -11,9 +11,15 @@ python = "^3.8"
 astropy = "^5.1.1"
 matplotlib = "^3.6.1"
 numpy = "^1.23.4"
+torch = {extras = ["cpu"], version = "^2.0.1+cpu"}
 
 [tool.poetry.dev-dependencies]
 pre-commit = "^2.20.0"
+
+[[tool.poetry.source]]
+name = "torch"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "primary"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

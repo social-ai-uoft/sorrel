@@ -14,7 +14,6 @@ class EmptyObject:
         self.vision = 1  # empty stuff is basically empty
         self.value = 0  # empty stuff is basically empty
         self.passable = 1  # whether the object blocks movement
-        self.has_transitions = False
         self.action_type = "empty"
 
 class Wall:
@@ -29,44 +28,19 @@ class Wall:
         self.action_type = "static"  # rays disappear after one turn
 
 class Gem():
-    def __init__(self, cfg):
+    def __init__(self, cfg, type):
         self.health = 1  # for the gen, whether it has been mined or not
-        self.appearance = make_tuple(cfg.entity.Gem.appearance)  # gems are green
         self.sprite = 'examples/RPG/assets/gem.png'
         self.vision = 1  # gems can see one radius around them
-        self.value = cfg.entity.Gem.value  # the value of this gem
         self.static = 1  # whether the object gets to take actions or not
         self.passable = 1  # whether the object blocks movement
         self.action_type = "static"
-
-class Coin():
-    def __init__(self, cfg):
-        self.health = 1  # for the gen, whether it has been mined or not
-        self.appearance = make_tuple(cfg.entity.Coin.appearance)  # gems are green
-        self.sprite = 'examples/RPG/assets/coin.png'
-        self.vision = 1  # gems can see one radius around them
-        self.policy = "NA"  # gems do not do anything
-        self.value = cfg.entity.Coin.value  # the value of this gem
-        self.passable = 1  # whether the object blocks movement
-        self.action_type = "static"
-
-class Food():
-    def __init__(self, cfg):
-        self.health = 1  # for the gen, whether it has been mined or not
-        self.appearance = make_tuple(cfg.entity.Food.appearance)  # gems are green
-        self.sprite = 'examples/RPG/assets/food.png'
-        self.vision = 1  # gems can see one radius around them
-        self.value = cfg.entity.Food.value  # the value of this gem
-        self.passable = 1  # whether the object blocks movement
-        self.action_type = "static"
-
-class Bone():
-    def __init__(self, cfg):
-        self.health = 1  # for the gen, whether it has been mined or not
-        self.appearance = make_tuple(cfg.entity.Bone.appearance)
-        self.sprite = 'examples/RPG/assets/bone.png'
-        self.vision = 1  # gems can see one radius around them
-        self.policy = "NA"  # gems do not do anything
-        self.value = cfg.entity.Bone.value  # the value of this gem
-        self.passable = 1  # whether the object blocks movement
-        self.action_type = "static"
+        if type == 1:
+            self.appearance = make_tuple(cfg.entity.Gem.appearance)
+            self.value = cfg.entity.Gem1.value
+        elif type == 2:
+            self.appearance = make_tuple(cfg.entity.Gem2.appearance)
+            self.value = cfg.entity.Gem2.value
+        elif type == 3:
+            self.appearance = make_tuple(cfg.entity.Gem3.appearance)
+            self.value = cfg.entity.Gem3.value
