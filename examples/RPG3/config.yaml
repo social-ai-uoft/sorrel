@@ -1,0 +1,80 @@
+
+experiment:
+  name: rpg
+  epochs: 10000
+  max_turns: 100
+  epsilon_decay: 0.00003
+  sync_freq: 500
+
+env:
+  length: 15
+  width: 15
+  height: 1
+  tile_size: (1, 1)
+  prob:
+    item_spawn: 0.15
+    item_choice: (0.1, 0.3, 0.4, 0.2) # gem, coin, food, bone
+
+model:
+  agent:
+    type: iRainbowModel
+    num: 2
+    device: cpu
+    parameters:
+      in_channels: 7
+      num_filters: 7
+      use_cnn: True
+      cnn_out_size: 1134 #224
+      action_size: 4
+      state_size: (7, 9, 9)
+      layer_size: 250
+      n_step: 3
+      lr: 0.00025
+      replay_size: 1024
+
+      sync_freq: 500
+      inepoch_sync_freq: 25
+      epsilon: 0.99
+      gamma: 0.95
+      tau: 1e-3
+      n: 12
+      batch_size: 64
+
+agent:
+  agent:
+    num: 1
+    model: agent
+    num_memories: 2
+    visual_depth: 4
+    appearance: (0.0, 0.0, 255.0, 0.0, 0.0, 0.0, 0.0)
+    tile_size: (1, 1)
+    pov_size: 9
+    health: 10
+
+entity:
+  Gem1:
+    value: 5
+    appearance: (0.0, 0.0, 0.0, 255.0, 0.0, 0.0, 0.0) # Green
+    prob: 0.110
+  Gem2:
+    value: 15
+    appearance: (0.0, 0.0, 0.0, 0.0, 255.0, 0.0, 0.0)
+    prob: 0.04
+  Gem3:
+    value: -5
+    appearance: (0.0, 0.0, 0.0, 0.0, 0.0, 255.0, 0.0)
+    prob: 0.005
+
+replay:
+  use_sprites: False
+  save: True
+  replay_frequency: 500
+  num_replays: 3
+  end_update: True
+  epsilon: 0.01
+  blit: False
+  fps: 2
+  turns: 100
+
+
+save_dir: "/Users/yumozi/Projects/gem_data/rpg_gem1.5/"

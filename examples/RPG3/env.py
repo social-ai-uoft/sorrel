@@ -1,5 +1,5 @@
-from examples.RPG.entities import Gem, Coin, Food, Bone, EmptyObject, Wall
-from examples.RPG.agents import Agent
+from examples.RPG3.entities import Gem, EmptyObject, Wall
+from examples.RPG3.agents import Agent
 
 import numpy as np
 from astropy.visualization import make_lupton_rgb
@@ -286,8 +286,9 @@ class RPG:
                 if obj == 2:
                     new_entity = Gem(cfg, 3)
 
+                if obj != 3:
                 # add new entity to env
-                self.add(new_entity, (i, j, 0))
+                    self.add(new_entity, (i, j, 0))
 
         # find location to place the agents
         x1 = np.random.choice(np.arange(1, self.world.shape[1] - 1))
@@ -301,7 +302,7 @@ class RPG:
             y2 = np.random.choice(np.arange(1, self.world.shape[1] - 1))
 
         agents[0].location = self.world[x1, y1, 0]
-        agents[1].location = self.world[y2, y2, 0]
+        agents[1].location = self.world[x2, y2, 0]
 
         for agent in agents:
             self.add(agent, agent.location)

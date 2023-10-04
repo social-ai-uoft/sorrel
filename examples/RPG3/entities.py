@@ -7,7 +7,7 @@ from ast import literal_eval as make_tuple
 # come back here to see if any entities require transiton
 
 class EmptyObject:
-    def __init__(self, cfg):
+    def __init__(self):
         self.apperance = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         # self.appearance = [255, 255, 255]  # empty is white
         # self.sprite = 'examples/RPG/assets/white.png'
@@ -17,7 +17,7 @@ class EmptyObject:
         self.action_type = "empty"
 
 class Wall:
-    def __init__(self, cfg):
+    def __init__(self):
         self.appearance = [0.0, 255.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         # self.appearance = [153.0, 51.0, 102.0]  # walls are purple
         # self.sprite = 'examples/RPG/assets/pink.png'
@@ -36,7 +36,7 @@ class Gem():
         self.passable = 1  # whether the object blocks movement
         self.action_type = "static"
         if type == 1:
-            self.appearance = make_tuple(cfg.entity.Gem.appearance)
+            self.appearance = make_tuple(cfg.entity.Gem1.appearance)
             self.value = cfg.entity.Gem1.value
         elif type == 2:
             self.appearance = make_tuple(cfg.entity.Gem2.appearance)

@@ -27,6 +27,7 @@ from gem.DQN_utils import save_models, load_models, make_video
 # update gems inventory after transition?
 # q_network_target for model update?
 
+device = 'cpu'
 SEED = 1  # Seed for replicating training runs
 np.random.seed(SEED)
 random.seed(SEED)
@@ -34,7 +35,7 @@ torch.manual_seed(SEED)
 
 def run(cfg):
     # Initialize the environment and get the agents
-    models = create_models(cfg)
+    models = create_models(cfg, SEED, device)
     agents = create_agents(cfg, models)
     entities = create_entities(cfg)
     env = RPG(cfg) # even though example is RPG3, env class is named RPG
@@ -44,6 +45,7 @@ def run(cfg):
     gems = [0, 0, 0, 0]
 
     for epoch in range(cfg.experiment.epochs):
+        print("made it!")
 
         # Reset the environment at the start of each epoch
         env.reset_world(agents, entities)
