@@ -42,7 +42,7 @@ model:
 
 agent:
   agent:
-    num: 1
+    num: 2
     model: agent
     num_memories: 2
     visual_depth: 4

@@ -117,28 +117,28 @@ class Agent:
 
         return state, action, reward, next_state
 
-    def transition(self, env, models, action, location):
-        """
-        Changes the world based on the action taken
-        """
-        done = 0
-        reward = 0
-        attempted_location = self.movement(action)
-        holdObject = env.world[location]
+    # def transition(self, env, models, action, location):
+    #     """
+    #     Changes the world based on the action taken
+    #     """
+    #     done = 0
+    #     reward = 0
+    #     attempted_location = self.movement(action)
+    #     holdObject = env.world[location]
 
-        if env.world[attempted_location].passable == 1:
-            env.world[location] = EmptyObject()
-            reward = env.world[attempted_location].value
-            env.world[attempted_location] = holdObject
-            new_loc = attempted_location
+    #     if env.world[attempted_location].passable == 1:
+    #         env.world[location] = EmptyObject()
+    #         reward = env.world[attempted_location].value
+    #         env.world[attempted_location] = holdObject
+    #         new_loc = attempted_location
 
-        else:
-            if isinstance(
-                env.world[attempted_location], Wall
-            ):  # Replacing comparison with string 'kind'
-                reward = -0.1
+    #     else:
+    #         if isinstance(
+    #             env.world[attempted_location], Wall
+    #         ):  # Replacing comparison with string 'kind'
+    #             reward = -0.1
 
-        next_state = env.pov(new_loc)
-        self.reward += reward
+    #     next_state = env.pov(new_loc)
+    #     self.reward += reward
 
-        return env.world, reward, next_state, done, new_loc
+    #     return env.world, reward, next_state, done, new_loc

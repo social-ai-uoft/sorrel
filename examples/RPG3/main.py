@@ -13,7 +13,7 @@ import torch
 
 from examples.RPG3.iRainbow_clean import iRainbowModel
 from examples.RPG3.env import RPG
-from examples.RPG.agents import Agent
+from examples.RPG3.agents import Agent
 import matplotlib.pyplot as plt
 from astropy.visualization import make_lupton_rgb
 import torch.nn as nn

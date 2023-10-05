@@ -8,31 +8,24 @@ from ast import literal_eval as make_tuple
 
 class EmptyObject:
     def __init__(self):
-        self.apperance = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        # self.appearance = [255, 255, 255]  # empty is white
-        # self.sprite = 'examples/RPG/assets/white.png'
-        self.vision = 1  # empty stuff is basically empty
-        self.value = 0  # empty stuff is basically empty
+        self.appearance = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.vision = 1
+        self.value = 0  
         self.passable = 1  # whether the object blocks movement
         self.action_type = "empty"
 
 class Wall:
     def __init__(self):
         self.appearance = [0.0, 255.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        # self.appearance = [153.0, 51.0, 102.0]  # walls are purple
-        # self.sprite = 'examples/RPG/assets/pink.png'
-        self.vision = 0  # wall stuff is basically empty
-        self.value = -0.1  # wall stuff is basically empty
-        self.static = 1  # wall stuff is basically empty
-        self.passable = 0  # you can't walk through a wall
+        self.vision = 0  
+        self.value = -0.1  
+        self.passable = 0  
         self.action_type = "static"  # rays disappear after one turn
 
 class Gem():
     def __init__(self, cfg, type):
         self.health = 1  # for the gen, whether it has been mined or not
-        self.sprite = 'examples/RPG/assets/gem.png'
         self.vision = 1  # gems can see one radius around them
-        self.static = 1  # whether the object gets to take actions or not
         self.passable = 1  # whether the object blocks movement
         self.action_type = "static"
         if type == 1:

@@ -301,8 +301,8 @@ class RPG:
             x2 = np.random.choice(np.arange(1, self.world.shape[1] - 1))
             y2 = np.random.choice(np.arange(1, self.world.shape[1] - 1))
 
-        agents[0].location = self.world[x1, y1, 0]
-        agents[1].location = self.world[x2, y2, 0]
+        agents[0].location = (x1, y1, 0)
+        agents[1].location = (x2, y2, 0)
 
         for agent in agents:
             self.add(agent, agent.location)
@@ -314,10 +314,10 @@ class RPG:
         Assumes that the world is square - fixme.
         """
         for i in range(self.x):
-            self.add(Wall(self.cfg), (0, i, 0))
-            self.add(Wall(self.cfg), (self.x - 1, i, 0))
-            self.add(Wall(self.cfg), (i, 0, 0))
-            self.add(Wall(self.cfg), (i, self.x - 1, 0))
+            self.add(Wall(), (0, i, 0))
+            self.add(Wall(), (self.x - 1, i, 0))
+            self.add(Wall(), (i, 0, 0))
+            self.add(Wall(), (i, self.x - 1, 0))
 
     def is_valid_location(self, location):
         """
