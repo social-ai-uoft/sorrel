@@ -124,48 +124,104 @@ def transfer_world_memories(agents, extra_reward = True):
         # this moves the specific form of the replay memory into the model class where it can be setup exactly for the model
         agent.model.transfer_memories(agent, extra_reward)
 
-def make_pov_image(env, agent, wall_app=[0.0, 0.0, 0.0]):
-    """
-    Create an agent visual field of size (2k + 1, 2k + 1) pixels
-    Layer = location[2] and layer in the else are added to this function
-    """
-    k = agent.visual_depth
-    world = env.world
-    location = agent.location
+# def make_pov_image(env, agent, wall_app=[0.0, 0.0, 0.0]):
+#     """
+#     Create an agent visual field of size (2k + 1, 2k + 1) pixels
+#     Layer = location[2] and layer in the else are added to this function
+#     """
+#     k = agent.visual_depth
+#     world = env.world
+#     location = agent.location
 
-    if len(location) > 2:
-        layer = location[2]
-    else:
-        layer = 0
+#     if len(location) > 2:
+#         layer = location[2]
+#     else:
+#         layer = 0
+
+#     bounds = (location[0] - k, location[0] + k, location[1] - k, location[1] + k)
+#     # instantiate image
+#     image_r = np.random.random((bounds[1] - bounds[0] + 1, bounds[3] - bounds[2] + 1))
+#     image_g = np.random.random((bounds[1] - bounds[0] + 1, bounds[3] - bounds[2] + 1))
+#     image_b = np.random.random((bounds[1] - bounds[0] + 1, bounds[3] - bounds[2] + 1))
+
+#     for i in range(bounds[0], bounds[1] + 1):
+#         for j in range(bounds[2], bounds[3] + 1):
+#             # while outside the world array index...
+#             if i < 0 or j < 0 or i >= env.x - 1 or j >= env.y:
+#                 # image has shape bounds[1] - bounds[0], bounds[3] - bounds[2]
+#                 # visual appearance = wall
+#                 image_r[i - bounds[0], j - bounds[2]] = wall_app[0]
+#                 image_g[i - bounds[0], j - bounds[2]] = wall_app[1]
+#                 image_b[i - bounds[0], j - bounds[2]] = wall_app[2]
+#             else:
+#                 image_r[i - bounds[0], j - bounds[2]] = world[i][j][layer].appearance[0]
+#                 image_g[i - bounds[0], j - bounds[2]] = world[i][j][layer].appearance[1]
+#                 image_b[i - bounds[0], j - bounds[2]] = world[i][j][layer].appearance[2]
+
+#     #image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
+#     image = np.zeros((image_r.shape[0], image_r.shape[1], 3))
+#     image[:, :, 0] = image_r
+#     image[:, :, 1] = image_g
+#     image[:, :, 2] = image_b
+#     # display image
+#     # plt.imshow(image)
+#     # plt.show()
+#     return image
+
+def create_pov_image(env, agent, use_sprites=False):
+    """
+    Create an agent visual field of size (2k + 1, 2k + 1) tiles (k=pov_size)
+    """
+    location = agent.location
+    layer = location[2]
+    k = agent.pov_size
 
     bounds = (location[0] - k, location[0] + k, location[1] - k, location[1] + k)
-    # instantiate image
-    image_r = np.random.random((bounds[1] - bounds[0] + 1, bounds[3] - bounds[2] + 1))
-    image_g = np.random.random((bounds[1] - bounds[0] + 1, bounds[3] - bounds[2] + 1))
-    image_b = np.random.random((bounds[1] - bounds[0] + 1, bounds[3] - bounds[2] + 1))
+
+    image_r = np.zeros(((2 * k + 1) * env.tile_size[0], (2 * k + 1) * env.tile_size[1]))
+    image_g = np.zeros(((2 * k + 1) * env.tile_size[0], (2 * k + 1) * env.tile_size[1]))
+    image_b = np.zeros(((2 * k + 1) * env.tile_size[0], (2 * k + 1) * env.tile_size[1]))
+
+    image_i = 0
+    image_j = 0
 
     for i in range(bounds[0], bounds[1] + 1):
         for j in range(bounds[2], bounds[3] + 1):
-            # while outside the world array index...
-            if i < 0 or j < 0 or i >= env.x - 1 or j >= env.y:
-                # image has shape bounds[1] - bounds[0], bounds[3] - bounds[2]
-                # visual appearance = wall
-                image_r[i - bounds[0], j - bounds[2]] = wall_app[0]
-                image_g[i - bounds[0], j - bounds[2]] = wall_app[1]
-                image_b[i - bounds[0], j - bounds[2]] = wall_app[2]
-            else:
-                image_r[i - bounds[0], j - bounds[2]] = world[i][j][layer].appearance[0]
-                image_g[i - bounds[0], j - bounds[2]] = world[i][j][layer].appearance[1]
-                image_b[i - bounds[0], j - bounds[2]] = world[i][j][layer].appearance[2]
 
-    #image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
-    image = np.zeros((image_r.shape[0], image_r.shape[1], 3))
-    image[:, :, 0] = image_r
-    image[:, :, 1] = image_g
-    image[:, :, 2] = image_b
-    # display image
-    # plt.imshow(image)
-    # plt.show()
+            if use_sprites:
+                if i < 0 or j < 0 or i >= env.world.shape[0] or j >= env.world.shape[1]:
+                    # Tile is out of bounds, use wall_sprite
+                    # NOTE: Assumes there is a wall at (0, 0, 0)!
+                    tile_appearance = env.world[0, 0, 0].sprite
+                    tile_image = Image.open(tile_appearance).resize(env.tile_size).convert('RGBA')
+                else:
+                    tile_appearance = env.world[i, j, layer].sprite
+                    tile_image = Image.open(tile_appearance).resize(env.tile_size).convert('RGBA')
+
+                tile_image_array = np.array(tile_image)
+                alpha = tile_image_array[:, :, 3]
+                tile_image_array[alpha == 0, :3] = 255
+                image_r[image_i * env.tile_size[0]: (image_i + 1) * env.tile_size[0], image_j * env.tile_size[1]: (image_j + 1) * env.tile_size[1]] = tile_image_array[:, :, 0]
+                image_g[image_i * env.tile_size[0]: (image_i + 1) * env.tile_size[0], image_j * env.tile_size[1]: (image_j + 1) * env.tile_size[1]] = tile_image_array[:, :, 1]
+                image_b[image_i * env.tile_size[0]: (image_i + 1) * env.tile_size[0], image_j * env.tile_size[1]: (image_j + 1) * env.tile_size[1]] = tile_image_array[:, :, 2]
+
+            else:
+                if i < 0 or j < 0 or i >= env.world.shape[0] or j >= env.world.shape[1]:
+                    # Tile is out of bounds, use wall_color
+                    # NOTE: Assumes there is a wall at (0, 0, 0)!
+                    tile_appearance = env.world[0, 0, 0].appearance
+                else:
+                    tile_appearance = env.world[i, j, layer].appearance
+
+                image_r[image_i * env.tile_size[0]: (image_i + 1) * env.tile_size[0], image_j * env.tile_size[1]: (image_j + 1) * env.tile_size[1]] = tile_appearance[0]
+                image_g[image_i * env.tile_size[0]: (image_i + 1) * env.tile_size[0], image_j * env.tile_size[1]: (image_j + 1) * env.tile_size[1]] = tile_appearance[1]
+                image_b[image_i * env.tile_size[0]: (image_i + 1) * env.tile_size[0], image_j * env.tile_size[1]: (image_j + 1) * env.tile_size[1]] = tile_appearance[2]
+
+            image_j += 1
+        image_i += 1
+        image_j = 0
+    
+    image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
     return image
 
 def create_world_image(env, layer=0, use_sprites=False):

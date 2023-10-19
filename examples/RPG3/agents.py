@@ -41,7 +41,7 @@ class Agent:
         Fills in blank images for the LSTM before game play.
         Impicitly defines the number of sequences that the LSTM will be trained on.
         """
-        image = torch.zeros(1, self.num_memories, self.visual_depth, self.pov_size, self.pov_size).float()
+        image = torch.zeros(1, self.num_memories, self.visual_depth, 2 * self.pov_size + 1, 2 * self.pov_size + 1).float()
         priority = torch.tensor(0.1)
         blank = torch.tensor(0.0)
         exp = (priority, (image, blank, blank, image, blank))
@@ -70,9 +70,7 @@ class Agent:
         return new_location
     
     def pov(self, env):
-        from utils import make_pov_image
-        # pdb.set_trace()
-
+        from utils import create_pov_image
         previous_state = self.episode_memory[-1][1][0]
         current_state = previous_state.clone()
 
@@ -80,20 +78,10 @@ class Agent:
 
         state_now = torch.tensor([])
  
-        # img = create_pov_image(env, 0, self)
-        # transform = T.Compose([T.PILToTensor()])
-        # input = transform(img).unsqueeze(0).permute(0, 3, 1, 2).float()
+        img = create_pov_image(env, self)
 
-        img = make_pov_image(env, self)
         input = torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2).float()
         state_now = torch.cat((state_now, input.unsqueeze(0)), dim=2)
-
-        # hack: add empty inventory var
-        # inventory_var = torch.tensor([])
-        # tmp = (current_state[:, -1, -1, :, :] * 0) + 0
-        # inventory_var = torch.cat((inventory_var, tmp), dim=0)
-        # inventory_var = inventory_var.unsqueeze(0).unsqueeze(0)
-        # state_now = torch.cat((state_now, inventory_var), dim=2)
 
         current_state[:, -1, :, :, :] = state_now
 
@@ -105,7 +93,7 @@ class Agent:
         """
         reward = 0
         state = self.pov(env)
-        action, self.init_rnn_state = self.model.take_action(state, self.init_rnn_state)
+        action = self.model.take_action(state)
 
         attempted_location = self.movement(action)
         target_object = env.observe(attempted_location)

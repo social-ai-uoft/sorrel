@@ -31,7 +31,7 @@ class RPG:
         """
         Creates a world of the specified size with a default object
         """
-        self.world = np.full((self.x, self.y, self.z), EmptyObject())
+        self.world = np.full((self.x, self.y, self.z), EmptyObject(self.cfg))
         # for i in range(self.x):
         #     for j in range(self.y):
         #         for k in range(self.z):
@@ -204,7 +204,7 @@ class RPG:
         Creates objects that survive from game to game
         """
         self.emptyObject = EmptyObject()
-        self.walls = Wall()
+        self.walls = Wall(self.cfg)
 
     def game_test(self, z=0):
         """
@@ -314,10 +314,10 @@ class RPG:
         Assumes that the world is square - fixme.
         """
         for i in range(self.x):
-            self.add(Wall(), (0, i, 0))
-            self.add(Wall(), (self.x - 1, i, 0))
-            self.add(Wall(), (i, 0, 0))
-            self.add(Wall(), (i, self.x - 1, 0))
+            self.add(Wall(self.cfg), (0, i, 0))
+            self.add(Wall(self.cfg), (self.x - 1, i, 0))
+            self.add(Wall(self.cfg), (i, 0, 0))
+            self.add(Wall(self.cfg), (i, self.x - 1, 0))
 
     def is_valid_location(self, location):
         """

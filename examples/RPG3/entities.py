@@ -7,7 +7,7 @@ from ast import literal_eval as make_tuple
 # come back here to see if any entities require transiton
 
 class EmptyObject:
-    def __init__(self):
+    def __init__(self, cfg):
         self.appearance = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.vision = 1
         self.value = 0  
@@ -15,7 +15,7 @@ class EmptyObject:
         self.action_type = "empty"
 
 class Wall:
-    def __init__(self):
+    def __init__(self, cfg):
         self.appearance = [0.0, 255.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.vision = 0  
         self.value = -0.1  

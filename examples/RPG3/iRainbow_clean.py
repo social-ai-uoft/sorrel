@@ -68,11 +68,11 @@ class CNN_CLD(nn.Module):
                 padding=0,
             )
         if type == 2:
-            self.conv1 = nn.Conv2d(7, 7, kernel_size=3, stride=1, padding=1)
+            self.conv1 = nn.Conv2d(3, 3, kernel_size=3, stride=1, padding=1)
             self.relu = nn.ReLU()
             self.maxpool = nn.MaxPool2d(kernel_size=2)
         if type == 3:
-            self.conv1 = nn.Conv2d(7, 7, kernel_size=1, stride=1, padding=1)
+            self.conv1 = nn.Conv2d(3, 3, kernel_size=1, stride=1, padding=1)
             self.relu = nn.ReLU()
 
         self.max_pool = nn.MaxPool2d(3, 1, padding=0)
@@ -355,6 +355,8 @@ class iRainbowModel:
         self.GAMMA = cfg.model.agent.parameters.gamma
         self.BATCH_SIZE = cfg.model.agent.parameters.batch_size
         self.n_step = cfg.model.agent.parameters.n_step
+        self.epsilon = cfg.model.agent.parameters.epsilon
+        self.inepoch_training_freq = cfg.model.agent.parameters.inepoch_training_freq
 
         # IQN-Network
         self.qnetwork_local = IQN(
@@ -378,7 +380,7 @@ class iRainbowModel:
             seed
         )
 
-    def take_action(self, state, eps=0.0, eval=False):
+    def take_action(self, state, eval=False):
         """Returns actions for given state as per current policy. Acting only every 4 frames!
 
         Params
@@ -388,7 +390,7 @@ class iRainbowModel:
 
         """
         # Epsilon-greedy action selection
-        if (random.random() > eps):  
+        if (random.random() > self.epsilon):  
             state = np.array(state)
             state = (torch.from_numpy(state).float().to(self.device)) 
             
@@ -401,7 +403,7 @@ class iRainbowModel:
         else:
 
             action = random.choices(np.arange(self.action_size), k=1)
-            return action
+            return action[0]
 
     def learn(self, experiences):
         """Update value parameters using given batch of experience tuples.
@@ -465,16 +467,16 @@ class iRainbowModel:
         """
         for target_param, local_param in zip(
             target_model.parameters(), local_model.parameters()
-        ):
+        ):  
             target_param.data.copy_(
                 self.TAU * local_param.data + (1.0 - self.TAU) * target_param.data
             )
 
-    def transfer_memories(self, world, loc, extra_reward=False, seqLength=4):
+    def transfer_memories(self, agent, extra_reward=False, seqLength=4):
         """
         Transfer the indiviudual memories to the model
         """
-        exp = world[loc].episode_memory[-1]
+        exp = agent.episode_memory[-1]
         high_reward = exp[1][2]
         _, (state, action, reward, next_state, done) = exp
         state = state.squeeze(0)
@@ -486,6 +488,12 @@ class iRainbowModel:
         if extra_reward == True and abs(high_reward) > 9:
             for _ in range(seqLength):
                 self.memory.add(state, action, reward, next_state, done)
+
+    
+    def end_epoch_action(self, **kwargs):
+        if kwargs['epoch'] > 50 and kwargs['turn'] % self.inepoch_training_freq == 0:
+            exp = self.memory.sample()
+            loss = self.learn(exp)
 
 def calculate_huber_loss(td_errors, k=1.0):
     """

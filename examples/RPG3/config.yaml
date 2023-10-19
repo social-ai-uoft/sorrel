@@ -21,12 +21,13 @@ model:
     num: 2
     device: cpu
     parameters:
-      in_channels: 7
-      num_filters: 7
+      in_channels: 3
+      epsilon: 0.99
+      num_filters: 3
       use_cnn: True
-      cnn_out_size: 1134 #224
+      cnn_out_size: 486 #224
       action_size: 4
-      state_size: (7, 9, 9)
+      state_size: (3, 9, 9)
       layer_size: 250
       n_step: 3
       lr: 0.00025
@@ -34,9 +35,10 @@ model:
 
       sync_freq: 500
       inepoch_sync_freq: 25
+      inepoch_training_freq: 25
       epsilon: 0.99
       gamma: 0.95
-      tau: 1e-3
+      tau: 0.001
       n: 12
       batch_size: 64
 
@@ -45,8 +47,8 @@ agent:
     num: 2
     model: agent
     num_memories: 2
-    visual_depth: 4
-    appearance: (0.0, 0.0, 255.0, 0.0, 0.0, 0.0, 0.0)
+    visual_depth: 3
+    appearance: (255.0, 0.0, 0.0)
     tile_size: (1, 1)
     pov_size: 9
     health: 10
@@ -54,15 +56,15 @@ agent:
 entity:
   Gem1:
     value: 5
-    appearance: (0.0, 0.0, 0.0, 255.0, 0.0, 0.0, 0.0) # Green
+    appearance: (0.0, 255.0, 127.0) # Green
     prob: 0.110
   Gem2:
     value: 15
-    appearance: (0.0, 0.0, 0.0, 0.0, 255.0, 0.0, 0.0)
+    appearance: (0.0, 255.0, 255.0)
     prob: 0.04
   Gem3:
     value: -5
-    appearance: (0.0, 0.0, 0.0, 0.0, 0.0, 255.0, 0.0)
+    appearance: (0.0, 255.0, 0.0)
     prob: 0.005
 
 replay:
@@ -77,4 +79,4 @@ replay:
   turns: 100
 
 
-save_dir: "/Users/yumozi/Projects/gem_data/rpg_gem1.5/"
+save_dir: "/Users/yumozi/Projects/gem_output/"

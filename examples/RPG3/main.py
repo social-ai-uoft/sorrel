@@ -45,7 +45,6 @@ def run(cfg):
     gems = [0, 0, 0, 0]
 
     for epoch in range(cfg.experiment.epochs):
-        print("made it!")
 
         # Reset the environment at the start of each epoch
         env.reset_world(agents, entities)
@@ -101,15 +100,11 @@ def run(cfg):
 
             transfer_world_memories(agents, extra_reward = True)
 
-             # Special action: update models within epoch
-            if epoch > 200 and turn % cfg.experiment.update_freq == 0:
-                for agent in agents:
-                    exp = agent.model.memory.sample()
-                    loss = agent.model.learn(exp)
-                    losses += loss
+            for agent in agents:
+                agent.model.end_epoch_action(**locals())
         
         # train each agent after an epoch
-        if epoch > 100:
+        if epoch > 10:
             for agent in agents:
                     exp = agent.model.memory.sample()
                     loss = agent.model.learn(exp)
