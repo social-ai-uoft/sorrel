@@ -1,3 +1,19 @@
+import jax
+import jax.numpy as jnp
+from flax import linen as nn
+import jax.random
+
+from collections import deque
+
+import numpy as np
+
+import random
+import optax
+import time
+
+from examples.RPG3_jax.models.nsDDQN_jax import doubleDQN
+
+
 # from tkinter.tix import Tree
 from examples.RPG3_jax.utils.utils import (
     update_epsilon,
@@ -45,20 +61,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # if torch.backends.mps.is_available():
 #    device = torch.device("mps")
 
-import jax
-import jax.numpy as jnp
-from flax import linen as nn
-import jax.random
 
-from collections import deque
-
-import numpy as np
-
-import random
-import optax
-import time
-
-from examples.RPG3_jax.nsDDQN_jax import doubleDQN
 
 
 world_size = 25

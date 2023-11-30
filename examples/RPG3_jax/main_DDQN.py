@@ -1,5 +1,19 @@
-# from tkinter.tix import Tree
-from gem.utils import (
+import jax
+import jax.numpy as jnp
+from flax import linen as nn
+import jax.random
+
+from collections import deque
+
+import numpy as np
+
+import random
+import optax
+import time
+
+from examples.RPG3_jax.models.DDQN_jax import doubleDQN
+
+from examples.RPG3_jax.utils.utils import (
     update_epsilon,
     update_memories,
     find_moveables,
@@ -13,7 +27,7 @@ import matplotlib.pyplot as plt
 from astropy.visualization import make_lupton_rgb
 import torch.nn as nn
 import torch.nn.functional as F
-from gem.DQN_utils import save_models, load_models, make_video
+from examples.RPG3_jax.utils.DQN_utils import save_models, load_models, make_video
 
 
 from examples.RPG3_jax.elements import EmptyObject, Wall
@@ -45,66 +59,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # if torch.backends.mps.is_available():
 #    device = torch.device("mps")
 
-from examples.RPG3.elements import EmptyObject, Wall
 
-import numpy as np
-import random
-import torch
-
-from collections import deque
-
-import numpy as np
-
-import random
-import optax
-import time
-from examples.RPG3_jax.iRainbow_clean import iRainbowModel
-
-SEED = 1  # Seed for replicating training runs
-np.random.seed(SEED)
-random.seed(SEED)
-torch.manual_seed(SEED)
-
-
-def create_models():
-    """
-    Should make the sequence length of the LSTM part of the model and an input here
-    Should also set up so that the number of hidden laters can be added to dynamically
-    in this function. Below should fully set up the NN in a flexible way for the studies
-    """
-
-    models = []
-    models.append(
-        iRainbowModel(
-            in_channels=7,
-            num_filters=7,
-            cnn_out_size=1134,  # 910
-            state_size=torch.tensor(
-                [7, 9, 9]
-            ),  # this seems to only be reading the first value
-            action_size=4,
-            layer_size=250,  # 100
-            n_step=3,  # Multistep IQN (rainbow paper uses 3)
-            BATCH_SIZE=32,
-            BUFFER_SIZE=5000,
-            LR=0.00025,  # 0.00025
-            TAU=1e-3,  # Soft update parameter
-            GAMMA=0.95,  # Discout factor 0.99
-            N=12,  # Number of quantiles
-            use_cnn=True,
-            use_per=False,
-            device=device,
-            seed=SEED,
-        )
-    )
-
-    return models
-
-
-# if torch.backends.mps.is_available():
-#    device = torch.device("mps")
-
-models = create_models()
 
 
 world_size = 25
@@ -133,6 +88,23 @@ env = RPG(
 # env.game_test()
 
 
+models = []
+models.append(
+    doubleDQN(
+        input_size=1134,
+        number_of_actions=4,
+        lr=0.001,
+        gamma=0.90,  # default: 0.99
+        per=True,
+        alpha=0.6,  # default: 0.6
+        beta=0.4,  # default: 0.4
+        beta_increment=0.0006,
+        capacity=capacity,  # default: 50000
+        noisy=True
+    )
+)
+
+
 def run_game(
     models,
     env,
@@ -157,9 +129,10 @@ def run_game(
         if epoch > start_training_time:
             epsilon = max(epsilon * 0.9999, 0.01)
         done, withinturn = 0, 0
+        if epoch % sync_freq == 0:
+            models[0].hard_update()
 
         # create a new gameboard for each epoch and repopulate
-        # the resset does allow for different params, but when the world size changes, odd
         env.reset_env(
             height=world_size,
             width=world_size,
@@ -170,15 +143,7 @@ def run_game(
         )
         for loc in find_instance(env.world, "neural_network"):
             # reset the memories for all agents
-            # the parameter sets the length of the sequence for LSTM
             env.world[loc].init_replay(2)
-
-        if epoch % sync_freq == 0:
-            # update the double DQN model ever sync_frew
-            for mods in trainable_models:
-                models[mods].qnetwork_target.load_state_dict(
-                    models[mods].qnetwork_local.state_dict()
-                )
 
         while done == 0:
             """
@@ -207,14 +172,10 @@ def run_game(
             for loc in agentList:
                 if env.world[loc].kind != "deadAgent":
                     holdObject = env.world[loc]
-                    device = models[holdObject.policy].device
-                    state = env.pov(loc)
-                    print(state.shape)
-                    # params = (state.to(device), epsilon, env.world[loc].init_rnn_state)
-                    # set up the right params below
+                    state = env.pov(loc).flatten()
+                    state = state / 255.0
 
-                    action = models[env.world[loc].policy].take_action(state, epsilon)
-                    print(action)
+                    action = models[0].take_action(state, epsilon, rng)
                     (
                         env.world,
                         reward,
@@ -232,20 +193,11 @@ def run_game(
                     if reward == -1:
                         gems[3] = gems[3] + 1
 
-                    print(next_state.shape)
+                    next_state = next_state / 255.0
 
-                    exp = (
-                        # models[env.world[new_loc].policy].max_priority,
-                        1,
-                        (
-                            state,
-                            action,
-                            reward,
-                            next_state,
-                            done,
-                        ),
+                    models[0].replay_buffer.add(
+                        state, action, reward, next_state.flatten(), done
                     )
-                    env.world[new_loc].episode_memory.append(exp)
 
                     if env.world[new_loc].kind == "agent":
                         game_points[0] = game_points[0] + reward
@@ -255,27 +207,8 @@ def run_game(
                 Train the neural networks within a eposide at rate of modelUpdate_freq
                 """
                 for mods in trainable_models:
-                    experiences = models[mods].memory.sample()
-                    print(experiences)
-                    loss = models[mods].learn(experiences)
+                    loss = models[0].train_step(32, 0.99)
                     losses = losses + loss
-
-        if len(trainable_models) > 0:
-            """
-            Update the next state and rewards for the agents after all have moved
-            And then transfer the local memory to the model memory
-            """
-            # this updates the last memory to be the final state of the game board
-            env.world = update_memories(
-                env,
-                find_instance(env.world, "neural_network"),
-                done,
-                end_update=True,
-            )
-
-            models = transfer_world_memories(
-                models, env.world, find_instance(env.world, "neural_network")
-            )
 
         if epoch > start_training_time and epoch % 1:
             for mods in trainable_models:
@@ -283,15 +216,8 @@ def run_game(
                 Train the neural networks at the end of each epoch
                 reduced to 64 so that the new memories ~200 are slowly added with the priority ones
                 """
-                experiences = models[mods].memory.sample()
-                loss = models[mods].learn(experiences)
+                loss = models[0].train_step(32, 0.99)
                 losses = losses + loss
-
-        updateEps = False
-        # TODO: the update_epsilon often does strange things. Needs to be reconceptualized
-        if updateEps == True:
-            # epsilon = update_epsilon(epsilon, turn, epoch)
-            epsilon = max(epsilon - 0.00003, 0.2)
 
         if epoch % 100 == 0 and len(trainable_models) > 0 and epoch != 0:
             # print the state and update the counters. This should be made to be tensorboard instead
@@ -308,16 +234,6 @@ def run_game(
             losses = 0
     return models, env, turn, epsilon
 
-
-# needs a dictionary with the following keys:
-# turn, trainable_models, sync_freq, modelUpdate_freq
-
-# below needs to be written
-# env, epsilon, params = setup_game(world_size=15)
-
-
-import matplotlib.animation as animation
-from gem.models.perception import agent_visualfield
 
 
 run_params = ([0.99, 100000, 20],)
