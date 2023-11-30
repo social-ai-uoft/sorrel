@@ -148,6 +148,7 @@ def run_game(
         """
 
         done, withinturn = 0, 0
+        epsilon = epsilon * .999
 
         # create a new gameboard for each epoch and repopulate
         # the resset does allow for different params, but when the world size changes, odd
@@ -191,46 +192,47 @@ def run_game(
 
             for loc in agentList:
                 if env.world[loc].kind != "deadAgent":
+                    if turn % env.world[loc].move_rate == 0:
 
-                    holdObject = env.world[loc]
-                    device = models[holdObject.policy].device
-                    state = env.pov(loc)
-                    params = (state.to(device), epsilon, env.world[loc].init_rnn_state)
-                    # set up the right params below
+                        holdObject = env.world[loc]
+                        device = models[holdObject.policy].device
+                        state = env.pov(loc)
+                        params = (state.to(device), epsilon, env.world[loc].init_rnn_state)
+                        # set up the right params below
 
-                    action = models[env.world[loc].policy].take_action(state, epsilon)
+                        action = models[env.world[loc].policy].take_action(state, epsilon)
 
-                    # env.world[loc].init_rnn_state = init_rnn_state
-                    (
-                        env.world,
-                        reward,
-                        next_state,
-                        done,
-                        new_loc,
-                    ) = holdObject.transition(env, models, action[0], loc)
-
-                    # these can be included on one replay
-
-                    exp = (
-                        # models[env.world[new_loc].policy].max_priority,
-                        1,
+                        # env.world[loc].init_rnn_state = init_rnn_state
                         (
-                            state,
-                            action,
+                            env.world,
                             reward,
                             next_state,
                             done,
-                            # env.world[new_loc].init_rnn_state[0],
-                            # env.world[new_loc].init_rnn_state[1],
-                        ),
-                    )
+                            new_loc,
+                        ) = holdObject.transition(env, models, action[0], loc)
 
-                    env.world[new_loc].episode_memory.append(exp)
+                        # these can be included on one replay
 
-                    if env.world[new_loc].kind == "agent":
-                        game_points[0] = game_points[0] + reward
-                    if env.world[new_loc].kind == "wolf":
-                        game_points[1] = game_points[1] + reward
+                        exp = (
+                            # models[env.world[new_loc].policy].max_priority,
+                            1,
+                            (
+                                state,
+                                action,
+                                reward,
+                                next_state,
+                                done,
+                                # env.world[new_loc].init_rnn_state[0],
+                                # env.world[new_loc].init_rnn_state[1],
+                            ),
+                        )
+
+                        env.world[new_loc].episode_memory.append(exp)
+
+                        if env.world[new_loc].kind == "agent":
+                            game_points[0] = game_points[0] + reward
+                        if env.world[new_loc].kind == "wolf":
+                            game_points[1] = game_points[1] + reward
 
             # determine whether the game is finished (either max length or all agents are dead)
             if (
@@ -409,12 +411,8 @@ def eval_game(models, env, turn, epsilon, epochs=10000, max_turns=100, filename=
 
 
 run_params = (
-    [0.5, 2000, 20],
-    [0.2, 2000, 20],
-    [0.05, 2000, 20],
-    [0.5, 2000, 35],
-    [0.2, 2000, 35],
-    [0.05, 2000, 35],
+    [[0.5, 15000, 20]]
+
 )
 
 # the version below needs to have the keys from above in it

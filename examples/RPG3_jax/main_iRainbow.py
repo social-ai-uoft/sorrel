@@ -8,8 +8,7 @@ from gem.utils import (
     find_instance,
 )
 
-from examples.RPG3.iRainbow_clean import iRainbowModel
-from examples.RPG3.env import RPG
+from examples.RPG3_jax.env import RPG
 import matplotlib.pyplot as plt
 from astropy.visualization import make_lupton_rgb
 import torch.nn as nn
@@ -17,11 +16,24 @@ import torch.nn.functional as F
 from gem.DQN_utils import save_models, load_models, make_video
 
 
-from examples.RPG3.elements import EmptyObject, Wall
+from examples.RPG3_jax.elements import EmptyObject, Wall
 
 import numpy as np
 import random
 import torch
+from collections import deque
+import optax
+
+import jax
+import jax.numpy as jnp
+from flax import linen as nn
+import jax.random
+import time
+
+# Seed for reproducibility
+seed = 0
+rng = jax.random.PRNGKey(seed)
+
 
 save_dir = "/Users/yumozi/Projects/gem_data/RPG3_test/"
 # save_dir = "/Users/socialai/Dropbox/M1_ultra/"
@@ -32,13 +44,26 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # if torch.backends.mps.is_available():
 #    device = torch.device("mps")
+
+from examples.RPG3.elements import EmptyObject, Wall
+
+import numpy as np
+import random
+import torch
+
+from collections import deque
+
+import numpy as np
+
+import random
+import optax
+import time
+from examples.RPG3_jax.iRainbow_clean import iRainbowModel
+
 SEED = 1  # Seed for replicating training runs
 np.random.seed(SEED)
 random.seed(SEED)
 torch.manual_seed(SEED)
-
-
-# noisy_dueling
 
 
 def create_models():
@@ -60,8 +85,8 @@ def create_models():
             action_size=4,
             layer_size=250,  # 100
             n_step=3,  # Multistep IQN (rainbow paper uses 3)
-            BATCH_SIZE=64,
-            BUFFER_SIZE=1024,
+            BATCH_SIZE=32,
+            BUFFER_SIZE=5000,
             LR=0.00025,  # 0.00025
             TAU=1e-3,  # Soft update parameter
             GAMMA=0.95,  # Discout factor 0.99
@@ -76,16 +101,26 @@ def create_models():
     return models
 
 
+# if torch.backends.mps.is_available():
+#    device = torch.device("mps")
+
+models = create_models()
+
+
 world_size = 25
 
 trainable_models = [0]
 sync_freq = 200  # https://openreview.net/pdf?id=3UK39iaaVpE
 modelUpdate_freq = 4  # https://openreview.net/pdf?id=3UK39iaaVpE
-epsilon = 0.99
 
+capacity = 5000
+start_training_time = capacity / 20
+
+epsilon = 0.99
+rng_key = jax.random.PRNGKey(int(time.time() * 1000))
 turn = 1
 
-models = create_models()
+
 env = RPG(
     height=world_size,
     width=world_size,
@@ -117,11 +152,11 @@ def run_game(
         Move each agent once and then update the world
         Creates new gamepoints, resets agents, and runs one episode
         """
-
-        done, withinturn = 0, 0
-
-        if epoch == 200:
+        if epoch == start_training_time - 1:
             epsilon = 0.5
+        if epoch > start_training_time:
+            epsilon = max(epsilon * 0.9999, 0.01)
+        done, withinturn = 0, 0
 
         # create a new gameboard for each epoch and repopulate
         # the resset does allow for different params, but when the world size changes, odd
@@ -137,7 +172,13 @@ def run_game(
             # reset the memories for all agents
             # the parameter sets the length of the sequence for LSTM
             env.world[loc].init_replay(2)
-            env.world[loc].init_rnn_state = None
+
+        if epoch % sync_freq == 0:
+            # update the double DQN model ever sync_frew
+            for mods in trainable_models:
+                models[mods].qnetwork_target.load_state_dict(
+                    models[mods].qnetwork_local.state_dict()
+                )
 
         while done == 0:
             """
@@ -146,12 +187,12 @@ def run_game(
             turn = turn + 1
             withinturn = withinturn + 1
 
-            if epoch % sync_freq == 0:
-                # update the double DQN model ever sync_frew
-                for mods in trainable_models:
-                    models[mods].qnetwork_target.load_state_dict(
-                        models[mods].qnetwork_local.state_dict()
-                    )
+            # determine whether the game is finished (either max length or all agents are dead)
+            if (
+                withinturn > max_turns
+                or len(find_instance(env.world, "neural_network")) == 0
+            ):
+                done = 1
 
             agentList = find_instance(env.world, "neural_network")
 
@@ -168,18 +209,19 @@ def run_game(
                     holdObject = env.world[loc]
                     device = models[holdObject.policy].device
                     state = env.pov(loc)
+                    print(state.shape)
                     # params = (state.to(device), epsilon, env.world[loc].init_rnn_state)
                     # set up the right params below
 
                     action = models[env.world[loc].policy].take_action(state, epsilon)
-
+                    print(action)
                     (
                         env.world,
                         reward,
                         next_state,
-                        done,
+                        odone,
                         new_loc,
-                    ) = holdObject.transition(env, models, action[0], loc)
+                    ) = holdObject.transition(env, models, action, loc)
 
                     if reward == 15:
                         gems[0] = gems[0] + 1
@@ -190,7 +232,7 @@ def run_game(
                     if reward == -1:
                         gems[3] = gems[3] + 1
 
-                    # these can be included on one replay
+                    print(next_state.shape)
 
                     exp = (
                         # models[env.world[new_loc].policy].max_priority,
@@ -203,50 +245,42 @@ def run_game(
                             done,
                         ),
                     )
-
                     env.world[new_loc].episode_memory.append(exp)
 
                     if env.world[new_loc].kind == "agent":
                         game_points[0] = game_points[0] + reward
 
-            # determine whether the game is finished (either max length or all agents are dead)
-            if (
-                withinturn > max_turns
-                or len(find_instance(env.world, "neural_network")) == 0
-            ):
-                done = 1
-
-            if len(trainable_models) > 0:
-                """
-                Update the next state and rewards for the agents after all have moved
-                And then transfer the local memory to the model memory
-                """
-                # this updates the last memory to be the final state of the game board
-                env.world = update_memories(
-                    env,
-                    find_instance(env.world, "neural_network"),
-                    done,
-                    end_update=True,
-                )
-
-                # transfer the events for each agent into the appropriate model after all have moved
-                models = transfer_world_memories(
-                    models, env.world, find_instance(env.world, "neural_network")
-                )
-
-            if epoch > 200 and withinturn % modelUpdate_freq == 0:
+            if epoch > start_training_time and withinturn % modelUpdate_freq == 0:
                 """
                 Train the neural networks within a eposide at rate of modelUpdate_freq
                 """
                 for mods in trainable_models:
                     experiences = models[mods].memory.sample()
+                    print(experiences)
                     loss = models[mods].learn(experiences)
                     losses = losses + loss
 
-        if epoch > 100:
+        if len(trainable_models) > 0:
+            """
+            Update the next state and rewards for the agents after all have moved
+            And then transfer the local memory to the model memory
+            """
+            # this updates the last memory to be the final state of the game board
+            env.world = update_memories(
+                env,
+                find_instance(env.world, "neural_network"),
+                done,
+                end_update=True,
+            )
+
+            models = transfer_world_memories(
+                models, env.world, find_instance(env.world, "neural_network")
+            )
+
+        if epoch > start_training_time and epoch % 1:
             for mods in trainable_models:
                 """
-                Train the neural networks at the end of eac epoch
+                Train the neural networks at the end of each epoch
                 reduced to 64 so that the new memories ~200 are slowly added with the priority ones
                 """
                 experiences = models[mods].memory.sample()
@@ -282,100 +316,11 @@ def run_game(
 # env, epsilon, params = setup_game(world_size=15)
 
 
-models = create_models()
-
-
 import matplotlib.animation as animation
 from gem.models.perception import agent_visualfield
 
 
-def eval_game(models, env, turn, epsilon, epochs=10000, max_turns=100, filename="tmp"):
-    """
-    This is the main loop of the game
-    """
-    game_points = [0, 0]
-
-    fig = plt.figure()
-    ims = []
-    env.reset_env(world_size, world_size)
-
-    """
-    Move each agent once and then update the world
-    Creates new gamepoints, resets agents, and runs one episode
-    """
-
-    done = 0
-
-    # create a new gameboard for each epoch and repopulate
-    # the resset does allow for different params, but when the world size changes, odd
-    env.reset_env(
-        height=world_size,
-        width=world_size,
-        layers=1,
-        gem1p=0.03,
-        gem2p=0.02,
-        gem3p=0.03,
-    )
-    for loc in find_instance(env.world, "neural_network"):
-        # reset the memories for all agents
-        # the parameter sets the length of the sequence for LSTM
-        env.world[loc].init_replay(1)
-        env.world[loc].init_rnn_state = None
-
-    for _ in range(max_turns):
-        """
-        Find the agents and wolves and move them
-        """
-
-        image = agent_visualfield(env.world, (0, 0), env.tile_size, k=None)
-        im = plt.imshow(image, animated=True)
-        ims.append([im])
-
-        agentList = find_instance(env.world, "neural_network")
-
-        random.shuffle(agentList)
-
-        for loc in agentList:
-            """
-            Reset the rewards for the trial to be zero for all agents
-            """
-            env.world[loc].reward = 0
-
-        for loc in agentList:
-            if env.world[loc].kind != "deadAgent":
-                holdObject = env.world[loc]
-                device = models[holdObject.policy].device
-                state = env.pov(loc)
-                params = (state.to(device), epsilon, env.world[loc].init_rnn_state)
-
-                # set up the right params below
-
-                action = models[env.world[loc].policy].take_action(state, 0)
-
-                (
-                    env.world,
-                    reward,
-                    next_state,
-                    done,
-                    new_loc,
-                ) = holdObject.transition(env, models, action[0], loc)
-
-    ani = animation.ArtistAnimation(fig, ims, interval=50, blit=True, repeat_delay=1000)
-    ani.save(filename, writer="PillowWriter", fps=2)
-
-
-# run_params = (
-#     [0.5, 2000, 20],
-#     [0.1, 10000, 20],
-#     [0.0, 10000, 20],
-# )
-
-run_params = (
-    [0.8, 2000, 20],
-    [0.5, 2000, 20],
-    [0.1, 10000, 20],
-    [0.0, 10000, 20],
-)
+run_params = ([0.99, 100000, 20],)
 
 
 # the version below needs to have the keys from above in it
@@ -388,18 +333,3 @@ for modRun in range(len(run_params)):
         epochs=run_params[modRun][1],
         max_turns=run_params[modRun][2],
     )
-    # filename = save_dir + "RPG2d_" + str(modRun) + ".gif"
-    # eval_game(models, env, turn, 0, 1, 35, filename)
-
-    # save_models(
-    #    models,
-    #    save_dir,
-    #    "WolvesGems_" + str(modRun),
-    # )
-    # make_video(
-    #    "WolvesGems_" + str(modRun),
-    #    save_dir,
-    #    models,
-    #    20,
-    #    env,
-    # )

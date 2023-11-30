@@ -74,6 +74,7 @@ class Gem:
         self.has_transitions = False
         self.deterministic = 0
         self.action_type = "static"
+        self.move_rate = 0
 
 
 class Agent:
@@ -92,6 +93,8 @@ class Agent:
         self.episode_memory = deque([], maxlen=100)  # we should read in these maxlens
         self.has_transitions = True
         self.action_type = "neural_network"
+        self.move_rate = 2
+
 
     def init_replay(self, numberMemories, pov_size=9, visual_depth=3):
         """
@@ -222,6 +225,8 @@ class Wolf:
         self.has_transitions = True
         self.deterministic = 0
         self.action_type = "neural_network"
+        self.move_rate = 1
+        self.awake = 5
 
     # init is now for LSTM, may need to have a toggle for LSTM of not
     def init_replay(self, numberMemories, pov_size=17, visual_depth=3):
