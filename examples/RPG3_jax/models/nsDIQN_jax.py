@@ -279,18 +279,27 @@ class QNetwork(nn.Module):
         seed = int(time.time() * 1000)
         rng_key = jax.random.PRNGKey(seed)
         quantiles = jax.random.uniform(rng_key, shape=(self.num_quantiles,))
+
         quantile_embeddings = self.quantile_embedding(quantiles)
 
-        # Combine state representation with quantile embeddings
-        state_quantile_combined = jnp.concatenate([x[:, None, :].repeat(self.num_quantiles, axis=1), quantile_embeddings[:, :, None].repeat(x.shape[1], axis=2)], axis=2)
+        # Expand quantile embeddings to match (batch_size, num_quantiles, embedding_dim)
+        batch_size = x.shape[0]
+        quantile_embeddings_expanded = jnp.repeat(quantile_embeddings[None, :, :], batch_size, axis=0)
 
-        # Value and advantage streams now output quantile values
-        value = nn.Dense(self.num_quantiles)(state_quantile_combined)
-        advantage = nn.Dense(self.num_quantiles * self.number_of_actions)(state_quantile_combined)
+        # Concatenate along the last dimension
+        # x: (batch_size, num_quantiles, state_dim)
+        # quantile_embeddings_expanded: (batch_size, num_quantiles, embedding_dim)
+        state_quantile_combined = jnp.concatenate([x[:, None, :].repeat(self.num_quantiles, axis=1), quantile_embeddings_expanded], axis=2)
 
-        # Reshape and combine value and advantage to get final quantile values
-        advantage = advantage.reshape(-1, self.num_quantiles, self.number_of_actions)
+
+
+        value = nn.Dense(1)(state_quantile_combined)  # Shape: (batch_size, num_quantiles, 1)
+        advantage = nn.Dense(self.number_of_actions)(state_quantile_combined)  # Shape: (batch_size, num_quantiles, number_of_actions)
+
+        # Combine value and advantage to get final quantile values
+        # Advantage mean is subtracted for stability
         q_values = value + advantage - jnp.mean(advantage, axis=2, keepdims=True)
+
 
         return q_values, quantiles, predicted_next_state
 
@@ -463,13 +472,28 @@ class doubleDQN:
 
 
     def compute_td_errors(self, params, states, actions, rewards, next_states, dones):
-        q_values, _ = self.local_model.apply({"params": params}, states)
-        next_q_values, _ = self.target_model.apply({"params": params}, next_states)
-        max_next_q_values = jnp.max(next_q_values, axis=1)
-        target_q_values = rewards + (self.gamma * max_next_q_values * (1 - dones))
+        q_values, _ , _= self.local_model.apply({"params": params}, states)
+        next_q_values, _ ,_ = self.target_model.apply({"params": params}, next_states)
+
+        # Expand and reshape rewards and dones for broadcasting
+        rewards_expanded = rewards[:, None, None]  # Shape: (batch_size, 1, 1)
+        dones_expanded = dones[:, None, None]  # Shape: (batch_size, 1, 1)
+
+        max_next_q_values = jnp.max(next_q_values, axis=-1, keepdims=True)
+        target_q_values = rewards_expanded + (self.gamma * max_next_q_values * (1 - dones_expanded))
+
+        # Expand and reshape actions for broadcasting
         actions_one_hot = jax.nn.one_hot(actions, self.number_of_actions)
-        predicted_q_values = jnp.sum(q_values * actions_one_hot, axis=1)
-        return jnp.abs(predicted_q_values - target_q_values)
+        actions_one_hot_expanded = actions_one_hot[:, None, :]  # Shape: (batch_size, 1, number_of_actions)
+
+        # Select the predicted Q-values for the taken actions
+        predicted_q_values = jnp.sum(q_values * actions_one_hot_expanded, axis=-1)
+
+        # Compute TD errors across all quantiles
+        td_errors = jnp.abs(predicted_q_values - target_q_values)
+
+        return td_errors
+
     
     def state_prediction_loss(self, predicted_next_states, actual_next_states):
         return jnp.mean(jnp.square(predicted_next_states - actual_next_states))
@@ -544,37 +568,39 @@ class doubleDQN:
             def loss_fn(params):
                 q_values, quantiles, predicted_next_states = self.local_model.apply({"params": params}, states)
                 next_q_values, _, _ = self.target_model.apply({"params": params}, next_states)
-                max_next_q_values = jnp.max(next_q_values, axis=1)
-                target_q_values = rewards + (
-                    self.gamma * max_next_q_values * (1 - dones)
-                )
-                actions_one_hot = jax.nn.one_hot(actions, self.number_of_actions)
-                predicted_q_values = jnp.sum(q_values * actions_one_hot, axis=1)
 
-                # Calculate TD errors
-                # Calculate the quantile regression loss
-                td_errors = target_q_values[:, None, None] - q_values
+                # Expand and reshape rewards and dones for broadcasting
+                rewards_expanded = rewards[:, None, None]  # Shape: (batch_size, 1, 1)
+                dones_expanded = dones[:, None, None]  # Shape: (batch_size, 1, 1)
+
+                # Maximize over action dimension of next_q_values for each quantile
+                max_next_q_values = jnp.max(next_q_values, axis=-1, keepdims=True)  # Shape: (batch_size, num_quantiles, 1)
+
+                # Calculate target Q values
+                target_q_values = rewards_expanded + (self.gamma * max_next_q_values * (1 - dones_expanded))  # Shape: (batch_size, num_quantiles, 1)
+
+                # Expand and reshape actions for selecting the appropriate q_values
+                actions_one_hot = jax.nn.one_hot(actions, self.number_of_actions)
+                actions_one_hot_expanded = actions_one_hot[:, None, :]  # Shape: (batch_size, 1, number_of_actions)
+
+                # Select the Q-values for the taken actions, resulting in shape (batch_size, num_quantiles, 1)
+                selected_q_values = jnp.sum(q_values * actions_one_hot_expanded, axis=-1, keepdims=True)
+
+                # Compute TD errors across all quantiles
+                td_errors = target_q_values - selected_q_values  # Shape should now be compatible
+
                 quantile_loss = jax.lax.stop_gradient(quantiles)[None, :, None] - (td_errors < 0).astype(jnp.float32)
                 quantile_loss = jnp.abs(quantile_loss) * jnp.square(td_errors)
-                #loss = jnp.mean(quantile_loss)
-
-                # Calculate the weighted loss using importance sampling weights
-
                 weighted_loss = jnp.mean(td_errors * jnp.array(weights))
+                scalar_weighted_loss = jnp.reshape(weighted_loss, ())  # Reshape to scalar
 
-                scalar_weighted_loss = jnp.reshape(
-                    weighted_loss, ()
-                )  # Reshape to scalar
-
-                # Calculate the state prediction loss
-                state_pred_loss = self.state_prediction_loss(
-                    predicted_next_states, next_states
-                )
+                # State prediction loss
+                state_pred_loss = self.state_prediction_loss(predicted_next_states, next_states)
 
                 loss = scalar_weighted_loss + 0.1 * state_pred_loss
 
-
                 return loss
+
 
             grad_fn = jax.value_and_grad(loss_fn)
             loss, gradients = grad_fn(self.local_model_params)
@@ -582,26 +608,24 @@ class doubleDQN:
             updates, self.optimizer_state = self.optimizer.update(
                 gradients, self.optimizer_state
             )
-            self.local_model_params = optax.apply_updates(
-                self.local_model_params, updates
-            )
+            self.local_model_params = optax.apply_updates(self.local_model_params, updates)
 
             if soft_update:
-                # Soft update
                 tau = 0.01
                 self.target_model_params = jax.tree_map(
                     lambda t, l: tau * l + (1 - tau) * t,
                     self.target_model_params,
                     self.local_model_params,
                 )
+
             td_errors = self.compute_td_errors(
                 self.local_model_params, states, actions, rewards, next_states, dones
             )
 
-            # note, should compute this above and pass into grad_fn
-            # Update priorities in the replay buffer based on TD errors
-            new_priorities = np.abs(td_errors) + 1e-6  # Ensure no zero priorities
-            self.replay_buffer.update_priorities(indices, new_priorities.tolist())
+            not_broken = False
+            if not_broken:
+                new_priorities = np.abs(td_errors) + 1e-6  # Ensure no zero priorities
+                self.replay_buffer.update_priorities(indices, new_priorities.tolist())
 
             return loss
 
