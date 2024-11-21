@@ -2,14 +2,22 @@ from matplotlib import pyplot as plt
 import numpy as np
 from IPython.display import clear_output
 
+import sys, os 
+sys.path.append(os.path.abspath("."))
+from agentarium.models.DDQN import ClaasyReplayBuffer as Buffer
+
 class ModelHumanPlayer:
 
     def __init__(self, action_space, state_size, memory_size):
-        self.name = "iqn"
+        self.name = "human"
         self.action_space = np.arange(action_space)
         self.state_size = state_size
         self.memory_size = memory_size
         self.num_frames = memory_size
+        self.memory = self.memory = Buffer(
+            capacity=memory_size,
+            obs_shape=(np.array(self.state_size).prod(),)
+        )
         self.show = False
 
     def take_action(self, state):
