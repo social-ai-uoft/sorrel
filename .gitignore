@@ -155,3 +155,15 @@ examples/cleanup/runs/
 pyvenv.cfg
 /bin
 /share
+*.4
+*.4
+*.2
+*.3
+*.2
+*.2
+*.2
+examples/state_punishment/runs/20241120-20111732154104/Encounters_Food/events.out.tfevents.1732154104.SocialAIs-Mac-Studio-3.local.46395.3
+examples/state_punishment/runs/20241120-20111732154104/Encounters_Food/events.out.tfevents.1732154104.SocialAIs-Mac-Studio-3.local.46395.3
+examples/state_punishment/runs/20241120-20111732154156/Encounters_Coin/events.out.tfevents.1732154156.SocialAIs-Mac-Studio-3.local.46437.2
+examples/state_punishment/runs/basic_sanity_check_20241122-12111732296101/events.out.tfevents.1732296101.SocialAIs-Mac-Studio-3.local.67967.0
+examples/state_punishment/runs/basic_sanity_check_20241122-12111732296101/Agent_0_Encounters_Gem/events.out.tfevents.1732296101.SocialAIs-Mac-Studio-3.local.67967.1
