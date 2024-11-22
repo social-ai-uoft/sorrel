@@ -8,8 +8,8 @@ from agentarium.models.DDQN import ClaasyReplayBuffer as Buffer
 
 class ModelHumanPlayer:
 
-    def __init__(self, action_space, state_size, memory_size):
-        self.name = "human"
+    def __init__(self, action_space, state_size, memory_size, name='human'):
+        self.name = name
         self.action_space = np.arange(action_space)
         self.state_size = state_size
         self.memory_size = memory_size
@@ -32,8 +32,8 @@ class ModelHumanPlayer:
         
         done = 0
         while done == 0:
-            action_ = input("Select Action: ")
-            if action_ in ["w", "a", "s", "d"]:
+            action_ = input(f"player {self.name}, Select Action: ")
+            if action_ in ["w", "a", "s", "d", "q", "e"]:
                 if action_ == "w":
                     action = 0
                 elif action_ == "s":
@@ -42,6 +42,10 @@ class ModelHumanPlayer:
                     action = 2
                 elif action_ == "d":
                     action = 3
+                elif action_ == "q":
+                    action = 4
+                elif action_ == "e":
+                    action = 5
             elif action_ in [str(act) for act in self.action_space]:
                 action = int(action_)
             else:

@@ -1,5 +1,5 @@
-from examples.RPG.agents import Agent, color_map
-from examples.RPG.entities import Coin, Bone, Food, Gem, Wall
+from examples.state_punishment.agents import Agent, color_map
+from examples.state_punishment.entities import Coin, Bone, Food, Gem, Wall
 
 from agentarium.models.iqn import iRainbowModel
 import argparse
@@ -60,7 +60,7 @@ def create_agents(cfg, models):
     model_num = 0
     for agent_type in vars(cfg.agent):
         AGENT_TYPE = AGENTS[agent_type]
-        for _ in range(vars(vars(cfg.agent)[agent_type])['num']):
+        for ixs in range(vars(vars(cfg.agent)[agent_type])['num']):
 
             # fetch for model in models
             agent_model_name = vars(vars(cfg.agent)[agent_type])['model']
@@ -78,7 +78,8 @@ def create_agents(cfg, models):
                 raise ValueError(f"Model {agent_model_name} not found, please make sure it is defined in the config file.")
             agents.append(AGENT_TYPE(
                 agent_model,
-                cfg
+                cfg,
+                ixs
             ))
 
         model_num += 1

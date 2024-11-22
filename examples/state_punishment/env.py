@@ -2,8 +2,8 @@
 # region: Imports                   #
 # --------------------------------- #
 
-from examples.RPG.entities import Gem, Coin, Food, Bone, EmptyObject, Wall
-from examples.RPG.agents import Agent, color_map
+from examples.state_punishment.entities import Gem, Coin, Food, Bone, EmptyObject, Wall
+from examples.state_punishment.agents import Agent, color_map
 
 from agentarium.primitives import GridworldEnv, Entity
 
@@ -16,7 +16,7 @@ import random
 # --------------------------------- #
 
 
-class RPG(GridworldEnv):
+class state_punishment(GridworldEnv):
     def __init__(self, cfg, agents, entities):
         self.cfg = cfg
         self.channels = cfg.env.channels
@@ -27,6 +27,7 @@ class RPG(GridworldEnv):
         self.item_spawn_prob = cfg.env.prob.item_spawn
         self.item_choice_prob = cfg.env.prob.item_choice
         self.tile_size = cfg.env.tile_size
+        self.cache = {'delayed_r':{}}
         super().__init__(cfg.env.height, cfg.env.width, cfg.env.layers, eval(cfg.env.default_object)(self.colors['EmptyObject'], self.cfg))
         self.create_world()        
         self.populate()

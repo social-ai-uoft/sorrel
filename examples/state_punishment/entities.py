@@ -12,11 +12,11 @@ class EmptyObject(Entity):
     def __init__(self, appearance, cfg):
         super().__init__(appearance)
         self.passable = True # EmptyObjects can be traversed
-        self.sprite = f'{cfg.root}/examples/RPG/assets/white.png'
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/white.png'
 
     def transition(self, env):
         '''
-        Transition function for EmptyObjects in the RPG environment. 
+        Transition function for EmptyObjects in the state_punishment environment. 
         EmptyObjects can randomly spawn into Gems, Coins, etc. according
         to the item spawn probabilities dictated in the environmnet.
         '''
@@ -31,7 +31,7 @@ class Wall(Entity):
     def __init__(self, appearance, cfg):
         super().__init__(appearance)
         self.value = -1 # Walls penalize contact
-        self.sprite = f'{cfg.root}/examples/RPG/assets/pink.png'
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/pink.png'
 
 class Gem(Entity):
     '''
@@ -46,22 +46,22 @@ class Gem(Entity):
         self.cfg = cfg
         self.value = cfg.entity.Gem.value
         self.passable = True
-        self.sprite = f'{cfg.root}/examples/RPG/assets/gem.png'
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/gem.png'
 
-class Coin(Entity):
-    '''
-    Base gem object.
+# class Coin(Entity):
+#     '''
+#     Base gem object.
 
-    Parameters:
-        appearance: The appearance of the gem. \n
-        cfg: The configuration object.
-    '''
-    def __init__(self, appearance, cfg):
-        super().__init__(appearance)
-        self.cfg = cfg
-        self.value = cfg.entity.Coin.value
-        self.passable = True
-        self.sprite = f'{cfg.root}/examples/RPG/assets/coin.png'
+#     Parameters:
+#         appearance: The appearance of the gem. \n
+#         cfg: The configuration object.
+#     '''
+#     def __init__(self, appearance, cfg):
+#         super().__init__(appearance)
+#         self.cfg = cfg
+#         self.value = cfg.entity.Coin.value
+#         self.passable = True
+#         self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
 
 class Food(Entity):
     '''
@@ -76,7 +76,7 @@ class Food(Entity):
         self.cfg = cfg
         self.value = cfg.entity.Food.value
         self.passable = True
-        self.sprite = f'{cfg.root}/examples/RPG/assets/food.png'
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/food.png'
 
 class Bone(Entity):
     '''
@@ -91,7 +91,7 @@ class Bone(Entity):
         self.cfg = cfg
         self.value = cfg.entity.Bone.value
         self.passable = True
-        self.sprite = f'{cfg.root}/examples/RPG/assets/bone.png'
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/bone.png'
 
 # ----------------------------------------------------- #
 # new entities for state_punishment                     #
@@ -110,7 +110,8 @@ class Coin(Entity):
         self.cfg = cfg
         self.value = cfg.entity.Coin.value
         self.passable = True
-        self.sprite = f'{cfg.root}/examples/RPG/assets/coin.png'
+        self.social_harm = cfg.entity.Coin.social_harm
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
 
 # ----------------------------------------------------- #
 # endregion                                             #

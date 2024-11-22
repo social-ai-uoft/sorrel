@@ -1,6 +1,6 @@
 
 experiment:
-  name: rpg
+  name: state_punishment_beta
   epochs: 10000
   max_turns: 100
   epsilon_decay: 0.0001
@@ -14,17 +14,24 @@ env:
   full_mdp: False # Whether to return the full agent 
   tile_size: [16, 16] # Default sprite size for visualization (not used as model input yet)
   prob:
-    item_spawn: 0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
-    item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
+    item_spawn: 0.2 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
+    # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
+    item_choice: [0.3, 0.7]
+
+state_sys:
+  init_prob: 0.0
+  magnitude: 100
+  taboo: 'Coin'
+  change_per_vote: 0.25
 
 model:
   iqn:
     type: iRainbowModel
-    num: 1
+    num: 2
     device: cpu
     parameters:
       state_size: [3, 15, 15] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
-      action_size: 4
+      action_size: 6
       layer_size: 250
       num_frames: 5
       n_step: 3
@@ -40,7 +47,7 @@ model:
 
 agent:
   agent:
-    num: 1
+    num: 2
     model: iqn
     num_memories: 5 # Should match num_frames in the model above
     vision: 7
@@ -54,20 +61,21 @@ agent:
 entity:
   Gem:
     start_num: 1
-    value: 10
+    value: 10 # 10
     appearance: (0.0, 255.0, 0.0) # Green
   Coin:
     start_num: 1
-    value: 2
+    value: 5 # 2
     appearance: (255.0, 255.0, 0.0) # Yellow
-  Food:
-    start_num: 1
-    value: 1
-    appearance: (255.0, 0.0, 0.0) # Red
-  Bone:
-    start_num: 1
-    value: -4
-    appearance: (0, 0, 0) # Black
+    social_harm: 5
+  # Food:
+  #   start_num: 0
+  #   value: 1
+  #   appearance: (255.0, 0.0, 0.0) # Red
+  # Bone:
+  #   start_num: 0
+  #   value: -4
+  #   appearance: (0, 0, 0) # Black
 
 # Not used right now
 replay:
@@ -84,3 +92,4 @@ replay:
 # Root folder for accessing file structure and modules
 root: '/Users/socialai/Documents/GitHub/agentarium'
 log: True
+exp_name: 'basic_sanity_check'
