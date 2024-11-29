@@ -2,7 +2,7 @@
 # region: Imports                   #
 # --------------------------------- #
 
-from examples.state_punishment.entities import Gem, Coin, Food, Bone, EmptyObject, Wall
+from examples.state_punishment.entities import Gem, Coin, EmptyObject, Wall
 from examples.state_punishment.agents import Agent, color_map
 
 from agentarium.primitives import GridworldEnv, Entity

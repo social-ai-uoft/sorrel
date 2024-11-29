@@ -24,6 +24,7 @@ class ANN(nn.Module):
     def __init__(
         self,
         state_size: ArrayLike,
+        extra_percept_size: int,
         action_size: int,
         layer_size: int,
         epsilon: float,
@@ -33,6 +34,7 @@ class ANN(nn.Module):
 
         super(ANN, self).__init__()
         self.state_size = state_size
+        self.extra_percept_size = extra_percept_size
         self.action_size = action_size
         self.layer_size = layer_size
         self.epsilon = epsilon
@@ -121,13 +123,14 @@ class DoubleANN(ANN):
     def __init__(
         self,
         state_size: ArrayLike,
+        extra_percept_size: int, 
         action_size: int,
         layer_size: int,
         epsilon: float,
         device: Union[str, torch.device],
         seed: int,
         ):
-        super(DoubleANN, self).__init__(state_size, action_size, layer_size, epsilon, device, seed)
+        super(DoubleANN, self).__init__(state_size, extra_percept_size, action_size, layer_size, epsilon, device, seed)
 
         self.models = {'local': None, 'target': None}
         self.optimizer = None

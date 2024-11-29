@@ -8,7 +8,7 @@ from agentarium.models.DDQN import ClaasyReplayBuffer as Buffer
 
 class ModelHumanPlayer:
 
-    def __init__(self, action_space, state_size, memory_size, name='human'):
+    def __init__(self, action_space, state_size, memory_size, extra_percept_size, name='human'):
         self.name = name
         self.action_space = np.arange(action_space)
         self.state_size = state_size
@@ -16,7 +16,7 @@ class ModelHumanPlayer:
         self.num_frames = memory_size
         self.memory = self.memory = Buffer(
             capacity=memory_size,
-            obs_shape=(np.array(self.state_size).prod(),)
+            obs_shape=(np.array(self.state_size).prod()+extra_percept_size,)
         )
         self.show = False
 

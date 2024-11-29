@@ -27,7 +27,7 @@ from examples.state_punishment.agents import Agent
 from examples.state_punishment.env import state_punishment
 from examples.state_punishment.state_sys import state_sys
 from examples.state_punishment.utils import (create_agents, create_entities, create_models,
-                                init_log, load_config)
+                                init_log, load_config, save_config_backup)
 
 import numpy as np
 
@@ -39,6 +39,8 @@ def run(cfg, **kwargs):
     # Initialize the environment and get the agents
     models = create_models(cfg)
     agents: list[Agent] = create_agents(cfg, models)
+    for a in agents:
+        print(a.appearance)
     entities: list[Entity] = create_entities(cfg)
     env = state_punishment(cfg, agents, entities)
 
@@ -173,8 +175,11 @@ def run(cfg, **kwargs):
 
     # If a file path has been specified, save the weights to the specified path
     if "save_weights" in kwargs:
-        for agent in agents:
-            agent.model.save(file_path=kwargs.get("save_weights"))
+        for a_ixs, agent in enumerate(agents):
+            # agent.model.save(file_path=kwargs.get("save_weights"))
+            agent.model.save(file_path=
+                             f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
+                             )
 
 
 def main():
@@ -184,14 +189,16 @@ def main():
     parser.add_argument(
         "--config", help="path to config file", default="./configs/config.yaml"
     )
+    
     print(os.path.abspath("."))
     args = parser.parse_args()
+    save_config_backup(args.config, 'examples/state_punishment/configs/records')
     cfg = load_config(args)
     init_log(cfg)
     run(
         cfg,
         # load_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
-        save_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
+        save_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
     )
 
 

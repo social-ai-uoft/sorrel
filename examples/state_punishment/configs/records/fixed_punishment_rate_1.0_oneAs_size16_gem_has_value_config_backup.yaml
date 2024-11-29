@@ -1,7 +1,7 @@
 
 experiment:
   name: state_punishment_beta
-  epochs: 10000
+  epochs: 20000
   max_turns: 100
   epsilon_decay: 0.0001
 
@@ -12,27 +12,27 @@ env:
   channels: 3
   default_object: EmptyObject
   full_mdp: False # Whether to return the full agent 
-  tile_size: [16, 16] # Default sprite size for visualization (not used as model input yet)
+  tile_size: [16, 16] # Default sprite size for visualization (not used as model input yet) [16, 16]
   prob:
     item_spawn: 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
     # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
-    item_choice: [0.8, 0.2] # [0.3, 0.7] [0.8, 0.2]
+    item_choice: [0.5, 0.5] # [0.3, 0.7] [0.8, 0.2]
 
 state_sys:
-  init_prob: 0.1 # 0.1
-  magnitude: -100 #-10 #20 # 40 # positive - punishment, negative - reward 
-  taboo: 'Gem'
-  change_per_vote: 0.2
+  init_prob: 1. # 0.1
+  magnitude: 20  # 40 # positive - punishment, negative - reward 
+  taboo: 'Coin'
+  change_per_vote: 0.25
 
 model:
   iqn:
     type: iRainbowModel
-    num: 2
+    num: 1
     device: cpu
     parameters:
       state_size: [3, 15, 15] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
-      extra_percept_size: 1
-      action_size: 6
+      extra_percept_size: 1 # added for extra percept
+      action_size: 4
       layer_size: 250
       num_frames: 5
       n_step: 3
@@ -58,7 +58,7 @@ agent:
     tile_size: (1, 1)
     pov_size: 9
     health: 10
-    extra_percept_size: 1
+    extra_percept_size: 1 # added for extra percept
 
 entity:
   Gem:
@@ -68,8 +68,8 @@ entity:
   Coin:
     start_num: 1
     value: 10 # 2
-    appearance: (255.0, 255.0, 0.0) # Yellow
-    social_harm: 0
+    appearance: (255.0, 0.0, 0.0) # Yellow
+    social_harm: 40 # 5
   # Food:
   #   start_num: 0
   #   value: 1
@@ -94,5 +94,5 @@ replay:
 # Root folder for accessing file structure and modules
 root: '/Users/socialai/Documents/GitHub/agentarium'
 log: True
-# exp_name: "fixed_punishment_rate_0.0_twoAs" #'sanity_check_state_reward'
-exp_name: 'state_reward_10x_with_vote_gem_oneAs'
+# exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
+exp_name: "fixed_punishment_rate_1.0_oneAs_size16_gem_has_value"

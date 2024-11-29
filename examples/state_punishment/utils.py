@@ -1,10 +1,14 @@
 from examples.state_punishment.agents import Agent, color_map
-from examples.state_punishment.entities import Coin, Bone, Food, Gem, Wall
+from examples.state_punishment.entities import Coin, Gem, Wall
 
 from agentarium.models.iqn import iRainbowModel
 import argparse
 import yaml
 import os
+import imageio
+from PIL import Image
+import shutil
+
 
 DEVICES = ['cpu', 'cuda']
 MODELS = {
@@ -16,8 +20,10 @@ AGENTS = {
 ENTITIES = {
     'Gem' : Gem,
     'Coin': Coin,
-    'Bone': Bone,
-    'Food': Food
+    # 'Wall' : Wall,
+    # 'EmptyObject': EmptyObject, 
+    # 'Bone': Bone,
+    # 'Food': Food
 }
 
 def init_log(cfg):
@@ -89,14 +95,16 @@ def create_agents(cfg, models):
 def create_entities(cfg):
     entities = []
     for entity_type in vars(cfg.entity):
-        ENTITY_TYPE = ENTITIES[entity_type]
+        if entity_type not in ['Wall', 'EmptyObject']:
+            ENTITY_TYPE = ENTITIES[entity_type]
 
-        # NOTE: Assumes only entities with num and num > 1 need to be initialized at the start
-        if 'start_num' in vars(vars(cfg.entity)[entity_type]):
-            for _ in range(vars(vars(cfg.entity)[entity_type])['start_num']):
-                entities.append(ENTITY_TYPE(
-                    color_map(cfg.env.channels)[entity_type], cfg
-                ))
+            # NOTE: Assumes only entities with num and num > 1 need to be initialized at the start
+            if 'start_num' in vars(vars(cfg.entity)[entity_type]):
+                for _ in range(vars(vars(cfg.entity)[entity_type])['start_num']):
+                    entities.append(ENTITY_TYPE(
+                        color_map(cfg.env.channels)[entity_type], cfg
+                        # cfg.entity_type.apperance, cfg
+                    ))
 
     return entities
 
@@ -127,3 +135,68 @@ class Cfg:
                 setattr(self, key, [Cfg(x) if isinstance(x, dict) else x for x in val])
             else:
                 setattr(self, key, Cfg(val) if isinstance(val, dict) else val)
+
+
+def make_animations(images):
+    imageio.mimsave('movie.mp4', images)
+
+
+def create_gif_from_arrays(image_arrays, output_path, duration=100, loop=0):
+    """
+    Create a GIF from a sequence of images in NumPy array format.
+
+    Args:
+        image_arrays (list of np.ndarray): Sequence of images as NumPy arrays.
+        output_path (str): Path to save the output GIF.
+        duration (int): Duration of each frame in milliseconds (controls speed).
+        loop (int): Number of times the GIF should loop (0 for infinite).
+    """
+    # Convert NumPy arrays to PIL Images
+    if type(image_arrays[0]) != Image.Image:
+        pil_images = [Image.fromarray(img) for img in image_arrays]
+    else:
+        pil_images = image_arrays
+    
+    # Save as GIF
+    pil_images[0].save(
+        output_path,
+        save_all=True,
+        append_images=pil_images[1:],
+        duration=duration,
+        loop=loop
+    )
+    print(f"GIF saved at {output_path}")
+
+
+def save_config_backup(config_file_path, backup_dir):
+    """
+    Saves a backup of the YAML configuration file with a timestamp and 'exp_name' as part of the name.
+
+    Args:
+        config_file_path (str): Path to the configuration YAML file.
+        backup_dir (str): Directory where backup files will be saved.
+    """
+    # Ensure the backup directory exists
+    os.makedirs(backup_dir, exist_ok=True)
+
+    # Load the YAML configuration file
+    with open(config_file_path, 'r') as file:
+        config = yaml.safe_load(file)
+
+    # Extract the 'exp_name' parameter from the config (defaults to 'experiment' if not found)
+    exp_name = config.get('exp_name', 'experiment')
+
+    # Construct the backup file name using 'exp_name' and the timestamp
+    backup_file_name = f"{exp_name}_config_backup.yaml"
+    backup_file_path = os.path.join(backup_dir, backup_file_name)
+
+    # Copy the config file to the backup location
+    try:
+        shutil.copy(config_file_path, backup_file_path)
+        print(f"Backup created successfully at {backup_file_path}")
+    except Exception as e:
+        print(f"Error during backup: {e}")
+
+    print(f"Config file backed up to: {backup_file_path}")
+
+    

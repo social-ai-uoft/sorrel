@@ -13,8 +13,9 @@ from agentarium.primitives import GridworldEnv
 class Agent:
     def __init__(self, model, cfg, ixs):
         self.kind = "Agent"
-        self.cfg = cfg      
-        self.appearance = make_tuple(cfg.agent.agent.appearance)  # agents are blue
+        self.cfg = cfg    
+        # print(cfg.agent.agent.appearance)  
+        self.appearance = cfg.agent.agent.appearance[ixs] # agents are blue # cfg.agent.agent.appearance[ixs]?        
         self.tile_size = make_tuple(cfg.agent.agent.tile_size)
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/hero.png'
         self.passable = 0  # whether the object blocks movement
@@ -24,6 +25,7 @@ class Agent:
         self.action_space = [0, 1, 2, 3]
         self.vision = cfg.agent.agent.vision
         self.ixs = ixs
+        self.extra_percept_size = cfg.agent.agent.extra_percept_size
         
         # training-related features
         self.model = model  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
@@ -41,7 +43,7 @@ class Agent:
     def init_replay(self, env: GridworldEnv) -> None:
         """Fill in blank images for the LSTM."""
 
-        state = np.zeros_like(self.pov(env))
+        state = np.zeros_like(np.concatenate([self.pov(env), np.zeros(self.extra_percept_size)]))
         action = 0  # Action outside the action space
         reward = 0.0
         done = 0.0
@@ -55,8 +57,9 @@ class Agent:
     def add_final_memory(self, state: np.ndarray) -> None:
         self.model.memory.add(state, 0, 0.0, float(True))
 
-    def current_state(self, env: GridworldEnv) -> np.ndarray:
+    def current_state(self, state_sys, env: GridworldEnv) -> np.ndarray:
         state = self.pov(env)
+        state = np.concatenate([state, np.array([state_sys.prob])])
         prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
         current_state = np.vstack((prev_states, state))
         return current_state
@@ -123,8 +126,12 @@ class Agent:
 
         # Get current state
         state = self.pov(env)
-        model_input = torch.from_numpy(self.current_state(env)).view(1, -1)
-        # model_input = torch.concat([model_input, state_sys.prob])
+        state = np.concatenate([state, np.array([state_sys.prob])])
+        model_input = torch.from_numpy(self.current_state(state_sys=state_sys, env=env)).view(1, -1)
+        # print(model_input.size())
+        # ll
+        # state_punishment_prob_tensor = torch.full((state.shape()[1], state.shape()[2]), state_sys.prob).view(1, -1)
+        # model_input = torch.concat([model_input, state_punishment_prob_tensor])
         reward = 0
 
         # Take action based on current state
@@ -147,6 +154,7 @@ class Agent:
                                       if k != self.ixs else env.cache['delayed_r'][k]
                                       for k in range(len(env.cache['delayed_r']))
                                       ]
+            # print(target_object, reward, env.cache['delayed_r'])
             
 
         # Add to the encounter record
@@ -155,6 +163,7 @@ class Agent:
 
         # Get the next state   
         next_state = self.pov(env)
+        next_state = np.concatenate([next_state, np.array([state_sys.prob])])
         return state, action, reward, next_state, False
         
     def reset(self, env: GridworldEnv) -> None:
@@ -179,14 +188,18 @@ def color_map(channels: int) -> dict:
     '''
     if channels > 5:
         colors = {
-            'EmptyObject': [0 for _ in range(channels)],
-            'Agent': [255 if x == 0 else 0 for x in range(channels)],
-            'Wall': [255 if x == 1 else 0 for x in range(channels)],
-            'Gem': [255 if x == 2 else 0 for x in range(channels)],
-            'Food': [255 if x == 3 else 0 for x in range(channels)],
-            'Coin': [255 if x == 4 else 0 for x in range(channels)],
-            'Evil_coin': [255 if x == 4 else 0 for x in range(channels)],
-            'Bone': [255 if x == 5 else 0 for x in range(channels)]
+            # 'EmptyObject': [0 for _ in range(channels)],
+            'EmptyObject': [1. if x == 0 else 0 for x in range(channels)],
+            'Wall': [1. if x == 1 else 0 for x in range(channels)],
+            'Gem': None,
+            'Coin': None
+            # 'Agent': [255 if x == 0 else 0 for x in range(channels)],
+            # 'Wall': [255 if x == 1 else 0 for x in range(channels)],
+            # 'Gem': [255 if x == 2 else 0 for x in range(channels)],
+            # 'Food': [255 if x == 3 else 0 for x in range(channels)],
+            # 'Coin': [255 if x == 4 else 0 for x in range(channels)],
+            # 'Evil_coin': [255 if x == 4 else 0 for x in range(channels)],
+            # 'Bone': [255 if x == 5 else 0 for x in range(channels)]
         }
     else:
         colors = {

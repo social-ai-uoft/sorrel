@@ -57,6 +57,7 @@ class IQN(nn.Module):
     def __init__(
         self,
         state_size: ArrayLike,
+        extra_percept_size: int,
         action_size: int,
         layer_size: int,
         seed: int,
@@ -68,6 +69,7 @@ class IQN(nn.Module):
         super(IQN, self).__init__()
         self.seed = torch.manual_seed(seed)
         self.input_shape = np.array(state_size)
+        self.extra_percept_size = extra_percept_size
         self.state_dim = len(self.input_shape)
         self.action_size = action_size
         self.n_quantiles = n_quantiles
@@ -81,7 +83,7 @@ class IQN(nn.Module):
         self.device = device
 
         # Network architecture
-        self.head1 = nn.Linear(num_frames * self.input_shape.prod(), layer_size)
+        self.head1 = nn.Linear(num_frames * (self.input_shape.prod()+self.extra_percept_size), layer_size)
 
         self.cos_embedding = nn.Linear(self.n_cos, layer_size)
         self.ff_1 = NoisyLinear(layer_size, layer_size)
@@ -168,6 +170,7 @@ class iRainbowModel(DoubleANN):
         # Base ANN parameters
         self,
         state_size: ArrayLike,
+        extra_percept_size: int,
         action_size: int,
         layer_size: int,
         epsilon: float,
@@ -208,7 +211,7 @@ class iRainbowModel(DoubleANN):
 
         # Initialize base ANN parameters
         super(iRainbowModel, self).__init__(
-            state_size, action_size, layer_size, epsilon, device, seed
+            state_size, extra_percept_size, action_size, layer_size, epsilon, device, seed
         )
 
         # iRainbow-specific parameters
@@ -224,6 +227,7 @@ class iRainbowModel(DoubleANN):
         # IQN-Network
         self.qnetwork_local = IQN(
             state_size,
+            extra_percept_size,
             action_size,
             layer_size,
             seed,
@@ -233,6 +237,7 @@ class iRainbowModel(DoubleANN):
         ).to(device)
         self.qnetwork_target = IQN(
             state_size,
+            extra_percept_size, 
             action_size,
             layer_size,
             seed,
@@ -256,7 +261,7 @@ class iRainbowModel(DoubleANN):
         # )
         self.memory = Buffer(
             capacity=BUFFER_SIZE,
-            obs_shape=(np.array(self.state_size).prod(),)
+            obs_shape=(np.array(self.state_size).prod()+extra_percept_size,)
         )
 
     def __str__(self):
