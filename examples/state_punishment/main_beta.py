@@ -168,19 +168,23 @@ def run(cfg, **kwargs):
             new_epsilon = agent.model.epsilon - cfg.experiment.epsilon_decay
             agent.model.epsilon = max(new_epsilon, 0.01)
 
+
+    if (epoch % 10000 == 0) or (epoch == cfg.experiment.epochs - 1):
+        # If a file path has been specified, save the weights to the specified path
+        if "save_weights" in kwargs:
+            for a_ixs, agent in enumerate(agents):
+                # agent.model.save(file_path=kwargs.get("save_weights"))
+                # agent.model.save(file_path=
+                #                 f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
+                #                 )
+                agent.model.save(file_path=
+                                f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
+                                )
+            
     # Close the tensorboard log
 
     if cfg.log:
         writer.close()
-
-    # If a file path has been specified, save the weights to the specified path
-    if "save_weights" in kwargs:
-        for a_ixs, agent in enumerate(agents):
-            # agent.model.save(file_path=kwargs.get("save_weights"))
-            agent.model.save(file_path=
-                             f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
-                             )
-
 
 def main():
     import argparse

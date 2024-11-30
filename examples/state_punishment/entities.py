@@ -13,7 +13,7 @@ class EmptyObject(Entity):
         super().__init__(appearance)
         self.passable = True # EmptyObjects can be traversed
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/white.png'
-        self.appearance = cfg.entity.EmptyObject.appearance
+        # self.appearance = cfg.entity.EmptyObject.appearance
 
     def transition(self, env):
         '''
@@ -33,7 +33,7 @@ class Wall(Entity):
         super().__init__(appearance)
         self.value = -1 # Walls penalize contact
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/pink.png'
-        self.appearance = cfg.entity.Wall.appearance
+        # self.appearance = cfg.entity.Wall.appearance
 
 class Gem(Entity):
     '''
@@ -49,7 +49,7 @@ class Gem(Entity):
         self.value = cfg.entity.Gem.value
         self.passable = True
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/gem.png'
-        self.appearance = cfg.entity.Gem.appearance
+        # self.appearance = cfg.entity.Gem.appearance
 
 # class Coin(Entity):
 #     '''
@@ -115,7 +115,7 @@ class Coin(Entity):
         self.passable = True
         self.social_harm = cfg.entity.Coin.social_harm
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
-        self.appearance = cfg.entity.Coin.appearance
+        # self.appearance = cfg.entity.Coin.appearance
 
 # ----------------------------------------------------- #
 # endregion                                             #

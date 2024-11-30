@@ -176,6 +176,46 @@ class Agent:
             'Wall': 0
         }
 
+# def color_map(channels: int) -> dict:
+#     '''
+#     Generates a color map for the food truck environment.
+
+#     Parameters:
+#         channels: the number of appearance channels in the environment
+
+#     Return:
+#         A dict of object-color mappings
+#     '''
+#     if channels > 5:
+#         colors = {
+#             # 'EmptyObject': [0 for _ in range(channels)],
+#             'EmptyObject': [1. if x == 0 else 0 for x in range(channels)],
+#             'Wall': [1. if x == 1 else 0 for x in range(channels)],
+#             'Gem': None,
+#             'Coin': None
+#             # 'Agent': [255 if x == 0 else 0 for x in range(channels)],
+#             # 'Wall': [255 if x == 1 else 0 for x in range(channels)],
+#             # 'Gem': [255 if x == 2 else 0 for x in range(channels)],
+#             # 'Food': [255 if x == 3 else 0 for x in range(channels)],
+#             # 'Coin': [255 if x == 4 else 0 for x in range(channels)],
+#             # 'Evil_coin': [255 if x == 4 else 0 for x in range(channels)],
+#             # 'Bone': [255 if x == 5 else 0 for x in range(channels)]
+#         }
+#     else:
+#         colors = {
+#             'EmptyObject': [255., 255., 255.],
+#             'Agent': [0., 0., 255.],
+#             'Wall': [153.0, 51.0, 102.0],
+#             'Gem': [0., 255., 0.],
+#             'Coin': [255., 255., 0.],
+#             'Evil_Coin': [255., 255., 0.],
+#             'Food': [255., 0., 0.],
+#             'Bone': [0., 0., 0.]
+#         }
+#     return colors
+
+
+
 def color_map(channels: int) -> dict:
     '''
     Generates a color map for the food truck environment.
@@ -188,18 +228,13 @@ def color_map(channels: int) -> dict:
     '''
     if channels > 5:
         colors = {
-            # 'EmptyObject': [0 for _ in range(channels)],
-            'EmptyObject': [1. if x == 0 else 0 for x in range(channels)],
-            'Wall': [1. if x == 1 else 0 for x in range(channels)],
-            'Gem': None,
-            'Coin': None
-            # 'Agent': [255 if x == 0 else 0 for x in range(channels)],
-            # 'Wall': [255 if x == 1 else 0 for x in range(channels)],
-            # 'Gem': [255 if x == 2 else 0 for x in range(channels)],
-            # 'Food': [255 if x == 3 else 0 for x in range(channels)],
-            # 'Coin': [255 if x == 4 else 0 for x in range(channels)],
-            # 'Evil_coin': [255 if x == 4 else 0 for x in range(channels)],
-            # 'Bone': [255 if x == 5 else 0 for x in range(channels)]
+            'EmptyObject': [0 for _ in range(channels)],
+            'Agent': [255 if x == 0 else 0 for x in range(channels)],
+            'Wall': [255 if x == 1 else 0 for x in range(channels)],
+            'Gem': [255 if x == 2 else 0 for x in range(channels)],
+            'Food': [255 if x == 3 else 0 for x in range(channels)],
+            'Coin': [255 if x == 4 else 0 for x in range(channels)],
+            'Bone': [255 if x == 5 else 0 for x in range(channels)]
         }
     else:
         colors = {
@@ -208,7 +243,6 @@ def color_map(channels: int) -> dict:
             'Wall': [153.0, 51.0, 102.0],
             'Gem': [0., 255., 0.],
             'Coin': [255., 255., 0.],
-            'Evil_Coin': [255., 255., 0.],
             'Food': [255., 0., 0.],
             'Bone': [0., 0., 0.]
         }
