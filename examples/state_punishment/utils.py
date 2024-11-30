@@ -95,16 +95,17 @@ def create_agents(cfg, models):
 def create_entities(cfg):
     entities = []
     for entity_type in vars(cfg.entity):
-        if entity_type not in ['Wall', 'EmptyObject']:
-            ENTITY_TYPE = ENTITIES[entity_type]
+        ENTITY_TYPE = ENTITIES[entity_type]
+        # if entity_type not in ['Wall', 'EmptyObject']:
+        #     ENTITY_TYPE = ENTITIES[entity_type]
 
-            # NOTE: Assumes only entities with num and num > 1 need to be initialized at the start
-            if 'start_num' in vars(vars(cfg.entity)[entity_type]):
-                for _ in range(vars(vars(cfg.entity)[entity_type])['start_num']):
-                    entities.append(ENTITY_TYPE(
-                        color_map(cfg.env.channels)[entity_type], cfg
-                        # cfg.entity_type.apperance, cfg
-                    ))
+        # NOTE: Assumes only entities with num and num > 1 need to be initialized at the start
+        if 'start_num' in vars(vars(cfg.entity)[entity_type]):
+            for _ in range(vars(vars(cfg.entity)[entity_type])['start_num']):
+                entities.append(ENTITY_TYPE(
+                    color_map(cfg.env.channels)[entity_type], cfg
+                    # cfg.entity_type.apperance, cfg
+                ))
 
     return entities
 

@@ -14,8 +14,11 @@ class Agent:
     def __init__(self, model, cfg, ixs):
         self.kind = "Agent"
         self.cfg = cfg    
-        # print(cfg.agent.agent.appearance)  
-        self.appearance = cfg.agent.agent.appearance[ixs] # agents are blue # cfg.agent.agent.appearance[ixs]?        
+        # print(cfg.agent.agent.appearance)
+        if isinstance(cfg.agent.agent.appearance, str):
+            self.appearance = make_tuple(cfg.agent.agent.appearance) 
+        else:
+            self.appearance = cfg.agent.agent.appearance[ixs] # agents are blue # cfg.agent.agent.appearance[ixs]?        
         self.tile_size = make_tuple(cfg.agent.agent.tile_size)
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/hero.png'
         self.passable = 0  # whether the object blocks movement

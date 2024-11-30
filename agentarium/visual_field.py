@@ -49,6 +49,7 @@ def visual_field(
         if return_rgb:
             new[:, H, W] = colors[world[H, W, 0].kind]
         else:
+            # print(world[H, W, 0], world[H, W, 0].appearance)
             new[:, H, W] = world[H, W, 0].appearance
 
     # If no location, return the full visual field
