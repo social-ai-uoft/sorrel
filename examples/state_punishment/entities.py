@@ -14,6 +14,7 @@ class EmptyObject(Entity):
         self.passable = True # EmptyObjects can be traversed
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/white.png'
         # self.appearance = cfg.entity.EmptyObject.appearance
+        self.respawn_rate = cfg.env.prob.respawn_rate
 
     def transition(self, env):
         '''
@@ -22,7 +23,7 @@ class EmptyObject(Entity):
         to the item spawn probabilities dictated in the environmnet.
         '''
         
-        if random.random() < env.item_spawn_prob * 0.02: # NOTE: If this rate is too high, the environment gets overrun
+        if random.random() < env.item_spawn_prob * self.respawn_rate: # NOTE: If this rate is too high, the environment gets overrun
             env.spawn(self.location)
 
 class Wall(Entity):

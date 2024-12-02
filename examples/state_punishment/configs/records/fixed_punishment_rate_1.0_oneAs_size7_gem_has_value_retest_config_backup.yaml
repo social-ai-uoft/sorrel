@@ -17,7 +17,8 @@ env:
     item_spawn: 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
     # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
     item_choice: [0.5, 0.5] # [0.3, 0.7] [0.8, 0.2]
-
+    respawn_rate: 0.02 # placeholder
+    
 state_sys:
   init_prob: 1. # 0.1
   magnitude: 20  # 40 # positive - punishment, negative - reward 
