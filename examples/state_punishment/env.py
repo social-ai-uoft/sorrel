@@ -91,7 +91,6 @@ class state_punishment(GridworldEnv):
             location: (tuple) The position to spawn an object into.
         """
         if self.world[location].kind == 'EmptyObject':
-
             object = np.random.choice(self.entities, p=self.item_choice_prob)
             self.add(location, object)
 

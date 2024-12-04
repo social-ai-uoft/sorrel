@@ -29,7 +29,8 @@ class Agent:
         self.vision = cfg.agent.agent.vision
         self.ixs = ixs
         self.extra_percept_size = cfg.agent.agent.extra_percept_size
-        
+        self.is_punished = 0.
+
         # training-related features
         self.model = model  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
         # self.episode_memory = Memory(cfg.agent.agent.memory_size)
@@ -63,6 +64,7 @@ class Agent:
     def current_state(self, state_sys, env: GridworldEnv) -> np.ndarray:
         state = self.pov(env)
         state = np.concatenate([state, np.array([state_sys.prob])])
+        state = np.concatenate([state, np.array([self.is_punished])])
         prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
         current_state = np.vstack((prev_states, state))
         return current_state
@@ -130,7 +132,10 @@ class Agent:
         # Get current state
         state = self.pov(env)
         state = np.concatenate([state, np.array([state_sys.prob])])
+        state = np.concatenate([state, np.array([self.is_punished])])
         model_input = torch.from_numpy(self.current_state(state_sys=state_sys, env=env)).view(1, -1)
+
+        
         # print(model_input.size())
         # ll
         # state_punishment_prob_tensor = torch.full((state.shape()[1], state.shape()[2]), state_sys.prob).view(1, -1)
@@ -147,17 +152,22 @@ class Agent:
 
         # Get the interaction reward
         reward += target_object.value
+        if self.is_punished == 1.:
+            reward -= state_sys.magnitude * (random.random() < state_sys.prob)
+        
+        self.is_punished = 0. 
+
         # Get the delayed reward
-        reward += env.cache['delayed_r'][self.ixs]
-        env.cache['delayed_r'][self.ixs] = 0 
+        reward += env.cache['harm'][self.ixs]
+        env.cache['harm'][self.ixs] = 0 
         # If the agent performs a transgression
         if str(target_object) == state_sys.taboo:
-            reward -= state_sys.magnitude * (random.random() < state_sys.prob)
-            env.cache['delayed_r'] = [env.cache['delayed_r'][k] - target_object.social_harm 
-                                      if k != self.ixs else env.cache['delayed_r'][k]
-                                      for k in range(len(env.cache['delayed_r']))
+            # reward -= state_sys.magnitude * (random.random() < state_sys.prob)
+            self.is_punished = 1.
+            env.cache['harm'] = [env.cache['harm'][k] - target_object.social_harm 
+                                      if k != self.ixs else env.cache['harm'][k]
+                                      for k in range(len(env.cache['harm']))
                                       ]
-            # print(target_object, reward, env.cache['delayed_r'])
             
 
         # Add to the encounter record
@@ -167,6 +177,7 @@ class Agent:
         # Get the next state   
         next_state = self.pov(env)
         next_state = np.concatenate([next_state, np.array([state_sys.prob])])
+        next_state = np.concatenate([next_state, np.array([self.is_punished])])
         return state, action, reward, next_state, False
         
     def reset(self, env: GridworldEnv) -> None:

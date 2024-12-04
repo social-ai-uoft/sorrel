@@ -50,6 +50,7 @@ class Gem(Entity):
         self.value = cfg.entity.Gem.value
         self.passable = True
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/gem.png'
+        self.social_harm = cfg.entity.Gem.social_harm
         # self.appearance = cfg.entity.Gem.appearance
 
 # class Coin(Entity):
@@ -82,20 +83,21 @@ class Gem(Entity):
 #         self.passable = True
 #         self.sprite = f'{cfg.root}/examples/state_punishment/assets/food.png'
 
-# class Bone(Entity):
-#     '''
-#     Base gem object.
+class Bone(Entity):
+    '''
+    Base gem object.
 
-#     Parameters:
-#         appearance: The appearance of the gem. \n
-#         cfg: The configuration object.
-#     '''
-#     def __init__(self, appearance, cfg):
-#         super().__init__(appearance)
-#         self.cfg = cfg
-#         self.value = cfg.entity.Bone.value
-#         self.passable = True
-#         self.sprite = f'{cfg.root}/examples/state_punishment/assets/bone.png'
+    Parameters:
+        appearance: The appearance of the gem. \n
+        cfg: The configuration object.
+    '''
+    def __init__(self, appearance, cfg):
+        super().__init__(appearance)
+        self.cfg = cfg
+        self.value = cfg.entity.Bone.value
+        self.passable = True
+        self.social_harm = cfg.entity.Bone.social_harm
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/bone.png'
 
 # ----------------------------------------------------- #
 # new entities for state_punishment                     #

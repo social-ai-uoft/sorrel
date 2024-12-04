@@ -72,7 +72,7 @@ def run(cfg, **kwargs):
 
         # Reset the environment at the start of each epoch
         env.reset()
-        env.cache['delayed_r'] = [0 for _ in range(len(agents))]
+        env.cache['harm'] = [0 for _ in range(len(agents))]
         # for agent in env.agents:
         #     agent.reset()
         random.shuffle(agents)
@@ -169,17 +169,17 @@ def run(cfg, **kwargs):
             agent.model.epsilon = max(new_epsilon, 0.01)
 
 
-    if (epoch % 10000 == 0) or (epoch == cfg.experiment.epochs - 1):
-        # If a file path has been specified, save the weights to the specified path
-        if "save_weights" in kwargs:
-            for a_ixs, agent in enumerate(agents):
-                # agent.model.save(file_path=kwargs.get("save_weights"))
-                # agent.model.save(file_path=
-                #                 f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
-                #                 )
-                agent.model.save(file_path=
-                                f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
-                                )
+        if (epoch % 1000 == 0) or (epoch == cfg.experiment.epochs - 1):
+            # If a file path has been specified, save the weights to the specified path
+            if "save_weights" in kwargs:
+                for a_ixs, agent in enumerate(agents):
+                    # agent.model.save(file_path=kwargs.get("save_weights"))
+                    # agent.model.save(file_path=
+                    #                 f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
+                    #                 )
+                    agent.model.save(file_path=
+                                    f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
+                                    )
             
     # Close the tensorboard log
 
