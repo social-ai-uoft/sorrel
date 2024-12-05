@@ -153,7 +153,7 @@ class Agent:
         # Get the interaction reward
         reward += target_object.value
         if self.is_punished == 1.:
-            reward -= state_sys.magnitude * (random.random() < state_sys.prob)
+            reward -= state_sys.magnitude 
         
         self.is_punished = 0. 
 
@@ -161,13 +161,14 @@ class Agent:
         reward += env.cache['harm'][self.ixs]
         env.cache['harm'][self.ixs] = 0 
         # If the agent performs a transgression
-        if str(target_object) == state_sys.taboo:
+        if str(target_object) in state_sys.taboo:
             # reward -= state_sys.magnitude * (random.random() < state_sys.prob)
-            self.is_punished = 1.
+            if random.random() < state_sys.prob_list[str(target_object)]:
+                self.is_punished = 1.
             env.cache['harm'] = [env.cache['harm'][k] - target_object.social_harm 
-                                      if k != self.ixs else env.cache['harm'][k]
-                                      for k in range(len(env.cache['harm']))
-                                      ]
+                                        if k != self.ixs else env.cache['harm'][k]
+                                        for k in range(len(env.cache['harm']))
+                                        ]
             
 
         # Add to the encounter record

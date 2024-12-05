@@ -1,6 +1,7 @@
 class state_sys():
-    def __init__(self, init_prob, magnitude, taboo, change_per_vote) -> None:
+    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote) -> None:
         self.prob = init_prob
+        self.prob_list = prob_list
         self.init_prob = init_prob 
         self.magnitude = magnitude
         self.taboo = taboo

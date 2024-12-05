@@ -60,11 +60,19 @@ def run(cfg, **kwargs):
         for agent in agents:
             agent.model.load(file_path=kwargs.get("load_weights"))
 
+
+    fixed_prob_dict = {'Gem': cfg.state_sys.prob_list.Gem,
+                        'Coin': cfg.state_sys.prob_list.Coin,
+                        'Bone': cfg.state_sys.prob_list.Bone}
+    
+
     for epoch in range(cfg.experiment.epochs):
 
         # initialize state system
+        
         state_entity = state_sys(
             cfg.state_sys.init_prob, 
+            fixed_prob_dict,
             cfg.state_sys.magnitude, 
             cfg.state_sys.taboo,
             cfg.state_sys.change_per_vote
@@ -154,7 +162,7 @@ def run(cfg, **kwargs):
                         "Gem": agent.encounters["Gem"],
                         "Coin": agent.encounters["Coin"],
                         # "Food": agent.encounters["Food"],
-                        # "Bone": agent.encounters["Bone"],
+                        "Bone": agent.encounters["Bone"],
                         "Wall": agent.encounters["Wall"],
                     },
                     epoch,
