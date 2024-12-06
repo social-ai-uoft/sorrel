@@ -61,9 +61,8 @@ class Agent:
     def add_final_memory(self, state: np.ndarray) -> None:
         self.model.memory.add(state, 0, 0.0, float(True))
 
-    def current_state(self, state_sys, env: GridworldEnv) -> np.ndarray:
+    def current_state(self, env: GridworldEnv) -> np.ndarray:
         state = self.pov(env)
-        state = np.concatenate([state, np.array([state_sys.prob])])
         state = np.concatenate([state, np.array([self.is_punished])])
         prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
         current_state = np.vstack((prev_states, state))
@@ -91,7 +90,6 @@ class Agent:
         
     def movement(self,
                  action: int,
-                 state_sys
                  ) -> tuple:
         
         '''
@@ -109,31 +107,19 @@ class Agent:
         if action == 3: # RIGHT
             self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-right.png'
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
-        if action == 4: # vote for state punishment
-            self.sprite = self.sprite
-            new_location = self.location
-            state_sys.prob += state_sys.change_per_vote
-            state_sys.prob = np.clip(state_sys.prob, 0, 1)
-        if action == 5: # vote against state punishment
-            self.sprite = self.sprite
-            new_location = self.location
-            state_sys.prob -= state_sys.change_per_vote
-            state_sys.prob = np.clip(state_sys.prob, 0, 1)
 
         return new_location
     
     def transition(self,
-                   env,
-                   state_sys) -> tuple:
+                   env) -> tuple:
         '''
         Changes the world based on the action taken.
         '''
 
         # Get current state
         state = self.pov(env)
-        state = np.concatenate([state, np.array([state_sys.prob])])
         state = np.concatenate([state, np.array([self.is_punished])])
-        model_input = torch.from_numpy(self.current_state(state_sys=state_sys, env=env)).view(1, -1)
+        model_input = torch.from_numpy(self.current_state(env=env)).view(1, -1)
 
         
         # print(model_input.size())
@@ -146,30 +132,12 @@ class Agent:
         action = self.model.take_action(model_input)
 
         # Attempt the transition 
-        attempted_location = self.movement(action, state_sys)
+        attempted_location = self.movement(action)
         target_object = env.observe(attempted_location)
         env.move(self, attempted_location)
 
         # Get the interaction reward
         reward += target_object.value
-        if self.is_punished == 1.:
-            reward -= state_sys.magnitude 
-        
-        self.is_punished = 0. 
-
-        # Get the delayed reward
-        reward += env.cache['harm'][self.ixs]
-        env.cache['harm'][self.ixs] = 0 
-        # If the agent performs a transgression
-        if str(target_object) in state_sys.taboo:
-            # reward -= state_sys.magnitude * (random.random() < state_sys.prob)
-            if random.random() < state_sys.prob_list[str(target_object)]:
-                self.is_punished = 1.
-            env.cache['harm'] = [env.cache['harm'][k] - target_object.social_harm 
-                                        if k != self.ixs else env.cache['harm'][k]
-                                        for k in range(len(env.cache['harm']))
-                                        ]
-            
 
         # Add to the encounter record
         if str(target_object) in self.encounters.keys():
@@ -177,7 +145,6 @@ class Agent:
 
         # Get the next state   
         next_state = self.pov(env)
-        next_state = np.concatenate([next_state, np.array([state_sys.prob])])
         next_state = np.concatenate([next_state, np.array([self.is_punished])])
         return state, action, reward, next_state, False
         

@@ -25,7 +25,6 @@ from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
 from examples.state_punishment.agents import Agent
 from examples.state_punishment.env import state_punishment
-from examples.state_punishment.state_sys import state_sys
 from examples.state_punishment.utils import (create_agents, create_entities, create_models,
                                 init_log, load_config, save_config_backup)
 
@@ -61,22 +60,8 @@ def run(cfg, **kwargs):
             agent.model.load(file_path=kwargs.get("load_weights"))
 
 
-    fixed_prob_dict = {'Gem': cfg.state_sys.prob_list.Gem,
-                        'Coin': cfg.state_sys.prob_list.Coin,
-                        'Bone': cfg.state_sys.prob_list.Bone}
-    
 
-    for epoch in range(cfg.experiment.epochs):
-
-        # initialize state system
-        
-        state_entity = state_sys(
-            cfg.state_sys.init_prob, 
-            fixed_prob_dict,
-            cfg.state_sys.magnitude, 
-            cfg.state_sys.taboo,
-            cfg.state_sys.change_per_vote
-            )
+    for epoch in range(cfg.experiment.epochs):        
 
         # Reset the environment at the start of each epoch
         env.reset()
@@ -96,9 +81,6 @@ def run(cfg, **kwargs):
 
         while not done:
 
-            # update prob record for state punishment
-            state_entity.update_prob_record()
-
             turn = turn + 1
 
             for agent in agents:
@@ -115,7 +97,7 @@ def run(cfg, **kwargs):
             # Agent transition
             for agent in agents:
 
-                (state, action, reward, next_state, done_) = agent.transition(env, state_entity)
+                (state, action, reward, next_state, done_) = agent.transition(env)
 
                 # record voting behaviors
                 if action == 4:
@@ -135,8 +117,11 @@ def run(cfg, **kwargs):
 
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
-            loss = agent.model.train_model()
-            losses[agent.ixs] += loss.detach().numpy()
+            if (epoch+1)*cfg.experiment.max_turns >= cfg.model.iqn.parameters.BATCH_SIZE:
+                loss = agent.model.train_model()
+                losses[agent.ixs] += loss.detach().numpy()
+            else:
+                losses[agent.ixs] += 0
 
             # Add the game variables to the game object
             game_vars.record_turn(epoch, turn, losses, game_points)
@@ -162,14 +147,11 @@ def run(cfg, **kwargs):
                         "Gem": agent.encounters["Gem"],
                         "Coin": agent.encounters["Coin"],
                         # "Food": agent.encounters["Food"],
-                        "Bone": agent.encounters["Bone"],
+                        # "Bone": agent.encounters["Bone"],
                         "Wall": agent.encounters["Wall"],
                     },
                     epoch,
                 )
-            writer.add_scalar(f'state_punishment_level_avg', np.mean(state_entity.prob_record), epoch)
-            writer.add_scalar(f'state_punishment_level_end', state_entity.prob, epoch)
-            writer.add_scalar(f'state_punishment_level_init', state_entity.init_prob, epoch)
 
         # Special action: update epsilon
         for agent in agents:
