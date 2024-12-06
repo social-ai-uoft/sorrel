@@ -23,9 +23,9 @@ import random
 
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
-from examples.state_punishment.agents import Agent
-from examples.state_punishment.env import state_punishment
-from examples.state_punishment.utils import (create_agents, create_entities, create_models,
+from examples.seeing_the_future.agents import Agent
+from examples.seeing_the_future.env import seeing_the_future
+from examples.seeing_the_future.utils import (create_agents, create_entities, create_models,
                                 init_log, load_config, save_config_backup)
 
 import numpy as np
@@ -41,14 +41,14 @@ def run(cfg, **kwargs):
     for a in agents:
         print(a.appearance)
     entities: list[Entity] = create_entities(cfg)
-    env = state_punishment(cfg, agents, entities)
+    env = seeing_the_future(cfg, agents, entities)
 
     # Set up tensorboard logging
     if cfg.log:
         from torch.utils.tensorboard import SummaryWriter
 
         writer = SummaryWriter(
-            log_dir=f'{root}/examples/state_punishment/runs/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
+            log_dir=f'{root}/examples/seeing_the_future/runs/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
         )
 
     # Container for game variables (epoch, turn, loss, reward)
@@ -165,10 +165,10 @@ def run(cfg, **kwargs):
                 for a_ixs, agent in enumerate(agents):
                     # agent.model.save(file_path=kwargs.get("save_weights"))
                     # agent.model.save(file_path=
-                    #                 f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
+                    #                 f'{cfg.root}/examples/seeing_the_future/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
                     #                 )
                     agent.model.save(file_path=
-                                    f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
+                                    f'{cfg.root}/examples/seeing_the_future/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
                                     )
             
     # Close the tensorboard log
@@ -186,13 +186,13 @@ def main():
     
     print(os.path.abspath("."))
     args = parser.parse_args()
-    save_config_backup(args.config, 'examples/state_punishment/configs/records')
+    save_config_backup(args.config, 'examples/seeing_the_future/configs/records')
     cfg = load_config(args)
     init_log(cfg)
     run(
         cfg,
-        # load_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
-        save_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
+        # load_weights=f'{cfg.root}/examples/seeing_the_future/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
+        save_weights=f'{cfg.root}/examples/seeing_the_future/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
     )
 
 

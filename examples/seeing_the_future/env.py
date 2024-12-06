@@ -2,8 +2,8 @@
 # region: Imports                   #
 # --------------------------------- #
 
-from examples.state_punishment.entities import Gem, Coin, EmptyObject, Wall
-from examples.state_punishment.agents import Agent, color_map
+from examples.seeing_the_future.entities import Gem, Coin, EmptyObject, Wall
+from examples.seeing_the_future.agents import Agent, color_map
 
 from agentarium.primitives import GridworldEnv, Entity
 
@@ -16,7 +16,7 @@ import random
 # --------------------------------- #
 
 
-class state_punishment(GridworldEnv):
+class seeing_the_future(GridworldEnv):
     def __init__(self, cfg, agents, entities):
         self.cfg = cfg
         self.channels = cfg.env.channels

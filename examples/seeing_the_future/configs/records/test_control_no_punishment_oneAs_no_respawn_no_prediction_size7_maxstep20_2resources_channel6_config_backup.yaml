@@ -9,7 +9,7 @@ env:
   height: 7
   width: 7
   layers: 1
-  channels: 3
+  channels: 8
   default_object: EmptyObject
   full_mdp: True # Whether to return the full agent 
   tile_size: [16, 16] # Default sprite size for visualization (not used as model input yet) [16, 16]
@@ -17,7 +17,7 @@ env:
     item_spawn: 0.3 # 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
     # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
     item_choice: [0.5, 0.5] # [0.3, 0.7] [0.8, 0.2]
-    respawn_rate: 0.02
+    respawn_rate: 0.0
 
 state_sys:
   prob_list: 
@@ -35,7 +35,7 @@ model:
     num: 1
     device: cpu
     parameters:
-      state_size: [3, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      state_size: [8, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
       extra_percept_size: 1 # added for extra percept
       action_size: 4
       layer_size: 250
@@ -57,11 +57,11 @@ agent:
     model: iqn
     num_memories: 5 # Should match num_frames in the model above
     vision: 7
-    appearance: (0.0, 0.0, 255.0)
-    # appearance: 
-    #   - [0.0, 0.0, 1.0, 1.0, 0., 0.]
-    #   - [0.0, 0.0, 1.0, 0.0, 1., 0.]
-    #   - [0.0, 0.0, 1.0, 0.0, 0., 1.]
+    # appearance: (0.0, 0.0, 255.0)
+    appearance: 
+      - [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0., 0.]
+      - [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1., 0.]
+      - [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0., 1.]
     memory_size: 100 # If this is larger than max_turns above, could cause issues
     # Not used right now
     tile_size: (1, 1)
@@ -106,4 +106,4 @@ replay:
 root: '/Users/socialai/Documents/agentarium'
 log: True
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
-exp_name: "test_control_no_punishment_oneAs_no_prediction_size7_maxstep20_2resources"
+exp_name: "test_control_no_punishment_oneAs_no_respawn_no_prediction_size7_maxstep20_2resources_channel6"

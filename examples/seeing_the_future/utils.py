@@ -1,5 +1,5 @@
-from examples.state_punishment.agents import Agent, color_map
-from examples.state_punishment.entities import Coin, Gem, Wall, Bone
+from examples.seeing_the_future.agents import Agent, color_map
+from examples.seeing_the_future.entities import Coin, Gem, Wall, Bone
 
 from agentarium.models.iqn import iRainbowModel
 import argparse

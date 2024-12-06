@@ -1,4 +1,4 @@
-from examples.state_punishment.entities import Wall, EmptyObject
+from examples.seeing_the_future.entities import Wall, EmptyObject
 # from examples.trucks.utils import color_map
 
 from ast import literal_eval as make_tuple
@@ -20,7 +20,7 @@ class Agent:
         else:
             self.appearance = cfg.agent.agent.appearance[ixs] # agents are blue # cfg.agent.agent.appearance[ixs]?        
         self.tile_size = make_tuple(cfg.agent.agent.tile_size)
-        self.sprite = f'{cfg.root}/examples/state_punishment/assets/hero.png'
+        self.sprite = f'{cfg.root}/examples/seeing_the_future/assets/hero.png'
         self.passable = 0  # whether the object blocks movement
         self.value = 0  # agents have no value
         self.health = cfg.agent.agent.health  # for the agents, this is how hungry they are
@@ -96,16 +96,16 @@ class Agent:
         Takes an action and returns a new location
         '''
         if action == 0: # UP
-            self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-back.png'
+            self.sprite = f'{self.cfg.root}/examples/seeing_the_future/assets/hero-back.png'
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
         if action == 1: # DOWN
-            self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero.png'
+            self.sprite = f'{self.cfg.root}/examples/seeing_the_future/assets/hero.png'
             new_location = (self.location[0] + 1, self.location[1], self.location[2])
         if action == 2: # LEFT
-            self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-left.png'
+            self.sprite = f'{self.cfg.root}/examples/seeing_the_future/assets/hero-left.png'
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
         if action == 3: # RIGHT
-            self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-right.png'
+            self.sprite = f'{self.cfg.root}/examples/seeing_the_future/assets/hero-right.png'
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
 
         return new_location
@@ -124,8 +124,8 @@ class Agent:
         
         # print(model_input.size())
         # ll
-        # state_punishment_prob_tensor = torch.full((state.shape()[1], state.shape()[2]), state_sys.prob).view(1, -1)
-        # model_input = torch.concat([model_input, state_punishment_prob_tensor])
+        # seeing_the_future_prob_tensor = torch.full((state.shape()[1], state.shape()[2]), state_sys.prob).view(1, -1)
+        # model_input = torch.concat([model_input, seeing_the_future_prob_tensor])
         reward = 0
 
         # Take action based on current state
@@ -211,12 +211,12 @@ def color_map(channels: int) -> dict:
     if channels > 5:
         colors = {
             'EmptyObject': [0 for _ in range(channels)],
-            'Agent': [255 if x == 0 else 0 for x in range(channels)],
-            'Wall': [255 if x == 1 else 0 for x in range(channels)],
-            'Gem': [255 if x == 2 else 0 for x in range(channels)],
-            'Food': [255 if x == 3 else 0 for x in range(channels)],
-            'Coin': [255 if x == 4 else 0 for x in range(channels)],
-            'Bone': [255 if x == 5 else 0 for x in range(channels)]
+            # 'Agent': [255 if x == 0 else 0 for x in range(channels)],
+            'Wall': [255. if x == 1 else 0 for x in range(channels)],
+            'Gem': [255. if x == 2 else 0 for x in range(channels)],
+            'Food': [255. if x == 4 else 0 for x in range(channels)],
+            'Coin': [255. if x == 3 else 0 for x in range(channels)],
+            'Bone': [255. if x == 5 else 0 for x in range(channels)]
         }
     else:
         colors = {
