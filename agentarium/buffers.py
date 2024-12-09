@@ -75,31 +75,74 @@ class ClaasyReplayBuffer:
         self.idx = (self.idx + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
+    # def sample(self, batch_size: int, stacked_frames: int = 1):
+    #     """
+    #     Sample a batch of experiences from the replay buffer.
+
+    #     Args:
+    #         batch_size (int): The number of experiences to sample.
+    #         stacked_frames (int): The number of frames to stack together.
+        
+    #     Returns:
+    #         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]: 
+    #             A tuple containing the states, actions, rewards, next states, dones, and 
+    #             invalid (meaning stacked frmaes cross episode boundary).
+    #     """
+    #     indices = np.random.choice(max(1, self.size - stacked_frames - 1),  batch_size, replace=False)
+    #     indices = indices[:, np.newaxis]
+    #     indices = (indices + np.arange(stacked_frames))
+
+    #     states = torch.from_numpy(self.buffer[indices]).view(batch_size, -1)
+    #     next_states = torch.from_numpy(self.buffer[indices + 1]).view(batch_size, -1)
+    #     actions = torch.from_numpy(self.actions[indices[:, -1]]).view(batch_size, -1)
+    #     rewards  = torch.from_numpy(self.rewards[indices[:, -1]]).view(batch_size, -1)
+    #     dones = torch.from_numpy(self.dones[indices[:, -1]]).view(batch_size, -1)
+    #     valid = torch.from_numpy(1. - np.any(self.dones[indices[:, :-1]], axis=-1)).view(batch_size, -1)
+
+    #     return states, actions, rewards, next_states, dones, valid
+
     def sample(self, batch_size: int, stacked_frames: int = 1):
         """
-        Sample a batch of experiences from the replay buffer.
+        Sample a batch of experiences from the replay buffer, ensuring that
+        no sampled sequences cross episode boundaries (done=True).
 
         Args:
             batch_size (int): The number of experiences to sample.
             stacked_frames (int): The number of frames to stack together.
-        
-        Returns:
-            Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]: 
-                A tuple containing the states, actions, rewards, next states, dones, and 
-                invalid (meaning stacked frmaes cross episode boundary).
-        """
-        indices = np.random.choice(max(1, self.size - stacked_frames - 1),  batch_size, replace=False)
-        indices = indices[:, np.newaxis]
-        indices = (indices + np.arange(stacked_frames))
 
-        states = torch.from_numpy(self.buffer[indices]).view(batch_size, -1)
-        next_states = torch.from_numpy(self.buffer[indices + 1]).view(batch_size, -1)
-        actions = torch.from_numpy(self.actions[indices[:, -1]]).view(batch_size, -1)
-        rewards  = torch.from_numpy(self.rewards[indices[:, -1]]).view(batch_size, -1)
-        dones = torch.from_numpy(self.dones[indices[:, -1]]).view(batch_size, -1)
-        valid = torch.from_numpy(1. - np.any(self.dones[indices[:, :-1]], axis=-1)).view(batch_size, -1)
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: 
+                A tuple containing the states, actions, rewards, next states, dones, and 
+                a validity mask indicating if stacked frames cross episode boundaries.
+        """
+        valid_indices = []
+        while len(valid_indices) < batch_size:
+            # Randomly sample a batch of indices (larger pool to account for filtering)
+            indices = np.random.choice(max(1, self.size - stacked_frames - 1),  batch_size, replace=False)
+            indices = indices[:, np.newaxis]
+            indices = (indices + np.arange(stacked_frames))
+
+            # Filter out invalid sequences (those with `done=True` in stacked frames)
+            invalid_mask = np.any(self.dones[indices], axis=1)
+            valid_batch_indices = indices[~invalid_mask]
+
+            # Add valid indices to the pool
+            valid_indices.extend(valid_batch_indices)
+
+        # Trim to exact batch size
+        valid_indices = np.array(valid_indices)
+        valid_indices = valid_indices[:batch_size]
+
+        # Extract batch data
+        states = torch.from_numpy(self.buffer[valid_indices]).view(batch_size, -1)
+        next_states = torch.from_numpy(self.buffer[valid_indices + 1]).view(batch_size, -1)
+        actions = torch.from_numpy(self.actions[valid_indices[:, -1]]).view(batch_size, -1)
+        rewards = torch.from_numpy(self.rewards[valid_indices[:, -1]]).view(batch_size, -1)
+        dones = torch.from_numpy(self.dones[valid_indices[:, -1]]).view(batch_size, -1)
+        valid = torch.ones(batch_size, 1)  # All sampled sequences are valid by construction
 
         return states, actions, rewards, next_states, dones, valid
+
     
     def clear(self):
         """Zero out the arrays."""

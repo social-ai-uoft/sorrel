@@ -20,14 +20,15 @@ import random
 
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-
+from agentarium.models.PPO import RolloutBuffer
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
 from examples.state_punishment.agents import Agent
 from examples.state_punishment.env import state_punishment
 from examples.state_punishment.state_sys import state_sys
-from examples.state_punishment.utils import (create_agents, create_entities, create_models,
+from examples.state_punishment.utils import (create_agents, create_entities, create_models_PPO,
                                 init_log, load_config, save_config_backup)
+import torch
 
 import numpy as np
 
@@ -37,10 +38,12 @@ import numpy as np
 
 def run(cfg, **kwargs):
     # Initialize the environment and get the agents
-    models = create_models(cfg)
+    models = create_models_PPO(cfg.model.PPO.num)
     agents: list[Agent] = create_agents(cfg, models)
     for a in agents:
         print(a.appearance)
+        a.episode_memory = RolloutBuffer()
+        a.model_type = 'PPO'
     entities: list[Entity] = create_entities(cfg)
     env = state_punishment(cfg, agents, entities)
 
@@ -98,8 +101,8 @@ def run(cfg, **kwargs):
 
             turn = turn + 1
 
-            for agent in agents:
-                agent.model.start_epoch_action(**locals())
+            # for agent in agents:
+            #     agent.model.start_epoch_action(**locals())
 
             for agent in agents:
                 agent.reward = 0
@@ -112,7 +115,7 @@ def run(cfg, **kwargs):
             # Agent transition
             for agent in agents:
 
-                (state, action, reward, next_state, done_) = agent.transition(env, state_entity)
+                (state, action, reward, next_state, done_, action_logprob) = agent.transition(env, state_entity)
 
                 # record voting behaviors
                 if action == 4:
@@ -127,14 +130,25 @@ def run(cfg, **kwargs):
                 #     agent.add_final_memory(next_state)
 
                 agent.add_memory(state, action, reward, done)
+                # Update the agent's memory buffer
+                agent.episode_memory.states.append(torch.tensor(state))
+                agent.episode_memory.actions.append(torch.tensor(action))
+                agent.episode_memory.logprobs.append(torch.tensor(action_logprob))
+                agent.episode_memory.rewards.append(torch.tensor(reward))
+                agent.episode_memory.is_terminals.append(torch.tensor(done))
 
                 game_points[agent.ixs] += reward
 
-                agent.model.end_epoch_action(**locals())
+                # agent.model.end_epoch_action(**locals())
 
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
-            loss = agent.model.train_model()
+
+            loss = agent.model.training(
+                    agent.episode_memory, 
+                    entropy_coefficient=0.01
+                    )
+            agent.episode_memory.clear()
             losses[agent.ixs] += loss.detach().numpy()
 
             # Add the game variables to the game object
@@ -185,7 +199,7 @@ def run(cfg, **kwargs):
                     #                 f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
                     #                 )
                     agent.model.save(file_path=
-                                    f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
+                                    f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.PPO.type}.pkl'
                                     )
             
     # Close the tensorboard log
@@ -209,7 +223,7 @@ def main():
     run(
         cfg,
         # load_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
-        save_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
+        save_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_{cfg.model.PPO.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
     )
 
 

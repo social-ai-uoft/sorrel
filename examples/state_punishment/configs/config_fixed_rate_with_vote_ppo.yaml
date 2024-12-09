@@ -26,8 +26,8 @@ state_sys:
   change_per_vote: 0.25
 
 model:
-  iqn:
-    type: iRainbowModel
+  PPO:
+    type: PPO
     num: 1
     device: cpu
     parameters:
@@ -50,7 +50,7 @@ model:
 agent:
   agent:
     num: 1
-    model: iqn
+    model: PPO
     num_memories: 5 # Should match num_frames in the model above
     vision: 7
     # appearance: (0.0, 0.0, 255.0)
@@ -101,4 +101,4 @@ root: '/Users/socialai/Documents/GitHub/agentarium'
 log: True
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
 # exp_name: "test_voting_sixAs_size15_init_spawn_0.2_no_respawn_extended"
-exp_name: "testvote_withseparateTime_boostrap_withEndDone"
+exp_name: "testvote_testppo"

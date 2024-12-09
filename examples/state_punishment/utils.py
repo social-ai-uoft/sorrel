@@ -2,6 +2,8 @@ from examples.state_punishment.agents import Agent, color_map
 from examples.state_punishment.entities import Coin, Gem, Wall
 
 from agentarium.models.iqn import iRainbowModel
+from agentarium.models.PPO import PPO
+from collections import deque
 import argparse
 import yaml
 import os
@@ -61,6 +63,32 @@ def create_models(cfg):
 
     return models
 
+
+def create_models_PPO(
+        num_model, 
+        device='cpu'
+        ):
+    """Create models for agents."""
+    models = deque(maxlen=num_model)
+    for _ in range(num_model):
+        model = PPO(
+            device=device, 
+            state_dim=6*15*15+2,
+            action_dim=6,
+            lr_actor=0.001,
+            lr_critic=0.0005,
+            gamma=0.99,
+            K_epochs=10,
+            eps_clip=0.2 
+        )
+        model.name = 'PPO'
+        models.append(model)
+    # convert to device
+    for model in range(len(models)):
+        models[model].model1.to(device)
+    return models
+
+
 def create_agents(cfg, models):
     agents = []
     model_num = 0
@@ -70,6 +98,7 @@ def create_agents(cfg, models):
 
             # fetch for model in models
             agent_model_name = vars(vars(cfg.agent)[agent_type])['model']
+            print(agent_model_name)
             for model in models:
                 has_model = False
                 if model.name == agent_model_name:

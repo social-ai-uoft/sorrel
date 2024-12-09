@@ -5,6 +5,7 @@ class state_sys():
         self.magnitude = magnitude
         self.taboo = taboo
         self.change_per_vote = change_per_vote
+        self.time = None
         self.prob_record = []
     
     def reset_prob_record(self):

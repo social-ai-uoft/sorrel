@@ -133,9 +133,10 @@ class Agent:
         state = np.concatenate([state, np.array([state_sys.prob])])
         state = np.concatenate([state, np.array([state_sys.time[self.ixs]])])
         model_input = torch.from_numpy(self.current_state(state_sys=state_sys, env=env)).view(1, -1)
-        if self.model_type == 'PPO':
-            model_input = torch.from_numpy(state)
-            
+        # print(model_input.size())
+        # ll
+        # state_punishment_prob_tensor = torch.full((state.shape()[1], state.shape()[2]), state_sys.prob).view(1, -1)
+        # model_input = torch.concat([model_input, state_punishment_prob_tensor])
         reward = 0
 
         # Take action based on current state
@@ -179,15 +180,6 @@ class Agent:
         return state, action, reward, next_state, False, action_prob
         
     def reset(self, env: GridworldEnv) -> None:
-        # if self.model_type == 'PPO':
-        #     self.encounters = {
-        #         'Gem': 0,
-        #         'Coin': 0,
-        #         'Food': 0,
-        #         'Bone': 0,
-        #         'Wall': 0
-        #     }
-        # else:
         self.init_replay(env)
         self.encounters = {
             'Gem': 0,
