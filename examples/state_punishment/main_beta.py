@@ -55,6 +55,10 @@ def run(cfg, **kwargs):
     # Container for game variables (epoch, turn, loss, reward)
     game_vars = GameLogger(cfg.experiment.epochs)
 
+
+    # # load weights
+    # for count, agent in enumerate(agents):
+    #     agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/fixed_punishment_rate_0.1_0.6_1.0_3As_size15_3Resources_ambiguity_agent{count}_iRainbowModel.pkl')
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:

@@ -21,9 +21,9 @@ env:
 
 state_sys:
   prob_list: 
-    Gem: 0.
-    Coin: 0.0
-    Bone: 0.2
+    Gem: 0.1
+    Coin: 0.2
+    Bone: 1.0
   init_prob: 1.
   magnitude: 20  # 40 # positive - punishment, negative - reward 
   taboo: ['Bone', 'Gem', 'Coin']
@@ -106,4 +106,4 @@ replay:
 root: '/Users/socialai/Documents/agentarium'
 log: True
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
-exp_name: "fixed_punishment_rate_0.0_0.0_0.2_3As_size15_3Resources_ambiguity"
+exp_name: "fixed_punishment_rate_0.1_0.2_1.0_3As_size15_3Resources_ambiguity"
