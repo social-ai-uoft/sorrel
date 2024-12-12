@@ -107,11 +107,14 @@ class Agent:
         if action == 3: # RIGHT
             self.sprite = f'{self.cfg.root}/examples/seeing_the_future/assets/hero-right.png'
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
+        if action == 4: # zap
+            new_location = (self.location[0], self.location[1], self.location[2])
 
         return new_location
     
     def transition(self,
-                   env) -> tuple:
+                   env,
+                   another_agent) -> tuple:
         '''
         Changes the world based on the action taken.
         '''
@@ -121,11 +124,6 @@ class Agent:
         state = np.concatenate([state, np.array([self.is_punished])])
         model_input = torch.from_numpy(self.current_state(env=env)).view(1, -1)
 
-        
-        # print(model_input.size())
-        # ll
-        # seeing_the_future_prob_tensor = torch.full((state.shape()[1], state.shape()[2]), state_sys.prob).view(1, -1)
-        # model_input = torch.concat([model_input, seeing_the_future_prob_tensor])
         reward = 0
 
         # Take action based on current state
@@ -139,9 +137,17 @@ class Agent:
         # Get the interaction reward
         reward += target_object.value
 
+        # Get the punishment if any
+        reward += (self.is_punished/255) * (-1.0)
+        self.is_punished = 0.
+
         # Add to the encounter record
         if str(target_object) in self.encounters.keys():
             self.encounters[str(target_object)] += 1 
+
+        # punish the other agent is zapping is choosen
+        if action == 4:
+            another_agent.is_punished = 255.
 
         # Get the next state   
         next_state = self.pov(env)
