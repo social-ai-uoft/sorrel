@@ -59,9 +59,9 @@ agent:
     vision: 7
     # appearance: (0.0, 0.0, 255.0)
     appearance: 
-      - [0.0, 0.0, 1.0, 1.0, 0., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 1., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0., 1.]
+      - [0.0, 0.0, 255.0, 255.0, 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 255., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 255.]
     memory_size: 100 # If this is larger than max_turns above, could cause issues
     # Not used right now
     tile_size: (1, 1)
