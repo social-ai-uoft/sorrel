@@ -41,12 +41,13 @@ def run(cfg, **kwargs):
     agents: list[Agent] = create_agents(cfg, models)
     for a in agents:
         print(a.appearance)
+        a.model_type = 'IQN'
     entities: list[Entity] = create_entities(cfg)
     env = state_punishment(cfg, agents, entities)
 
     # # resume training of existing models
     # for count, a in enumerate(agents):
-    #     a.model.load(f'{root}/examples/state_punishment/models/checkpoints/testvote_withseparateTime_boostrap_agent{count}_iRainbowModel.pkl')
+    #     a.model.load(f'{root}/examples/state_punishment/models/checkpoints/testvote_withseparateTime_boostrap_withEndDone_test6agents_agent{count}_iRainbowModel.pkl')
 
     # Set up tensorboard logging
     if cfg.log:

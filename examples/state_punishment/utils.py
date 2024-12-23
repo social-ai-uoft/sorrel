@@ -7,7 +7,7 @@ from collections import deque
 import argparse
 import yaml
 import os
-import imageio
+# import imageio
 from PIL import Image
 import shutil
 
@@ -167,8 +167,8 @@ class Cfg:
                 setattr(self, key, Cfg(val) if isinstance(val, dict) else val)
 
 
-def make_animations(images):
-    imageio.mimsave('movie.mp4', images)
+# def make_animations(images):
+#     imageio.mimsave('movie.mp4', images)
 
 
 def create_gif_from_arrays(image_arrays, output_path, duration=100, loop=0):

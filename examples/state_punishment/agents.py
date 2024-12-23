@@ -62,7 +62,7 @@ class Agent:
 
     def current_state(self, state_sys, env: GridworldEnv) -> np.ndarray:
         state = self.pov(env)
-        state = np.concatenate([state, np.array([state_sys.prob])])
+        state = np.concatenate([state, np.array([255*state_sys.prob])])
         state = np.concatenate([state, np.array([state_sys.time[self.ixs]])])
         prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
         current_state = np.vstack((prev_states, state))
@@ -130,7 +130,7 @@ class Agent:
 
         # Get current state
         state = self.pov(env)
-        state = np.concatenate([state, np.array([state_sys.prob])])
+        state = np.concatenate([state, np.array([255*state_sys.prob])])
         state = np.concatenate([state, np.array([state_sys.time[self.ixs]])])
         model_input = torch.from_numpy(self.current_state(state_sys=state_sys, env=env)).view(1, -1)
         if self.model_type == 'PPO':
@@ -174,9 +174,12 @@ class Agent:
 
         # Get the next state   
         next_state = self.pov(env)
-        next_state = np.concatenate([next_state, np.array([state_sys.prob])])
+        next_state = np.concatenate([next_state, np.array([255*state_sys.prob])])
         next_state = np.concatenate([next_state, np.array([state_sys.time[self.ixs]])])
-        return state, action, reward, next_state, False, action_prob
+        if self.model_type == 'PPO':
+            return state, action, reward, next_state, False, action_prob
+        else:
+            return state, action, reward, next_state, False
         
     def reset(self, env: GridworldEnv) -> None:
         # if self.model_type == 'PPO':
