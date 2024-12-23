@@ -152,8 +152,9 @@ class Agent:
 
         # Get the interaction reward
         reward += target_object.value
-        if self.is_punished == 1.:
+        if self.is_punished == 1.: ##TODO: change to to_be_punished 
             reward -= state_sys.magnitude 
+            # TODO: if self.to_be_punished: 
         
         self.is_punished = 0. 
 
@@ -178,7 +179,10 @@ class Agent:
         # Get the next state   
         next_state = self.pov(env)
         next_state = np.concatenate([next_state, np.array([state_sys.prob])])
-        next_state = np.concatenate([next_state, np.array([self.is_punished])])
+        next_state = np.concatenate([next_state, np.array([self.is_punished])])  ## TODO: how to edit the to_be_punished state within agents
+
+        self.to_be_punished = False
+
         return state, action, reward, next_state, False
         
     def reset(self, env: GridworldEnv) -> None:

@@ -127,11 +127,13 @@ def run(cfg, **kwargs):
                 elif action == 5:
                     punishment_decrease_record[agent.ixs] += 1 
 
-                agent.add_memory(state, action, reward, done)
+                # agent.add_memory(state, action, reward, done)
 
                 if turn >= cfg.experiment.max_turns or done_:
                     done = 1
-                    agent.add_final_memory(next_state)
+                    # agent.add_final_memory(next_state)
+
+                agent.add_memory(state, action, reward, done)
 
                 game_points[agent.ixs] += reward
 
