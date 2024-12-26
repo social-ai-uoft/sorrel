@@ -29,8 +29,7 @@ class Agent:
         self.vision = cfg.agent.agent.vision
         self.ixs = ixs
         self.extra_percept_size = cfg.agent.agent.extra_percept_size
-        self.is_punished = 0.
-
+        
         # training-related features
         self.model = model  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
         # self.episode_memory = Memory(cfg.agent.agent.memory_size)
@@ -59,11 +58,12 @@ class Agent:
         self.model.memory.add(state, action, reward, float(done))
     
     def add_final_memory(self, state: np.ndarray) -> None:
-        self.model.memory.add(state, 0, 0.0, float(True))
+        self.model.memory.add(state, 0, 0.0, float(True)) 
 
-    def current_state(self, env: GridworldEnv) -> np.ndarray:
+    def current_state(self, state_sys, env: GridworldEnv) -> np.ndarray:
         state = self.pov(env)
-        state = np.concatenate([state, np.array([self.is_punished])])
+        state = np.concatenate([state, np.array([255*state_sys.prob])])
+        state = np.concatenate([state, np.array([state_sys.time[self.ixs]])])
         prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
         current_state = np.vstack((prev_states, state))
         return current_state
@@ -107,32 +107,42 @@ class Agent:
         if action == 3: # RIGHT
             self.sprite = f'{self.cfg.root}/examples/seeing_the_future/assets/hero-right.png'
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
-        if action == 4: # zap
-            new_location = (self.location[0], self.location[1], self.location[2])
+        # if action == 4: # vote for state punishment
+        #     self.sprite = self.sprite
+        #     new_location = self.location
+        #     state_sys.prob += state_sys.change_per_vote
+        #     state_sys.prob = np.clip(state_sys.prob, 0, 1)
+        # if action == 5: # vote against state punishment
+        #     self.sprite = self.sprite
+        #     new_location = self.location
+        #     state_sys.prob -= state_sys.change_per_vote
+        #     state_sys.prob = np.clip(state_sys.prob, 0, 1)
+
         return new_location
     
     def transition(self,
                    env,
-                   another_agent) -> tuple:
+                   state_sys) -> tuple:
         '''
         Changes the world based on the action taken.
         '''
 
         # Get current state
         state = self.pov(env)
-        state = np.concatenate([state, np.array([self.is_punished])])
-        model_input = torch.from_numpy(self.current_state(env=env)).view(1, -1)
+        state = np.concatenate([state, np.array([255*state_sys.prob])])
+        state = np.concatenate([state, np.array([state_sys.time[self.ixs]])])
+        model_input = torch.from_numpy(self.current_state(state_sys=state_sys, env=env)).view(1, -1)
         if self.model_type == 'PPO':
             model_input = torch.from_numpy(state)
+            
         reward = 0
 
         # Take action based on current state
         if self.model_type == 'PPO':
-            # action, action_prob = self.model.take_action(model_input, whether_to_predict=False, steps=2)
             action, action_prob = self.model.take_action(model_input)
         else:
             action = self.model.take_action(model_input)
-            action_prob = None
+            action_prob = None 
 
         # Attempt the transition 
         attempted_location = self.movement(action)
@@ -141,29 +151,45 @@ class Agent:
 
         # Get the interaction reward
         reward += target_object.value
-
-        # Get the punishment if any
-        reward += (self.is_punished/255) * (-1.0)
-        self.is_punished = 0.
+        # Get the delayed reward
+        reward += env.cache['delayed_r'][self.ixs]
+        env.cache['delayed_r'][self.ixs] = 0 
+        # If the agent performs a transgression
+        if str(target_object) == state_sys.taboo:
+            reward -= state_sys.magnitude * (random.random() < state_sys.prob)
+            env.cache['delayed_r'] = [env.cache['delayed_r'][k] - target_object.social_harm 
+                                      if k != self.ixs else env.cache['delayed_r'][k]
+                                      for k in range(len(env.cache['delayed_r']))
+                                      ]
+            # print(target_object, reward, env.cache['delayed_r'])
+            
 
         # Add to the encounter record
         if str(target_object) in self.encounters.keys():
             self.encounters[str(target_object)] += 1 
 
-        # punish the other agent is zapping is choosen
-        if action == 4:
-            another_agent.is_punished = 255.
+        # update state_sys time
+        state_sys.time[self.ixs] += 1
 
         # Get the next state   
         next_state = self.pov(env)
-        next_state = np.concatenate([next_state, np.array([self.is_punished])])
-        # print(next_state.shape)
+        next_state = np.concatenate([next_state, np.array([255*state_sys.prob])])
+        next_state = np.concatenate([next_state, np.array([state_sys.time[self.ixs]])])
         if self.model_type == 'PPO':
             return state, action, reward, next_state, False, action_prob
         else:
             return state, action, reward, next_state, False
         
     def reset(self, env: GridworldEnv) -> None:
+        # if self.model_type == 'PPO':
+        #     self.encounters = {
+        #         'Gem': 0,
+        #         'Coin': 0,
+        #         'Food': 0,
+        #         'Bone': 0,
+        #         'Wall': 0
+        #     }
+        # else:
         self.init_replay(env)
         self.encounters = {
             'Gem': 0,
@@ -226,12 +252,12 @@ def color_map(channels: int) -> dict:
     if channels > 5:
         colors = {
             'EmptyObject': [0 for _ in range(channels)],
-            # 'Agent': [255 if x == 0 else 0 for x in range(channels)],
-            'Wall': [255. if x == 1 else 0 for x in range(channels)],
-            'Gem': [255. if x == 2 else 0 for x in range(channels)],
-            'Food': [255. if x == 4 else 0 for x in range(channels)],
-            'Coin': [255. if x == 3 else 0 for x in range(channels)],
-            'Bone': [255. if x == 5 else 0 for x in range(channels)]
+            'Agent': [255 if x == 0 else 0 for x in range(channels)],
+            'Wall': [255 if x == 1 else 0 for x in range(channels)],
+            'Gem': [255 if x == 2 else 0 for x in range(channels)],
+            'Food': [255 if x == 3 else 0 for x in range(channels)],
+            'Coin': [255 if x == 4 else 0 for x in range(channels)],
+            'Bone': [255 if x == 5 else 0 for x in range(channels)]
         }
     else:
         colors = {

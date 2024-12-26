@@ -9,6 +9,7 @@ https://github.com/nikhilbarhate99/PPO-PyTorch
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical
+from agentarium.models.DDQN import ClaasyReplayBuffer as Buffer
 
 # Memory 
 class RolloutBuffer:
@@ -33,38 +34,14 @@ class RolloutBuffer:
         del self.gt[:]
 
 
-# Actor-critic network 
+# Actor-critic model_mainwork 
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(ActorCritic, self).__init__()
 
         
-        # actor 
-        self.actor = nn.Sequential(
-                        nn.Linear(state_dim, 64),
-                        nn.Tanh(),
-                        nn.Linear(64, 128),
-                        nn.Tanh(),
-                        # nn.Dropout(p=0.2),
-                        nn.Linear(128, 64),
-                        nn.Tanh(),
-                        nn.Linear(64, action_dim),
-                        nn.Softmax(dim=-1)
-                    )
-        # critic
-        self.critic = nn.Sequential(
-                        nn.Linear(state_dim, 64),
-                        nn.Tanh(),
-                        nn.Linear(64, 128),
-                        nn.Tanh(),
-                        # nn.Dropout(p=0.2),
-                        nn.Linear(128, 64),
-                        nn.Tanh(),
-                        nn.Linear(64, 1)
-                    )
-        
-        # feature extractor
-        # self.feature_extractor = nn.Sequential(
+        # # actor 
+        # self.actor = nn.Sequential(
         #                 nn.Linear(state_dim, 64),
         #                 nn.Tanh(),
         #                 nn.Linear(64, 128),
@@ -72,23 +49,49 @@ class ActorCritic(nn.Module):
         #                 # nn.Dropout(p=0.2),
         #                 nn.Linear(128, 64),
         #                 nn.Tanh(),
-        #             )
-
-        # self.actor = nn.Sequential(
         #                 nn.Linear(64, action_dim),
         #                 nn.Softmax(dim=-1)
         #             )
-
+        # # critic
         # self.critic = nn.Sequential(
+        #                 nn.Linear(state_dim, 64),
+        #                 nn.Tanh(),
+        #                 nn.Linear(64, 128),
+        #                 nn.Tanh(),
+        #                 # nn.Dropout(p=0.2),
+        #                 nn.Linear(128, 64),
+        #                 nn.Tanh(),
         #                 nn.Linear(64, 1)
         #             )
+        
+        # feature extractor
+        self.feature_extractor = nn.Sequential(
+                        nn.Linear(state_dim, 64),
+                        nn.Tanh(),
+                        nn.Linear(64, 128),
+                        nn.Tanh(),
+                        # nn.Dropout(p=0.2),
+                        nn.Linear(128, 64),
+                        nn.Tanh(),
+                    )
+
+        self.actor = nn.Sequential(
+                        nn.Linear(64, action_dim),
+                        nn.Softmax(dim=-1)
+                    )
+
+        self.critic = nn.Sequential(
+                        nn.Linear(64, 1)
+                    )
 
         # predictor
-        # self.predictor = nn.Sequential(
-        #                 nn.Linear(64+1, 64),
-        #                 nn.Tanh(),
-        #                 nn.Linear(64, state_dim),
-        #             )
+        self.predictor = nn.Sequential(
+                        nn.Linear(64+1, 64),
+                        nn.Tanh(),
+                        nn.Linear(64, state_dim),
+                    )
+        
+        self.double()
         
 
     def forward(self):
@@ -157,21 +160,28 @@ class PPO:
         self.K_epochs = K_epochs
         if self.is_a2c:
             self.K_epochs = 1
-        self.net = ActorCritic(state_dim, action_dim).to(self.device)
+        self.model_main = ActorCritic(state_dim, action_dim).to(self.device)
         self.optimizer = torch.optim.Adam([
-                        {'params': self.net.actor.parameters(), 'lr': lr_actor},
-                        {'params': self.net.critic.parameters(), 'lr': lr_critic}
+                        {'params': self.model_main.actor.parameters(), 'lr': lr_actor},
+                        {'params': self.model_main.critic.parameters(), 'lr': lr_critic}
                     ])
         self.loss_fn = nn.MSELoss()
+        self.memory = Buffer(
+            capacity=1024,
+            obs_shape=(state_dim,)
+        )
+        self.epsilon = 0
 
     def take_action(self, state, whether_to_predict=False, steps=1):
         """Choose an action based on the observed state."""
         with torch.no_grad():
             state = state.to(self.device)
-            action, action_logprob = self.net.act(state)
-        with torch.gradient.enable():
+            hidden_state = self.model_main.feature_extractor(state)
+            action, action_logprob = self.model_main.act(hidden_state)
+            # print(action, hidden_state.size())
+        with torch.enable_grad():
             if whether_to_predict:
-                prediction = self.net.recursive_predict(state, action, steps=steps)
+                prediction = self.model_main.recursive_predict(state, action, steps=steps)
                 return action, action_logprob, prediction
         return action, action_logprob
 
@@ -187,22 +197,22 @@ class PPO:
             rewards.insert(0, discounted_reward)
             
         # Normalizing the rewards
-        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        rewards = torch.tensor(rewards, dtype=torch.float64).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # convert list to tensor
         old_states = torch.squeeze(torch.stack(buffer.states, dim=0)).detach().to(self.device)
         old_actions = torch.squeeze(torch.stack(buffer.actions, dim=0)).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(buffer.logprobs, dim=0)).detach().to(self.device)
-        predictions = torch.squeeze(torch.stack(buffer.predictions, dim=0)).detach().to(self.device)
-        gts = torch.squeeze(torch.stack(buffer.gt, dim=0)).detach().to(self.device)
-        # To do: curate gts
+        # predictions = torch.squeeze(torch.stack(buffer.predictions, dim=0)).detach().to(self.device)
+        # gts = torch.squeeze(torch.stack(buffer.gt, dim=0)).detach().to(self.device)
+        # TODO: curate gts
 
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
 
             # Evaluating old actions and values
-            logprobs, state_values, dist_entropy = self.net.evaluate(old_states, old_actions)
+            logprobs, state_values, dist_entropy = self.model_main.evaluate(old_states, old_actions)
             
             # match state_values tensor dimensions with rewards tensor
             state_values = torch.squeeze(state_values)
@@ -220,13 +230,14 @@ class PPO:
             critic_loss = self.loss_fn(state_values, rewards)
 
             if self.is_a2c:
-                action_probs = torch.exp(self.net.evaluate(old_states, old_actions)[0])
+                action_probs = torch.exp(self.model_main.evaluate(old_states, old_actions)[0])
                 policy_loss = -action_probs * advantages 
             else:
                 policy_loss = -torch.min(surr1, surr2) 
 
             # calculate prediction error
-            prediction_error = self.loss_fn(predictions, gts)
+            # prediction_error = self.loss_fn(predictions, gts)
+            prediction_error = 0
 
             loss = policy_loss + 0.5*critic_loss - entropy_coefficient * dist_entropy + prediction_error
 
@@ -239,8 +250,8 @@ class PPO:
     
     def save(self, checkpoint_path):
         """Save the current model."""
-        torch.save(self.net.state_dict(), checkpoint_path)
+        torch.save(self.model_main.state_dict(), checkpoint_path)
    
     def load(self, checkpoint_path):
         """Load the specified model."""
-        self.net.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
+        self.model_main.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))

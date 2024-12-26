@@ -20,13 +20,15 @@ import random
 
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-
+from agentarium.models.PPO import RolloutBuffer
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
 from examples.seeing_the_future.agents import Agent
 from examples.seeing_the_future.env import seeing_the_future
-from examples.seeing_the_future.utils import (create_agents, create_entities, create_models,
+from examples.seeing_the_future.state_sys import state_sys
+from examples.seeing_the_future.utils import (create_agents, create_entities, create_models_PPO,
                                 init_log, load_config, save_config_backup)
+import torch
 
 import numpy as np
 
@@ -36,12 +38,18 @@ import numpy as np
 
 def run(cfg, **kwargs):
     # Initialize the environment and get the agents
-    models = create_models(cfg)
+    models = create_models_PPO(cfg.model.PPO.num)
     agents: list[Agent] = create_agents(cfg, models)
     for a in agents:
         print(a.appearance)
+        a.episode_memory = RolloutBuffer()
+        a.model_type = 'PPO'
     entities: list[Entity] = create_entities(cfg)
     env = seeing_the_future(cfg, agents, entities)
+
+    # # resume training of existing models
+    # for count, a in enumerate(agents):
+    #     a.model.load(f'{root}/examples/seeing_the_future/models/checkpoints/testvote_withseparateTime_boostrap_agent{count}_iRainbowModel.pkl')
 
     # Set up tensorboard logging
     if cfg.log:
@@ -59,13 +67,11 @@ def run(cfg, **kwargs):
         for agent in agents:
             agent.model.load(file_path=kwargs.get("load_weights"))
 
-
-
-    for epoch in range(cfg.experiment.epochs):        
+    for epoch in range(cfg.experiment.epochs):
 
         # Reset the environment at the start of each epoch
         env.reset()
-        env.cache['harm'] = [0 for _ in range(len(agents))]
+        env.cache['delayed_r'] = [0 for _ in range(len(agents))]
         # for agent in env.agents:
         #     agent.reset()
         random.shuffle(agents)
@@ -81,10 +87,12 @@ def run(cfg, **kwargs):
 
         while not done:
 
+            # update prob record for state punishment
+
             turn = turn + 1
 
-            for agent in agents:
-                agent.model.start_epoch_action(**locals())
+            # for agent in agents:
+            #     agent.model.start_epoch_action(**locals())
 
             for agent in agents:
                 agent.reward = 0
@@ -97,31 +105,41 @@ def run(cfg, **kwargs):
             # Agent transition
             for agent in agents:
 
-                (state, action, reward, next_state, done_) = agent.transition(env, None)
-
+                (state, action, reward, next_state, done_, action_logprob) = agent.transition(env, None)
+                # action = random.randint(0,3)
                 # record voting behaviors
                 if action == 4:
                     punishment_increase_record[agent.ixs] += 1
                 elif action == 5:
                     punishment_decrease_record[agent.ixs] += 1 
 
-                agent.add_memory(state, action, reward, done)
+                # agent.add_memory(state, action, reward, done)
 
                 if turn >= cfg.experiment.max_turns or done_:
                     done = 1
-                    agent.add_final_memory(next_state)
+                #     agent.add_final_memory(next_state)
+
+                agent.add_memory(state, action, reward, done)
+                # Update the agent's memory buffer
+                agent.episode_memory.states.append(torch.tensor(state))
+                agent.episode_memory.actions.append(torch.tensor(action))
+                agent.episode_memory.logprobs.append(torch.tensor(action_logprob))
+                agent.episode_memory.rewards.append(torch.tensor(reward))
+                agent.episode_memory.is_terminals.append(torch.tensor(done))
 
                 game_points[agent.ixs] += reward
 
-                agent.model.end_epoch_action(**locals())
+                # agent.model.end_epoch_action(**locals())
 
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
-            if (epoch+1)*cfg.experiment.max_turns >= cfg.model.iqn.parameters.BATCH_SIZE:
-                loss = agent.model.train_model()
-                losses[agent.ixs] += loss.detach().numpy()
-            else:
-                losses[agent.ixs] += 0
+
+            loss = agent.model.training(
+                    agent.episode_memory, 
+                    entropy_coefficient=0.01
+                    )
+            agent.episode_memory.clear()
+            losses[agent.ixs] += loss.detach().numpy()
 
             # Add the game variables to the game object
             game_vars.record_turn(epoch, turn, losses, game_points)
@@ -152,6 +170,9 @@ def run(cfg, **kwargs):
                     },
                     epoch,
                 )
+            # writer.add_scalar(f'seeing_the_future_level_avg', np.mean(state_entity.prob_record), epoch)
+            # writer.add_scalar(f'seeing_the_future_level_end', state_entity.prob, epoch)
+            # writer.add_scalar(f'seeing_the_future_level_init', state_entity.init_prob, epoch)
 
         # Special action: update epsilon
         for agent in agents:
@@ -159,7 +180,7 @@ def run(cfg, **kwargs):
             agent.model.epsilon = max(new_epsilon, 0.01)
 
 
-        if (epoch % 1000 == 0) or (epoch == cfg.experiment.epochs - 1):
+        if (epoch % 500 == 0) or (epoch == cfg.experiment.epochs - 1):
             # If a file path has been specified, save the weights to the specified path
             if "save_weights" in kwargs:
                 for a_ixs, agent in enumerate(agents):
@@ -167,8 +188,8 @@ def run(cfg, **kwargs):
                     # agent.model.save(file_path=
                     #                 f'{cfg.root}/examples/seeing_the_future/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
                     #                 )
-                    agent.model.save(file_path=
-                                    f'{cfg.root}/examples/seeing_the_future/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
+                    agent.model.save(
+                                    f'{cfg.root}/examples/seeing_the_future/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.PPO.type}.pkl'
                                     )
             
     # Close the tensorboard log
@@ -192,7 +213,7 @@ def main():
     run(
         cfg,
         # load_weights=f'{cfg.root}/examples/seeing_the_future/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
-        save_weights=f'{cfg.root}/examples/seeing_the_future/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
+        save_weights=f'{cfg.root}/examples/seeing_the_future/models/checkpoints/{cfg.exp_name}_{cfg.model.PPO.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
     )
 
 

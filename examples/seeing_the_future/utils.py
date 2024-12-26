@@ -5,9 +5,11 @@ from agentarium.models.iqn import iRainbowModel
 import argparse
 import yaml
 import os
-import imageio
 from PIL import Image
 import shutil
+from collections import deque
+from agentarium.models.PPO_ import PPO
+
 
 
 DEVICES = ['cpu', 'cuda']
@@ -60,6 +62,31 @@ def create_models(cfg):
             )
 
     return models
+
+def create_models_PPO(
+        num_model, 
+        device='cpu'
+        ):
+    """Create models for agents."""
+    models = deque(maxlen=num_model)
+    for _ in range(num_model):
+        model = PPO(
+            device=device, 
+            state_dim=9*15*15+1,
+            action_dim=4,
+            lr_actor=0.0001,
+            lr_critic=0.00005,
+            gamma=0.99,
+            K_epochs=10,
+            eps_clip=0.2 
+        )
+        model.name = 'PPO'
+        models.append(model)
+    # convert to device
+    for model in range(len(models)):
+        models[model].model_main.to(device)
+    return models
+
 
 def create_agents(cfg, models):
     agents = []
@@ -138,8 +165,7 @@ class Cfg:
                 setattr(self, key, Cfg(val) if isinstance(val, dict) else val)
 
 
-def make_animations(images):
-    imageio.mimsave('movie.mp4', images)
+
 
 
 def create_gif_from_arrays(image_arrays, output_path, duration=100, loop=0):
