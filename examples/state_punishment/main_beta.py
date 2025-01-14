@@ -57,8 +57,8 @@ def run(cfg, **kwargs):
 
 
     # load weights
-    for count, agent in enumerate(agents):
-        agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/fixed_punishment_rate_0.0_0.0_1.0_3As_size15_3Resources_ambiguity_v2_init0.2_agent{count}_iRainbowModel.pkl')
+    # for count, agent in enumerate(agents):
+    #     agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/fixed_punishment_rate_0.0_0.0_1.0_3As_size15_3Resources_ambiguity_v2_init0.2_agent{count}_iRainbowModel.pkl')
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:

@@ -32,7 +32,7 @@ state_sys:
 model:
   iqn:
     type: iRainbowModel
-    num: 3
+    num: 1
     device: cpu
     parameters:
       state_size: [6, 15, 15] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
@@ -53,7 +53,7 @@ model:
 
 agent:
   agent:
-    num: 3
+    num: 1
     model: iqn
     num_memories: 5 # Should match num_frames in the model above
     vision: 7
@@ -103,7 +103,7 @@ replay:
   turns: 100
 
 # Root folder for accessing file structure and modules
-root: '/Users/socialai/Documents/Github/agentarium'
+root: '/Users/yikaitang/Documents/Github/agentarium'
 log: True
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
 exp_name: "fixed_punishment_rate_0.0_0.0_1.0_3As_size15_3Resources_ambiguity_v2_init0.2_resume"

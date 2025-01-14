@@ -15,6 +15,7 @@ class EmptyObject(Entity):
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/white.png'
         # self.appearance = cfg.entity.EmptyObject.appearance
         self.respawn_rate = cfg.env.prob.respawn_rate
+        self.type = 'emptyobject'
 
     def transition(self, env):
         '''
@@ -34,6 +35,7 @@ class Wall(Entity):
         super().__init__(appearance)
         self.value = -1 # Walls penalize contact
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/pink.png'
+        self.type = 'wall'
         # self.appearance = cfg.entity.Wall.appearance
 
 class Gem(Entity):
@@ -51,6 +53,7 @@ class Gem(Entity):
         self.passable = True
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/gem.png'
         self.social_harm = cfg.entity.Gem.social_harm
+        self.type = 'gem'
         # self.appearance = cfg.entity.Gem.appearance
 
 # class Coin(Entity):
@@ -98,6 +101,7 @@ class Bone(Entity):
         self.passable = True
         self.social_harm = cfg.entity.Bone.social_harm
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/bone.png'
+        self.type = 'bone'
 
 # ----------------------------------------------------- #
 # new entities for state_punishment                     #
@@ -119,6 +123,7 @@ class Coin(Entity):
         self.social_harm = cfg.entity.Coin.social_harm
         self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
         # self.appearance = cfg.entity.Coin.appearance
+        self.type = 'coin'
 
 # ----------------------------------------------------- #
 # endregion                                             #

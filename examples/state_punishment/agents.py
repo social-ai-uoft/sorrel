@@ -13,6 +13,7 @@ from agentarium.primitives import GridworldEnv
 class Agent:
     def __init__(self, model, cfg, ixs):
         self.kind = "Agent"
+        self.type = 'agent'
         self.cfg = cfg    
         # print(cfg.agent.agent.appearance)
         if isinstance(cfg.agent.agent.appearance, str):
@@ -30,6 +31,7 @@ class Agent:
         self.ixs = ixs
         self.extra_percept_size = cfg.agent.agent.extra_percept_size
         self.is_punished = 0.
+        self.to_be_punished = {'gem':0, 'bone':0, 'coin':0}
 
         # training-related features
         self.model = model  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
@@ -180,8 +182,9 @@ class Agent:
         next_state = self.pov(env)
         next_state = np.concatenate([next_state, np.array([state_sys.prob])])
         next_state = np.concatenate([next_state, np.array([self.is_punished])])  ## TODO: how to edit the to_be_punished state within agents
-
-        self.to_be_punished = False
+        
+        # reset to_be_punished 
+        # self.to_be_punished = {'gem':0, 'bone':0, 'coin':0}
 
         return state, action, reward, next_state, False
         

@@ -8,7 +8,8 @@ import os
 import imageio
 from PIL import Image
 import shutil
-
+import pandas as pd
+import numpy as np
 
 DEVICES = ['cpu', 'cuda']
 MODELS = {
@@ -199,5 +200,44 @@ def save_config_backup(config_file_path, backup_dir):
         print(f"Error during backup: {e}")
 
     print(f"Config file backed up to: {backup_file_path}")
+
+
+def inspect_the_env(env, types=None, locs=None):
+    """
+    Inspect the environment and get all the item identities on the locations 
+    of interest, if locations are provided.
+    If locations are not provided, get the items of interest.
+    """
+    # if types is None and locs is None:
+    #     raise ValueError('Both types and locs are None!')
+    if types is not None:
+        if isinstance(types, str):
+            types = [types]
+        types = [val.lower() for val in types]
+    res = pd.DataFrame(columns=['type', 'location'])
+    for index, _ in np.ndenumerate(env.world[:, :, 0]):
+        H, W = index  # Get the coordinates
+        item_type = env.world[H, W, 0].type
+        item_loc = (H, W)
+        # print([item_type, item_loc])
+        res.loc[len(res)] = [item_type, item_loc]
+    # clean the data based on the specified types and locs
+    if types is not None:
+        res_filtered = res[res.type.isin(types)]
+    elif locs is not None:
+        res_filtered = res[res.location.isin(locs)]
+    else:
+        res_filtered = res[~res.type.isin(['wall', 'emptyobject', 'agent'])]
+    return res_filtered 
+
+
+def add_extra_info(df, timepoint, done):
+    """
+    Add extra record info.
+    """
+    df['timepoint'] = timepoint
+    df['over'] = done
+    return df
+
 
     
