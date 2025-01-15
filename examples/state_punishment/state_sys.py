@@ -20,7 +20,7 @@ class state_sys():
         self.prob_record.append(self.prob)
 
 
-class monitor():
+class Monitor():
     def __init__(
             self, 
             max_duration_between_checks,
@@ -33,7 +33,7 @@ class monitor():
             'over',
             'being_checked',
             'timepoint',
-            'check_index'
+            'check_index', 
         ])
         self.max_duration_between_checks = max_duration_between_checks # duration between two checks
         self.time = 0 # clock to record the time 
@@ -43,29 +43,30 @@ class monitor():
         self.wait_time = 0 # 
         self.check_index = 0 # the number of checks undergone 
         self.size_of_env = env_size # size of the environment
+        self.check_time_record = []
+        self.time_record = []
     
     def get_taxicab_distance_points(self, a, b, distance, size_of_env):
         """
-        get the taxicab distance between two locations in the environment. 
+        Generate region of suspect. 
+        This version does not consider what was observed in last check. Therefore, 
+        any agents that have a distance of smaller than X are considered as guilty. 
+
+        if last observation is considered, we need to calculate the possible current 
+        locations of that agent considering the last location.
         """
         points = []
 
         # Iterate over all possible dx values within the distance range [0, X]
-        for dx in range(distance + 1):
-            # Corresponding dy based on the taxicab distance formula
-            dy = distance - dx
-
-            # Generate points for all combinations of +dx/-dx and +dy/-dy
-            for sign_x in [1, -1]:
-                for sign_y in [1, -1]:
-                    x = a + sign_x * dx
-                    y = b + sign_y * dy
-                    
-                    # Clip the coordinates within the range [0, l]
-                    x = max(0, min(x, size_of_env))
-                    y = max(0, min(y, size_of_env))
-                    
-                    points.append((x, y))
+        for dx in range(-distance, distance + 1):
+            for dy in range(-distance + abs(dx), distance - abs(dx) + 1):
+                # Calculate new position
+                x, y = a + dx, b + dy
+                # Clip the coordinates within the range [0, l]
+                x = max(0, min(x, size_of_env-1))
+                y = max(0, min(y, size_of_env-1))
+                
+                points.append((x, y))
 
         # Remove duplicates (in case some points have been added more than once)
         points = list(set(points))
@@ -96,7 +97,11 @@ class monitor():
         """
         Add a new line of record to the dataframe 
         """
-        if self.time == self.check_time:
+        if (
+            (self.time == self.check_time) 
+            or 
+            (self.time == 0)
+        ):
             new_rows['being_checked'] = True # 'being_checked' become True
             new_rows['check_index'] = self.check_index
         else:
@@ -104,15 +109,15 @@ class monitor():
             # new_rows['check_index']
         # self.record[len(self.record)] = new_rows
         self.record = pd.concat([self.record, new_rows], ignore_index=True)
-    
+        self.check_time_record.append(self.check_time)
+        self.time_record.append(self.wait_time)
 
     def regular_check(self, timepoint, resource_type, state_sys, agents):
         """
         At time T, check through all agents for a specific type of transgression. Punish
         the transgressors.
         """
-        if (self.time == self.check_time) and (self.time != 0) :
-            
+        if (self.time == self.check_time):
             filtered_record = self.record[
                 (self.record.over == False) &
                 (self.record.being_checked == True) &
@@ -134,16 +139,18 @@ class monitor():
                     (self.record.type == resource_type) & 
                     (self.record.check_index == index_of_last_check)   
                 ]
-                print('this', resource_type, last_resource_state, filtered_record)
-                ll
-                for loc in last_resource_state['location']:
+                # print('this', self.check_time, self.time, self.wait_time, index_of_last_check, resource_type, last_resource_state, filtered_record)
+                
+                for loc in list(set(last_resource_state['location'])):
+                    # print('here', filtered_record[filtered_record.location == loc])
+                    # ll
                     if (
                         resource_type
                         !=
                         (filtered_record[filtered_record.location == loc]['type'].iloc[0])
                     ):
-                        print('punish')
-                        ll
+                        # print('punish')
+                        # ll
                         region_of_suspect = self.get_taxicab_distance_points(
                             loc[0], 
                             loc[1], 
@@ -151,13 +158,20 @@ class monitor():
                             self.size_of_env
                             )
                         for agent in agents: ##TODO if there are multiple agents in the region, who should be punished? Currently the program punishes all
-                            print(agent.location, region_of_suspect)
-                            ll
-                            if agent.location in region_of_suspect:
-                                if state_sys.prob * 1. + 1. > random.random(): # the prob of the agent made the transgression * the prob of punishing it given the transgression
+                            # print(agent.location, region_of_suspect, self.wait_time, loc)
+                            # print((agent.location[0], agent.location[1]) in region_of_suspect)
+                            # print(state_sys.prob * 1. +1> random.random())
+                            
+                            if (agent.location[0], agent.location[1]) in region_of_suspect:
+                                if state_sys.prob * 1. > random.random(): # the prob of the agent made the transgression * the prob of punishing it given the transgression
                                     agent.to_be_punished[resource_type] += 1 #TODO: to_be_punished should be a dict {a: 0, b:0, ...}
+                                    # print('add one', self.wait_time)
+                                    # ll
             self.wait_for_check = False
-        self.check_index += 1 #TODO check whether this is correct
+            self.check_index += 1 #TODO check whether this is correct
+
+        if self.time == 0:
+            self.check_index += 1
         
 
         
@@ -166,9 +180,10 @@ class monitor():
         """
         At time T, check through all resources types for any transgressions. 
         """
+        
         for resource_type in self.resource_to_monitor:
             self.regular_check(timepoint, resource_type, state_sys, agents)
-        self.time += 1
+        
     
                         
 ## before agent loop: collect_new_state_info(), update(), time_next_check()

@@ -46,6 +46,7 @@ class Agent:
             'Wall': 0
         }
 
+
     def init_replay(self, env: GridworldEnv) -> None:
         """Fill in blank images for the LSTM."""
 
@@ -56,20 +57,25 @@ class Agent:
         for _ in range(self.num_frames):
             self.model.memory.add(state, action, reward, done)
     
+
     def add_memory(self, state: np.ndarray, action: int, reward: float, done: bool) -> None:
         """Add an experience to the memory."""
         self.model.memory.add(state, action, reward, float(done))
     
+
     def add_final_memory(self, state: np.ndarray) -> None:
         self.model.memory.add(state, 0, 0.0, float(True))
 
+
     def current_state(self, state_sys, env: GridworldEnv) -> np.ndarray:
         state = self.pov(env)
-        state = np.concatenate([state, np.array([state_sys.prob])])
-        state = np.concatenate([state, np.array([self.is_punished])])
+        to_be_punished = sum(self.to_be_punished.values())
+        state = np.concatenate([state, np.array([state_sys.prob*255])])
+        state = np.concatenate([state, np.array([to_be_punished*255])])
         prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
         current_state = np.vstack((prev_states, state))
         return current_state
+
 
     def pov(self, env: GridworldEnv) -> np.ndarray:
         """
@@ -91,6 +97,7 @@ class Agent:
 
         return current_state
         
+
     def movement(self,
                  action: int,
                  state_sys
@@ -123,25 +130,26 @@ class Agent:
             state_sys.prob = np.clip(state_sys.prob, 0, 1)
 
         return new_location
+
     
     def transition(self,
                    env,
                    state_sys) -> tuple:
         '''
         Changes the world based on the action taken.
+
+        when transgression is not apparent. 
+
+        currently, all transgression records will be equally punished.
         '''
 
         # Get current state
         state = self.pov(env)
-        state = np.concatenate([state, np.array([state_sys.prob])])
-        state = np.concatenate([state, np.array([self.is_punished])])
+        to_be_punished = sum(self.to_be_punished.values())
+        state = np.concatenate([state, np.array([state_sys.prob*255])])
+        state = np.concatenate([state, np.array([to_be_punished*255])])
         model_input = torch.from_numpy(self.current_state(state_sys=state_sys, env=env)).view(1, -1)
 
-        
-        # print(model_input.size())
-        # ll
-        # state_punishment_prob_tensor = torch.full((state.shape()[1], state.shape()[2]), state_sys.prob).view(1, -1)
-        # model_input = torch.concat([model_input, state_punishment_prob_tensor])
         reward = 0
 
         # Take action based on current state
@@ -154,20 +162,16 @@ class Agent:
 
         # Get the interaction reward
         reward += target_object.value
-        if self.is_punished == 1.: ##TODO: change to to_be_punished 
-            reward -= state_sys.magnitude 
+        if to_be_punished >= 1.: ##TODO: change to to_be_punished 
+            reward -= state_sys.magnitude * to_be_punished
             # TODO: if self.to_be_punished: 
         
-        self.is_punished = 0. 
 
         # Get the delayed reward
         reward += env.cache['harm'][self.ixs]
         env.cache['harm'][self.ixs] = 0 
         # If the agent performs a transgression
         if str(target_object) in state_sys.taboo:
-            # reward -= state_sys.magnitude * (random.random() < state_sys.prob)
-            if random.random() < state_sys.prob_list[str(target_object)]:
-                self.is_punished = 1.
             env.cache['harm'] = [env.cache['harm'][k] - target_object.social_harm 
                                         if k != self.ixs else env.cache['harm'][k]
                                         for k in range(len(env.cache['harm']))
@@ -180,14 +184,82 @@ class Agent:
 
         # Get the next state   
         next_state = self.pov(env)
-        next_state = np.concatenate([next_state, np.array([state_sys.prob])])
-        next_state = np.concatenate([next_state, np.array([self.is_punished])])  ## TODO: how to edit the to_be_punished state within agents
+        next_state = np.concatenate([next_state, np.array([state_sys.prob*255])])
+        next_state = np.concatenate([next_state, np.array([to_be_punished*255])])  ## TODO: how to edit the to_be_punished state within agents
         
         # reset to_be_punished 
-        # self.to_be_punished = {'gem':0, 'bone':0, 'coin':0}
+        self.to_be_punished = {'gem':0, 'bone':0, 'coin':0}
 
         return state, action, reward, next_state, False
         
+    
+    # def transition(self,
+    #                env,
+    #                state_sys) -> tuple:
+    #     '''
+    #     Changes the world based on the action taken.
+
+    #     when transgression is apparent. 
+    #     '''
+
+    #     # Get current state
+    #     state = self.pov(env)
+    #     state = np.concatenate([state, np.array([state_sys.prob])])
+    #     state = np.concatenate([state, np.array([self.is_punished])])
+    #     model_input = torch.from_numpy(self.current_state(state_sys=state_sys, env=env)).view(1, -1)
+
+        
+    #     # print(model_input.size())
+    #     # ll
+    #     # state_punishment_prob_tensor = torch.full((state.shape()[1], state.shape()[2]), state_sys.prob).view(1, -1)
+    #     # model_input = torch.concat([model_input, state_punishment_prob_tensor])
+    #     reward = 0
+
+    #     # Take action based on current state
+    #     action = self.model.take_action(model_input)
+
+    #     # Attempt the transition 
+    #     attempted_location = self.movement(action, state_sys)
+    #     target_object = env.observe(attempted_location)
+    #     env.move(self, attempted_location)
+
+    #     # Get the interaction reward
+    #     reward += target_object.value
+    #     if self.is_punished == 1.: ##TODO: change to to_be_punished 
+    #         reward -= state_sys.magnitude 
+    #         # TODO: if self.to_be_punished: 
+        
+    #     self.is_punished = 0. 
+
+    #     # Get the delayed reward
+    #     reward += env.cache['harm'][self.ixs]
+    #     env.cache['harm'][self.ixs] = 0 
+    #     # If the agent performs a transgression
+    #     if str(target_object) in state_sys.taboo:
+    #         # reward -= state_sys.magnitude * (random.random() < state_sys.prob)
+    #         if random.random() < state_sys.prob_list[str(target_object)]:
+    #             self.is_punished = 1.
+    #         env.cache['harm'] = [env.cache['harm'][k] - target_object.social_harm 
+    #                                     if k != self.ixs else env.cache['harm'][k]
+    #                                     for k in range(len(env.cache['harm']))
+    #                                     ]
+            
+
+    #     # Add to the encounter record
+    #     if str(target_object) in self.encounters.keys():
+    #         self.encounters[str(target_object)] += 1 
+
+    #     # Get the next state   
+    #     next_state = self.pov(env)
+    #     next_state = np.concatenate([next_state, np.array([state_sys.prob])])
+    #     next_state = np.concatenate([next_state, np.array([self.is_punished])])  ## TODO: how to edit the to_be_punished state within agents
+        
+    #     # reset to_be_punished 
+    #     # self.to_be_punished = {'gem':0, 'bone':0, 'coin':0}
+
+    #     return state, action, reward, next_state, False
+
+
     def reset(self, env: GridworldEnv) -> None:
         self.init_replay(env)
         self.encounters = {

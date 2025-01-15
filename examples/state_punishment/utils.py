@@ -227,7 +227,7 @@ def inspect_the_env(env, types=None, locs=None):
     elif locs is not None:
         res_filtered = res[res.location.isin(locs)]
     else:
-        res_filtered = res[~res.type.isin(['wall', 'emptyobject', 'agent'])]
+        res_filtered = res[~res.type.isin(['wall'])]
     return res_filtered 
 
 
