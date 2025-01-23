@@ -154,6 +154,12 @@ def run(cfg, **kwargs):
             monitor.regular_check_all_resources(turn, state_entity, agents) ##
             monitor.time_of_next_check()
 
+            # clear memory of the monitor regulary
+            # if monitor.time > 0:
+            #     if monitor.time % (2*monitor.max_duration_between_checks) == 0: 
+            #         monitor.clear_mem(monitor.time)
+            #         print('mem len:', len(monitor.record))
+
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
             loss = agent.model.train_model()

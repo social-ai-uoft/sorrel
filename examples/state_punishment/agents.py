@@ -100,34 +100,57 @@ class Agent:
 
     def movement(self,
                  action: int,
-                 state_sys
+                 state_sys,
+                 mode='composite'
                  ) -> tuple:
         
         '''
         Takes an action and returns a new location
         '''
-        if action == 0: # UP
-            self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-back.png'
-            new_location = (self.location[0] - 1, self.location[1], self.location[2])
-        if action == 1: # DOWN
-            self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero.png'
-            new_location = (self.location[0] + 1, self.location[1], self.location[2])
-        if action == 2: # LEFT
-            self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-left.png'
-            new_location = (self.location[0], self.location[1] - 1, self.location[2])
-        if action == 3: # RIGHT
-            self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-right.png'
-            new_location = (self.location[0], self.location[1] + 1, self.location[2])
-        if action == 4: # vote for state punishment
-            self.sprite = self.sprite
-            new_location = self.location
-            state_sys.prob += state_sys.change_per_vote
-            state_sys.prob = np.clip(state_sys.prob, 0, 1)
-        if action == 5: # vote against state punishment
-            self.sprite = self.sprite
-            new_location = self.location
-            state_sys.prob -= state_sys.change_per_vote
-            state_sys.prob = np.clip(state_sys.prob, 0, 1)
+        if mode == 'simple':
+            if action == 0: # UP
+                self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-back.png'
+                new_location = (self.location[0] - 1, self.location[1], self.location[2])
+            if action == 1: # DOWN
+                self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero.png'
+                new_location = (self.location[0] + 1, self.location[1], self.location[2])
+            if action == 2: # LEFT
+                self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-left.png'
+                new_location = (self.location[0], self.location[1] - 1, self.location[2])
+            if action == 3: # RIGHT
+                self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-right.png'
+                new_location = (self.location[0], self.location[1] + 1, self.location[2])
+            if action == 4: # vote for state punishment
+                self.sprite = self.sprite
+                new_location = self.location
+                state_sys.prob += state_sys.change_per_vote
+                state_sys.prob = np.clip(state_sys.prob, 0, 1)
+            if action == 5: # vote against state punishment
+                self.sprite = self.sprite
+                new_location = self.location
+                state_sys.prob -= state_sys.change_per_vote
+                state_sys.prob = np.clip(state_sys.prob, 0, 1)
+
+        elif mode == 'composite':
+            if action%4 == 0: # UP
+                self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-back.png'
+                new_location = (self.location[0] - 1, self.location[1], self.location[2])
+            if action%4 == 1: # DOWN
+                self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero.png'
+                new_location = (self.location[0] + 1, self.location[1], self.location[2])
+            if action%4 == 2: # LEFT
+                self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-left.png'
+                new_location = (self.location[0], self.location[1] - 1, self.location[2])
+            if action%4 == 3: # RIGHT
+                self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-right.png'
+                new_location = (self.location[0], self.location[1] + 1, self.location[2])
+            
+            if action//4 == 0:
+                state_sys.prob += state_sys.change_per_vote
+                state_sys.prob = np.clip(state_sys.prob, 0, 1)
+            elif action//4 == 0:
+                state_sys.prob -= state_sys.change_per_vote
+                state_sys.prob = np.clip(state_sys.prob, 0, 1)
 
         return new_location
 

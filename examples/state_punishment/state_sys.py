@@ -46,6 +46,10 @@ class Monitor():
         self.check_time_record = []
         self.time_record = []
     
+
+    def clear_mem(self, time):
+        self.record = self.record[self.record.timepoint >= (time-2*self.max_duration_between_checks)]
+    
     def get_taxicab_distance_points(self, a, b, distance, size_of_env):
         """
         Generate region of suspect. 
@@ -157,16 +161,21 @@ class Monitor():
                             self.wait_time, 
                             self.size_of_env
                             )
-                        for agent in agents: ##TODO if there are multiple agents in the region, who should be punished? Currently the program punishes all
-                            # print(agent.location, region_of_suspect, self.wait_time, loc)
-                            # print((agent.location[0], agent.location[1]) in region_of_suspect)
-                            # print(state_sys.prob * 1. +1> random.random())
-                            
+
+                        suspects = []
+                        for agent_ind, agent in enumerate(agents): ##TODO if there are multiple agents in the region, who should be punished? Currently the program punishes all
                             if (agent.location[0], agent.location[1]) in region_of_suspect:
                                 if state_sys.prob * 1. > random.random(): # the prob of the agent made the transgression * the prob of punishing it given the transgression
-                                    agent.to_be_punished[resource_type] += 1 #TODO: to_be_punished should be a dict {a: 0, b:0, ...}
-                                    # print('add one', self.wait_time)
-                                    # ll
+                                    agent.to_be_punished[resource_type] += 1 
+                                    suspects.append(agent_ind)
+                        
+                        # randomly decide the transgressor #TODO if one agent is in multiple regions of suspect
+                        # judge = random.choice(suspects)
+                        # agent_of_suspect = agents[judge]
+                        # if state_sys.prob * 1. > random.random():
+                        #     agent_of_suspect.to_be_punished[resource_type] += 1
+
+                                    
             self.wait_for_check = False
             self.check_index += 1 #TODO check whether this is correct
 
