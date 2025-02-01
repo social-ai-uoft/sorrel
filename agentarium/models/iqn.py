@@ -150,6 +150,9 @@ class IQN(nn.Module):
         x = self.ff_1(x)
         x = torch.relu(x)
 
+        #TODO: add world model here -- the hidden state used should be the one used for value and advantage networks
+
+
         # Calculate output based on value and advantage
         advantage = self.advantage(x)
         value = self.value(x)
