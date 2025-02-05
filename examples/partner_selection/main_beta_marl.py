@@ -114,52 +114,54 @@ def run(cfg, **kwargs):
                 agent.reward = 0
 
             # Agent transition
-            for agent in agents:
+            
+            focal_agent, partner_choices = partner_pool_env.agents_sampling(agent)
+            focal_ixs = partner_pool_env.focal_ixs
+            agents_to_act = partner_choices.append(focal_agent)
+            max_var_ixs = partner_pool_env.get_max_variability_partner_ixs()
 
-                # only run one agent
-                if agent.ixs == 0:
-                
-                    agent, partner_choices = partner_pool_env.agents_sampling(agent)
-                    max_var_ixs = partner_pool_env.get_max_variability_partner_ixs()
-                    (state, action, partner, done_, action_logprob, partner_ixs) = agent.transition(
-                        partner_pool_env, 
-                        partner_choices, 
-                        True,
-                        cfg,
-                        mode=cfg.interaction_task.mode
-                        )
+            for agent in agents_to_act:
+                (state, action, partner, done_, action_logprob, partner_ixs) = agent.transition(
+                    partner_pool_env, 
+                    partner_choices, 
+                    True,
+                    cfg,
+                    mode=cfg.interaction_task.mode
+                    )
 
-                    # record the ixs of the selected partner
-                    partner_selection_freqs[partner_ixs] += 1
-                    selecting_more_variable_partner.append(partner_ixs==max_var_ixs)
-                    for potential_partner in partner_choices:
-                        partner_occurence_freqs[potential_partner.ixs] += 1
-                        presented_partner_variability.append(potential_partner.variability)
-                    selected_partner_variability.append(partner.variability)
+                # record the ixs of the selected partner
+                partner_selection_freqs[partner_ixs] += 1
+                selecting_more_variable_partner.append(partner_ixs==max_var_ixs)
+                for potential_partner in partner_choices:
+                    partner_occurence_freqs[potential_partner.ixs] += 1
+                    presented_partner_variability.append(potential_partner.variability)
+                selected_partner_variability.append(partner.variability)
 
-                    # prepare the env for the interaction task
-                    agents_pair = [agent, partner]
-                    entities = create_entities(cfg)
-                    interaction_env = partner_selection(cfg, agents_pair, entities)
+                # prepare the env for the interaction task
+                agents_pair = [agent, partner]
+                entities = create_entities(cfg)
+                interaction_env = partner_selection(cfg, agents_pair, entities)
 
+                reward = 0 
+                if agent.ixs == focal_ixs:
                     reward = agent.interaction_task(
                         partner,
                         cfg,
                         interaction_env
                     )
 
-                    if turn >= cfg.experiment.max_turns or done_:
-                        done = 1
+                if turn >= cfg.experiment.max_turns or done_:
+                    done = 1
 
-                    
-                    # Update the agent's memory buffer
-                    agent.episode_memory.states.append(torch.tensor(state))
-                    agent.episode_memory.actions.append(torch.tensor(action))
-                    agent.episode_memory.logprobs.append(torch.tensor(action_logprob))
-                    agent.episode_memory.rewards.append(torch.tensor(reward))
-                    agent.episode_memory.is_terminals.append(torch.tensor(done))
-    
-                    game_points[agent.ixs] += reward
+                
+                # Update the agent's memory buffer
+                agent.episode_memory.states.append(torch.tensor(state))
+                agent.episode_memory.actions.append(torch.tensor(action))
+                agent.episode_memory.logprobs.append(torch.tensor(action_logprob))
+                agent.episode_memory.rewards.append(torch.tensor(reward))
+                agent.episode_memory.is_terminals.append(torch.tensor(done))
+
+                game_points[agent.ixs] += reward
                  
 
         # At the end of each epoch, train as long as the batch size is large enough.

@@ -43,7 +43,7 @@ model:
 agent:
   agent:
     num: 3
-    preference_var: 0.3
+    preference_var: 0
     model: PPO
     num_memories: 5 # Should match num_frames in the model above
     vision: 7
@@ -107,4 +107,4 @@ root: '/Users/yikaitang/Documents/Github/agentarium_predictive_regularity'
 log: True
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
 # exp_name: "test_voting_sixAs_size15_init_spawn_0.2_no_respawn_extended"
-exp_name: "test_v6_3agents_same_init_pref_0.3_var"
+exp_name: "test_v5_3agents_same_init_pref_zero_var"

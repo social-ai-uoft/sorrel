@@ -1,5 +1,5 @@
-from examples.seeing_the_future.agents import Agent, color_map
-from examples.seeing_the_future.entities import Coin, Gem, Wall, Bone
+from examples.partner_selection.agents import Agent, color_map
+from examples.partner_selection.entities import Coin, Gem, Wall, Bone
 
 from agentarium.models.iqn import iRainbowModel
 import argparse

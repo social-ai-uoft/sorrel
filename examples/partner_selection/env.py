@@ -2,8 +2,8 @@
 # region: Imports                   #
 # --------------------------------- #
 
-from examples.seeing_the_future.entities import Gem, Coin, EmptyObject, Wall
-from examples.seeing_the_future.agents import Agent, color_map
+from examples.partner_selection.entities import Gem, Coin, EmptyObject, Wall
+from examples.partner_selection.agents import color_map
 
 from agentarium.primitives import GridworldEnv, Entity
 
@@ -16,13 +16,13 @@ import random
 # --------------------------------- #
 
 
-class seeing_the_future(GridworldEnv):
+class partner_selection(GridworldEnv):
     def __init__(self, cfg, agents, entities):
         self.cfg = cfg
         self.channels = cfg.env.channels
         self.colors = color_map(self.channels)
         self.full_mdp = cfg.env.full_mdp
-        self.agents: list[Agent] = agents
+        self.agents = agents
         self.entities: list[Entity] = entities
         self.item_spawn_prob = cfg.env.prob.item_spawn
         self.item_choice_prob = cfg.env.prob.item_choice

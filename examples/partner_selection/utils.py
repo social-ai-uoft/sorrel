@@ -8,13 +8,17 @@ import os
 from PIL import Image
 import shutil
 from collections import deque
-from agentarium.models.PPO_ import PPO
+from agentarium.models.PPO import PPO
+from examples.partner_selection.task_models import Classification
 import random 
-
+import itertools
+import numpy as np
+from scipy.special import softmax
 
 DEVICES = ['cpu', 'cuda']
 MODELS = {
-    'iRainbowModel' : iRainbowModel
+    'iRainbowModel' : iRainbowModel,
+    'Classification' : Classification
 }
 AGENTS = {
     'agent' : Agent,
@@ -63,7 +67,21 @@ def create_models(cfg):
 
     return models
 
-def create_models_PPO(
+def create_interaction_task_models(cfg):
+    models = []
+    for model_name in cfg.interaction_task.model.type:
+        MODEL_TYPE = MODELS[cfg.interaction_task.model.type]
+        for _ in range(cfg.interaction_task.model.num):
+            model = MODEL_TYPE(**vars(vars(cfg.interaction_task.model)['parameters']))
+            model.name = model_name
+            models.append(
+                model
+            )
+
+    return models
+
+
+def create_partner_selection_models_PPO(
         num_model, 
         device='cpu'
         ):
@@ -72,8 +90,8 @@ def create_models_PPO(
     for _ in range(num_model):
         model = PPO(
             device=device, 
-            state_dim=9*15*15+1,
-            action_dim=4,
+            state_dim=7,
+            action_dim=2,
             lr_actor=0.0001,
             lr_critic=0.00005,
             gamma=0.99,
@@ -246,5 +264,26 @@ def agents_sampling(agents):
     return focal_agent, partner_choices
 
 
+def create_agent_appearances(num_agents):
+    """
+    Create the appearances for num_agents agents, used in partner selection process.
 
+    Args:
+    num_agents - number of agents
+    """
+    appearances = 255. * np.eye(num_agents)
+    return appearances
+
+
+def generate_preferences(X):
+    """Generate a list of length X where the sum of elements is 1."""
+    values = np.random.rand(X)  # Generate X random numbers
+    values = np.array([0.5, 0.5]) #TODO: temporary
+    return softmax(values)  # Normalize so sum is 1
+
+
+def generate_variability(X, max=0.5):
+    """Generate a list of nums representing the variability of preferences."""
+    values = np.random.rand(X) * max
+    return values.tolist()
     

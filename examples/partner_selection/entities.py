@@ -12,13 +12,13 @@ class EmptyObject(Entity):
     def __init__(self, appearance, cfg):
         super().__init__(appearance)
         self.passable = True # EmptyObjects can be traversed
-        self.sprite = f'{cfg.root}/examples/seeing_the_future/assets/white.png'
+        self.sprite = f'{cfg.root}/examples/partner_selection/assets/white.png'
         # self.appearance = cfg.entity.EmptyObject.appearance
         self.respawn_rate = cfg.env.prob.respawn_rate
 
     def transition(self, env):
         '''
-        Transition function for EmptyObjects in the seeing_the_future environment. 
+        Transition function for EmptyObjects in the partner_selection environment. 
         EmptyObjects can randomly spawn into Gems, Coins, etc. according
         to the item spawn probabilities dictated in the environmnet.
         '''
@@ -33,7 +33,7 @@ class Wall(Entity):
     def __init__(self, appearance, cfg):
         super().__init__(appearance)
         self.value = -1 # Walls penalize contact
-        self.sprite = f'{cfg.root}/examples/seeing_the_future/assets/pink.png'
+        self.sprite = f'{cfg.root}/examples/partner_selection/assets/pink.png'
         # self.appearance = cfg.entity.Wall.appearance
 
 class Gem(Entity):
@@ -49,7 +49,7 @@ class Gem(Entity):
         self.cfg = cfg
         self.value = cfg.entity.Gem.value
         self.passable = True
-        self.sprite = f'{cfg.root}/examples/seeing_the_future/assets/gem.png'
+        self.sprite = f'{cfg.root}/examples/partner_selection/assets/gem.png'
         # self.appearance = cfg.entity.Gem.appearance
 
 # class Coin(Entity):
@@ -65,7 +65,7 @@ class Gem(Entity):
 #         self.cfg = cfg
 #         self.value = cfg.entity.Coin.value
 #         self.passable = True
-#         self.sprite = f'{cfg.root}/examples/seeing_the_future/assets/coin.png'
+#         self.sprite = f'{cfg.root}/examples/partner_selection/assets/coin.png'
 
 # class Food(Entity):
 #     '''
@@ -80,7 +80,7 @@ class Gem(Entity):
 #         self.cfg = cfg
 #         self.value = cfg.entity.Food.value
 #         self.passable = True
-#         self.sprite = f'{cfg.root}/examples/seeing_the_future/assets/food.png'
+#         self.sprite = f'{cfg.root}/examples/partner_selection/assets/food.png'
 
 class Bone(Entity):
     '''
@@ -95,10 +95,10 @@ class Bone(Entity):
         self.cfg = cfg
         self.value = cfg.entity.Bone.value
         self.passable = True
-        self.sprite = f'{cfg.root}/examples/seeing_the_future/assets/bone.png'
+        self.sprite = f'{cfg.root}/examples/partner_selection/assets/bone.png'
 
 # ----------------------------------------------------- #
-# new entities for seeing_the_future                     #
+# new entities for partner_selection                     #
 # ----------------------------------------------------- # 
 
 class Coin(Entity):
@@ -114,7 +114,7 @@ class Coin(Entity):
         self.cfg = cfg
         self.value = cfg.entity.Coin.value
         self.passable = True
-        self.sprite = f'{cfg.root}/examples/seeing_the_future/assets/coin.png'
+        self.sprite = f'{cfg.root}/examples/partner_selection/assets/coin.png'
         # self.appearance = cfg.entity.Coin.appearance
 
 # ----------------------------------------------------- #

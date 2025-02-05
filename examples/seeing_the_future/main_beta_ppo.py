@@ -20,7 +20,7 @@ import random
 
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from agentarium.models.PPO import RolloutBuffer
+from agentarium.models.PPO_mb import RolloutBuffer
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
 from examples.seeing_the_future.agents import Agent
