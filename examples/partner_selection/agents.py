@@ -36,6 +36,7 @@ class Agent:
         self.to_be_punished = {'Gem':0, 'Bone':0, 'Coin':0}
         self.preferences = None
         self.variability = None
+        self.base_variability = None
         self.social_task_memory = {'gt':[], 'pred':[]}
 
         # training-related features
@@ -230,6 +231,8 @@ class Agent:
             if cfg.interaction_task.mode == 'prediction':
                 prediction = self.task_model(torch.from_numpy(partner.appearance).float())
                 partner_choice_in_task = np.argmax(partner.preferences)
+                # partner_choice_in_task = random.choices([v for v in range(len(partner.preferences))], 
+                #                                         partner.preferences, k=1)[0]
                 # print(prediction, partner_choice_in_task)
                 if int(torch.max(prediction, dim=0)[1]) == int(partner_choice_in_task):
                     reward += 1
@@ -242,6 +245,18 @@ class Agent:
                 reward += self.frozen_network_foraging(partner, env, cfg.task_max_turns)
         return reward 
     
+
+    def selection_task_action(self, action, is_focal):
+        """
+        Define the action dynamics of the partner selection model
+        """
+        if action == 2:
+            self.variability -= self.base_variability*0.2
+            self.variability = max(0, self.variability)
+        elif action == 3:
+            self.variability += self.base_variability*0.2
+            self.variability = max(0, self.variability)
+
     
     def transition(self,
                    env,
@@ -269,6 +284,9 @@ class Agent:
             action = self.partner_choice_model.take_action(model_input)
             action_prob = None
 
+        # execute the selection model action
+        self.selection_task_action(action, is_focal)
+
         # Attempt the transition 
         selected_partner = partner_choices[action]
         selected_partner_ixs = selected_partner.ixs
@@ -295,7 +313,7 @@ class Agent:
         }
 
     def update_preference(self):
-        randomness = (random.random() - 0.5) * self.variability
+        randomness = (random.random() - 0.5) * self.variability * 10
         self.preferences = np.array(self.preferences) - np.array([randomness, -1 * randomness])
         self.preferences = np.clip(self.preferences, 0., 1.)
 

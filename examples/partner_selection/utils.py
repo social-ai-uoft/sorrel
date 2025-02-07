@@ -285,5 +285,6 @@ def generate_preferences(X):
 def generate_variability(X, max=0.5):
     """Generate a list of nums representing the variability of preferences."""
     values = np.random.rand(X) * max
+    values = np.array([1., 0.1, 1.]) * max # 1, 0, 1
     return values.tolist()
     

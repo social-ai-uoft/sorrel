@@ -59,6 +59,7 @@ def run(cfg, **kwargs):
         a.appearance = appearances[a.ixs]
         a.preferences = preferences_lst[a.ixs]
         a.variability = variability_lst[a.ixs]
+        a.base_variability = variability_lst[a.ixs]
         if a.ixs == 0:
             a.task_model = task_models[0]
         print(a.appearance)
@@ -116,15 +117,17 @@ def run(cfg, **kwargs):
             # Agent transition
             for agent in agents:
 
-                # only run one agent
-                if agent.ixs == 0:
-                
-                    agent, partner_choices = partner_pool_env.agents_sampling(agent)
-                    max_var_ixs = partner_pool_env.get_max_variability_partner_ixs()
+                focal_agent, partner_choices = partner_pool_env.agents_sampling(agent)
+                focal_ixs = partner_pool_env.focal_ixs
+                max_var_ixs = partner_pool_env.get_max_variability_partner_ixs()
+                agents_to_act = partner_choices.append(focal_agent)
+                is_focal = focal_ixs == agent.ixs
+                    
+                for agent in agents_to_act:
                     (state, action, partner, done_, action_logprob, partner_ixs) = agent.transition(
                         partner_pool_env, 
                         partner_choices, 
-                        True,
+                        is_focal,
                         cfg,
                         mode=cfg.interaction_task.mode
                         )
@@ -145,11 +148,15 @@ def run(cfg, **kwargs):
                     entities = create_entities(cfg)
                     interaction_env = partner_selection(cfg, agents_pair, entities)
 
-                    reward = agent.interaction_task(
-                        partner,
-                        cfg,
-                        interaction_env
-                    )
+                    reward = 0 
+                    # execute the interaction task only when the agent is the focal one in this trial
+                    if is_focal:
+                        reward = agent.interaction_task(
+                            partner,
+                            cfg,
+                            interaction_env
+                        )
+            
 
                     if turn >= cfg.experiment.max_turns or done_:
                         done = 1
@@ -161,7 +168,7 @@ def run(cfg, **kwargs):
                     agent.episode_memory.logprobs.append(torch.tensor(action_logprob))
                     agent.episode_memory.rewards.append(torch.tensor(reward))
                     agent.episode_memory.is_terminals.append(torch.tensor(done))
-    
+
                     game_points[agent.ixs] += reward
                  
 

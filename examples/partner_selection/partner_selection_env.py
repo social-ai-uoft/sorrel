@@ -13,11 +13,10 @@ class partner_pool:
         """
         # sample all needed agents
         if focal_agent:
-            selected_agents = random.sample(self.pool, 2)
-            selected_agents_indices = [agent.ixs for agent in selected_agents]
             focal_agent_ixs = focal_agent.ixs
-            partner_choices = [selected_agents[i] for i in range(len(selected_agents)) 
-                               if selected_agents[i] != focal_agent_ixs]
+            qualified_pool = [agent for agent in self.pool if agent.ixs != focal_agent_ixs]
+            selected_agents = random.sample(qualified_pool, 2)
+            partner_choices = selected_agents
         else:
             selected_agents = random.sample(self.pool, 3)
             selected_agents_indices = [agent.ixs for agent in selected_agents]
