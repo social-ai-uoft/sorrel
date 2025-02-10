@@ -288,9 +288,12 @@ class Agent:
         self.selection_task_action(action, is_focal)
 
         # Attempt the transition 
-        selected_partner = partner_choices[action]
-        selected_partner_ixs = selected_partner.ixs
-
+        if int(action) <= 1:
+            selected_partner = partner_choices[action]
+            selected_partner_ixs = selected_partner.ixs
+        else:
+            selected_partner = None
+            selected_partner_ixs = None
         # # Get the interaction rewards
         # if is_focal:
         #     reward += self.interaction_task(selected_partner, mode, 5, env)

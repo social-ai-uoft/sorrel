@@ -90,8 +90,8 @@ def create_partner_selection_models_PPO(
     for _ in range(num_model):
         model = PPO(
             device=device, 
-            state_dim=7,
-            action_dim=2,
+            state_dim=8,
+            action_dim=4,
             lr_actor=0.0001,
             lr_critic=0.00005,
             gamma=0.99,
@@ -285,6 +285,6 @@ def generate_preferences(X):
 def generate_variability(X, max=0.5):
     """Generate a list of nums representing the variability of preferences."""
     values = np.random.rand(X) * max
-    values = np.array([1., 0.1, 1.]) * max # 1, 0, 1
+    values = np.array([1., 1., 1.]) * max # 1, 0, 1 # working: 1, 0.1, 1
     return values.tolist()
     

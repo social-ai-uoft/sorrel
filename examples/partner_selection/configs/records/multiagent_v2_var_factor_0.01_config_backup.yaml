@@ -43,7 +43,7 @@ model:
 agent:
   agent:
     num: 3
-    preference_var: 10
+    preference_var: 0.01
     model: PPO
     num_memories: 5 # Should match num_frames in the model above
     vision: 7
@@ -109,4 +109,8 @@ log: True
 # exp_name: "test_voting_sixAs_size15_init_spawn_0.2_no_respawn_extended"
 # exp_name: "test_v6_3agents_same_init_pref_0.3_var_learn"
 # exp_name: 'debug_fixed_faster_v1_10'
-exp_name: 'multiagent_v0'
+exp_name: 'multiagent_v2_var_factor_0.01' # with variability in the state info 
+
+
+# note:
+# three agents have same base var of 1.

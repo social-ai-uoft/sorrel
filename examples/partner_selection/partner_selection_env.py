@@ -21,7 +21,7 @@ class partner_pool:
             selected_agents = random.sample(self.pool, 3)
             selected_agents_indices = [agent.ixs for agent in selected_agents]
             # pick the focal agent
-            focal_agent_ixs = random.sample([i for i in range(len(selected_agents_indices))])[0]
+            focal_agent_ixs = random.sample([i for i in range(len(selected_agents_indices))], 1)[0]
             focal_agent = selected_agents[focal_agent_ixs]
             partner_choices = [selected_agents[i] for i in range(len(selected_agents)) 
                                if i != focal_agent_ixs]
@@ -35,8 +35,12 @@ class partner_pool:
     def state(self, agent):
         if agent.ixs == self.focal_ixs:
             state = np.concat([self.partner_to_select_appearance, np.array([1])])
+            # add variability
+            state = np.concat([state, np.array ([agent.variability])])
         else:
             state = np.concat([self.partner_to_select_appearance, np.array([0])])
+            # add variability
+            state = np.concat([state, np.array ([agent.variability])])
         return state
     
     def get_max_variability_partner_ixs(self):
