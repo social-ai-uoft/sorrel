@@ -3,7 +3,7 @@
 import os
 import sys
 from datetime import datetime
-
+import pandas as pd
 # ------------------------ #
 # region: path nonsense    #
 # Determine appropriate paths for imports and storage
@@ -27,8 +27,9 @@ from examples.state_punishment.agents import Agent
 from examples.state_punishment.env import state_punishment
 from examples.state_punishment.state_sys import state_sys
 from examples.state_punishment.utils import (create_agents, create_entities, create_models,
-                                init_log, load_config, save_config_backup)
-
+                                init_log, load_config, save_config_backup,
+                                build_transgression_and_punishment_record)
+from copy import deepcopy
 import numpy as np
 
 # endregion                #
@@ -42,7 +43,12 @@ def run(cfg, **kwargs):
     for a in agents:
         print(a.appearance)
     entities: list[Entity] = create_entities(cfg)
-    env = state_punishment(cfg, agents, entities)
+    
+    envs = []
+    for i in range(len(agents)):
+        envs.append(
+            state_punishment(cfg, [agents[i]], deepcopy(entities))
+        )
 
     # Set up tensorboard logging
     if cfg.log:
@@ -55,6 +61,8 @@ def run(cfg, **kwargs):
     # Container for game variables (epoch, turn, loss, reward)
     game_vars = GameLogger(cfg.experiment.epochs)
 
+    # container for agent transgression and punishment record
+    transgression_punishment_record = pd.DataFrame(columns=['agent', 'transgression', 'punished', 'time'])
 
     # load weights
     # for count, agent in enumerate(agents):
@@ -82,9 +90,11 @@ def run(cfg, **kwargs):
             cfg.state_sys.change_per_vote
             )
 
+        state_mode = 'simple'
         # Reset the environment at the start of each epoch
-        env.reset()
-        env.cache['harm'] = [0 for _ in range(len(agents))]
+        for env in envs:
+            env.reset(state_mode=state_mode)
+            env.cache['harm'] = [0 for _ in range(len(agents))]
         # for agent in env.agents:
         #     agent.reset()
         random.shuffle(agents)
@@ -111,38 +121,29 @@ def run(cfg, **kwargs):
             for agent in agents:
                 agent.reward = 0
 
-            entities = env.get_entities_for_transition()
-            # Entity transition
-            for entity in entities:
-                entity.transition(env)
+            for env in envs:
+                entities = env.get_entities_for_transition()
+                # Entity transition
+                for entity in entities:
+                    entity.transition(env)
 
             # Agent transition
-            for agent in agents:
-                
-                action_mode = 'composite'
+            for ixs, agent in enumerate(agents):
 
                 (state, action, reward, next_state, done_) = agent.transition(
-                    env, 
+                    envs[agent.ixs], 
                     state_entity, 
                     'certain', 
-                    action_mode= action_mode,
+                    action_mode='simple',
                     state_is_composite=False,
-                    envs=None,
-
+                    envs=envs
                     )
-
+                # composite_state = agent.generate_composite_state(envs)
                 # record voting behaviors
-                if action_mode == 'simple':
-                    if action == 4:
-                        punishment_increase_record[agent.ixs] += 1
-                    elif action == 5:
-                        punishment_decrease_record[agent.ixs] += 1 
-
-                else:
-                    if action%4 == 0:
-                        punishment_increase_record[agent.ixs] += 1
-                    elif action%4 == 1:
-                        punishment_decrease_record[agent.ixs] += 1 
+                if action == 4:
+                    punishment_increase_record[agent.ixs] += 1
+                elif action == 5:
+                    punishment_decrease_record[agent.ixs] += 1 
 
                 # agent.add_memory(state, action, reward, done)
 
@@ -152,7 +153,7 @@ def run(cfg, **kwargs):
 
                 agent.add_memory(state, action, reward, done)
 
-                game_points[agent.ixs] += reward
+                game_points[agent.ixs] += float(reward)
 
                 agent.model.end_epoch_action(**locals())
 
@@ -211,11 +212,19 @@ def run(cfg, **kwargs):
                     agent.model.save(file_path=
                                     f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
                                     )
-            
+                    
+        epoch_transgression_df = build_transgression_and_punishment_record(agents)
+        transgression_punishment_record = pd.concat([transgression_punishment_record, epoch_transgression_df], ignore_index=True)
+        for agent in agents:
+            agent.reset_record()
+
     # Close the tensorboard log
 
     if cfg.log:
         writer.close()
+
+    # save punishment record
+    transgression_punishment_record.to_csv(f'data/{cfg.exp_name}_transgression_record.csv')
 
 def main():
     import argparse

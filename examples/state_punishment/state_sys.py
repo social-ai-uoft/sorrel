@@ -45,6 +45,12 @@ class Monitor():
         self.size_of_env = env_size # size of the environment
         self.check_time_record = []
         self.time_record = []
+        self.signal_detection_record = pd.DataFrame(columns=[
+            'location',
+            'punished_agent',
+            'current_time',
+            'last_check_time',
+        ])
     
 
     def clear_mem(self, time):
@@ -167,7 +173,8 @@ class Monitor():
                             if (agent.location[0], agent.location[1]) in region_of_suspect:
                                 if state_sys.prob * 1. > random.random(): # the prob of the agent made the transgression * the prob of punishing it given the transgression
                                     agent.to_be_punished[resource_type] += 1 
-                                    suspects.append(agent_ind)
+                                    new_row = [loc, agent.ixs, self.time, self.time-self.check_time]
+                                    self.signal_detection_record.iloc[len(self.signal_detection_record)] = new_row
                         
                         # randomly decide the transgressor #TODO if one agent is in multiple regions of suspect
                         # judge = random.choice(suspects)

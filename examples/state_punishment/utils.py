@@ -63,20 +63,25 @@ def create_models(cfg):
     return models
 
 def create_agents(cfg, models):
+    for ixs_m, model in enumerate(models):
+        model.ixs = ixs_m
     agents = []
     model_num = 0
+    if len(models) != cfg.agent.agent.num:
+        raise ValueError('Please make sure the number of models match the number of agents.')
     for agent_type in vars(cfg.agent):
         AGENT_TYPE = AGENTS[agent_type]
         for ixs in range(vars(vars(cfg.agent)[agent_type])['num']):
 
             # fetch for model in models
             agent_model_name = vars(vars(cfg.agent)[agent_type])['model']
-            for model in models:
+            for ixs_m, model in enumerate(models): # modify to make sure correspondence
                 has_model = False
                 if model.name == agent_model_name:
-                    agent_model = model
-                    has_model = True
-                    models.remove(model)
+                    if model.ixs == ixs:
+                        agent_model = model
+                        has_model = True
+                        models.remove(model)
                 
                 if has_model:
                     break
@@ -239,5 +244,28 @@ def add_extra_info(df, timepoint, done):
     df['over'] = done
     return df
 
+
+def build_transgression_and_punishment_record(agents):
+    """
+    Write each agent's record of transgressions and punishment record into the same file.
+    """
+    df = {'agent':[], 'transgression':[], 'punished':[], 'time':[]}
+
+    for agent in agents:
+
+        length = len(agent.transgression_record)
+        agent_ixs_data = [agent.ixs] * length
+        agent_transgression_data = agent.transgression_record
+        agent_being_punished_data = agent.punishment_record
+        agent_time_data = [i for i in range(length)]
+
+        df['agent'].extend(agent_ixs_data)
+        df['transgression'].extend(agent_transgression_data)
+        df['punished'].extend(agent_being_punished_data)
+        df['time'].extend(agent_time_data)
+    
+    df = pd.DataFrame(df)
+
+    return df 
 
     

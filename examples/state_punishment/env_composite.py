@@ -16,7 +16,7 @@ import random
 # --------------------------------- #
 
 
-class state_punishment(GridworldEnv):
+class state_punishment_composite(GridworldEnv):
     def __init__(self, cfg, agents, entities):
         self.cfg = cfg
         self.channels = cfg.env.channels
@@ -27,19 +27,20 @@ class state_punishment(GridworldEnv):
         self.item_spawn_prob = cfg.env.prob.item_spawn
         self.item_choice_prob = cfg.env.prob.item_choice
         self.tile_size = cfg.env.tile_size
+        self.world_list = []
         self.cache = {'delayed_r':{}}
         super().__init__(cfg.env.height, cfg.env.width, cfg.env.layers, eval(cfg.env.default_object)(self.colors['EmptyObject'], self.cfg))
         self.create_world()        
         self.populate()
 
-    def reset(self, state_mode='simple'):
+    def reset(self):
         '''
         Reset the environment.
         '''
         self.create_world()
         self.populate()
         for agent in self.agents:
-            agent.reset(self, state_mode)
+            agent.reset(self)
 
     def create_world(self):
         '''
@@ -54,6 +55,7 @@ class state_punishment(GridworldEnv):
         for index, x in np.ndenumerate(self.world):
             self.world[index] = EmptyObject(self.colors['EmptyObject'], self.cfg)
             self.world[index].location = index
+        self.world_list.append(self.world)
 
     def populate(self):
         '''

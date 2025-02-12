@@ -1,13 +1,13 @@
 
 experiment:
   name: state_punishment_beta
-  epochs: 2000000
+  epochs: 200000
   max_turns: 100
   epsilon_decay: 0.0001
 
 env:
-  height: 6
-  width: 6
+  height: 15
+  width: 15
   layers: 1
   channels: 6
   default_object: EmptyObject
@@ -16,17 +16,17 @@ env:
   prob:
     item_spawn: 0.2 # 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
     # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
-    item_choice: [0.32, 0.34, 0.34] # [0.3, 0.7] [0.8, 0.2] [0.32, 0.34, 0.34]
+    item_choice: [0.0, 1., 0.0] # [0.3, 0.7] [0.8, 0.2]
     respawn_rate: 0.02
 
 state_sys:
   prob_list: 
     Gem: 0.0
-    Coin: 0.0
-    Bone: 1.
-  init_prob: 0.
-  magnitude: 20  # 40 # positive - punishment, negative - reward 
-  taboo: ['Bone', 'Gem', 'Coin']
+    Coin: 1.0
+    Bone: 0.
+  init_prob: 1.
+  magnitude: 20  # 20 # positive - punishment, negative - reward 
+  taboo: ['Coin']
   change_per_vote: 0.25
 
 model:
@@ -35,10 +35,10 @@ model:
     num: 1
     device: cpu
     parameters:
-      state_size: [6, 6, 6] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      state_size: [6, 15, 15] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
       extra_percept_size: 2 # added for extra percept
       action_size: 4
-      layer_size: 250
+      layer_size: 250 # 250
       num_frames: 5
       n_step: 3
       BATCH_SIZE: 64
@@ -62,9 +62,6 @@ agent:
       - [0.0, 0.0, 255.0, 255.0, 0., 0.]
       - [0.0, 0.0, 255.0, 0.0, 255., 0.]
       - [0.0, 0.0, 255.0, 0.0, 0., 255.]
-      - [0.0, 0.0, 255.0, 255.0, 0., 0.]
-      - [0.0, 0.0, 255.0, 0.0, 255., 0.]
-      - [0.0, 0.0, 255.0, 0.0, 0., 255.]
     memory_size: 100 # If this is larger than max_turns above, could cause issues
     # Not used right now
     tile_size: (1, 1)
@@ -80,9 +77,9 @@ entity:
     social_harm: 0
   Coin:
     start_num: 1
-    value: 10 # 2
+    value: 10 # 2 #10
     appearance: (255.0, 0.0, 0.0) # Yellow
-    social_harm: 0 # 5
+    social_harm: 40 # 5
   # Food:
   #   start_num: 0
   #   value: 1
@@ -109,4 +106,4 @@ replay:
 root: '/Users/yikaitang/Documents/Github/agentarium'
 log: True
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
-exp_name: "fixed_punishment_rate_0.0_0.0_1.0_3As_size15_3Resources_ambiguity_v2_init0.2_resume"
+exp_name: 'test_punishment_noncomposite_oneA' #"test_composite_input_fixed_punishment_1.0_clear_detection_v0_oneA_instant_only_coin_hs500"

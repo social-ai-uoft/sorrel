@@ -31,7 +31,9 @@ class Agent:
         self.ixs = ixs
         self.extra_percept_size = cfg.agent.agent.extra_percept_size
         self.is_punished = 0.
-        self.to_be_punished = {'gem':0, 'bone':0, 'coin':0}
+        self.to_be_punished = {'Gem':0, 'Bone':0, 'Coin':0}
+        self.transgression_record = []
+        self.punishment_record = []
 
         # training-related features
         self.model = model  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
@@ -47,10 +49,13 @@ class Agent:
         }
 
 
-    def init_replay(self, env: GridworldEnv) -> None:
+    def init_replay(self, env: GridworldEnv, state_mode: str) -> None:
         """Fill in blank images for the LSTM."""
-
-        state = np.zeros_like(np.concatenate([self.pov(env), np.zeros(self.extra_percept_size)]))
+        if state_mode == 'simple':
+            state = np.zeros_like(np.concatenate([self.pov(env), np.zeros(self.extra_percept_size)]))
+        else:
+            grid_state = self.generate_composite_state([env for _ in range(6)])
+            state = np.zeros_like(np.concatenate([grid_state, np.zeros(self.extra_percept_size)]))
         action = 0  # Action outside the action space
         reward = 0.0
         done = 0.0
@@ -67,8 +72,11 @@ class Agent:
         self.model.memory.add(state, 0, 0.0, float(True))
 
 
-    def current_state(self, state_sys, env: GridworldEnv) -> np.ndarray:
-        state = self.pov(env)
+    def current_state(self, state_sys, env: GridworldEnv, envs, state_mode='simple') -> np.ndarray:
+        if state_mode:
+            state = self.generate_composite_state(envs)
+        else:
+            state = self.pov(env)
         to_be_punished = sum(self.to_be_punished.values())
         state = np.concatenate([state, np.array([state_sys.prob*255])])
         state = np.concatenate([state, np.array([to_be_punished*255])])
@@ -101,7 +109,7 @@ class Agent:
     def movement(self,
                  action: int,
                  state_sys,
-                 mode='composite'
+                 mode='simple'
                  ) -> tuple:
         
         '''
@@ -148,7 +156,7 @@ class Agent:
             if action//4 == 0:
                 state_sys.prob += state_sys.change_per_vote
                 state_sys.prob = np.clip(state_sys.prob, 0, 1)
-            elif action//4 == 0:
+            elif action//4 == 1:
                 state_sys.prob -= state_sys.change_per_vote
                 state_sys.prob = np.clip(state_sys.prob, 0, 1)
 
@@ -157,7 +165,11 @@ class Agent:
     
     def transition(self,
                    env,
-                   state_sys) -> tuple:
+                   state_sys,
+                   mode, 
+                   action_mode='simple',
+                   state_is_composite=False,
+                   envs=None) -> tuple:
         '''
         Changes the world based on the action taken.
 
@@ -167,38 +179,60 @@ class Agent:
         '''
 
         # Get current state
-        state = self.pov(env)
+        if state_is_composite:
+            state = self.generate_composite_state(envs)
+        else:
+            state = self.pov(env)
+
         to_be_punished = sum(self.to_be_punished.values())
+       
         state = np.concatenate([state, np.array([state_sys.prob*255])])
         state = np.concatenate([state, np.array([to_be_punished*255])])
-        model_input = torch.from_numpy(self.current_state(state_sys=state_sys, env=env)).view(1, -1)
+        model_input = torch.from_numpy(self.current_state(
+            state_sys=state_sys, 
+            env=env, 
+            envs=envs, 
+            state_mode=state_is_composite
+            )).view(1, -1)
 
         reward = 0
 
         # Take action based on current state
         action = self.model.take_action(model_input)
-
+        # action = random.randint(0,3)
         # Attempt the transition 
-        attempted_location = self.movement(action, state_sys)
+        attempted_location = self.movement(action, state_sys, action_mode)
         target_object = env.observe(attempted_location)
         env.move(self, attempted_location)
 
         # Get the interaction reward
         reward += target_object.value
         if to_be_punished >= 1.: ##TODO: change to to_be_punished 
-            reward -= state_sys.magnitude * to_be_punished
+            self.punishment_record.append(1)
+            # reward -= state_sys.magnitude * to_be_punished
             # TODO: if self.to_be_punished: 
+        else:
+            self.punishment_record.append(0)
         
+        if mode == 'certain':
+            self.to_be_punished = {'Gem':0, 'Bone':0, 'Coin':0}
 
         # Get the delayed reward
         reward += env.cache['harm'][self.ixs]
         env.cache['harm'][self.ixs] = 0 
         # If the agent performs a transgression
         if str(target_object) in state_sys.taboo:
+            self.transgression_record.append(1)
+            if mode == 'certain':
+                if random.random() < state_sys.prob_list[str(target_object)]*state_sys.prob:
+                    self.to_be_punished[str(target_object)] += 1.
+                    reward -= state_sys.magnitude * (random.random() < state_sys.prob_list[str(target_object)]*state_sys.prob) # instant punishment
             env.cache['harm'] = [env.cache['harm'][k] - target_object.social_harm 
                                         if k != self.ixs else env.cache['harm'][k]
                                         for k in range(len(env.cache['harm']))
                                         ]
+        else:
+            self.transgression_record.append(0)
             
 
         # Add to the encounter record
@@ -206,16 +240,35 @@ class Agent:
             self.encounters[str(target_object)] += 1 
 
         # Get the next state   
-        next_state = self.pov(env)
+        if state_is_composite:
+            next_state = self.generate_composite_state(envs)
+        else:
+            next_state = self.pov(env)
         next_state = np.concatenate([next_state, np.array([state_sys.prob*255])])
         next_state = np.concatenate([next_state, np.array([to_be_punished*255])])  ## TODO: how to edit the to_be_punished state within agents
         
         # reset to_be_punished 
-        self.to_be_punished = {'gem':0, 'bone':0, 'coin':0}
+        if mode == 'ambiguous':
+            self.to_be_punished = {'gem':0, 'bone':0, 'coin':0}
 
         return state, action, reward, next_state, False
-        
-    
+
+
+    def generate_composite_state(self, envs):
+        """
+        Generate the stacked states. 
+        """
+        env_states = []
+        for env in envs:
+            env.full_mdp = True
+            env_state = self.pov(env)
+            env_states.append(env_state)
+        template = np.zeros(env_states[0].shape)
+        for i in range(6-len(envs)):       
+            env_states.append(template)
+        composite_state = np.concat(env_states)
+        return composite_state
+
     # def transition(self,
     #                env,
     #                state_sys) -> tuple:
@@ -283,8 +336,8 @@ class Agent:
     #     return state, action, reward, next_state, False
 
 
-    def reset(self, env: GridworldEnv) -> None:
-        self.init_replay(env)
+    def reset(self, env: GridworldEnv, state_mode='simple') -> None:
+        self.init_replay(env, state_mode)
         self.encounters = {
             'Gem': 0,
             'Coin': 0,
@@ -292,6 +345,10 @@ class Agent:
             'Bone': 0,
             'Wall': 0
         }
+    
+    def reset_record(self) -> None:
+        self.transgression_record = []
+        self.punishment_record = []
 
 # def color_map(channels: int) -> dict:
 #     '''

@@ -57,8 +57,8 @@ def run(cfg, **kwargs):
 
 
     # load weights
-    # for count, agent in enumerate(agents):
-    #     agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/fixed_punishment_rate_0.0_0.0_1.0_3As_size15_3Resources_ambiguity_v2_init0.2_agent{count}_iRainbowModel.pkl')
+    for count, agent in enumerate(agents):
+        agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/test_ambiguous_detection_3agents_composite_actions_v0_agent{count}_iRainbowModel.pkl')
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:
@@ -126,14 +126,20 @@ def run(cfg, **kwargs):
 
             # Agent transition
             for agent in agents:
-
-                (state, action, reward, next_state, done_) = agent.transition(env, state_entity)
+                action_mode = 'simple'
+                (state, action, reward, next_state, done_) = agent.transition(env, state_entity, 'ambiguous', action_mode=action_mode)
 
                 # record voting behaviors
-                if action == 4:
-                    punishment_increase_record[agent.ixs] += 1
-                elif action == 5:
-                    punishment_decrease_record[agent.ixs] += 1 
+                if action_mode == 'simple':
+                    if action == 4:
+                        punishment_increase_record[agent.ixs] += 1
+                    elif action == 5:
+                        punishment_decrease_record[agent.ixs] += 1 
+                else:
+                    if action%4 == 0:
+                        punishment_increase_record[agent.ixs] += 1
+                    elif action%4 == 1:
+                        punishment_decrease_record[agent.ixs] += 1 
 
                 # agent.add_memory(state, action, reward, done)
 
