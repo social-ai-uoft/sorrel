@@ -107,20 +107,25 @@ def create_partner_selection_models_PPO(
 
 
 def create_agents(cfg, models):
+    for ixs_m, model in enumerate(models):
+        model.ixs = ixs_m
     agents = []
     model_num = 0
+    if len(models) != cfg.agent.agent.num:
+        raise ValueError('Please make sure the number of models match the number of agents.')
     for agent_type in vars(cfg.agent):
         AGENT_TYPE = AGENTS[agent_type]
         for ixs in range(vars(vars(cfg.agent)[agent_type])['num']):
-
             # fetch for model in models
             agent_model_name = vars(vars(cfg.agent)[agent_type])['model']
-            for model in models:
+            for ixs_m, model in enumerate(models):
                 has_model = False
                 if model.name == agent_model_name:
-                    agent_model = model
-                    has_model = True
-                    models.remove(model)
+                    if model.ixs == ixs:
+                        agent_model = model
+                        has_model = True
+                        models.remove(model)
+                        
                 
                 if has_model:
                     break
@@ -132,6 +137,8 @@ def create_agents(cfg, models):
                 cfg,
                 ixs
             ))
+        
+        
 
         model_num += 1
 
@@ -278,8 +285,8 @@ def create_agent_appearances(num_agents):
 def generate_preferences(X):
     """Generate a list of length X where the sum of elements is 1."""
     values = np.random.rand(X)  # Generate X random numbers
-    values = np.array([0.5, 0.5]) #TODO: temporary
-    return softmax(values)  # Normalize so sum is 1
+    values = np.array([0., 1.0]) #TODO: temporary
+    return values  # Normalize so sum is 1
 
 
 def generate_variability(X, max=0.5):

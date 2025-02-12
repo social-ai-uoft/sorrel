@@ -58,7 +58,9 @@ def run(cfg, **kwargs):
         a.model_type = 'PPO'
         a.appearance = appearances[a.ixs]
         a.preferences = preferences_lst[a.ixs]
+        a.base_preferences = preferences_lst[a.ixs]
         a.variability = variability_lst[a.ixs]
+        a.base_variability = variability_lst[a.ixs]
         if a.ixs == 0:
             a.task_model = task_models[0]
         print(a.appearance)

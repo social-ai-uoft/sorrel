@@ -8,13 +8,13 @@ experiment:
 interaction_task:
   mode: prediction
   task_max_turns: 25
-  n_trials: 40
+  n_trials: 5
   model: 
     type: Classification
     num: 1
     parameters:
       input_size: 3
-      hidden_size: 16 # 16
+      hidden_size: 4 # 16
       output_size: 2
       lr: 0.01 # 0.01
 
@@ -26,7 +26,7 @@ model:
     parameters:
       state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
       extra_percept_size: 1 # added for extra percept
-      action_size: 4
+      action_size: 2
       layer_size: 250
       num_frames: 5
       n_step: 1
@@ -109,4 +109,4 @@ log: True
 # exp_name: "test_voting_sixAs_size15_init_spawn_0.2_no_respawn_extended"
 # exp_name: "test_v6_3agents_same_init_pref_0.3_var_learn"
 # exp_name: 'debug_fixed_faster_v1_10'
-exp_name: 'multiagent_test_v1' # with variability in the state info 
+exp_name: 'multiagent_v7_var_factor_0.01_with_preference_maxvar_0.1_around_the_base' # with variability in the state info 

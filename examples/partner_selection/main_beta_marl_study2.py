@@ -10,7 +10,7 @@ import torch
 # Determine appropriate paths for imports and storage
 # root = os.path.abspath("~/Documents/GitHub/agentarium")  # Change the wd as needed.
 root = os.path.abspath(".") 
-# print(root)
+
 # # Make sure the transformers directory is in PYTHONPATH
 if root not in sys.path:
     sys.path.insert(0, root)
@@ -21,7 +21,7 @@ import random
 
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from agentarium.models.PPO import RolloutBuffer
+from agentarium.models.PPO import RolloutBuffer, PPO
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
 from examples.partner_selection.agents import Agent
@@ -43,8 +43,52 @@ def run(cfg, **kwargs):
     task_models = create_interaction_task_models(cfg)
     partner_selection_models = create_partner_selection_models_PPO(3, 'cpu')
     appearances = create_agent_appearances(cfg.agent.agent.num)
-    agents: list[Agent] = create_agents(cfg, partner_selection_models)
-    
+
+    agents = []
+    agent1 = Agent(partner_selection_models[0], cfg, 0)
+    agent2 = Agent(partner_selection_models[1], cfg, 1)
+    agent3 = Agent(partner_selection_models[2], cfg, 2)
+    agents.append(agent1)
+    agents.append(agent2)
+    agents.append(agent3)
+
+    # agent model
+    agent1.partner_choice_model = PPO(
+            device='cpu', 
+            state_dim=8,
+            action_dim=2,
+            lr_actor=0.0001,
+            lr_critic=0.00005,
+            gamma=0.99,
+            K_epochs=10,
+            eps_clip=0.2 
+        )
+    agent1.partner_choice_model.name = 'PPO'
+
+    agent2.partner_choice_model = PPO(
+            device='cpu', 
+            state_dim=8,
+            action_dim=4,
+            lr_actor=0.0001,
+            lr_critic=0.00005,
+            gamma=0.99,
+            K_epochs=10,
+            eps_clip=0.2 
+        )
+    agent2.partner_choice_model.name = 'PPO'
+
+    agent3.partner_choice_model = PPO(
+            device='cpu', 
+            state_dim=8,
+            action_dim=4,
+            lr_actor=0.0001,
+            lr_critic=0.00005,
+            gamma=0.99,
+            K_epochs=10,
+            eps_clip=0.2 
+        )
+    agent3.partner_choice_model.name = 'PPO'
+
     # generate preferences and variability
     preferences_lst = [generate_preferences(2) for _ in range(cfg.agent.agent.num)]
     variability_lst = generate_variability(cfg.agent.agent.num, cfg.agent.agent.preference_var)
@@ -61,6 +105,15 @@ def run(cfg, **kwargs):
             raise ValueError('agent appearance should not be none')
         a.preferences = preferences_lst[a.ixs]
         a.base_preferences = preferences_lst[a.ixs]
+
+        # define preferences for other agents
+        if a.ixs == 1:
+            a.preferences = [1.0, 0]
+            a.base_preferences = [1.0, 0]
+        elif a.ixs == 2:
+            a.preferences = [0, 1.0]
+            a.base_preferences = [0, 1.0]
+
         a.variability = variability_lst[a.ixs]
         a.base_variability = variability_lst[a.ixs]
         a.task_model = task_models[a.ixs]
@@ -70,7 +123,7 @@ def run(cfg, **kwargs):
 
     entities: list[Entity] = create_entities(cfg)
     partner_pool_env = partner_pool(agents)
-    
+
     # Set up tensorboard logging
     if cfg.log:
         from torch.utils.tensorboard import SummaryWriter
@@ -118,17 +171,18 @@ def run(cfg, **kwargs):
             for agent in agents:
                 agent.reward = 0
 
-   
-
             focal_agent, partner_choices = partner_pool_env.agents_sampling()
             focal_ixs = partner_pool_env.focal_ixs
             max_var_ixs = partner_pool_env.get_max_variability_partner_ixs()
+            # print([a.ixs for a in partner_choices])
+            # print(focal_ixs, focal_agent.ixs)
             partner_choices.append(focal_agent)
-            
-                
+                        
             for agent in partner_choices:
+                is_focal = (0 == agent.ixs) and (agent.ixs == focal_ixs)
                 variability_record[agent.ixs].append(agent.variability)
-                is_focal = focal_ixs == agent.ixs
+                # print([a.ixs for a in partner_choices])
+
                 (state, action, partner, done_, action_logprob, partner_ixs) = agent.transition(
                     partner_pool_env, 
                     partner_choices, 
@@ -136,17 +190,20 @@ def run(cfg, **kwargs):
                     cfg,
                     mode=cfg.interaction_task.mode
                     )
+                
                 # assert agent.ixs != partner_ixs, f'select itself, is_focal: {partner_ixs, action, agent.ixs}'
+
                 # record the ixs of the selected partner
                 if is_focal & (int(action) <= 1):
                     assert agent.ixs != partner_ixs, 'select oneself'
                     partner_selection_freqs[agent.ixs][partner_ixs] += 1
                     selecting_more_variable_partner[agent.ixs].append(partner_ixs==max_var_ixs)
                     selected_partner_variability[agent.ixs].append(partner.variability)
-                for potential_partner in partner_choices:
-                    if potential_partner.ixs != focal_ixs:
-                        partner_occurence_freqs[agent.ixs][potential_partner.ixs] += 1
-                        presented_partner_variability[agent.ixs].append(potential_partner.variability)
+                if is_focal:
+                    for potential_partner in partner_choices:
+                        if potential_partner.ixs != focal_ixs:
+                            partner_occurence_freqs[agent.ixs][potential_partner.ixs] += 1
+                            presented_partner_variability[agent.ixs].append(potential_partner.variability)
                 
 
                 # prepare the env for the interaction task
@@ -176,6 +233,9 @@ def run(cfg, **kwargs):
                 # calculate total reward
                 reward += agent.delay_reward
 
+                # # debug
+                # reward = (action==1)
+
                 # Update the agent's memory buffer
                 agent.episode_memory.states.append(torch.tensor(state))
                 agent.episode_memory.actions.append(torch.tensor(action))
@@ -187,7 +247,7 @@ def run(cfg, **kwargs):
 
                 # clear delayed reward
                 agent.delay_reward = 0
-                 
+                    
                 agent.update_preference(mode='categorical')
 
                 

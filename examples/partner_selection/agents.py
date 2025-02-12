@@ -35,9 +35,11 @@ class Agent:
         self.is_punished = 0.
         self.to_be_punished = {'Gem':0, 'Bone':0, 'Coin':0}
         self.preferences = None
+        self.base_preferences = None
         self.variability = None
         self.base_variability = None
         self.social_task_memory = {'gt':[], 'pred':[]}
+        self.delay_reward = 0
 
         # training-related features
         self.task_model = None  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
@@ -243,6 +245,7 @@ class Agent:
                 # entities = create_entities(cfg)
                 # env = partner_selection(cfg, agents, entities)
                 reward += self.frozen_network_foraging(partner, env, cfg.task_max_turns)
+        partner.delay_reward = reward
         return reward 
     
 
@@ -251,11 +254,11 @@ class Agent:
         Define the action dynamics of the partner selection model
         """
         if action == 2:
-            self.variability -= self.base_variability*0.2
-            self.variability = max(0, self.variability)
+            self.variability -= self.base_variability*0.02
+            self.variability = min(max(0, self.variability), 0.1)
         elif action == 3:
-            self.variability += self.base_variability*0.2
-            self.variability = max(0, self.variability)
+            self.variability += self.base_variability*0.02
+            self.variability = min(max(0, self.variability), 0.1)
 
     
     def transition(self,
@@ -315,10 +318,18 @@ class Agent:
             'Wall': 0
         }
 
-    def update_preference(self):
-        randomness = (random.random() - 0.5) * self.variability * 10
-        self.preferences = np.array(self.preferences) - np.array([randomness, -1 * randomness])
-        self.preferences = np.clip(self.preferences, 0., 1.)
+    def update_preference(self, mode='categorical'):
+        if mode == 'additive':
+            randomness = (random.random() - 0.5) * self.variability * 10
+            self.preferences = np.array(self.base_preferences) - np.array([randomness, -1 * randomness])
+            self.preferences = np.clip(self.preferences, 0., 1.)
+        elif mode == 'categorical':
+            random_num = random.random()
+            num_categories = len(self.preferences)
+            if self.variability > random_num:
+                probs = np.zeros(num_categories)
+                probs[np.random.randint(num_categories)] = 1.
+                self.preferences = probs
 
 
 # def color_map(channels: int) -> dict:
