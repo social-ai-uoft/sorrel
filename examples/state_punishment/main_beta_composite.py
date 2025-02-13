@@ -90,7 +90,7 @@ def run(cfg, **kwargs):
             cfg.state_sys.change_per_vote
             )
 
-        state_mode = 'simple'
+        state_mode = cfg.state_mode
         # Reset the environment at the start of each epoch
         for env in envs:
             env.reset(state_mode=state_mode)
@@ -129,13 +129,12 @@ def run(cfg, **kwargs):
 
             # Agent transition
             for ixs, agent in enumerate(agents):
-
                 (state, action, reward, next_state, done_) = agent.transition(
                     envs[agent.ixs], 
                     state_entity, 
                     'certain', 
                     action_mode='simple',
-                    state_is_composite=False,
+                    state_is_composite=state_mode=='composite',
                     envs=envs
                     )
                 # composite_state = agent.generate_composite_state(envs)

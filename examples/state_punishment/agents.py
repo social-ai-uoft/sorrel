@@ -179,6 +179,7 @@ class Agent:
         '''
 
         # Get current state
+        # print(state_is_composite)
         if state_is_composite:
             state = self.generate_composite_state(envs)
         else:

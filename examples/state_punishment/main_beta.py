@@ -139,9 +139,9 @@ def run(cfg, **kwargs):
                         punishment_decrease_record[agent.ixs] += 1 
 
                 else:
-                    if action%4 == 0:
+                    if action//4 == 0:
                         punishment_increase_record[agent.ixs] += 1
-                    elif action%4 == 1:
+                    elif action//4 == 1:
                         punishment_decrease_record[agent.ixs] += 1 
 
                 # agent.add_memory(state, action, reward, done)
