@@ -63,19 +63,35 @@ class Agent:
         reward = 0.0
         done = 0.0
         for _ in range(self.num_frames):
-            self.model.memory.add(state, action, reward, done)
+            try:
+                self.model.memory.add(state, action, reward, done)
+            except:
+                self.partner_choice_model.memory.add(state, action, reward, float(done))
+     
     
     def add_memory(self, state: np.ndarray, action: int, reward: float, done: bool) -> None:
         """Add an experience to the memory."""
-        self.model.memory.add(state, action, reward, float(done))
+        try:
+            self.model.memory.add(state, action, reward, float(done))
+        except:
+            self.partner_choice_model.memory.add(state, action, reward, float(done))
     
     def add_final_memory(self, state: np.ndarray) -> None:
-        self.model.memory.add(state, 0, 0.0, float(True))
+        try:
+            self.model.memory.add(state, 0, 0.0, float(True))
+        except:
+            self.partner_choice_model.memory.add(state, 0, 0.0, float(True))
 
-    def current_state(self, env: GridworldEnv) -> np.ndarray:
-        state = self.pov(env)
+    def current_state(self, env: GridworldEnv, partner_selection=True) -> np.ndarray:
+        if partner_selection:
+            state = env.state(self)
+        else:
+            state = self.pov(env)
         # state = np.concatenate([state, np.array([self.is_punished])])
-        prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
+        try:
+            prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
+        except:
+            prev_states = self.partner_choice_model.memory.current_state(stacked_frames=self.num_frames-1)
         current_state = np.vstack((prev_states, state))
         return current_state
 
@@ -136,7 +152,7 @@ class Agent:
         # Get current state
         state = self.pov(env)
         if self.model_type != 'PPO':
-            model_input = torch.from_numpy(self.current_state(env=env)).view(1, -1)
+            model_input = torch.from_numpy(self.current_state(env=env, partner_selection=False)).view(1, -1)
         else:
             model_input = torch.from_numpy(state)
             
@@ -246,6 +262,7 @@ class Agent:
                 # env = partner_selection(cfg, agents, entities)
                 reward += self.frozen_network_foraging(partner, env, cfg.task_max_turns)
         partner.delay_reward = reward
+        # print(partner.ixs, partner.delay_reward)
         return reward 
     
 
@@ -255,10 +272,11 @@ class Agent:
         """
         if action == 2:
             self.variability -= self.base_variability*0.02
-            self.variability = min(max(0, self.variability), 0.1)
+            self.variability = min(max(0, self.variability), 1)
         elif action == 3:
             self.variability += self.base_variability*0.02
-            self.variability = min(max(0, self.variability), 0.1)
+            self.variability = min(max(0, self.variability), 1)
+         
 
     
     def transition(self,
@@ -273,7 +291,7 @@ class Agent:
 
         # Get current state
         state = env.state(self)
-        # model_input = torch.from_numpy(self.current_state(env=env)).view(1, -1)
+        model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
         if self.model_type == 'PPO':
             model_input = torch.from_numpy(state)
 
@@ -283,6 +301,14 @@ class Agent:
         if self.model_type == 'PPO':
             # action, action_prob = self.model.take_action(model_input, whether_to_predict=False, steps=2)
             action, action_prob = self.partner_choice_model.take_action(model_input)
+            if cfg.study == 3:
+                if cfg.random_selection:
+                    if action in [0,1]:
+                        action = random.randint(0,1)
+                        
+            elif cfg.study == 2:
+                if self.ixs == 0 and cfg.random_selection:
+                    action = random.randint(0,1)
         else:
             action = self.partner_choice_model.take_action(model_input)
             action_prob = None
@@ -294,6 +320,7 @@ class Agent:
         if int(action) <= 1:
             selected_partner = partner_choices[action]
             selected_partner_ixs = selected_partner.ixs
+           
         else:
             selected_partner = None
             selected_partner_ixs = None

@@ -8,7 +8,7 @@ experiment:
 interaction_task:
   mode: prediction
   task_max_turns: 25
-  n_trials: 80
+  n_trials: 40
   model: 
     type: Classification
     num: 1
@@ -109,4 +109,7 @@ log: True
 # exp_name: "test_voting_sixAs_size15_init_spawn_0.2_no_respawn_extended"
 # exp_name: "test_v6_3agents_same_init_pref_0.3_var_learn"
 # exp_name: 'debug_fixed_faster_v1_10'
-exp_name: 'SB_task_v1' # with variability in the state info 
+random_selection: True
+hardcoded: False
+study: 2
+exp_name: 'SB_task_v2_random' # with variability in the state info 

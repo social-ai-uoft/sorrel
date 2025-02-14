@@ -68,15 +68,20 @@ def create_models(cfg):
     return models
 
 def create_interaction_task_models(cfg):
+
     models = []
-    for model_name in cfg.interaction_task.model.type:
-        MODEL_TYPE = MODELS[cfg.interaction_task.model.type]
-        for _ in range(cfg.interaction_task.model.num):
-            model = MODEL_TYPE(**vars(vars(cfg.interaction_task.model)['parameters']))
-            model.name = model_name
-            models.append(
-                model
-            )
+        
+    MODEL_TYPE = MODELS[cfg.interaction_task.model.type]
+    
+    for _ in range(cfg.interaction_task.model.num):
+        model = MODEL_TYPE(**vars(vars(cfg.interaction_task.model)['parameters']))
+        model.name = cfg.interaction_task.model.type
+        models.append(
+            model
+        )
+
+    if len(models) != cfg.agent.agent.num:
+        raise ValueError('Please make sure the number of models match the number of agents.')
 
     return models
 
@@ -90,7 +95,7 @@ def create_partner_selection_models_PPO(
     for _ in range(num_model):
         model = PPO(
             device=device, 
-            state_dim=8,
+            state_dim=16,
             action_dim=4,
             lr_actor=0.0001,
             lr_critic=0.00005,
@@ -294,4 +299,15 @@ def generate_variability(X, max=0.5):
     values = np.random.rand(X) * max
     values = np.array([1., 1., 1.]) * max # 1, 0, 1 # working: 1, 0.1, 1
     return values.tolist()
-    
+
+
+def get_agents_by_ixs(agents, target_ixs):
+    """
+    Filters agents whose 'ixs' value is in the target_ixs list.
+
+    :param agents: List of agent dictionaries (or objects with an 'ixs' attribute).
+    :param target_ixs: List or set of desired ixs values.
+    :return: List of matching agents.
+    """
+    target_ixs = set(target_ixs)  # Convert to set for faster lookup
+    return [agent for agent in agents if agent.ixs in target_ixs]

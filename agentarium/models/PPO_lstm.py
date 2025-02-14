@@ -34,13 +34,16 @@ class RolloutBuffer:
 
 # Actor-critic network 
 class ActorCritic(nn.Module):
-    def __init__(self, state_dim, action_dim):
+    def __init__(self, state_dim, action_dim, hidden_dim=128):
         super(ActorCritic, self).__init__()
 
-        
+        self.hidden_dim = hidden_dim
+
+        self.lstm = nn.LSTM(state_dim, hidden_dim, batch_first=True)
+
         # actor 
         self.actor = nn.Sequential(
-                        nn.Linear(state_dim, 64),
+                        nn.Linear(hidden_dim, 64),
                         nn.Tanh(),
                         nn.Linear(64, 128),
                         nn.Tanh(),
@@ -52,7 +55,7 @@ class ActorCritic(nn.Module):
                     )
         # critic
         self.critic = nn.Sequential(
-                        nn.Linear(state_dim, 64),
+                        nn.Linear(hidden_dim, 64),
                         nn.Tanh(),
                         nn.Linear(64, 128),
                         nn.Tanh(),
@@ -61,7 +64,7 @@ class ActorCritic(nn.Module):
                         nn.Tanh(),
                         nn.Linear(64, 1)
                     )
-        
+
         self.double()
         
         
@@ -69,25 +72,31 @@ class ActorCritic(nn.Module):
     def forward(self):
         raise NotImplementedError
     
-    def act(self, state):
+    def act(self, state, hidden):
         """Takes an action with the input state."""
-        action_probs = self.actor(state)
+        lstm_out, hidden = self.lstm(state, hidden)
+        action_probs = self.actor(lstm_out)
         dist = Categorical(action_probs)
 
         action = dist.sample()
         action_logprob = dist.log_prob(action)
         
-        return action.detach(), action_logprob.detach()
+        return action.detach(), action_logprob.detach(), hidden
     
-    def evaluate(self, state, action):
+    def evaluate(self, state, action, hidden):
         """Evaluate the specified action and state."""
-        action_probs = self.actor(state)
+        lstm_out, hidden = self.lstm(state, hidden)
+        action_probs = self.actor(lstm_out)
         dist = Categorical(action_probs)
         action_logprobs = dist.log_prob(action)
         dist_entropy = dist.entropy()
-        state_values = self.critic(state)
+        state_values = self.critic(lstm_out)
         
         return action_logprobs, state_values, dist_entropy
+    
+    def init_hidden(self, batch_size=1):
+        return (torch.zeros(1, batch_size, self.hidden_dim),
+                torch.zeros(1, batch_size, self.hidden_dim))
 
 
 # PPO  
@@ -109,13 +118,13 @@ class PPO:
         )
         self.epsilon = 0
 
-    def take_action(self, state):
+    def take_action(self, state, hidden):
         """Choose an action based on the observed state."""
         with torch.no_grad():
             state = state.to(self.device)
-            action, action_logprob = self.model_main.act(state)
+            action, action_logprob, hidden = self.model_main.act(state, hidden)
 
-        return action, action_logprob
+        return action, action_logprob, hidden
 
     def training(self, buffer, entropy_coefficient=0.01):
         """Train the model with the memories stored in the buffer."""

@@ -30,10 +30,11 @@ from examples.partner_selection.env import partner_selection
 from examples.partner_selection.utils import (create_agents, create_entities, create_interaction_task_models,
                                 init_log, load_config, save_config_backup, 
                                 create_partner_selection_models_PPO, create_agent_appearances,
-                                generate_preferences, generate_variability)
+                                generate_preferences, generate_variability,
+                                get_agents_by_ixs)
 
 import numpy as np
-
+from copy import deepcopy
 # endregion                #
 # ------------------------ #
 
@@ -67,6 +68,7 @@ def run(cfg, **kwargs):
         print(a.appearance)
         print(a.base_preferences)
         print(a.variability)
+
 
     entities: list[Entity] = create_entities(cfg)
     partner_pool_env = partner_pool(agents)
@@ -107,9 +109,15 @@ def run(cfg, **kwargs):
         presented_partner_variability = [[] for _ in range(len(agents))]
         selecting_more_variable_partner = [[] for _ in range(len(agents))]
         agent_preferences = [0 for _ in range(len(agents))]
+        mean_variability = 0
         # Container for data within epoch
         # variability_increase_record = [0 for _ in range(len(agents))]
         # variability_decrease_record = [0 for _ in range(len(agents))]
+
+        # reset delayed reward
+        for agent in agents:
+            agent.delay_reward = 0
+            agent.reward = 0
 
         while not done:
 
@@ -120,13 +128,14 @@ def run(cfg, **kwargs):
 
    
 
-            focal_agent, partner_choices = partner_pool_env.agents_sampling()
+            focal_agent, partner_choices, partner_choices_ixs = partner_pool_env.agents_sampling()
             focal_ixs = partner_pool_env.focal_ixs
             max_var_ixs = partner_pool_env.get_max_variability_partner_ixs()
-            partner_choices.append(focal_agent)
+            partner_choices_ixs.append(focal_ixs)
+            agents_to_act = get_agents_by_ixs(agents, partner_choices_ixs)
             
                 
-            for agent in partner_choices:
+            for agent in agents_to_act:
                 variability_record[agent.ixs].append(agent.variability)
                 is_focal = focal_ixs == agent.ixs
                 (state, action, partner, done_, action_logprob, partner_ixs) = agent.transition(
@@ -190,7 +199,7 @@ def run(cfg, **kwargs):
                  
                 agent.update_preference(mode='categorical')
 
-                
+        mean_variability = np.mean([a.variability for a in agents])
 
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
