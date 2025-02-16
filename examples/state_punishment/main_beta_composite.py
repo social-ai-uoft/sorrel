@@ -107,6 +107,7 @@ def run(cfg, **kwargs):
         # Container for data within epoch
         punishment_increase_record = [0 for _ in range(len(agents))]
         punishment_decrease_record = [0 for _ in range(len(agents))]
+        action_record = [0 for _ in range(cfg.model.iqn.parameters.action_size)]
 
         while not done:
 
@@ -189,6 +190,10 @@ def run(cfg, **kwargs):
                         "Wall": agent.encounters["Wall"],
                     },
                     epoch,
+                )
+                writer.add_scalars(
+                    f'Agent_{i}/Actions',
+                    {f'action_{k}': action_record[k] for k in range(cfg.model.iqn.parameters.action_size)}
                 )
             writer.add_scalar(f'state_punishment_level_avg', np.mean(state_entity.prob_record), epoch)
             writer.add_scalar(f'state_punishment_level_end', state_entity.prob, epoch)
