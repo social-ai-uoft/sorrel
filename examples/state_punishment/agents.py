@@ -220,7 +220,8 @@ class Agent:
 
         # Get the delayed reward
         reward += env.cache['harm'][self.ixs]
-        env.cache['harm'][self.ixs] = 0 
+        env.cache['harm'][self.ixs] = 0
+
         # If the agent performs a transgression
         if str(target_object) in state_sys.taboo:
             self.transgression_record.append(1)
@@ -228,10 +229,17 @@ class Agent:
                 if random.random() < state_sys.prob_list[str(target_object)]*state_sys.prob:
                     self.to_be_punished[str(target_object)] += 1.
                     reward -= state_sys.magnitude * (random.random() < state_sys.prob_list[str(target_object)]*state_sys.prob) # instant punishment
-            env.cache['harm'] = [env.cache['harm'][k] - target_object.social_harm 
+            cache_harm = [env.cache['harm'][k] - target_object.social_harm 
                                         if k != self.ixs else env.cache['harm'][k]
                                         for k in range(len(env.cache['harm']))
                                         ]
+            # assign harm value to each individual world
+            if state_is_composite:
+                for env_ixs, env_ in enumerate(envs):
+                    env_.cache['harm'][env_ixs] = cache_harm[env_ixs]
+            else:
+                env.cache['harm'] = cache_harm
+
         else:
             self.transgression_record.append(0)
             

@@ -120,7 +120,7 @@ def run(cfg, **kwargs):
             # Agent transition
             for agent in agents:
                 
-                action_mode = 'composite'
+                action_mode = cfg.action_mode
 
                 (state, action, reward, next_state, done_) = agent.transition(
                     env, 
@@ -156,7 +156,7 @@ def run(cfg, **kwargs):
 
                 agent.add_memory(state, action, reward, done)
 
-                game_points[agent.ixs] += reward
+                game_points[agent.ixs] += int(reward)
 
                 agent.model.end_epoch_action(**locals())
 

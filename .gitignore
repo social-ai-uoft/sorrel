@@ -190,3 +190,4 @@ examples/state_punishment/runs/state_reward_with_vote_twoAs_20241123-21111732415
 *.16
 examples/state_punishment/configs/records/fixed_punishment_rate_1.0_oneAs_size16_gem_has_value_epsilon0.01_onehot_5channel_config_backup.yaml
 examples/state_punishment/configs/config_fixed_rate_no_vote.yaml
+/examples/state_punishment/runs
