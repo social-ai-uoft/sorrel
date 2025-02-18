@@ -7,6 +7,7 @@ class partner_pool:
         self.partner_to_select = []
         self.partner_to_select_appearance = None
         self.pool = agents
+        self.time = 0
     
     def agents_sampling(self, focal_agent=None):
         """
@@ -31,6 +32,9 @@ class partner_pool:
         self.focal_ixs = focal_agent.ixs
         self.partner_to_select_appearance = np.concat([partner.appearance for partner in partner_choices])
 
+        # update time
+        self.time += 1
+
         return focal_agent, partner_choices, partner_ixs
     
     def state(self, agent):
@@ -43,6 +47,7 @@ class partner_pool:
             for partner in self.partner_to_select:
                 state = np.concat([state, np.array([partner.variability])])
                 state = np.concat([state, np.array(partner.appearance)])
+
         else:
             state = np.concat([self.partner_to_select_appearance, np.array([0])])
             # add variability
@@ -51,6 +56,10 @@ class partner_pool:
             for partner in self.partner_to_select:
                 state = np.concat([state, np.array([partner.variability])])
                 state = np.concat([state, np.array(partner.appearance)])
+        
+        # add time
+        state = np.concat([state, np.array([self.time])])
+        
         return state
     
     def get_max_variability_partner_ixs(self):

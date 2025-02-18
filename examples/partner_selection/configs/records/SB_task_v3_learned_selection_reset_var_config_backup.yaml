@@ -19,17 +19,17 @@ interaction_task:
       lr: 0.01 # 0.01
 
 model:
-  iqn:
-    type: iRainbowModel
+  PPO:
+    type: PPO
     num: 3
     device: cpu
     parameters:
-      state_size: [1, 16] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
-      extra_percept_size: 0 # added for extra percept
+      state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      extra_percept_size: 1 # added for extra percept
       action_size: 4
       layer_size: 250
       num_frames: 5
-      n_step: 3
+      n_step: 1
       BATCH_SIZE: 64
       BUFFER_SIZE: 1024
       LR: 0.00025
@@ -43,8 +43,8 @@ model:
 agent:
   agent:
     num: 3
-    preference_var: 0.01
-    model: iqn
+    preference_var: 1
+    model: PPO
     num_memories: 5 # Should match num_frames in the model above
     vision: 7
     # appearance: (0.0, 0.0, 255.0)
@@ -109,8 +109,9 @@ log: True
 # exp_name: "test_voting_sixAs_size15_init_spawn_0.2_no_respawn_extended"
 # exp_name: "test_v6_3agents_same_init_pref_0.3_var_learn"
 # exp_name: 'debug_fixed_faster_v1_10'
-random_selection: True
+random_selection: False
 hardcoded: False
+var_reset: True 
 study: 2
-exp_name: 'SB_task_v2_random_iqn' # with variability in the state info 
-exp_name: 'debug_SB_task_iqn'
+exp_name: 'SB_task_v3_learned_selection_reset_var' # with variability in the state info [learned selection, hardcoded, random]
+# exp_name: 'debug_study2_v2'

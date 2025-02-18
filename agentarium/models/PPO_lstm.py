@@ -11,6 +11,7 @@ import torch.nn as nn
 from torch.distributions import Categorical
 from agentarium.models.DDQN import ClaasyReplayBuffer as Buffer
 import numpy as np 
+import torch.nn.functional as F
 
 # Memory 
 class RolloutBuffer:
@@ -21,7 +22,8 @@ class RolloutBuffer:
         self.logprobs = []
         self.rewards = []
         self.is_terminals = []
-        self.day_rewards = []
+        self.h_in = []
+        self.h_out = []
 
     def clear(self):
         """Clear the stored memories."""
@@ -30,6 +32,8 @@ class RolloutBuffer:
         del self.logprobs[:]
         del self.rewards[:]
         del self.is_terminals[:]
+        del self.h_in[:]
+        del self.h_out[:]
 
 
 # Actor-critic network 
@@ -39,7 +43,8 @@ class ActorCritic(nn.Module):
 
         self.hidden_dim = hidden_dim
 
-        self.lstm = nn.LSTM(state_dim, hidden_dim, batch_first=True)
+        self.fc1 = nn.Linear(state_dim, hidden_dim)
+        self.lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
 
         # actor 
         self.actor = nn.Sequential(
@@ -74,7 +79,9 @@ class ActorCritic(nn.Module):
     
     def act(self, state, hidden):
         """Takes an action with the input state."""
-        lstm_out, hidden = self.lstm(state, hidden)
+        lstm_in = F.relu(self.fc1(state))
+        lstm_in = lstm_in.view(-1, 1, self.hidden_dim)
+        lstm_out, hidden = self.lstm(lstm_in, hidden)
         action_probs = self.actor(lstm_out)
         dist = Categorical(action_probs)
 
@@ -85,7 +92,9 @@ class ActorCritic(nn.Module):
     
     def evaluate(self, state, action, hidden):
         """Evaluate the specified action and state."""
-        lstm_out, hidden = self.lstm(state, hidden)
+        lstm_in = F.relu(self.fc1(state))
+        lstm_in = lstm_in.view(-1, 1, self.hidden_dim)
+        lstm_out, hidden = self.lstm(lstm_in, hidden)
         action_probs = self.actor(lstm_out)
         dist = Categorical(action_probs)
         action_logprobs = dist.log_prob(action)
@@ -95,8 +104,8 @@ class ActorCritic(nn.Module):
         return action_logprobs, state_values, dist_entropy
     
     def init_hidden(self, batch_size=1):
-        return (torch.zeros(1, batch_size, self.hidden_dim),
-                torch.zeros(1, batch_size, self.hidden_dim))
+        return (torch.zeros(1, batch_size, self.hidden_dim).double(),
+                torch.zeros(1, batch_size, self.hidden_dim).double())
 
 
 # PPO  
@@ -145,12 +154,14 @@ class PPO:
         old_states = torch.squeeze(torch.stack(buffer.states, dim=0)).detach().to(self.device)
         old_actions = torch.squeeze(torch.stack(buffer.actions, dim=0)).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(buffer.logprobs, dim=0)).detach().to(self.device)
+        old_h1_in = torch.cat(list(zip(*(buffer.h_in)))[0], dim=1).detach().to(self.device)
+        old_h2_in = torch.cat(list(zip(*(buffer.h_in)))[1], dim=1).detach().to(self.device)
 
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
 
             # Evaluating old actions and values
-            logprobs, state_values, dist_entropy = self.model_main.evaluate(old_states, old_actions)
+            logprobs, state_values, dist_entropy = self.model_main.evaluate(old_states, old_actions, (old_h1_in, old_h2_in))
             
             # match state_values tensor dimensions with rewards tensor
             state_values = torch.squeeze(state_values)

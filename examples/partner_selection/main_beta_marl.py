@@ -42,14 +42,15 @@ from copy import deepcopy
 def run(cfg, **kwargs):
     # Initialize the environment and get the agents
     task_models = create_interaction_task_models(cfg)
-    partner_selection_models = create_partner_selection_models_PPO(3, 'cpu')
+    partner_selection_models = create_partner_selection_models_PPO(cfg.agent.agent.num, 'cpu')
     appearances = create_agent_appearances(cfg.agent.agent.num)
     agents: list[Agent] = create_agents(cfg, partner_selection_models)
-    
+    # print(len(agents))
+    # print(cfg.agent.agent.num)
     # generate preferences and variability
     preferences_lst = [generate_preferences(2) for _ in range(cfg.agent.agent.num)]
     variability_lst = generate_variability(cfg.agent.agent.num, cfg.agent.agent.preference_var)
-
+    # print(len(variability_lst))
     mean_variability = np.mean(variability_lst)
     
 
@@ -185,6 +186,12 @@ def run(cfg, **kwargs):
                 # calculate total reward
                 reward += agent.delay_reward
 
+                # ##TODO: debug
+                # reward = 0
+                # action = random.randint(0, 3)
+                # if action == 0:
+                #     reward = 1
+
                 # Update the agent's memory buffer
                 agent.episode_memory.states.append(torch.tensor(state))
                 agent.episode_memory.actions.append(torch.tensor(action))
@@ -252,6 +259,7 @@ def run(cfg, **kwargs):
                                 np.array(variability_lst))
             writer.add_scalars('occurence sum freq', {f'Agent_{j}': np.sum(partner_occurence_freqs[j]) for j in range(len(agents))}, 
                                epoch)
+            writer.add_scalar('avg_reward', np.mean(game_points), epoch)    
             # print(partner_occurence_freqs, sum(partner_occurence_freqs))
         
 

@@ -92,7 +92,18 @@ class ActorCritic(nn.Module):
 
 # PPO  
 class PPO:
-    def __init__(self, device, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip):
+    def __init__(
+            self, 
+            device, 
+            state_dim, 
+            action_dim, 
+            lr_actor, 
+            lr_critic, 
+            gamma, 
+            K_epochs, 
+            eps_clip,
+            entropy_coefficient
+            ):
         self.device = device 
         self.gamma = gamma
         self.eps_clip = eps_clip
@@ -108,6 +119,7 @@ class PPO:
             obs_shape=(state_dim,)
         )
         self.epsilon = 0
+        self.entropy_coefficient = entropy_coefficient
 
     def take_action(self, state):
         """Choose an action based on the observed state."""
@@ -117,7 +129,7 @@ class PPO:
 
         return action, action_logprob
 
-    def training(self, buffer, entropy_coefficient=0.01):
+    def training(self, buffer):
         """Train the model with the memories stored in the buffer."""
         # Monte Carlo estimate of returns
         rewards = []
@@ -158,7 +170,7 @@ class PPO:
             # final loss of clipped objective PPO 
             critic_loss = self.loss_fn(state_values, rewards)
             policy_loss = -torch.min(surr1, surr2) 
-            loss = policy_loss + 0.5*critic_loss - entropy_coefficient * dist_entropy
+            loss = policy_loss + 0.5*critic_loss - self.entropy_coefficient * dist_entropy
             # take gradient step
             self.optimizer.zero_grad()
             loss.mean().backward()

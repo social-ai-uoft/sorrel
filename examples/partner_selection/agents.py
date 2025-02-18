@@ -271,10 +271,10 @@ class Agent:
         Define the action dynamics of the partner selection model
         """
         if action == 2:
-            self.variability -= self.base_variability*0.02
+            self.variability -= self.base_variability*0.2 # 0.02
             self.variability = min(max(0, self.variability), 1)
         elif action == 3:
-            self.variability += self.base_variability*0.02
+            self.variability += self.base_variability*0.2
             self.variability = min(max(0, self.variability), 1)
          
 
@@ -291,7 +291,8 @@ class Agent:
 
         # Get current state
         state = env.state(self)
-        model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
+        if self.model_type != 'PPO':
+            model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
         if self.model_type == 'PPO':
             model_input = torch.from_numpy(state)
 
@@ -299,8 +300,21 @@ class Agent:
 
         # Take action based on current state
         if self.model_type == 'PPO':
-            # action, action_prob = self.model.take_action(model_input, whether_to_predict=False, steps=2)
-            action, action_prob = self.partner_choice_model.take_action(model_input)
+            if hasattr(self, 'lstm'):
+                if self.lstm:
+                    self.hidden_in = self.hidden_out
+                    # action, action_prob = self.model.take_action(model_input, whether_to_predict=False, steps=2)
+                    action, action_prob, hidden = self.partner_choice_model.take_action(model_input, self.hidden_in)
+                    self.hidden_out = hidden
+            else:
+                
+                action, action_prob = self.partner_choice_model.take_action(model_input)
+                # set the strategy
+                if cfg.hardcoded:
+                    if self.ixs != 0:
+                        action = 2
+
+            # set random actions
             if cfg.study == 3:
                 if cfg.random_selection:
                     if action in [0,1]:
@@ -309,9 +323,26 @@ class Agent:
             elif cfg.study == 2:
                 if self.ixs == 0 and cfg.random_selection:
                     action = random.randint(0,1)
+
         else:
-            action = self.partner_choice_model.take_action(model_input)
+            if hasattr(self, 'lstm'):
+                if self.lstm:
+                    self.hidden_in = self.hidden_out
+                    action, hidden = self.partner_choice_model.take_action(model_input, hidden=self.hidden_in)
+                    self.hidden_out = hidden
+            else:
+                action = self.partner_choice_model.take_action(model_input)
             action_prob = None
+
+            # set random actions
+            if cfg.study == 3:
+                if cfg.random_selection:
+                    if action in [0,1]:
+                        action = random.randint(0,1)
+                        
+            elif cfg.study == 2:
+                if self.ixs == 0 and cfg.random_selection:
+                    action = random.randint(0,1)
 
         # execute the selection model action
         self.selection_task_action(action, is_focal)
@@ -327,6 +358,12 @@ class Agent:
         # # Get the interaction rewards
         # if is_focal:
         #     reward += self.interaction_task(selected_partner, mode, 5, env)
+
+        #TODO: check
+        # if self.ixs == 1:
+        #     self.variability = 0
+        # elif self.ixs == 2:
+            # self.variability = 1
 
         if self.model_type == 'PPO':
             return state, action, selected_partner, False, action_prob, selected_partner_ixs

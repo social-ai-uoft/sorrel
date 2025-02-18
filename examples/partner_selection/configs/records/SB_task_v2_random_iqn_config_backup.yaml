@@ -113,4 +113,3 @@ random_selection: True
 hardcoded: False
 study: 2
 exp_name: 'SB_task_v2_random_iqn' # with variability in the state info 
-exp_name: 'debug_SB_task_iqn'

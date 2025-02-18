@@ -88,6 +88,7 @@ def create_interaction_task_models(cfg):
 
 def create_partner_selection_models_PPO(
         num_model, 
+        cfg,
         device='cpu'
         ):
     """Create models for agents."""
@@ -97,11 +98,15 @@ def create_partner_selection_models_PPO(
             device=device, 
             state_dim=16,
             action_dim=4,
-            lr_actor=0.0001,
-            lr_critic=0.00005,
+            # lr_actor=0.0001,
+            # lr_critic=0.00005,
+            lr_actor=0.00002,
+            lr_critic=0.00001,
             gamma=0.99,
             K_epochs=10,
-            eps_clip=0.2 
+            eps_clip=0.2,
+            # entropy_coefficient=0.01  
+            entropy_coefficient=0.005
         )
         model.name = 'PPO'
         models.append(model)
@@ -297,7 +302,7 @@ def generate_preferences(X):
 def generate_variability(X, max=0.5):
     """Generate a list of nums representing the variability of preferences."""
     values = np.random.rand(X) * max
-    values = np.array([1., 1., 1.]) * max # 1, 0, 1 # working: 1, 0.1, 1
+    values = np.array([1. for _ in range(X)]) * max # 1, 0, 1 # working: 1, 0.1, 1
     return values.tolist()
 
 

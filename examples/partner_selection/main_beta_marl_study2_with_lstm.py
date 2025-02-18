@@ -21,7 +21,7 @@ import random
 
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from agentarium.models.iqn import iRainbowModel
+from agentarium.models.PPO_lstm import RolloutBuffer, PPO
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
 from examples.partner_selection.agents import Agent
@@ -29,9 +29,8 @@ from examples.partner_selection.partner_selection_env import partner_pool
 from examples.partner_selection.env import partner_selection
 from examples.partner_selection.utils import (create_agents, create_entities, create_interaction_task_models,
                                 init_log, load_config, save_config_backup, 
-                                create_agent_appearances,
-                                generate_preferences, generate_variability, get_agents_by_ixs,
-                                create_models)
+                                create_partner_selection_models_PPO, create_agent_appearances,
+                                generate_preferences, generate_variability, get_agents_by_ixs)
 
 import numpy as np
 from copy import deepcopy
@@ -43,7 +42,7 @@ from scipy.special import softmax
 def run(cfg, **kwargs):
     # Initialize the environment and get the agents
     task_models = create_interaction_task_models(cfg)
-    partner_selection_models = create_models(cfg)
+    partner_selection_models = create_partner_selection_models_PPO(3, 'cpu')
     appearances = create_agent_appearances(cfg.agent.agent.num)
 
     agents = []
@@ -55,68 +54,41 @@ def run(cfg, **kwargs):
     agents.append(agent3)
 
     # agent model
-    agent1.partner_choice_model = iRainbowModel(
-            state_size=[1, 16],
-            extra_percept_size=0,
-            action_size=2,
-            layer_size=250,
-            num_frames=5,
-            n_step=3,
-            BATCH_SIZE=64,
-            BUFFER_SIZE=1024,
-            LR=0.00025,
-            TAU=.001,
-            GAMMA=0.99,
-            N=12,
-            sync_freq=200,
-            model_update_freq=4,
-            epsilon=0.01,
-            seed=1,
-            device='cpu',
+    agent1.partner_choice_model = PPO(
+            device='cpu', 
+            state_dim=16,
+            action_dim=2,
+            lr_actor=0.00002,
+            lr_critic=0.00001,
+            gamma=0.99,
+            K_epochs=10,
+            eps_clip=0.2 
         )
-    agent1.partner_choice_model.name = 'iqn'
+    agent1.partner_choice_model.name = 'PPO'
 
-    agent2.partner_choice_model = iRainbowModel(
-            state_size=[1, 16],
-            extra_percept_size=0,
-            action_size=4,
-            layer_size=250,
-            num_frames=5,
-            n_step=3,
-            BATCH_SIZE=64,
-            BUFFER_SIZE=1024,
-            LR=0.00025,
-            TAU=.001,
-            GAMMA=0.99,
-            N=12,
-            sync_freq=200,
-            model_update_freq=4,
-            epsilon=0.01,
-            seed=1,
-            device='cpu',
+    agent2.partner_choice_model = PPO(
+            device='cpu', 
+            state_dim=16,
+            action_dim=4,
+            lr_actor=0.00002,
+            lr_critic=0.00001,
+            gamma=0.99,
+            K_epochs=10,
+            eps_clip=0.2 
         )
-    agent2.partner_choice_model.name = 'iqn'
+    agent2.partner_choice_model.name = 'PPO'
 
-    agent3.partner_choice_model = iRainbowModel(
-            state_size=[1, 16],
-            extra_percept_size=0,
-            action_size=4,
-            layer_size=250,
-            num_frames=5,
-            n_step=3,
-            BATCH_SIZE=64,
-            BUFFER_SIZE=1024,
-            LR=0.00025,
-            TAU=.001,
-            GAMMA=0.99,
-            N=12,
-            sync_freq=200,
-            model_update_freq=4,
-            epsilon=0.01,
-            seed=1,
-            device='cpu',
+    agent3.partner_choice_model = PPO(
+            device='cpu', 
+            state_dim=16,
+            action_dim=4,
+            lr_actor=0.00002,
+            lr_critic=0.00001,
+            gamma=0.99,
+            K_epochs=10,
+            eps_clip=0.2 
         )
-    agent3.partner_choice_model.name = 'iqn'
+    agent3.partner_choice_model.name = 'PPO'
 
     # generate preferences and variability
     preferences_lst = [generate_preferences(2) for _ in range(cfg.agent.agent.num)]
@@ -127,7 +99,8 @@ def run(cfg, **kwargs):
 
     for a in agents:
         
-        a.model_type = 'iqn'
+        a.episode_memory = RolloutBuffer()
+        a.model_type = 'PPO'
         a.appearance = appearances[a.ixs]
         if a.appearance is None:
             raise ValueError('agent appearance should not be none')
@@ -148,6 +121,8 @@ def run(cfg, **kwargs):
         print(a.appearance)
         print(a.base_preferences)
         print(a.variability)
+        a.hidden_out = a.partner_choice_model.model_main.init_hidden(
+                batch_size=1)
 
     entities: list[Entity] = create_entities(cfg)
     partner_pool_env = partner_pool(agents)
@@ -166,12 +141,12 @@ def run(cfg, **kwargs):
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:
-            agent.choice_model.load(file_path=kwargs.get("load_weights"))
+            agent.model.load(file_path=kwargs.get("load_weights"))
 
 
     # initialize the dynamic sampling mechanism
     frequencies = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
-    
+
 
     for epoch in range(cfg.experiment.epochs):        
 
@@ -198,16 +173,20 @@ def run(cfg, **kwargs):
         for agent in agents:
             agent.delay_reward = 0
             agent.reward = 0
+            if cfg.var_reset:
+                agent.variability = agent.base_variability
+            if cfg.lstm_reset_on_epoch:
+                agent.hidden_out = agent.partner_choice_model.model_main.init_hidden(
+                    batch_size=1)
+            agent.lstm = cfg.model.PPO.lstm
 
         while not done:
 
             turn = turn + 1
 
             for agent in agents:
-                agent.partner_choice_model.start_epoch_action(**locals())
-
-            for agent in agents:
                 agent.reward = 0
+               
                 # if agent.ixs == 0:
                 #     print(agent.delay_reward)
 
@@ -231,7 +210,7 @@ def run(cfg, **kwargs):
                 variability_record[agent.ixs].append(agent.variability)
                 # print([a.ixs for a in partner_choices]) 
 
-                (state, action, partner, done_, partner_ixs) = agent.transition(
+                (state, action, partner, done_, action_logprob, partner_ixs) = agent.transition(
                     partner_pool_env, 
                     partner_choices, 
                     is_focal,
@@ -287,17 +266,23 @@ def run(cfg, **kwargs):
 
                 if turn >= cfg.experiment.max_turns or done_:
                     done = 1
+
                 
                 # calculate total reward
                 reward += agent.delay_reward
 
-                # #TODO: debug
-                # reward = 0 
-                # if action == 0:
-                #     reward = 1
+                # check if the model can learn
+                reward = 0
+                if action == 0:
+                    reward = 1
 
-                # update memory
-                agent.add_memory(state, action, reward, done)
+                # Update the agent's memory buffer
+                agent.episode_memory.h_in.append(agent.hidden_in)
+                agent.episode_memory.states.append(torch.tensor(state))
+                agent.episode_memory.actions.append(torch.tensor(action))
+                agent.episode_memory.logprobs.append(torch.tensor(action_logprob))
+                agent.episode_memory.rewards.append(torch.tensor(reward))
+                agent.episode_memory.is_terminals.append(torch.tensor(done))
 
                 game_points[agent.ixs] += reward
 
@@ -309,7 +294,6 @@ def run(cfg, **kwargs):
                 
                 agent.update_preference(mode='categorical')
 
-                agent.partner_choice_model.end_epoch_action(**locals())
                 
         mean_variability = np.mean([a.variability for a in agents])
 
@@ -319,8 +303,22 @@ def run(cfg, **kwargs):
             # record preferences
             agent_preferences[agent.ixs] = agent.preferences
 
-            loss = agent.partner_choice_model.train_model()
-            # losses[agent.ixs] += loss.detach().numpy()
+            # print('agent ixs', agent.ixs, agent.preferences)
+            # print(agent.preferences, agent.ixs)
+        
+
+            loss = agent.partner_choice_model.training(
+                    agent.episode_memory, 
+                    entropy_coefficient=0.01
+                    )
+            agent.episode_memory.clear()
+        
+            # update the task model
+            # print(agent.social_task_memory)
+            # loss_task = agent.task_model.train_model(agent.social_task_memory)
+            # if epoch % 1 == 0:
+            #         agent.social_task_memory = {'gt':[], 'pred':[]}
+            # losses[agent.ixs] += loss_task.detach().numpy()
 
             # Add the game variables to the game object
             game_vars.record_turn(epoch, turn, losses, game_points)
@@ -369,7 +367,7 @@ def run(cfg, **kwargs):
                     #                 )
                     agent.partner_choice_model.save(
                                     f'{cfg.root}/examples/partner_selection/models/checkpoints/'
-                                    f'{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
+                                    f'{cfg.exp_name}_agent{a_ixs}_{cfg.model.PPO.type}.pkl'
                                     )
                     torch.save(agent.task_model,
                                 f'{cfg.root}/examples/partner_selection/models/checkpoints/'
@@ -396,7 +394,7 @@ def main():
     run(
         cfg,
         # load_weights=f'{cfg.root}/examples/partner_selection/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
-        save_weights=f'{cfg.root}/examples/partner_selection/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
+        save_weights=f'{cfg.root}/examples/partner_selection/models/checkpoints/{cfg.exp_name}_{cfg.model.PPO.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
     )
 
 

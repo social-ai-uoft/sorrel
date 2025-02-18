@@ -56,37 +56,40 @@ def run(cfg, **kwargs):
     # agent model
     agent1.partner_choice_model = PPO(
             device='cpu', 
-            state_dim=16,
-            action_dim=2,
-            lr_actor=0.0001,
-            lr_critic=0.00005,
+            state_dim=17,
+            action_dim=2, # should be 2
+            lr_actor=0.00002,
+            lr_critic=0.00001,
             gamma=0.99,
             K_epochs=10,
-            eps_clip=0.2 
+            eps_clip=0.2,
+            entropy_coefficient=0.005 
         )
     agent1.partner_choice_model.name = 'PPO'
 
     agent2.partner_choice_model = PPO(
             device='cpu', 
-            state_dim=16,
+            state_dim=17,
             action_dim=4,
-            lr_actor=0.0001,
-            lr_critic=0.00005,
+            lr_actor=0.00002,
+            lr_critic=0.00001,
             gamma=0.99,
             K_epochs=10,
-            eps_clip=0.2 
+            eps_clip=0.2,
+            entropy_coefficient=0.005  
         )
     agent2.partner_choice_model.name = 'PPO'
 
     agent3.partner_choice_model = PPO(
             device='cpu', 
-            state_dim=16,
+            state_dim=17,
             action_dim=4,
-            lr_actor=0.0001,
-            lr_critic=0.00005,
+            lr_actor=0.00002,
+            lr_critic=0.00001,
             gamma=0.99,
             K_epochs=10,
-            eps_clip=0.2 
+            eps_clip=0.2,
+            entropy_coefficient=0.005  
         )
     agent3.partner_choice_model.name = 'PPO'
 
@@ -111,9 +114,13 @@ def run(cfg, **kwargs):
         if a.ixs == 1:
             a.preferences = [1.0, 0]
             a.base_preferences = [1.0, 0]
+            # a.variability = 0 ## set the val
         elif a.ixs == 2:
             a.preferences = [0, 1.0]
             a.base_preferences = [0, 1.0]
+        #     a.variability = 1 ## set the val
+        # else:
+        #     a.varibility = variability_lst[a.ixs]
 
         a.variability = variability_lst[a.ixs]
         a.base_variability = variability_lst[a.ixs]
@@ -144,7 +151,7 @@ def run(cfg, **kwargs):
 
     # initialize the dynamic sampling mechanism
     frequencies = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
-    
+
 
     for epoch in range(cfg.experiment.epochs):        
 
@@ -171,6 +178,11 @@ def run(cfg, **kwargs):
         for agent in agents:
             agent.delay_reward = 0
             agent.reward = 0
+            if cfg.var_reset:
+                agent.variability = agent.base_variability
+        
+        # reset time
+        partner_pool_env.time = 0
 
         while not done:
 
@@ -199,7 +211,7 @@ def run(cfg, **kwargs):
             for agent in agents_to_act:
                 is_focal = (0 == agent.ixs) and (agent.ixs == focal_ixs)
                 variability_record[agent.ixs].append(agent.variability)
-                # print([a.ixs for a in partner_choices])
+                # print([a.ixs for a in partner_choices]) 
 
                 (state, action, partner, done_, action_logprob, partner_ixs) = agent.transition(
                     partner_pool_env, 
@@ -212,6 +224,8 @@ def run(cfg, **kwargs):
                 if cfg.hardcoded:
                     partner = min_partner
                     partner_ixs = min_partner_ixs
+
+               
                 
                 # if not cfg.random_selection:
                 #     assert max_var_ixs != partner_ixs, f'error: {[a.variability for a in agents], max_var_ixs, partner_ixs}'
@@ -227,7 +241,7 @@ def run(cfg, **kwargs):
                         if potential_partner.ixs != focal_ixs:
                             partner_occurence_freqs[agent.ixs][potential_partner.ixs] += 1
                             presented_partner_variability[agent.ixs].append(potential_partner.variability)
-             
+            
 
                 # prepare the env for the interaction task
                 if is_focal & (int(action) <= 1):
@@ -246,14 +260,15 @@ def run(cfg, **kwargs):
                     )
 
                     loss_task = agent.task_model.train_model(agent.social_task_memory)
+                    
                     if epoch % 1 == 0:
                         agent.social_task_memory = {'gt':[], 'pred':[]}
                     losses[agent.ixs] += loss_task.detach().numpy()
                     
                     # punishment for not being selected
-                    # for a in agents:
-                    #     if (a.ixs != 0) and (a.ixs != partner_ixs):
-                    #         a.delay_reward -= 10
+                    for a in agents:
+                        if (a.ixs != 0) and (a.ixs != partner_ixs):
+                            a.delay_reward -= 10
 
                 if turn >= cfg.experiment.max_turns or done_:
                     done = 1
@@ -261,6 +276,11 @@ def run(cfg, **kwargs):
                 
                 # calculate total reward
                 reward += agent.delay_reward
+
+                # check if the model can learn
+                # reward = 0
+                # if action == 0:
+                #     reward = 1
 
                 # Update the agent's memory buffer
                 agent.episode_memory.states.append(torch.tensor(state))
@@ -290,11 +310,9 @@ def run(cfg, **kwargs):
 
             # print('agent ixs', agent.ixs, agent.preferences)
             # print(agent.preferences, agent.ixs)
-        
 
             loss = agent.partner_choice_model.training(
                     agent.episode_memory, 
-                    entropy_coefficient=0.01
                     )
             agent.episode_memory.clear()
         
@@ -307,7 +325,7 @@ def run(cfg, **kwargs):
 
             # Add the game variables to the game object
             game_vars.record_turn(epoch, turn, losses, game_points)
-
+        
         # Print the variables to the console
         game_vars.pretty_print()
 
