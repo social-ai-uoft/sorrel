@@ -193,7 +193,8 @@ def run(cfg, **kwargs):
                 )
                 writer.add_scalars(
                     f'Agent_{i}/Actions',
-                    {f'action_{k}': action_record[k] for k in range(cfg.model.iqn.parameters.action_size)}
+                    {f'action_{k}': action_record[k] for k in range(cfg.model.iqn.parameters.action_size)},
+                    epoch
                 )
             writer.add_scalar(f'state_punishment_level_avg', np.mean(state_entity.prob_record), epoch)
             writer.add_scalar(f'state_punishment_level_end', state_entity.prob, epoch)

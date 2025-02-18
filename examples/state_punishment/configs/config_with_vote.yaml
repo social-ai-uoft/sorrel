@@ -116,3 +116,4 @@ action_mode: 'simple'
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
 exp_name: "test_punishment_oneA_using_config_with_vote"
 exp_name: "test_voting_sixA_noncompositeState"
+exp_name: "test_clear_detection_3agents_simple_actions_v3"
