@@ -97,7 +97,7 @@ def run(cfg, **kwargs):
         # Container for data within epoch
         punishment_increase_record = [0 for _ in range(len(agents))]
         punishment_decrease_record = [0 for _ in range(len(agents))]
-        action_record = [0 for _ in range(cfg.model.iqn.parameters.action_size)]
+        action_record = [[0 for _ in range(cfg.model.iqn.parameters.action_size)] for _ in range(len(agents))]
 
         while not done:
 
@@ -133,7 +133,7 @@ def run(cfg, **kwargs):
                     )
                 
                 # record actions
-                action_record[action] += 1
+                action_record[agent.ixs][action] += 1
 
                 # record voting behaviors
                 if action_mode == 'simple':
@@ -196,7 +196,12 @@ def run(cfg, **kwargs):
                 )
                 writer.add_scalars(
                     f'Agent_{i}/Actions',
-                    {f'action_{k}': action_record[k] for k in range(cfg.model.iqn.parameters.action_size)}
+                    {f'action_{k}': action_record[agent.ixs][k] for k in range(cfg.model.iqn.parameters.action_size)
+                     },
+                     epoch
+                )
+                writer.add_scalar(
+                    f'Agent_{i}/sum_freq_action', np.sum(action_record[agent.ixs]), epoch
                 )
             writer.add_scalar(f'state_punishment_level_avg', np.mean(state_entity.prob_record), epoch)
             writer.add_scalar(f'state_punishment_level_end', state_entity.prob, epoch)
