@@ -219,6 +219,9 @@ class Agent:
             self.to_be_punished = {'Gem':0, 'Bone':0, 'Coin':0}
 
         # Get the delayed reward
+        # if env.cache['harm'][self.ixs] < 0:
+        #     print(self.ixs)
+        #     ll
         reward += env.cache['harm'][self.ixs]
         env.cache['harm'][self.ixs] = 0
 
@@ -275,7 +278,7 @@ class Agent:
         template = np.zeros(env_states[0].shape)
         for i in range(6-len(envs)):       
             env_states.append(template)
-        composite_state = np.concat(env_states)
+        composite_state = np.concatenate(env_states)
         return composite_state
 
     # def transition(self,

@@ -69,6 +69,11 @@ def run(cfg, **kwargs):
                         'Coin': cfg.state_sys.prob_list.Coin,
                         'Bone': cfg.state_sys.prob_list.Bone}
     
+     # check action space size
+    if cfg.action_mode == 'composite':
+        assert cfg.model.iqn.parameters.action_size == 8, ValueError('Number of actions should be 8 when the action mode is compound')
+    elif cfg.action_mode == 'simple':
+        assert cfg.model.iqn.parameters.action_size == 6, ValueError('Number of actions should be 6 when the action mode is compound')
 
     for epoch in range(cfg.experiment.epochs):
 
