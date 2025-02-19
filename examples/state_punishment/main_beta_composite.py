@@ -134,7 +134,7 @@ def run(cfg, **kwargs):
                     envs[agent.ixs], 
                     state_entity, 
                     'certain', 
-                    action_mode='simple',
+                    action_mode=cfg.action_mode,
                     state_is_composite=state_mode=='composite',
                     envs=envs
                     )

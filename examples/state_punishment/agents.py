@@ -269,7 +269,7 @@ class Agent:
         """
         env_states = []
         for env in envs:
-            env.full_mdp = True
+            env.full_mdp = False
             env_state = self.pov(env)
             env_states.append(env_state)
         template = np.zeros(env_states[0].shape)
