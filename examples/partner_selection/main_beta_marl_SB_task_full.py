@@ -71,7 +71,7 @@ def run(cfg, **kwargs):
         a.base_preferences = a.preferences
         a.trainable = True
         a.frozen = False
-        agent.action_size = 6
+        a.action_size = 6
 
         print('appearance:', a.appearance)
         print('base_preferences:', a.base_preferences)

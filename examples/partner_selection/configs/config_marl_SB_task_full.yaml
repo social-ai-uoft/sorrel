@@ -121,5 +121,5 @@ with_self_preferences: True
 with_partner_preferences: True
 with_partner_to_select_appearance: True
 study: 1
-exp_name: 'SB_task/v5_same_init_entropy_max_sanity_check_two_trainable_selection_SB_choice' # with variability in the state info [learned selection, hardcoded, random]
+exp_name: 'SB_task/full_marl_test_v1' # with variability in the state info [learned selection, hardcoded, random]
 # exp_name: 'debug_study2_v3'
