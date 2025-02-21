@@ -40,6 +40,9 @@ class Agent:
         self.base_variability = None
         self.social_task_memory = {'gt':[], 'pred':[]}
         self.delay_reward = 0
+        self.trainable = cfg.agent.agent.trainable
+        self.frozen = cfg.agent.agent.frozen
+        self.action_size = cfg.agent.agent.action_size
 
         # training-related features
         self.task_model = None  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
@@ -265,20 +268,70 @@ class Agent:
         # print(partner.ixs, partner.delay_reward)
         return reward 
     
+    def SB_task(
+            self, 
+            action, 
+            partner, 
+            ):
+        '''
+        Conduct the Stravinsky and Bach task with the selected partner.
+        '''
+        partner_action = random.choices([0, 1], partner.preferences, k=1)[0]
+        if action <= 3:
+            self_SB_choice = action % 2
+            # print('pair', self_SB_choice, partner_action)
+            if self_SB_choice == partner_action:
+                reward = 1
+                partner_reward = 1
+            else:
+                reward = 0
+                partner_reward = 0
+        else: 
+            reward = 0
+            partner_reward = 0 
+        return reward, partner_reward
 
     def selection_task_action(self, action, is_focal):
         """
         Define the action dynamics of the partner selection model
         """
-        if action == 2:
-            self.variability -= self.base_variability*0.2 # 0.02
-            self.variability = min(max(0, self.variability), 1)
-        elif action == 3:
-            self.variability += self.base_variability*0.2
-            self.variability = min(max(0, self.variability), 1)
-         
-
+        if not self.frozen:
+            if action == 2:
+                self.variability -= self.base_variability*0.2 # 0.02
+                self.variability = min(max(0, self.variability), 1)
+            elif action == 3:
+                self.variability += self.base_variability*0.2
+                self.variability = min(max(0, self.variability), 1)
     
+    def change_preferences(self, action):
+        """
+        Change the prefernces values based on the actions taken
+        """
+        if hasattr(self, 'role'):
+            if self.role == 'partner':
+                assert action in [0, 1, 2], ValueError('Action not in action space')
+                if not self.frozen:
+                    if action == 0:
+                        self.preferences[0] -= 0.1
+                        self.preferences[1] += 0.1
+                    elif action == 1:
+                        self.preferences[0] += 0.1
+                        self.preferences[1] -= 0.1
+                    for i in range(len(self.preferences)):
+                        self.preferences[i] = min(max(0, self.preferences[i]), 1)
+        else:
+            assert action in range(6), ValueError("Action not in action space")
+            if not self.frozen:
+                if action == 4:
+                        self.preferences[0] -= 0.1
+                        self.preferences[1] += 0.1
+                elif action == 5:
+                    self.preferences[0] += 0.1
+                    self.preferences[1] -= 0.1
+                for i in range(len(self.preferences)):
+                    self.preferences[i] = min(max(0, self.preferences[i]), 1)
+            
+            
     def transition(self,
                    env,
                    partner_choices,
@@ -290,7 +343,7 @@ class Agent:
         '''
 
         # Get current state
-        state = env.state(self)
+        state = env.state(self, cfg)
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
         if self.model_type == 'PPO':
@@ -314,16 +367,6 @@ class Agent:
                     if self.ixs != 0:
                         action = 2
 
-            # set random actions
-            if cfg.study == 3:
-                if cfg.random_selection:
-                    if action in [0,1]:
-                        action = random.randint(0,1)
-                        
-            elif cfg.study == 2:
-                if self.ixs == 0 and cfg.random_selection:
-                    action = random.randint(0,1)
-
         else:
             if hasattr(self, 'lstm'):
                 if self.lstm:
@@ -334,36 +377,40 @@ class Agent:
                 action = self.partner_choice_model.take_action(model_input)
             action_prob = None
 
-            # set random actions
-            if cfg.study == 3:
-                if cfg.random_selection:
-                    if action in [0,1]:
-                        action = random.randint(0,1)
-                        
-            elif cfg.study == 2:
-                if self.ixs == 0 and cfg.random_selection:
+        # set random actions
+        if cfg.study == 3:
+            if cfg.random_selection:
+                if action in [0,1]:
                     action = random.randint(0,1)
+                    
+        elif cfg.study == 2:
+            if self.ixs == 0 and cfg.random_selection:
+                action = random.randint(0,1)
+        
+        elif cfg.study == 1:
+            if self.ixs == 0 and cfg.random_selection:
+                pref_act = action % 2
+                action = 2*random.randint(0,1) + pref_act
 
         # execute the selection model action
-        self.selection_task_action(action, is_focal)
-
-        # Attempt the transition 
-        if int(action) <= 1:
-            selected_partner = partner_choices[action]
-            selected_partner_ixs = selected_partner.ixs
-           
+        if cfg.experiment.is_SB_task:
+            self.change_preferences(action)
         else:
-            selected_partner = None
-            selected_partner_ixs = None
-        # # Get the interaction rewards
-        # if is_focal:
-        #     reward += self.interaction_task(selected_partner, mode, 5, env)
+            self.selection_task_action(action, is_focal)
 
-        #TODO: check
-        # if self.ixs == 1:
-        #     self.variability = 0
-        # elif self.ixs == 2:
-            # self.variability = 1
+        # Select the partner
+        if cfg.experiment.is_SB_task:
+            # debug
+            # print([(partner.ixs, partner.preferences) for partner in partner_choices])
+            selected_partner = partner_choices[int(action//2)]
+            selected_partner_ixs = selected_partner.ixs
+        else:
+            if int(action) <= 1:
+                selected_partner = partner_choices[action]
+                selected_partner_ixs = selected_partner.ixs
+            else:
+                selected_partner = None
+                selected_partner_ixs = None
 
         if self.model_type == 'PPO':
             return state, action, selected_partner, False, action_prob, selected_partner_ixs

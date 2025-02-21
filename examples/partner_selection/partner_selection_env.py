@@ -1,6 +1,7 @@
 import numpy as np
 import random 
 from copy import deepcopy
+from scipy.stats import entropy
 
 class partner_pool:
     def __init__(self, agents):
@@ -28,7 +29,7 @@ class partner_pool:
             partner_choices = [sampled_agents[i] for i in range(len(sampled_agents)) 
                                if i != focal_agent_ixs]
         partner_ixs = [a.ixs for a in partner_choices]
-        self.partner_to_select = partner_choices
+        self.partner_to_select = deepcopy(partner_choices)
         self.focal_ixs = focal_agent.ixs
         self.partner_to_select_appearance = np.concat([partner.appearance for partner in partner_choices])
 
@@ -37,34 +38,63 @@ class partner_pool:
 
         return focal_agent, partner_choices, partner_ixs
     
-    def state(self, agent):
+    def state(self, agent, cfg):
         assert len(self.partner_to_select) == 2, 'number of partners to select larger than 2'
-        if agent.ixs == self.focal_ixs:
-            state = np.concat([self.partner_to_select_appearance, np.array([1])])
-            # add variability
-            state = np.concat([state, np.array ([agent.variability])])
-            
-            for partner in self.partner_to_select:
-                state = np.concat([state, np.array([partner.variability])])
-                state = np.concat([state, np.array(partner.appearance)])
 
+        # add stage marker
+        if agent.ixs == self.focal_ixs:
+            if cfg.with_partner_to_select_appearance:
+                state = np.concat([self.partner_to_select_appearance, np.array([1])])
+            else:
+                state = np.concat([self.partner_to_select_appearance*0, np.array([1])])
         else:
-            state = np.concat([self.partner_to_select_appearance, np.array([0])])
+            if cfg.with_partner_to_select_appearance:
+                state = np.concat([self.partner_to_select_appearance, np.array([0])])
+            else:
+                state = np.concat([self.partner_to_select_appearance*0, np.array([0])])
+        
+        if not cfg.experiment.is_SB_task:
             # add variability
-            state = np.concat([state, np.array ([agent.variability])])
-            # print('len, partner_to_select', len(self.partner_to_select))
+            if cfg.with_self_variability:
+                state = np.concat([state, np.array ([agent.variability])])
+            else:
+                state = np.concat([state, np.array([0])])
+            # add partner variability
             for partner in self.partner_to_select:
-                state = np.concat([state, np.array([partner.variability])])
-                state = np.concat([state, np.array(partner.appearance)])
+                if cfg.with_partner_variability:
+                    state = np.concat([state, np.array([partner.variability])])
+                else:
+                    state = np.concat([state, np.array([0])])
+                if cfg.with_partner_to_select_appearance:
+                    state = np.concat([state, np.array(partner.appearance)])
+                else:
+                    state = np.concat([state, np.array(partner.appearance)*0])
+        else:
+            # add preferences
+            if cfg.with_self_preferences:
+                state = np.concat([state, np.array(agent.preferences)])
+            else:
+                state = np.concat([state, np.array([0,0])])
+            # add partner preferences
+            for partner in self.partner_to_select:
+                if cfg.with_partner_preferences:
+                    state = np.concat([state, np.array(partner.preferences)])
+                else:
+                    state = np.concat([state, np.array([0,0])])
+                if cfg.with_partner_to_select_appearance:
+                    state = np.concat([state, np.array(partner.appearance)])
+                else:
+                    state = np.concat([state, np.array(partner.appearance)*0])
+
         
         # add time
         state = np.concat([state, np.array([self.time])])
-        
+      
         return state
     
     def get_max_variability_partner_ixs(self):
         """
-        Get the ixs of the partner among all options.
+        Get the ixs of the most variable partner among all options.
         """
         variability = [partner.variability for partner in self.partner_to_select]
         
@@ -78,9 +108,27 @@ class partner_pool:
         
         return agent_ixs
     
+    def get_max_entropic_partner_ixs(self):
+        """
+        Get the ixs of the most entropic partner among all options.
+        """
+        entropy_val = [entropy(partner.preferences) for partner in self.partner_to_select]
+
+        # Sort indices based on entropy values in descending order
+        sorted_ixs = sorted(range(len(entropy_val)), key=lambda x: entropy_val[x], reverse=True)
+
+        # Get sorted entropy values
+        sorted_vals = [entropy_val[j] for j in sorted_ixs]
+
+        agent_ixs = self.partner_to_select[sorted_ixs[0]].ixs
+
+        agent = self.partner_to_select[sorted_ixs[0]]
+
+        return agent, agent_ixs
+    
     def get_min_variability_partner_ixs(self):
         """
-        Get the ixs of the partner among all options.
+        Get the ixs of the least variable partner among all options.
         """
         variability = [partner.variability for partner in self.partner_to_select]
         

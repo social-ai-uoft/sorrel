@@ -62,7 +62,6 @@ agent:
     health: 10
     extra_percept_size: 1 # added for extra percept
     preference_len: 3
-    
 
 
 
@@ -116,7 +115,6 @@ var_reset: True
 social_comparison: False
 with_self_variability: False
 with_partner_variability: False
-with_partner_to_select_appearance: True
 study: 2
-exp_name: 'SB_task_v4_learned_selection_reset_var_high_0.6_no_self_var_no_partner_var_with_partner_app' # with variability in the state info [learned selection, hardcoded, random]
-# exp_name: 'debug_study2_v3'
+exp_name: 'SB_task_v3_learned_selection_reset_var_high_0.6_no_self_var_no_partner_var' # with variability in the state info [learned selection, hardcoded, random]
+# exp_name: 'debug_study2_v2'

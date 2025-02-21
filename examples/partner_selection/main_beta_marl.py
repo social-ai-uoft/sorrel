@@ -203,8 +203,11 @@ def run(cfg, **kwargs):
 
                 # clear delayed reward
                 agent.delay_reward = 0
-                 
+
+                #TODO: this update func should be called for every agent at every timestep 
                 agent.update_preference(mode='categorical')
+
+                #TODO: the action logic should be modified to allow every agent to act at every timestep
 
         mean_variability = np.mean([a.variability for a in agents])
 

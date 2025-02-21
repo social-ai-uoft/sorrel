@@ -62,7 +62,6 @@ agent:
     health: 10
     extra_percept_size: 1 # added for extra percept
     preference_len: 3
-    
 
 
 
