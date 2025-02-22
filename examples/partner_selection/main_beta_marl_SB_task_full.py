@@ -58,6 +58,14 @@ def run(cfg, **kwargs):
 
     # mean_variability = np.mean(variability_lst)
     
+    # check if the condition is random 
+    if cfg.random_selection:
+        if 'random' not in cfg.exp_name:
+            raise ValueError('random_selection is True but exp_name does not contain "random"')
+    else:
+        if 'learned' not in cfg.exp_name:
+            raise ValueError('random_selection is False but exp_name does not contain "learned"')
+    
 
     for a in agents:
         
