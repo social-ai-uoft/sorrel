@@ -76,7 +76,7 @@ def run(cfg, **kwargs):
         print('appearance:', a.appearance)
         print('base_preferences:', a.base_preferences)
         print('preferences', a.preferences)
-        # print(a.variability)
+
 
     # entities: list[Entity] = create_entities(cfg)
     partner_pool_env = partner_pool(agents)
@@ -167,7 +167,7 @@ def run(cfg, **kwargs):
 
 
             for agent in agents_to_act:
-                is_focal = (0 == agent.ixs) and (agent.ixs == focal_ixs)
+                is_focal = agent.ixs == focal_ixs
                 entropy_record[agent.ixs].append(entropy(agent.preferences))
 
                 (state, action, partner, done_, action_logprob, partner_ixs) = agent.transition(
@@ -191,10 +191,11 @@ def run(cfg, **kwargs):
                 # record the ixs of the selected partner
                 if is_focal:
                     assert agent.ixs != partner_ixs, 'select oneself'
-                    partner_selection_freqs[agent.ixs][partner_ixs] += 1
-                    selecting_more_entropic_partner[agent.ixs].append(partner_ixs==max_var_ixs)
-                    # selecting_more_variable_partner[agent.ixs].append(partner_ixs==max_var_ixs)
-                    selected_partner_entropy[agent.ixs].append(entropy(partner.preferences))
+                    if partner is not None:
+                        partner_selection_freqs[agent.ixs][partner_ixs] += 1
+                        selecting_more_entropic_partner[agent.ixs].append(partner_ixs==max_var_ixs)
+                        # selecting_more_variable_partner[agent.ixs].append(partner_ixs==max_var_ixs)
+                        selected_partner_entropy[agent.ixs].append(entropy(partner.preferences))
                     # selected_partner_variability[agent.ixs].append(partner.variability)
                 if is_focal:
                     for potential_partner in partner_choices:
@@ -206,20 +207,21 @@ def run(cfg, **kwargs):
                 reward = 0 
                 # execute the interaction task only when the agent is the focal one in this trial
                 if is_focal:
-                    # print(partner.ixs)
-                    reward, selected_parnter_reward = agent.SB_task(
-                        action,
-                        partner,
-                    )
+                    if partner is not None:
+                        # print(partner.ixs)
+                        reward, selected_parnter_reward = agent.SB_task(
+                            action,
+                            partner,
+                        )
 
-                    nonselected_partner_reward = -1 
-                    
-                    # update the delayed reward for the partners
-                    for a in partner_choices:
-                        if a.ixs != partner.ixs:
-                            a.delay_reward += nonselected_partner_reward
-                        elif a.ixs == partner.ixs:
-                            a.delay_reward += selected_parnter_reward
+                        nonselected_partner_reward = -1 
+                        
+                        # update the delayed reward for the partners
+                        for a in partner_choices:
+                            if a.ixs != partner.ixs:
+                                a.delay_reward += nonselected_partner_reward
+                            elif a.ixs == partner.ixs:
+                                a.delay_reward += selected_parnter_reward
      
 
                 if turn >= cfg.experiment.max_turns or done_:

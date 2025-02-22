@@ -389,8 +389,9 @@ class Agent:
         
         elif cfg.study == 1:
             if self.ixs == 0 and cfg.random_selection:
-                pref_act = action % 2
-                action = 2*random.randint(0,1) + pref_act
+                if action <= 3:
+                    pref_act = action % 2
+                    action = 2*random.randint(0,1) + pref_act
 
         # execute the selection model action
         if cfg.experiment.is_SB_task:
@@ -400,10 +401,12 @@ class Agent:
 
         # Select the partner
         if cfg.experiment.is_SB_task:
-            # debug
-            # print([(partner.ixs, partner.preferences) for partner in partner_choices])
-            selected_partner = partner_choices[int(action//2)]
-            selected_partner_ixs = selected_partner.ixs
+            if action <= 3: 
+                selected_partner = partner_choices[int(action//2)]
+                selected_partner_ixs = selected_partner.ixs
+            else:
+                selected_partner = None
+                selected_partner_ixs = None
         else:
             if int(action) <= 1:
                 selected_partner = partner_choices[action]
