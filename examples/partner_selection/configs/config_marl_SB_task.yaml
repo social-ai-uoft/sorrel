@@ -113,7 +113,7 @@ log: True
 # exp_name: "test_voting_sixAs_size15_init_spawn_0.2_no_respawn_extended"
 # exp_name: "test_v6_3agents_same_init_pref_0.3_var_learn"
 # exp_name: 'debug_fixed_faster_v1_10'
-random_selection: True
+random_selection: False
 hardcoded: False
 preference_reset: True 
 social_comparison: False
@@ -121,5 +121,5 @@ with_self_preferences: True
 with_partner_preferences: True
 with_partner_to_select_appearance: True
 study: 1
-exp_name: 'SB_task/v5_same_init_entropy_max_sanity_check_two_trainable_selection_SB_choice' # with variability in the state info [learned selection, hardcoded, random]
+exp_name: 'SB_task/v5_same_init_entropy_max_sanity_check_two_trainable_selection_SB_choice_learned' # with variability in the state info [learned selection, hardcoded, random]
 # exp_name: 'debug_study2_v3'
