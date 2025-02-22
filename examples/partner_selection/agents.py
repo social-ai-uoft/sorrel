@@ -386,6 +386,12 @@ class Agent:
         elif cfg.study == 2:
             if self.ixs == 0 and cfg.random_selection:
                 action = random.randint(0,1)
+
+        elif cfg.study == 1.5:
+            if cfg.random_selection:
+                if action <= 3:
+                    pref_act = action % 2
+                    action = 2*random.randint(0,1) + pref_act
         
         elif cfg.study == 1:
             if self.ixs == 0 and cfg.random_selection:

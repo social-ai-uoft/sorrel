@@ -252,6 +252,12 @@ def save_config_backup(config_file_path, backup_dir):
     backup_file_name = f"{exp_name}_config_backup.yaml"
     backup_file_path = os.path.join(backup_dir, backup_file_name)
 
+    # Create the destination directory if it doesn't exist
+    destination_dir = os.path.dirname(backup_file_path)  # Extracts the directory part of the destination path
+    if not os.path.exists(destination_dir):
+        os.makedirs(destination_dir)
+        
+
     # Copy the config file to the backup location
     try:
         shutil.copy(config_file_path, backup_file_path)
