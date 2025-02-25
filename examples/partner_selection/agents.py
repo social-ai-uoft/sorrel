@@ -157,7 +157,7 @@ class Agent:
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=False)).view(1, -1)
         else:
-            model_input = torch.from_numpy(state)
+            model_input = torch.from_numpy(state).double()
             
         reward = 0
 
@@ -281,15 +281,19 @@ class Agent:
             self_SB_choice = action % 2
             # print('pair', self_SB_choice, partner_action)
             if self_SB_choice == partner_action:
-                reward = 1
-                partner_reward = 1
+                r = 1 * (self.preferences[self_SB_choice] > 0) 
+                reward = r
+                partner_reward = r
             else:
                 reward = 0
                 partner_reward = 0
         else: 
             reward = 0
             partner_reward = 0 
-        return reward, partner_reward
+        # reward = self.preferences[self_SB_choice] > 0
+        # print(self.ixs, reward, self_SB_choice, self.preferences)
+        # partner_reward = -1
+        return reward, partner_reward, self.preferences[self_SB_choice] > 0, self_SB_choice == partner_action
 
     def selection_task_action(self, action, is_focal):
         """
@@ -298,38 +302,39 @@ class Agent:
         if not self.frozen:
             if action == 2:
                 self.variability -= self.base_variability*0.2 # 0.02
-                self.variability = min(max(0, self.variability), 1)
+                self.variability = min(max(0., self.variability), 1.)
             elif action == 3:
                 self.variability += self.base_variability*0.2
-                self.variability = min(max(0, self.variability), 1)
+                self.variability = min(max(0., self.variability), 1.)
     
     def change_preferences(self, action):
         """
         Change the prefernces values based on the actions taken
         """
+        val = 0.01
         if hasattr(self, 'role'):
             if self.role == 'partner':
                 assert action in [0, 1, 2], ValueError('Action not in action space')
                 if not self.frozen:
                     if action == 0:
-                        self.preferences[0] -= 0.1
-                        self.preferences[1] += 0.1
+                        self.preferences[0] -= val
+                        self.preferences[1] += val
                     elif action == 1:
-                        self.preferences[0] += 0.1
-                        self.preferences[1] -= 0.1
+                        self.preferences[0] += val
+                        self.preferences[1] -= val
                     for i in range(len(self.preferences)):
-                        self.preferences[i] = min(max(0, self.preferences[i]), 1)
+                        self.preferences[i] = min(max(0., self.preferences[i]), 1.)
         else:
             assert action in range(6), ValueError("Action not in action space")
             if not self.frozen:
                 if action == 4:
-                        self.preferences[0] -= 0.1
-                        self.preferences[1] += 0.1
+                        self.preferences[0] -= val
+                        self.preferences[1] += val
                 elif action == 5:
-                    self.preferences[0] += 0.1
-                    self.preferences[1] -= 0.1
+                    self.preferences[0] += val
+                    self.preferences[1] -= val
                 for i in range(len(self.preferences)):
-                    self.preferences[i] = min(max(0, self.preferences[i]), 1)
+                    self.preferences[i] = min(max(0., self.preferences[i]), 1.)
             
             
     def transition(self,
@@ -347,7 +352,7 @@ class Agent:
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
         if self.model_type == 'PPO':
-            model_input = torch.from_numpy(state)
+            model_input = torch.from_numpy(state).double()
 
         reward = 0
 

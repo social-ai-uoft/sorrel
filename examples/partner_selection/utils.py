@@ -96,12 +96,12 @@ def create_partner_selection_models_PPO(
     for _ in range(num_model):
         model = PPO(
             device=device, 
-            state_dim=32,
-            action_dim=6,
+            state_dim=28,
+            action_dim=3,
             # lr_actor=0.0001,
             # lr_critic=0.00005,
-            lr_actor=0.00002,
-            lr_critic=0.00001,
+            lr_actor=0.0001,
+            lr_critic=0.00005,
             gamma=0.99,
             K_epochs=10,
             eps_clip=0.2,
@@ -294,7 +294,7 @@ def create_agent_appearances(num_agents):
     Args:
     num_agents - number of agents
     """
-    appearances = 255. * np.eye(num_agents)
+    appearances = 1. * np.eye(num_agents)
     return appearances
 
 

@@ -10,29 +10,37 @@ class partner_pool:
         self.pool = agents
         self.time = 0
     
-    def agents_sampling(self, focal_agent=None):
+    def agents_sampling(self, focal_agent=None, default=True):
         """
         Sample two agents as potential partner choices and one agent as the focal agent.
         """
-        # sample all needed agents
-        if focal_agent:
-            focal_agent_ixs = focal_agent.ixs
-            qualified_pool = [agent for agent in self.pool if agent.ixs != focal_agent_ixs]
-            sampled_agents = random.sample(qualified_pool, 2)
-            partner_choices = sampled_agents
-        else:
-            sampled_agents = random.sample(self.pool, 3)
-            sampled_agents_indices = [agent.ixs for agent in sampled_agents]
-            # pick the focal agent
-            focal_agent_ixs = random.sample([i for i in range(len(sampled_agents_indices))], 1)[0]
-            focal_agent = sampled_agents[focal_agent_ixs]
-            partner_choices = [sampled_agents[i] for i in range(len(sampled_agents)) 
-                               if i != focal_agent_ixs]
-        partner_ixs = [a.ixs for a in partner_choices]
-        self.partner_to_select = deepcopy(partner_choices)
-        self.focal_ixs = focal_agent.ixs
-        self.partner_to_select_appearance = np.concat([partner.appearance for partner in partner_choices])
-
+        if not default:
+            # sample all needed agents
+            if focal_agent:
+                focal_agent_ixs = focal_agent.ixs
+                qualified_pool = [agent for agent in self.pool if agent.ixs != focal_agent_ixs]
+                sampled_agents = random.sample(qualified_pool, 2)
+                partner_choices = sampled_agents
+            else:
+                sampled_agents = random.sample(self.pool, 3)
+                sampled_agents_indices = [agent.ixs for agent in sampled_agents]
+                # pick the focal agent
+                focal_agent_ixs = random.sample([i for i in range(len(sampled_agents_indices))], 1)[0]
+                focal_agent = sampled_agents[focal_agent_ixs]
+                partner_choices = [sampled_agents[i] for i in range(len(sampled_agents)) 
+                                if i != focal_agent_ixs]
+            partner_ixs = [a.ixs for a in partner_choices]
+            self.partner_to_select = deepcopy(partner_choices)
+            self.focal_ixs = focal_agent.ixs
+            self.partner_to_select_appearance = np.concat([partner.appearance for partner in partner_choices])
+        # else:
+        #     focal_agent = [a for a in self.pool if a.ixs == 0][0]
+        #     qualified_pool = [a for a in self.pool if a.ixs != 0]
+        #     sampled_agents = random.sample(qualified_pool, 2)
+        #     partner_ixs = [a.ixs for a in partner_choices]
+        #     self.focal_ixs = 0 
+        #     self.partner_to_select = deepcopy(partner_choices)
+        #     self.partner_to_select_appearance = np.concat([partner.appearance for partner in partner_choices])
         # update time
         self.time += 1
 
@@ -75,6 +83,7 @@ class partner_pool:
                 state = np.concat([state, np.array(agent.preferences)])
             else:
                 state = np.concat([state, np.array([0,0])])
+
             # add partner preferences
             for partner in self.partner_to_select:
                 if cfg.with_partner_preferences:
@@ -86,10 +95,10 @@ class partner_pool:
                 else:
                     state = np.concat([state, np.array(partner.appearance)*0])
 
-        
+
         # add time
         state = np.concat([state, np.array([self.time])])
-      
+
         return state
     
     def get_max_variability_partner_ixs(self):
