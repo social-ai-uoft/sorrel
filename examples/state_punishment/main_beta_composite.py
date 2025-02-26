@@ -144,6 +144,10 @@ def run(cfg, **kwargs):
                     state_is_composite=state_mode=='composite',
                     envs=envs
                     )
+                
+                # record actions
+                action_record[agent.ixs][action] += 1
+                
                 # composite_state = agent.generate_composite_state(envs)
                 # record voting behaviors
                 if action == 4:
