@@ -311,7 +311,7 @@ class Agent:
         """
         Change the prefernces values based on the actions taken
         """
-        val = 0.01
+        val = 0.05
         if hasattr(self, 'role'):
             if self.role == 'partner':
                 assert action in [0, 1, 2], ValueError('Action not in action space')
@@ -324,6 +324,7 @@ class Agent:
                         self.preferences[1] -= val
                     for i in range(len(self.preferences)):
                         self.preferences[i] = min(max(0., self.preferences[i]), 1.)
+              
         else:
             assert action in range(6), ValueError("Action not in action space")
             if not self.frozen:

@@ -208,7 +208,7 @@ def run(cfg, **kwargs):
         if a.appearance is None:
             raise ValueError('agent appearance should not be none')
         # a.preferences = preferences_lst[a.ixs]
-        a.base_preferences = a.preferences
+        a.base_preferences = deepcopy(a.preferences)
 
         print(a.appearance)
         print(a.base_preferences)
@@ -262,6 +262,9 @@ def run(cfg, **kwargs):
         agent_preferences = [0 for _ in range(len(agents))]
         action_record = {a.ixs:[0 for _ in range(a.action_size)] for a in agents}
         dominant_pref = [0 for _ in range(len(agents))]
+        preferences_track = [[] for _ in range(len(agents))]
+        avg_val_bach = [[] for _ in range(len(agents))]
+        avg_val_stravinsky = [[] for _ in range(len(agents))]
         same_choices_lst = 0
         choice_matches_preference_lst = 0 
         # Container for data within epoch
@@ -272,7 +275,7 @@ def run(cfg, **kwargs):
             agent.delay_reward = 0
             agent.reward = 0
             if cfg.preference_reset:
-                agent.preferences = agent.base_preferences
+                agent.preferences = deepcopy(agent.base_preferences)
         
         # reset time
         partner_pool_env.time = 0
@@ -283,6 +286,9 @@ def run(cfg, **kwargs):
             for agent in agents:
                 agent.reward = 0
                 dominant_pref[agent.ixs] += agent.preferences.index(max(agent.preferences))
+                preferences_track[agent.ixs].append(agent.preferences)
+                avg_val_bach[agent.ixs].append(agent.preferences[0])
+                avg_val_stravinsky[agent.ixs].append(agent.preferences[1])
                 # if agent.ixs == 0:
                 #     print(agent.delay_reward)
 
@@ -429,7 +435,7 @@ def run(cfg, **kwargs):
 
             # training
             if agent.trainable:
-                if len(agent.episode_memory.states) > 0:
+                if len(agent.episode_memory.states) > 1:
                     loss = agent.partner_choice_model.training(
                             agent.episode_memory, 
                             )
@@ -437,11 +443,13 @@ def run(cfg, **kwargs):
         
             # Add the game variables to the game object
             game_vars.record_turn(epoch, turn, losses, game_points)
-        
+
+        # print(preferences_track)
+        # ll
         # Print the variables to the console
         game_vars.pretty_print()
         
-
+        
         # Add scalars to Tensorboard (multiple agents)
         if cfg.log:
             # Iterate through all agents
@@ -470,6 +478,8 @@ def run(cfg, **kwargs):
                 writer.add_scalars(f'Agent_{i}/action_freq',
                                 {f'action_{j}': np.array(action_record[i][j]) for j in range(agent.action_size)},
                                 epoch)
+                writer.add_scalar(f'Agent_{i}/bach_preference', np.mean(avg_val_bach[i]), epoch)
+                writer.add_scalar(f'Agent_{i}/stravinsky_preference', np.mean(avg_val_stravinsky[i]), epoch)
             writer.add_scalar(f'population_mean_entropy', mean_entropy, epoch)
             # writer.add_scalar(f'population_mean_variability', mean_variability, epoch)
             # writer.add_histogram("population_variability", 
