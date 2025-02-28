@@ -294,7 +294,7 @@ def create_agent_appearances(num_agents):
     Args:
     num_agents - number of agents
     """
-    appearances = 255. * np.eye(num_agents)
+    appearances = 1. * np.eye(num_agents)
     return appearances
 
 

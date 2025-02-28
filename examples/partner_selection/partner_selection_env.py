@@ -31,7 +31,7 @@ class partner_pool:
         partner_ixs = [a.ixs for a in partner_choices]
         self.partner_to_select = deepcopy(partner_choices)
         self.focal_ixs = focal_agent.ixs
-        self.partner_to_select_appearance = np.concat([partner.appearance for partner in partner_choices])
+        self.partner_to_select_appearance = np.concatenate([partner.appearance for partner in partner_choices])
 
         # update time
         self.time += 1
@@ -44,51 +44,51 @@ class partner_pool:
         # add stage marker
         if agent.ixs == self.focal_ixs:
             if cfg.with_partner_to_select_appearance:
-                state = np.concat([self.partner_to_select_appearance, np.array([1])])
+                state = np.concatenate([self.partner_to_select_appearance, np.array([1])])
             else:
-                state = np.concat([self.partner_to_select_appearance*0, np.array([1])])
+                state = np.concatenate([self.partner_to_select_appearance*0, np.array([1])])
         else:
             if cfg.with_partner_to_select_appearance:
-                state = np.concat([self.partner_to_select_appearance, np.array([0])])
+                state = np.concatenate([self.partner_to_select_appearance, np.array([0])])
             else:
-                state = np.concat([self.partner_to_select_appearance*0, np.array([0])])
+                state = np.concatenate([self.partner_to_select_appearance*0, np.array([0])])
         
         if not cfg.experiment.is_SB_task:
             # add variability
             if cfg.with_self_variability:
-                state = np.concat([state, np.array ([agent.variability])])
+                state = np.concatenate([state, np.array ([agent.variability])])
             else:
-                state = np.concat([state, np.array([0])])
+                state = np.concatenate([state, np.array([0])])
             # add partner variability
             for partner in self.partner_to_select:
                 if cfg.with_partner_variability:
-                    state = np.concat([state, np.array([partner.variability])])
+                    state = np.concatenate([state, np.array([partner.variability])])
                 else:
-                    state = np.concat([state, np.array([0])])
+                    state = np.concatenate([state, np.array([0])])
                 if cfg.with_partner_to_select_appearance:
-                    state = np.concat([state, np.array(partner.appearance)])
+                    state = np.concatenate([state, np.array(partner.appearance)])
                 else:
-                    state = np.concat([state, np.array(partner.appearance)*0])
+                    state = np.concatenate([state, np.array(partner.appearance)*0])
         else:
             # add preferences
             if cfg.with_self_preferences:
-                state = np.concat([state, np.array(agent.preferences)])
+                state = np.concatenate([state, np.array(agent.preferences)])
             else:
-                state = np.concat([state, np.array([0,0])])
+                state = np.concatenate([state, np.array([0,0])])
             # add partner preferences
             for partner in self.partner_to_select:
                 if cfg.with_partner_preferences:
-                    state = np.concat([state, np.array(partner.preferences)])
+                    state = np.concatenate([state, np.array(partner.preferences)])
                 else:
-                    state = np.concat([state, np.array([0,0])])
+                    state = np.concatenate([state, np.array([0,0])])
                 if cfg.with_partner_to_select_appearance:
-                    state = np.concat([state, np.array(partner.appearance)])
+                    state = np.concatenate([state, np.array(partner.appearance)])
                 else:
-                    state = np.concat([state, np.array(partner.appearance)*0])
+                    state = np.concatenate([state, np.array(partner.appearance)*0])
 
         
         # add time
-        state = np.concat([state, np.array([self.time])])
+        state = np.concatenate([state, np.array([self.time])])
       
         return state
     

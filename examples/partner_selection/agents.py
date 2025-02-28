@@ -281,6 +281,7 @@ class Agent:
             self_SB_choice = action % 2
             # print('pair', self_SB_choice, partner_action)
             if self_SB_choice == partner_action:
+                r = self.preferences[self_SB_choice] > 0.1
                 reward = 1
                 partner_reward = 1
             else:
@@ -307,27 +308,28 @@ class Agent:
         """
         Change the prefernces values based on the actions taken
         """
+        v = 0.02
         if hasattr(self, 'role'):
             if self.role == 'partner':
                 assert action in [0, 1, 2], ValueError('Action not in action space')
                 if not self.frozen:
                     if action == 0:
-                        self.preferences[0] -= 0.1
-                        self.preferences[1] += 0.1
+                        self.preferences[0] -= v
+                        self.preferences[1] += v
                     elif action == 1:
-                        self.preferences[0] += 0.1
-                        self.preferences[1] -= 0.1
+                        self.preferences[0] += v
+                        self.preferences[1] -= v
                     for i in range(len(self.preferences)):
                         self.preferences[i] = min(max(0, self.preferences[i]), 1)
         else:
             assert action in range(6), ValueError("Action not in action space")
             if not self.frozen:
                 if action == 4:
-                        self.preferences[0] -= 0.1
-                        self.preferences[1] += 0.1
+                        self.preferences[0] -= v
+                        self.preferences[1] += v
                 elif action == 5:
-                    self.preferences[0] += 0.1
-                    self.preferences[1] -= 0.1
+                    self.preferences[0] += v
+                    self.preferences[1] -= v
                 for i in range(len(self.preferences)):
                     self.preferences[i] = min(max(0, self.preferences[i]), 1)
             
