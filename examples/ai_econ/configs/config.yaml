@@ -1,0 +1,68 @@
+experiment:
+  seller_epsilon_decay: 0.0001
+  epochs: 1000
+  max_turns: 100
+  record_period: 50 # how many epochs in each data recording period
+
+env:
+  height: 51
+  width: 51
+  resource_renew_chance: 0.001
+  resource_renew_amount: 1
+
+model:
+  seller:
+    iqn:
+      type: iRainbowModel
+      parameters:
+        action_space: 5
+        num_frames: 5
+        layer_size: 250
+        n_step: 3
+        BATCH_SIZE: 64
+        memory_size: 1024
+        LR: 0.00025
+        TAU: .001
+        GAMMA: 0.99
+        N: 12
+        sync_freq: 200
+        model_update_freq: 4
+        epsilon: 0.8
+        device: cpu
+  buyer:
+    iqn:
+      type: iRainbowModel
+      parameters:
+        action_space: 5
+        num_frames: 5
+        layer_size: 250
+        n_step: 3
+        BATCH_SIZE: 64
+        memory_size: 1024
+        LR: 0.00025
+        TAU: .001
+        GAMMA: 0.99
+        N: 12
+        sync_freq: 200
+        model_update_freq: 4
+        epsilon: 0.8
+        device: cpu
+
+
+agent:
+  seller:
+    model: iqn
+    num: 10 # population size for ONE group i.e. total num of sellers would be double this
+    majority_percentage: 0.8
+    skilled_success_rate: 0.9
+    unskilled_success_rate: 0.25
+    sell_reward: 1
+    obs:
+      entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer"]
+      vision_radius: 10
+  buyer:
+    model: iqn
+    num: 1
+    buy_reward: 1
+    obs:
+      entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer"]
