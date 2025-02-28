@@ -11,7 +11,7 @@ env:
   layers: 1
   channels: 9
   default_object: EmptyObject
-  full_mdp: False # Whether to return the full agent 
+  full_mdp: False # Whether to return the full agent # the result is not normal when True
   tile_size: [16, 16] # Default sprite size for visualization (not used as model input yet) [16, 16]
   prob:
     item_spawn: 0.2 # 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
@@ -25,7 +25,7 @@ state_sys:
     Coin: 1.0
     Bone: 0.
   init_prob: 0.
-  magnitude: 20  # 40 # positive - punishment, negative - reward 
+  magnitude: 20  # 20 # positive - punishment, negative - reward 
   taboo: ['Coin']
   change_per_vote: 0.25
 
@@ -35,10 +35,10 @@ model:
     num: 3
     device: cpu
     parameters:
-      state_size: [9, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      state_size: [6, 9, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
       extra_percept_size: 2 # added for extra percept
       action_size: 8
-      layer_size: 250
+      layer_size: 250 # 250
       num_frames: 5
       n_step: 3
       BATCH_SIZE: 64
@@ -59,9 +59,6 @@ agent:
     vision: 3
     # appearance: (0.0, 0.0, 255.0)
     appearance: 
-      # - [0.0, 0.0, 255.0, 255.0, 0., 0.]
-      # - [0.0, 0.0, 255.0, 0.0, 255., 0.]
-      # - [0.0, 0.0, 255.0, 0.0, 0., 255.]
       - [0.0, 0.0, 255.0, 255.0, 0., 0.0, 0.0, 0.0, 0.0, ]
       - [0.0, 0.0, 255.0, 0., 255., 0.0, 0.0, 0.0, 0.0, ]
       - [0.0, 0.0, 255.0, 0.0, 0.0, 255., 0., 0.0, 0.0,]
@@ -84,7 +81,7 @@ entity:
     social_harm: 0
   Coin:
     start_num: 1
-    value: 10 # 2
+    value: 10 # 2 #10
     appearance: (255.0, 0.0, 0.0) # Yellow
     social_harm: 40 # 5
   # Food:
@@ -112,8 +109,9 @@ replay:
 # Root folder for accessing file structure and modules
 root: '/Users/socialai/Documents/state_punishment/agentarium'
 log: True
+state_mode: 'composite'
 action_mode: 'composite'
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
-exp_name: "test_punishment_oneA_using_config_with_vote"
-exp_name: "test_voting_sixA_noncompositeState"
-exp_name: "test_voting_single_view_composite_actions_3agents_v0_resume"
+exp_name: 'test_punishment_noncomposite_oneA_po' #"test_composite_input_fixed_punishment_1.0_clear_detection_v0_oneA_instant_only_coin_hs500"
+exp_name: 'test_voting_stacked_views_composite_actions_3agents_v0_resume' 
+# stacked_views,single_view
