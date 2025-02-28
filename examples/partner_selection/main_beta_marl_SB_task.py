@@ -481,7 +481,6 @@ def run(cfg, **kwargs):
                 writer.add_scalar(f'Agent_{i}/bach_preference', np.mean(avg_val_bach[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/stravinsky_preference', np.mean(avg_val_stravinsky[i]), epoch)
             writer.add_scalar(f'population_mean_entropy', mean_entropy, epoch)
-            # writer.add_scalar(f'population_mean_variability', mean_variability, epoch)
             # writer.add_histogram("population_variability", 
             #                     np.array(variability_lst))
             writer.add_scalars('occurence_sum_freq', {f'Agent_{j}': np.sum(partner_occurence_freqs[j]) for j in range(len(agents))}, 
