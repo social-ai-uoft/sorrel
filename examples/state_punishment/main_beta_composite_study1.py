@@ -178,6 +178,10 @@ def run(cfg, **kwargs):
             # Add the game variables to the game object
             game_vars.record_turn(epoch, turn, losses, game_points)
 
+            # debug
+            # if agent.encounters['Agent'] >  0:
+            print(agent.encounters)
+
         # Print the variables to the console
         game_vars.pretty_print()
 

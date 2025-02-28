@@ -368,7 +368,8 @@ class Agent:
             'Coin': 0,
             'Food': 0,
             'Bone': 0,
-            'Wall': 0
+            'Wall': 0,
+            'Agent': 0,
         }
     
     def reset_record(self) -> None:
