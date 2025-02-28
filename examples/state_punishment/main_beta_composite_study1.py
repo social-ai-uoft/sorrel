@@ -148,6 +148,10 @@ def run(cfg, **kwargs):
                     envs=envs
                     )
                 
+                # random condition baseline
+                if cfg.random:
+                    action = random.randint(0, cfg.model.iqn.parameters.action_size-1)
+                    
                 # record actions
                 action_record[agent.ixs][action] += 1
 
