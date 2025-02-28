@@ -4,7 +4,6 @@ import numpy as np
 
 from agentarium.agents import Agent
 from agentarium.environments import GridworldEnv
-from agentarium.observation import observation
 
 
 class TreasurehuntAgent(Agent):
@@ -12,13 +11,11 @@ class TreasurehuntAgent(Agent):
     A treasurehunt agent that uses the iqn model.
     """
 
-    def __init__(self, observation_spec: observation.ObservationSpec, model):
+    def __init__(self, observation_spec, model):
         action_space = [0, 1, 2, 3]  # the agent can move up, down, left, or right
         super().__init__(observation_spec, model, action_space)
 
-        self.sprite = (
-            "./assets/hero.png"
-        )
+        self.sprite = "./assets/hero.png"
 
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""

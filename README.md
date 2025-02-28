@@ -134,6 +134,7 @@ TODO: Insert paper citation here
 ## Maintainers
 
 TODO: update the list of people here
+Agentarium is currently maintained by Yibing Ju (aka [@bing-j](https://github.com/galacticglum)), [Rebekah Gelpi](http://individual.utoronto.ca/rgelpi/) (aka [@rgelpi](https://github.com/galacticglum)), and [Wil Cunningham](https://www.psych.utoronto.ca/people/directories/all-faculty/william-cunningham) (aka [@wacunn](https://github.com/wacunn)).
 
 Agentarium is currently maintained by [Shon Verch](https://github.com/galacticglum) (aka @galacticglum), [Wil Cunningham](https://www.psych.utoronto.ca/people/directories/all-faculty/william-cunningham) (aka [@wacunn](https://github.com/wacunn)), [Paul Stillman](https://www.paulstillman.com/) (aka [@paulstillman](https://github.com/paulstillman)), and [Ethan Jackson](https://github.com/ethancjackson) (aka @ethancjackson).
 

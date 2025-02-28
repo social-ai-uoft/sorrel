@@ -1,10 +1,10 @@
 import numpy as np
 
-from agentarium.location import Location, Vector
 from agentarium.agents import Agent
 from agentarium.entities import Entity
 from agentarium.environments import GridworldEnv
-from agentarium.observation import observation, embedding
+from agentarium.location import Location, Vector
+from agentarium.observation import embedding, observation_spec
 from examples.cleanup.entities import EmptyEntity
 
 # --------------------------- #
@@ -14,30 +14,26 @@ from examples.cleanup.entities import EmptyEntity
 """The agent for treasurehunt, a simple example for the purpose of a tutorial."""
 
 
-class CleanupObservation(observation.ObservationSpec):
+class CleanupObservation(observation_spec.ObservationSpec):
     """Custom observation function for the Cleanup agent class."""
+
     def __init__(
         self,
         entity_list: list[str],
         vision_radius: int | None = None,
-        embedding_size: int = 3
+        embedding_size: int = 3,
     ):
-        
+
         super().__init__(entity_list, vision_radius)
         self.embedding_size = embedding_size
 
-    def observe(
-        self,
-        env: GridworldEnv,
-        location: tuple | Location | None = None
-    ):
-        
+    def observe(self, env: GridworldEnv, location: tuple | Location | None = None):
+
         visual_field = super().observe(env, location).flatten()
         pos_code = embedding.positional_embedding(
-            location, env, 
-            self.embedding_size, 
-            self.embedding_size)
-        
+            location, env, self.embedding_size, self.embedding_size
+        )
+
         return np.concatenate((visual_field, pos_code))
 
 
@@ -50,10 +46,8 @@ class CleanupAgent(Agent):
         action_space = [0, 1, 2, 3]  # the agent can move up, down, left, or right
         super().__init__(observation_spec, model, action_space)
 
-        self.direction = 2 # 90 degree rotation: default at 180 degrees (facing down)
-        self.sprite = (
-            "./assets/hero.png"
-        )
+        self.direction = 2  # 90 degree rotation: default at 180 degrees (facing down)
+        self.sprite = "./assets/hero.png"
 
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
@@ -64,13 +58,11 @@ class CleanupAgent(Agent):
         for i in range(self.model.num_frames):
             self.add_memory(state, action, reward, done)
 
-
     def pov(self, env: GridworldEnv) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field + positional code."""
         image = self.observation_spec.observe(env, self.location)
         # flatten the image to get the state
         return image.reshape(1, -1)
-
 
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
@@ -82,7 +74,6 @@ class CleanupAgent(Agent):
         model_input = stacked_states.reshape(1, -1)
         action = self.model.take_action(model_input)
         return action
-    
 
     def spawn_beam(self, env: GridworldEnv, action: int):
         """Generate a beam extending cfg.agent.agent.beam_radius pixels
@@ -126,9 +117,7 @@ class CleanupAgent(Agent):
         for loc in placeable_locs:
             if action == 4:
                 env.remove(loc.to_tuple())
-                env.add(
-                    loc.to_tuple(), CleanBeam()
-                )
+                env.add(loc.to_tuple(), CleanBeam())
             elif action == 5:
                 env.remove(loc.to_tuple())
                 env.add(loc.to_tuple(), ZapBeam())
@@ -140,19 +129,19 @@ class CleanupAgent(Agent):
         new_location = self.location
         if action == 0:  # UP
             self.direction = 0
-            self.sprite = './assets/hero-back.png'
+            self.sprite = "./assets/hero-back.png"
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
         if action == 1:  # DOWN
             self.direction = 2
-            self.sprite = './assets/hero.png'
+            self.sprite = "./assets/hero.png"
             new_location = (self.location[0] + 1, self.location[1], self.location[2])
         if action == 2:  # LEFT
             self.direction = 3
-            self.sprite = './assets/hero-left.png'
+            self.sprite = "./assets/hero-left.png"
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
         if action == 3:  # RIGHT
             self.direction = 1
-            self.sprite = './assets/hero-right.png'
+            self.sprite = "./assets/hero-right.png"
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
 
         # Attempt to spawn beam
@@ -189,7 +178,6 @@ class Beam(Entity):
         super().__init__()
         self.sprite = f"./assets/beam.png"
         self.turn_counter = 0
-
 
     def transition(self, env: GridworldEnv):
         # Beams persist for one full turn, then disappear.

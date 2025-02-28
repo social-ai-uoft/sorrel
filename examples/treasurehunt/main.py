@@ -3,7 +3,7 @@ import torch
 
 # agentarium imports
 from agentarium.models.pytorch import PyTorchIQN
-from agentarium.observation.observation import ObservationSpec
+from agentarium.observation.observation_spec import OneHotObservationSpec
 from agentarium.utils.visualization import (animate, image_from_array,
                                             visual_field_sprite)
 # imports from our example
@@ -14,7 +14,7 @@ from examples.treasurehunt.env import Treasurehunt
 EPOCHS = 500
 MAX_TURNS = 100
 EPSILON_DECAY = 0.0001
-ENTITY_LIST = ["EmptyEntity", "Wall",  "Sand", "Gem", "TreasurehuntAgent"]
+ENTITY_LIST = ["EmptyEntity", "Wall", "Sand", "Gem", "TreasurehuntAgent"]
 RECORD_PERIOD = 50  # how many epochs in each data recording period
 
 
@@ -31,11 +31,17 @@ def setup() -> Treasurehunt:
     agent_num = 2
     agents = []
     for _ in range(agent_num):
-        observation_spec = ObservationSpec(ENTITY_LIST, vision_radius=agent_vision_radius)
+        observation_spec = OneHotObservationSpec(
+            ENTITY_LIST, vision_radius=agent_vision_radius
+        )
 
         model = PyTorchIQN(
             # the agent can see r blocks on each side, so the size of the observation is (2r+1) * (2r+1)
-            input_size=(len(ENTITY_LIST), 2 * agent_vision_radius + 1, 2 * agent_vision_radius + 1),
+            input_size=(
+                len(ENTITY_LIST),
+                2 * agent_vision_radius + 1,
+                2 * agent_vision_radius + 1,
+            ),
             action_space=4,
             layer_size=250,
             epsilon=0.7,
@@ -56,7 +62,9 @@ def setup() -> Treasurehunt:
         agents.append(TreasurehuntAgent(observation_spec, model))
 
     # make the environment
-    env = Treasurehunt(world_height, world_width, gem_value, spawn_prob, MAX_TURNS, agents)
+    env = Treasurehunt(
+        world_height, world_width, gem_value, spawn_prob, MAX_TURNS, agents
+    )
     return env
 
 

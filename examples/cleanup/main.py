@@ -1,35 +1,44 @@
 # ------------------------ #
 # region: Imports          #
 # general imports
+import os
+import sys
+from datetime import datetime
+
 import torch
 
+from agentarium.config import Cfg, load_config
+from agentarium.entities import Entity
 # agentarium imports
 from agentarium.models.pytorch import PyTorchIQN
-from agentarium.observation.observation import ObservationSpec
+from agentarium.observation.observation_spec import ObservationSpec
 from agentarium.utils.visualization import (animate, image_from_array,
                                             visual_field_sprite)
-
-import sys
-import os
-from datetime import datetime
-from agentarium.entities import Entity
-from agentarium.config import load_config, Cfg
-from agentarium.models.pytorch import PyTorchIQN
-
-from examples.cleanup.env import Cleanup
 from examples.cleanup.agents import CleanupAgent, CleanupObservation
+from examples.cleanup.env import Cleanup
 
 # endregion                #
 # ------------------------ #
 
 # Experiment parameters
-ENTITY_LIST = ["EmptyEntity", "Wall", "River", "Pollution", "AppleTree", "Apple", "CleanBeam", "ZapBeam", "CleanupAgent"]
+ENTITY_LIST = [
+    "EmptyEntity",
+    "Wall",
+    "River",
+    "Pollution",
+    "AppleTree",
+    "Apple",
+    "CleanBeam",
+    "ZapBeam",
+    "CleanupAgent",
+]
 RECORD_PERIOD = 50  # how many epochs in each data recording period
 EPSILON_DECAY = 0.0001
 
+
 def setup(cfg: Cfg, **kwargs) -> Cleanup:
     """Set up the environment and everything within it."""
-    
+
     agents = []
     # make the agents
     for _ in range(cfg.agent.agent.num):
@@ -38,19 +47,22 @@ def setup(cfg: Cfg, **kwargs) -> Cleanup:
         observation_spec = CleanupObservation(ENTITY_LIST, agent_vision_radius)
 
         model = PyTorchIQN(
-            input_size=(1, len(ENTITY_LIST) * (2 * agent_vision_radius + 1) * (2 * agent_vision_radius + 1) + (4 * observation_spec.embedding_size)),
+            input_size=(
+                1,
+                len(ENTITY_LIST)
+                * (2 * agent_vision_radius + 1)
+                * (2 * agent_vision_radius + 1)
+                + (4 * observation_spec.embedding_size),
+            ),
             seed=torch.random.seed(),
             num_frames=cfg.agent.agent.obs.num_frames,
-            **cfg.model.iqn.parameters.to_dict()
+            **cfg.model.iqn.parameters.to_dict(),
         )
 
-        if 'load_weights' in kwargs:
+        if "load_weights" in kwargs:
             model.load(file_path=kwargs.get("load_weights"))
 
-        agents.append(CleanupAgent(
-            observation_spec=observation_spec,
-            model=model
-        ))
+        agents.append(CleanupAgent(observation_spec=observation_spec, model=model))
 
     env = Cleanup(cfg, agents)
     return env
@@ -100,16 +112,28 @@ def run(env: Cleanup, **kwargs):
             new_epsilon = agent.model.epsilon - cfg.experiment.epsilon_decay
             agent.model.epsilon = max(new_epsilon, 0.01)
 
-    if 'save_weights' in kwargs:
+    if "save_weights" in kwargs:
         for i, agent in enumerate(env.agents):
-            file_path = os.path.abspath(f'./checkpoints/{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}_{i}.pkl')
+            file_path = os.path.abspath(
+                f'./checkpoints/{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}_{i}.pkl'
+            )
             agent.model.save(file_path=file_path)
+
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", "-c", type=str, help="Path to configuration file", default="./configs/config.yaml")
-    parser.add_argument("--load-weights", "-l", type=str, help="Path to pretrained model.", default="")
+    parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        help="Path to configuration file",
+        default="./configs/config.yaml",
+    )
+    parser.add_argument(
+        "--load-weights", "-l", type=str, help="Path to pretrained model.", default=""
+    )
     parser.add_argument("--verbose", "-v", action="count", default=0)
     args = parser.parse_args()
     cfg = load_config(args)
@@ -118,6 +142,7 @@ def main():
         # load_weights=args.load_weights,
     )
     run(env, save_weights=True)
+
 
 if __name__ == "__main__":
     main()

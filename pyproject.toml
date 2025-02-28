@@ -7,6 +7,8 @@ license = "MIT"
 authors = [
     {name = "Yibing Ju", email = "bing.ju@mail.utoronto.ca"}, 
     {name = "Rebekah Gelpi", email = "rebekah.gelpi@mail.utoronto.ca"},
+    {name = "Shon Verch", email = "verchshon@gmail.com"},
+    {name = "Ethan Jackson", email = "jackson.ethan.c@gmail.com"},
 ]
 
 [tool.poetry]
