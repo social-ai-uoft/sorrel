@@ -47,7 +47,7 @@ def run(cfg, **kwargs):
     appearances = create_agent_appearances(cfg.agent.agent.num)
     agents: list[Agent] = create_agents(cfg, partner_selection_models)
 
-    preferences_lst = [[0.5, 0.5] for _ in range(cfg.agent.agent.num)]
+    preferences_lst = [random.choices([[0.7, 0.3], [0.3, 0.7]], k=1)[0] for _ in range(cfg.agent.agent.num)]
     trainable_lst = []
     frozen_lst = []
 
@@ -76,7 +76,7 @@ def run(cfg, **kwargs):
         if a.appearance is None:
             raise ValueError('agent appearance should not be none')
         a.preferences = preferences_lst[a.ixs]
-        a.base_preferences = a.preferences
+        a.base_preferences = deepcopy(a.preferences)
         a.trainable = True
         a.frozen = False
         a.action_size = 6
@@ -141,8 +141,8 @@ def run(cfg, **kwargs):
             agent.delay_reward = 0
             agent.reward = 0
             if cfg.preference_reset:
-                agent.preferences = agent.base_preferences
-        
+                agent.preferences = deepcopy(agent.base_preferences)
+            # print(agent.preferences, agent.base_preferences)
         # reset time
         partner_pool_env.time = 0
 
@@ -151,6 +151,7 @@ def run(cfg, **kwargs):
 
             for agent in agents:
                 agent.reward = 0
+                
                 # if agent.ixs == 0:
                 #     print(agent.delay_reward)
 
@@ -192,10 +193,9 @@ def run(cfg, **kwargs):
 
 
                 # record the action
-                if focal_ixs == 0:
-                    action_record[agent.ixs][action] += 1
+                action_record[agent.ixs][action] += 1
                     
-               
+
                 # record the ixs of the selected partner
                 if is_focal:
                     assert agent.ixs != partner_ixs, 'select oneself'
@@ -211,7 +211,8 @@ def run(cfg, **kwargs):
                             partner_occurence_freqs[agent.ixs][potential_partner.ixs] += 1
                             # presented_partner_variability[agent.ixs].append(potential_partner.variability)
                             presented_partner_entropy[agent.ixs].append(entropy(potential_partner.preferences))
-            
+                
+
                 reward = 0 
                 # execute the interaction task only when the agent is the focal one in this trial
                 if is_focal:
@@ -266,9 +267,10 @@ def run(cfg, **kwargs):
 
             # training
             if agent.trainable:
-                loss = agent.partner_choice_model.training(
-                        agent.episode_memory, 
-                        )
+                if len(agent.episode_memory.states) > 1:
+                    loss = agent.partner_choice_model.training(
+                            agent.episode_memory, 
+                            )
             agent.episode_memory.clear()
         
             # Add the game variables to the game object

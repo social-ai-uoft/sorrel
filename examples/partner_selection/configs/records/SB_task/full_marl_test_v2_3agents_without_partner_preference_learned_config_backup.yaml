@@ -2,7 +2,7 @@
 experiment:
   name: state_punishment_beta
   epochs: 1000000
-  max_turns: 20
+  max_turns: 100
   epsilon_decay: 0.0001
   is_SB_task: True
 
@@ -22,7 +22,7 @@ interaction_task:
 model:
   PPO:
     type: PPO
-    num: 6
+    num: 3
     device: cpu
     parameters:
       state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
@@ -43,7 +43,7 @@ model:
 
 agent:
   agent:
-    num: 6
+    num: 3
     preference_var: 0.5
     model: PPO
     num_memories: 5 # Should match num_frames in the model above
@@ -113,7 +113,7 @@ log: True
 # exp_name: "test_voting_sixAs_size15_init_spawn_0.2_no_respawn_extended"
 # exp_name: "test_v6_3agents_same_init_pref_0.3_var_learn"
 # exp_name: 'debug_fixed_faster_v1_10'
-random_selection: True
+random_selection: False
 hardcoded: False
 preference_reset: True 
 social_comparison: False
@@ -121,6 +121,6 @@ with_self_preferences: True
 with_partner_preferences: False
 with_partner_to_select_appearance: True
 study: 1.5
-exp_name: 'SB_task/full_marl_test_v5_6agents_without_partner_preference_random_vary' # with variability in the state info [learned selection, hardcoded, random]
+exp_name: 'SB_task/full_marl_test_v2_3agents_without_partner_preference_learned' # with variability in the state info [learned selection, hardcoded, random]
 # exp_name: 'debug_study2_v3'
-# exp_name: 'SB_task/test_random'
+# exp_name: 'SB_task/test'

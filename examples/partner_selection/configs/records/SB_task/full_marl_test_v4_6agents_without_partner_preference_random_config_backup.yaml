@@ -121,6 +121,6 @@ with_self_preferences: True
 with_partner_preferences: False
 with_partner_to_select_appearance: True
 study: 1.5
-exp_name: 'SB_task/full_marl_test_v5_6agents_without_partner_preference_random_vary' # with variability in the state info [learned selection, hardcoded, random]
+exp_name: 'SB_task/full_marl_test_v4_6agents_without_partner_preference_random' # with variability in the state info [learned selection, hardcoded, random]
 # exp_name: 'debug_study2_v3'
 # exp_name: 'SB_task/test_random'
