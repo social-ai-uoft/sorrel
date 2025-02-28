@@ -157,7 +157,7 @@ class Agent:
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=False)).view(1, -1)
         else:
-            model_input = torch.from_numpy(state)
+            model_input = torch.from_numpy(state).double()
             
         reward = 0
 
@@ -271,7 +271,8 @@ class Agent:
     def SB_task(
             self, 
             action, 
-            partner, 
+            partner,
+            cfg, 
             ):
         '''
         Conduct the Stravinsky and Bach task with the selected partner.
@@ -281,7 +282,10 @@ class Agent:
             self_SB_choice = action % 2
             # print('pair', self_SB_choice, partner_action)
             if self_SB_choice == partner_action:
-                r = self.preferences[self_SB_choice] > 0.1
+                if cfg.study == 1.5:
+                    r = self.preferences[self_SB_choice] > 0.1
+                else:
+                    r = 1 * (self.preferences[self_SB_choice] > 0.)
                 reward = 1
                 partner_reward = 1
             else:
@@ -290,7 +294,10 @@ class Agent:
         else: 
             reward = 0
             partner_reward = 0 
-        return reward, partner_reward
+        # reward = self.preferences[self_SB_choice] > 0
+        # print(self.ixs, reward, self_SB_choice, self.preferences)
+        # partner_reward = -1
+        return reward, partner_reward, self.preferences[self_SB_choice] > 0, self_SB_choice == partner_action
 
     def selection_task_action(self, action, is_focal):
         """
@@ -299,10 +306,10 @@ class Agent:
         if not self.frozen:
             if action == 2:
                 self.variability -= self.base_variability*0.2 # 0.02
-                self.variability = min(max(0, self.variability), 1)
+                self.variability = min(max(0., self.variability), 1.)
             elif action == 3:
                 self.variability += self.base_variability*0.2
-                self.variability = min(max(0, self.variability), 1)
+                self.variability = min(max(0., self.variability), 1.)
     
     def change_preferences(self, action):
         """
@@ -320,7 +327,8 @@ class Agent:
                         self.preferences[0] += v
                         self.preferences[1] -= v
                     for i in range(len(self.preferences)):
-                        self.preferences[i] = min(max(0, self.preferences[i]), 1)
+                        self.preferences[i] = min(max(0., self.preferences[i]), 1.)
+              
         else:
             assert action in range(6), ValueError("Action not in action space")
             if not self.frozen:
@@ -331,7 +339,7 @@ class Agent:
                     self.preferences[0] += v
                     self.preferences[1] -= v
                 for i in range(len(self.preferences)):
-                    self.preferences[i] = min(max(0, self.preferences[i]), 1)
+                    self.preferences[i] = min(max(0., self.preferences[i]), 1.)
             
             
     def transition(self,
@@ -349,7 +357,7 @@ class Agent:
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
         if self.model_type == 'PPO':
-            model_input = torch.from_numpy(state)
+            model_input = torch.from_numpy(state).double()
 
         reward = 0
 

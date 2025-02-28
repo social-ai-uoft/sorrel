@@ -115,7 +115,7 @@ class IQN(nn.Module):
         # Add noise to the input
         eps = 0.01
         noise = torch.rand_like(input) * eps
-        input = input / 255.0
+        input = input # /255
         input = input + noise
 
         # Flatten the input from [1, N, 7, 9, 9] to [1, N * 7 * 9 * 9]
