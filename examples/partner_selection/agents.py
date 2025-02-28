@@ -273,21 +273,42 @@ class Agent:
             action, 
             partner,
             cfg, 
+            env
             ):
         '''
         Conduct the Stravinsky and Bach task with the selected partner.
         '''
-        partner_action = random.choices([0, 1], partner.preferences, k=1)[0]
+        # generate partner choice
+        if cfg.partner_free_choice:
+            state = env.state(self, cfg)
+            if self.model_type != 'PPO':
+                model_input = torch.from_numpy(
+                    self.current_state(env=env, partner_selection=True)
+                    ).view(1, -1)
+            if self.model_type == 'PPO':
+                model_input = torch.from_numpy(state).double()
+            partner_action, partner_action_prob = self.partner_choice_model.take_action(model_input)
+            parnter_learning_tuples = {'state': state, 
+                                       'action': partner_action, 
+                                       'action_prob': partner_action_prob}
+        elif cfg.partner_free_choice_beforehand:
+            partner_action = partner.cached_action
+            parnter_learning_tuples = None
+        else:
+            partner_action = random.choices([0, 1], partner.preferences, k=1)[0]
+            parnter_learning_tuples = None
+
+        # determine the outcomes 
         if action <= 3:
             self_SB_choice = action % 2
             # print('pair', self_SB_choice, partner_action)
             if self_SB_choice == partner_action:
                 if cfg.study == 1.5:
                     r = self.preferences[self_SB_choice] > 0.1
-                else:
+                elif cfg.study == 1:
                     r = 1 * (self.preferences[self_SB_choice] > 0.)
-                reward = 1
-                partner_reward = 1
+                reward = r
+                partner_reward = r
             else:
                 reward = 0
                 partner_reward = 0
@@ -297,7 +318,10 @@ class Agent:
         # reward = self.preferences[self_SB_choice] > 0
         # print(self.ixs, reward, self_SB_choice, self.preferences)
         # partner_reward = -1
-        return reward, partner_reward, self.preferences[self_SB_choice] > 0, self_SB_choice == partner_action
+        return reward, partner_reward, \
+            self.preferences[self_SB_choice] > 0, \
+                self_SB_choice == partner_action, \
+                    parnter_learning_tuples
 
     def selection_task_action(self, action, is_focal):
         """

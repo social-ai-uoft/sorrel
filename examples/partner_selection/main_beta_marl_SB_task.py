@@ -375,9 +375,15 @@ def run(cfg, **kwargs):
                 # execute the interaction task only when the agent is the focal one in this trial
                 if is_focal:
                     # print(partner.ixs)
-                    reward, selected_parnter_reward, choice_matches_preference, same_choices = agent.SB_task(
+                    reward, \
+                    selected_parnter_reward, \
+                    choice_matches_preference, \
+                    same_choices,\
+                    partner_learning_dict = agent.SB_task(
                         action,
                         partner,
+                        cfg, 
+                        partner_pool_env
                     )
 
                     nonselected_partner_reward = -1 
@@ -398,15 +404,6 @@ def run(cfg, **kwargs):
                 
                 # calculate total reward
                 reward += agent.delay_reward
-
-                #TODO: debug
-                # if agent.ixs == 2:
-                #     print(f'time {turn} agent {agent.ixs} reward: {reward}')
-
-                # # check if the model can learn
-                # reward = 0
-                # if action == 0:
-                #     reward = 1
 
                 # Update the agent's memory buffer
                 agent.episode_memory.states.append(torch.tensor(state))
