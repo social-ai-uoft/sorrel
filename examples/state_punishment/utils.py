@@ -268,4 +268,39 @@ def build_transgression_and_punishment_record(agents):
 
     return df 
 
+
+def calculate_sdt_metrics_np(signal_array, response_array):
+    # Convert inputs to NumPy arrays for efficient element-wise operations
+    signal_array = np.array(signal_array)
+    response_array = np.array(response_array)
+    
+    # Calculate each component using vectorized operations
+    hits = np.sum((signal_array == 1) & (response_array == 1))
+    misses = np.sum((signal_array == 1) & (response_array == 0))
+    false_alarms = np.sum((signal_array == 0) & (response_array == 1))
+    correct_rejections = np.sum((signal_array == 0) & (response_array == 0))
+    
+    return hits, misses, false_alarms, correct_rejections
+
+
+from scipy.stats import norm
+
+def calculate_d_prime(hits, misses, false_alarms, correct_rejections):
+    # Calculate hit rate and false alarm rate
+    hit_rate = hits / (hits + misses) if (hits + misses) > 0 else 0
+    false_alarm_rate = false_alarms / (false_alarms + correct_rejections) if (false_alarms + correct_rejections) > 0 else 0
+    
+    # Apply a correction to avoid Z(0) or Z(1) which are undefined
+    # Adding a small epsilon to avoid taking the log of 0 or 1
+    epsilon = 1e-6
+    hit_rate = min(max(hit_rate, epsilon), 1 - epsilon)
+    false_alarm_rate = min(max(false_alarm_rate, epsilon), 1 - epsilon)
+    
+    # Calculate d' using Z-scores (inverse of CDF of normal distribution)
+    d_prime = norm.ppf(hit_rate) - norm.ppf(false_alarm_rate)
+    
+    return d_prime
+
+
+
     

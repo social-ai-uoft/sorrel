@@ -2,15 +2,18 @@ import pandas as pd
 import random 
 import numpy as np
 from examples.state_punishment.utils import inspect_the_env, add_extra_info
+from copy import deepcopy
 
 class state_sys():
-    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote) -> None:
+    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote, is_dynamic, potential_taboo) -> None:
         self.prob = init_prob
         self.prob_list = prob_list
         self.init_prob = init_prob 
         self.magnitude = magnitude
         self.taboo = taboo
         self.change_per_vote = change_per_vote
+        self.resource_punishment_schedule_is_dynamic = is_dynamic
+        self.potential_taboo = potential_taboo
         self.prob_record = []
     
     def reset_prob_record(self):
@@ -18,6 +21,48 @@ class state_sys():
 
     def update_prob_record(self):
         self.prob_record.append(self.prob)
+
+    def punishment_schedule_func(self, resource_name):
+        assert isinstance(resource_name, str), ValueError('Please specify a correct resource type name')
+        self.prob = round(self.prob, 1)
+        base_prob = deepcopy(self.prob)
+        #TODO:design the schedule funcs
+        assert base_prob in [0., 0.2, 0.4, 0.6, 0.8, 1.], ValueError(f'Punishment base prob value is incorrect, {self.prob}')
+        punishment_prob = 0 
+        if resource_name == 'Gem':
+            if self.prob in [0., 0.2, 0.4]:
+                punishment_prob = 0.
+            elif self.prob == 0.6:
+                punishment_prob = 0.01
+            elif self.prob == 0.8:
+                punishment_prob = 0.03
+            elif self.prob == 1.:
+                punishment_prob = 0.05
+        elif resource_name == 'Bone':
+            if self.prob == 0.:
+                punishment_prob = 0.
+            elif self.prob == 0.2:
+                punishment_prob = 0.1
+            elif self.prob == 0.4:
+                punishment_prob = 0.2
+            elif self.prob == 0.6:
+                punishment_prob = 0.3
+            elif self.prob in [0.8, 1.]:
+                punishment_prob = 0.4 
+        elif resource_name == 'Coin':
+            if self.prob == 0.:
+                punishment_prob = 0.2
+            elif self.prob == 0.2:
+                punishment_prob = 0.4
+            elif self.prob == 0.4:
+                punishment_prob = 0.6
+            elif self.prob == 0.6:
+                punishment_prob = 0.75
+            elif self.prob == 0.8:
+                punishment_prob = 0.9
+            elif self.prob == 1.0:
+                punishment_prob = 1.
+        return punishment_prob
 
 
 class Monitor():

@@ -208,12 +208,12 @@ class Agent:
 
         # Get the interaction reward
         reward += target_object.value
-        if to_be_punished >= 1.: ##TODO: change to to_be_punished 
-            self.punishment_record.append(1)
-            # reward -= state_sys.magnitude * to_be_punished
-            # TODO: if self.to_be_punished: 
-        else:
-            self.punishment_record.append(0)
+        # if to_be_punished >= 1.: ##TODO: change to to_be_punished 
+        #     self.punishment_record.append(1)
+        #     # reward -= state_sys.magnitude * to_be_punished
+        #     # TODO: if self.to_be_punished: 
+        # else:
+        #     self.punishment_record.append(0)
         
         if mode == 'certain':
             self.to_be_punished = {'Gem':0, 'Bone':0, 'Coin':0}
@@ -226,25 +226,38 @@ class Agent:
         env.cache['harm'][self.ixs] = 0
 
         # If the agent performs a transgression
-        if str(target_object) in state_sys.taboo:
-            self.transgression_record.append(1)
+        if str(target_object) in state_sys.potential_taboo:
+
+            if str(target_object) in state_sys.taboo:
+                self.transgression_record.append(1)
+            else:
+                self.transgression_record.append(0)
+
             if mode == 'certain':
-                if random.random() < state_sys.prob_list[str(target_object)]*state_sys.prob:
-                    self.to_be_punished[str(target_object)] += 1.
-                    reward -= state_sys.magnitude * (random.random() < state_sys.prob_list[str(target_object)]*state_sys.prob) # instant punishment
+                # prob = state_sys.punishment_schedule_func(str(target_object))
+                #TODO: merge the conditions/simplify
+                if state_sys.resource_punishment_schedule_is_dynamic:
+                    punishment_prob = state_sys.punishment_schedule_func(str(target_object))
+                    r_of_state_punishment = state_sys.magnitude * (random.random() < punishment_prob)
+                    reward -= r_of_state_punishment
+                else:
+                    r_of_state_punishment = state_sys.magnitude * (random.random() 
+                                                    < state_sys.prob_list[str(target_object)]*state_sys.prob) # instant punishment
+                    reward -= r_of_state_punishment
+                # record being punished or not
+                self.punishment_record.append(1*(r_of_state_punishment > 0))
+
             cache_harm = [env.cache['harm'][k] - target_object.social_harm 
                                         if k != self.ixs else env.cache['harm'][k]
                                         for k in range(len(env.cache['harm']))
                                         ]
+            
             # assign harm value to each individual world
             if state_is_composite:
                 for env_ixs, env_ in enumerate(envs):
                     env_.cache['harm'][env_ixs] = cache_harm[env_ixs]
             else:
                 env.cache['harm'] = cache_harm
-
-        else:
-            self.transgression_record.append(0)
             
 
         # Add to the encounter record

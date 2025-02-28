@@ -17,7 +17,7 @@ env:
     item_spawn: 0.2 # 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
     # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
     item_choice: [0.5, 0.5, 0.0] # [0.3, 0.7] [0.8, 0.2]
-    respawn_rate: 0.02
+    respawn_rate: 0.05
 
 state_sys:
   resource_punishment_schedule_is_dynamic: True
@@ -115,5 +115,5 @@ state_mode: 'composite'
 action_mode: 'simple'
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
 exp_name: 'test_punishment_noncomposite_oneA_po' #"test_composite_input_fixed_punishment_1.0_clear_detection_v0_oneA_instant_only_coin_hs500"
-exp_name: 'test_voting_stacked_view_simple_actions_3agents_lifelong_v0' 
+exp_name: 'test_voting_stacked_view_simple_actions_3agents_lifelong_005_v0' 
 # stacked_views,single_view
