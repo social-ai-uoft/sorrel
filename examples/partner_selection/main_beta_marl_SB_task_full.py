@@ -109,6 +109,14 @@ def run(cfg, **kwargs):
     # initialize the dynamic sampling mechanism
     frequencies = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
 
+    # initial diversity
+    init_pref_dist = {0:0, 1:0}
+    for a in agents:
+        pref_type = a.preferences.index(max(a.preferences))
+        init_pref_dist[pref_type] += 1
+    init_diversity = entropy(softmax(list(init_pref_dist.values())))
+
+
 
     for epoch in range(cfg.experiment.epochs):        
 
@@ -133,6 +141,12 @@ def run(cfg, **kwargs):
         selecting_more_entropic_partner = [[] for _ in range(len(agents))]
         agent_preferences = [0 for _ in range(len(agents))]
         action_record = {a.ixs:[0 for _ in range(a.action_size)] for a in agents}
+        dominant_pref = [0 for _ in range(len(agents))]
+        preferences_track = [[] for _ in range(len(agents))]
+        avg_val_bach = [[] for _ in range(len(agents))]
+        avg_val_stravinsky = [[] for _ in range(len(agents))]
+        same_choices_lst = 0
+        choice_matches_preference_lst = 0 
         # Container for data within epoch
         # variability_increase_record = [0 for _ in range(len(agents))]
         # variability_decrease_record = [0 for _ in range(len(agents))]
@@ -151,6 +165,10 @@ def run(cfg, **kwargs):
 
             for agent in agents:
                 agent.reward = 0
+                dominant_pref[agent.ixs] += agent.preferences.index(max(agent.preferences))
+                preferences_track[agent.ixs].append(agent.preferences)
+                avg_val_bach[agent.ixs].append(agent.preferences[0])
+                avg_val_stravinsky[agent.ixs].append(agent.preferences[1])
                 
                 # if agent.ixs == 0:
                 #     print(agent.delay_reward)
@@ -218,10 +236,15 @@ def run(cfg, **kwargs):
                 if is_focal:
                     if partner is not None:
                         # print(partner.ixs)
-                        reward, selected_parnter_reward = agent.SB_task(
+                        reward, \
+                        selected_parnter_reward, \
+                        choice_matches_preference, \
+                        same_choices,\
+                        partner_learning_dict  = agent.SB_task(
                             action,
                             partner,
                             cfg,
+                            partner_pool_env
                         )
 
                         nonselected_partner_reward = -1 
@@ -232,6 +255,9 @@ def run(cfg, **kwargs):
                                 a.delay_reward += nonselected_partner_reward
                             elif a.ixs == partner.ixs:
                                 a.delay_reward += selected_parnter_reward
+                        
+                        choice_matches_preference_lst += choice_matches_preference
+                        same_choices_lst += same_choices
      
 
                 if turn >= cfg.experiment.max_turns or done_:
@@ -280,14 +306,25 @@ def run(cfg, **kwargs):
         # Print the variables to the console
         game_vars.pretty_print()
 
+        # calculate diversity
+        pref_dist = {0:0, 1:0}
+        for a in agents:
+            pref_type = a.preferences.index(max(a.preferences))
+            pref_dist[pref_type] += 1
+        diversity = entropy(softmax(list(pref_dist.values())))
+
         # Add scalars to Tensorboard (multiple agents)
         if cfg.log:
             # Iterate through all agents
             for _, agent in enumerate(agents):
                 i = agent.ixs
+                if i == 0:
+                    writer.add_scalar("same_choices", same_choices_lst/cfg.experiment.max_turns, epoch)
+                    writer.add_scalar("choice_matches_preference", choice_matches_preference_lst/cfg.experiment.max_turns, epoch)
                 # Use agent-specific tags for logging
                 writer.add_scalar(f"Agent_{i}/Loss", losses[i], epoch)
                 writer.add_scalar(f"Agent_{i}/Reward", game_points[i], epoch)
+                writer.add_scalar(f"Agent_{i}/dominant_pref", dominant_pref[i]/cfg.experiment.max_turns, epoch)
                 # writer.add_scalar(f'Agent_{i}/variability', np.mean(variability_record[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/entropy', np.mean(entropy_record[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/selected_partner_entropy', np.mean(selected_partner_entropy[i]), epoch)
@@ -298,12 +335,17 @@ def run(cfg, **kwargs):
                 # writer.add_scalar(f'Agent_{i}/select_more_variable_one', np.mean(selecting_more_variable_partner[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/selection_sum_freq', np.sum(partner_selection_freqs[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/max_pref', np.max(agent_preferences[i]), epoch)
+                writer.add_scalar(f'Agent_{i}/bach_preference', np.mean(avg_val_bach[i]), epoch)
+                writer.add_scalar(f'Agent_{i}/stravinsky_preference', np.mean(avg_val_stravinsky[i]), epoch)
                 writer.add_scalars(f'Agent_{i}/selection_freq', 
                                 {f'Agent_{j}_selected':np.array(partner_selection_freqs[i][j]) for j in range(len(agents))}, 
                                 epoch)
                 writer.add_scalars(f'Agent_{i}/action_freq',
                                 {f'action_{j}': np.array(action_record[i][j]) for j in range(agent.action_size)},
                                 epoch)
+            if epoch == 0:
+                writer.add_scalar(f'diversity', init_diversity, epoch)
+            writer.add_scalar(f'diversity', diversity, epoch+1)
             writer.add_scalar(f'population_mean_entropy', mean_entropy, epoch)
             # writer.add_scalar(f'population_mean_variability', mean_variability, epoch)
             # writer.add_histogram("population_variability", 
