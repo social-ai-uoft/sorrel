@@ -375,9 +375,15 @@ def run(cfg, **kwargs):
                 # execute the interaction task only when the agent is the focal one in this trial
                 if is_focal:
                     # print(partner.ixs)
-                    reward, selected_parnter_reward, choice_matches_preference, same_choices = agent.SB_task(
+                    reward, \
+                    selected_parnter_reward, \
+                    choice_matches_preference, \
+                    same_choices,\
+                    partner_learning_dict = agent.SB_task(
                         action,
                         partner,
+                        cfg, 
+                        partner_pool_env
                     )
 
                     nonselected_partner_reward = -1 
@@ -398,15 +404,6 @@ def run(cfg, **kwargs):
                 
                 # calculate total reward
                 reward += agent.delay_reward
-
-                #TODO: debug
-                # if agent.ixs == 2:
-                #     print(f'time {turn} agent {agent.ixs} reward: {reward}')
-
-                # # check if the model can learn
-                # reward = 0
-                # if action == 0:
-                #     reward = 1
 
                 # Update the agent's memory buffer
                 agent.episode_memory.states.append(torch.tensor(state))
@@ -481,7 +478,6 @@ def run(cfg, **kwargs):
                 writer.add_scalar(f'Agent_{i}/bach_preference', np.mean(avg_val_bach[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/stravinsky_preference', np.mean(avg_val_stravinsky[i]), epoch)
             writer.add_scalar(f'population_mean_entropy', mean_entropy, epoch)
-            # writer.add_scalar(f'population_mean_variability', mean_variability, epoch)
             # writer.add_histogram("population_variability", 
             #                     np.array(variability_lst))
             writer.add_scalars('occurence_sum_freq', {f'Agent_{j}': np.sum(partner_occurence_freqs[j]) for j in range(len(agents))}, 
