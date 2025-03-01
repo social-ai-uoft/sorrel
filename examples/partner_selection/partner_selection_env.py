@@ -10,7 +10,7 @@ class partner_pool:
         self.pool = agents
         self.time = 0
     
-    def agents_sampling(self, focal_agent=None, default=True):
+    def agents_sampling(self, focal_agent=None, default=False):
         """
         Sample two agents as potential partner choices and one agent as the focal agent.
         """
@@ -32,7 +32,7 @@ class partner_pool:
             partner_ixs = [a.ixs for a in partner_choices]
             self.partner_to_select = deepcopy(partner_choices)
             self.focal_ixs = focal_agent.ixs
-            self.partner_to_select_appearance = np.concat([partner.appearance for partner in partner_choices])
+            self.partner_to_select_appearance = np.concatenate([partner.appearance for partner in partner_choices])
         # else:
         #     focal_agent = [a for a in self.pool if a.ixs == 0][0]
         #     qualified_pool = [a for a in self.pool if a.ixs != 0]
@@ -40,7 +40,7 @@ class partner_pool:
         #     partner_ixs = [a.ixs for a in partner_choices]
         #     self.focal_ixs = 0 
         #     self.partner_to_select = deepcopy(partner_choices)
-        #     self.partner_to_select_appearance = np.concat([partner.appearance for partner in partner_choices])
+        #     self.partner_to_select_appearance = np.concatenate([partner.appearance for partner in partner_choices])
         # update time
         self.time += 1
 

@@ -96,7 +96,7 @@ def create_partner_selection_models_PPO(
     for _ in range(num_model):
         model = PPO(
             device=device, 
-            state_dim=28,
+            state_dim=32,
             action_dim=3,
             # lr_actor=0.0001,
             # lr_critic=0.00005,

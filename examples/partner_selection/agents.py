@@ -283,7 +283,7 @@ class Agent:
             # print('pair', self_SB_choice, partner_action)
             if self_SB_choice == partner_action:
                 if cfg.study == 1.5:
-                    r = self.preferences[self_SB_choice] > 0.1
+                    r = self.preferences[self_SB_choice] > 0.35 # 0.1
                 else:
                     r = 1 * (self.preferences[self_SB_choice] > 0.)
                 reward = 1
@@ -315,7 +315,7 @@ class Agent:
         """
         Change the prefernces values based on the actions taken
         """
-        v = 0.02
+        v = 0.05 # 0.02
         if hasattr(self, 'role'):
             if self.role == 'partner':
                 assert action in [0, 1, 2], ValueError('Action not in action space')

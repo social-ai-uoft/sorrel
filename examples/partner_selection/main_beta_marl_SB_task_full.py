@@ -221,6 +221,7 @@ def run(cfg, **kwargs):
                         reward, selected_parnter_reward = agent.SB_task(
                             action,
                             partner,
+                            cfg,
                         )
 
                         nonselected_partner_reward = -1 
