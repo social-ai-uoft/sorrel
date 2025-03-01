@@ -38,7 +38,7 @@ class state_sys():
                 punishment_prob = 0.03
             elif self.prob == 1.:
                 punishment_prob = 0.05
-        elif resource_name == 'Bone':
+        elif resource_name == 'Coin':
             if self.prob == 0.:
                 punishment_prob = 0.
             elif self.prob == 0.2:
@@ -49,7 +49,7 @@ class state_sys():
                 punishment_prob = 0.3
             elif self.prob in [0.8, 1.]:
                 punishment_prob = 0.4 
-        elif resource_name == 'Coin':
+        elif resource_name == 'Bone':
             if self.prob == 0.:
                 punishment_prob = 0.2
             elif self.prob == 0.2:
