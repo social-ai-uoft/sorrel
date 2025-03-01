@@ -150,6 +150,7 @@ def run(cfg, **kwargs):
                 
                 # random condition baseline
                 if cfg.random:
+                    assert 'random' in cfg.exp_name, ValueError('the random condition does not match the exp name')
                     action = random.randint(0, cfg.model.iqn.parameters.action_size-1)
                     
                 # record actions
