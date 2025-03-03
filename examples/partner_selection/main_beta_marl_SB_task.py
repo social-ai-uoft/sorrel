@@ -237,6 +237,14 @@ def run(cfg, **kwargs):
     # initialize the dynamic sampling mechanism
     frequencies = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
 
+    # initial diversity
+    init_pref_dist = {0:0, 1:0}
+    for a in agents:
+        if a.ixs != 0:
+            pref_type = a.preferences.index(max(a.preferences))
+            init_pref_dist[pref_type] += 1
+    init_diversity = entropy(softmax(list(init_pref_dist.values())))
+
 
     for epoch in range(cfg.experiment.epochs):        
 
@@ -446,6 +454,13 @@ def run(cfg, **kwargs):
         # Print the variables to the console
         game_vars.pretty_print()
         
+        # calculate diversity
+        pref_dist = {0:0, 1:0}
+        for a in agents:
+            if a.ixs != 0:
+                pref_type = a.preferences.index(max(a.preferences))
+                pref_dist[pref_type] += 1
+        diversity = entropy(softmax(list(pref_dist.values())))
         
         # Add scalars to Tensorboard (multiple agents)
         if cfg.log:
@@ -477,6 +492,9 @@ def run(cfg, **kwargs):
                                 epoch)
                 writer.add_scalar(f'Agent_{i}/bach_preference', np.mean(avg_val_bach[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/stravinsky_preference', np.mean(avg_val_stravinsky[i]), epoch)
+            if epoch == 0:
+                writer.add_scalar(f'diversity', init_diversity, epoch)
+            writer.add_scalar(f'diversity', diversity, epoch+1)
             writer.add_scalar(f'population_mean_entropy', mean_entropy, epoch)
             # writer.add_histogram("population_variability", 
             #                     np.array(variability_lst))

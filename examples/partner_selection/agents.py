@@ -304,11 +304,13 @@ class Agent:
             # print('pair', self_SB_choice, partner_action)
             if self_SB_choice == partner_action:
                 if cfg.study == 1.5:
-                    r = self.preferences[self_SB_choice] > 0.35 # 0.1
+                    # r = self.preferences[self_SB_choice] > 0.35 # 0.1
+                    r = self.preferences[self_SB_choice]
                 else:
                     r = 1 * (self.preferences[self_SB_choice] > 0.)
                 reward = r
-                partner_reward = r
+                # partner_reward = r
+                partner_reward = partner.preferences[self_SB_choice]
             else:
                 reward = 0
                 partner_reward = 0

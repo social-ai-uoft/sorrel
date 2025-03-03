@@ -115,7 +115,7 @@ log: True
 # exp_name: 'debug_fixed_faster_v1_10'
 partner_free_choice: False
 partner_free_choice_beforehand: False
-random_selection: False
+random_selection: True
 hardcoded: False
 preference_reset: False 
 social_comparison: False
@@ -123,6 +123,6 @@ with_self_preferences: True
 with_partner_preferences: False
 with_partner_to_select_appearance: True
 study: 1.5
-exp_name: 'SB_task/full_marl_test_v7_without_reset_6agents_without_partner_preference_learned_vary' # with variability in the state info [learned selection, hardcoded, random]
+exp_name: 'SB_task/full_marl_test_v6_without_reset_6agents_without_partner_preference_random_vary' # with variability in the state info [learned selection, hardcoded, random]
 # exp_name: 'debug_study2_v3'
 # exp_name: 'SB_task/test_random'
