@@ -335,6 +335,8 @@ def run(cfg, **kwargs):
 
                 if not is_focal: 
                     agent.cached_action = action
+                if agent.ixs != 0:
+                    print(agent.ixs, agent.cached_action)
                 
                 if cfg.hardcoded:
                     partner = min_partner
