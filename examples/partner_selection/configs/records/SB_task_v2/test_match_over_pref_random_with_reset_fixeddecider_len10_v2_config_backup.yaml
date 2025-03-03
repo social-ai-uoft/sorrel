@@ -22,7 +22,7 @@ interaction_task:
 model:
   PPO:
     type: PPO
-    num: 5
+    num: 3
     device: cpu
     parameters:
       state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
@@ -43,7 +43,7 @@ model:
 
 agent:
   agent:
-    num: 5
+    num: 3
     preference_var: 0.5
     model: PPO
     num_memories: 5 # Should match num_frames in the model above
@@ -112,7 +112,7 @@ log: True
 
 partner_free_choice: False
 partner_free_choice_beforehand: True
-random_selection: False
+random_selection: True
 hardcoded: False
 preference_reset: True 
 social_comparison: False
@@ -127,6 +127,5 @@ default: True
 # exp_name: 'SB_task/v5_diff_init_entropy_sanity_check_two_trainable_selection_SB_choice_learned_without_partner_preference' # with variability in the state info [learned selection, hardcoded, random]
 # exp_name: 'debug_study2_v3'
 exp_name: 'SB_task_v2/sanity_check_two_trainable_learned_selection_with_reset_fixeddecider_len10'
-exp_name: 'SB_task_v2/test_match_over_pref_learned_with_reset_fixeddecider_len10_v2'
-exp_name: 'SB_task_v2/test_match_over_pref_learned_maj_min_condition_with_reset_fixeddecider_len10'
+exp_name: 'SB_task_v2/test_match_over_pref_random_with_reset_fixeddecider_len10_v2'
 # exp_name: 'test_learned'

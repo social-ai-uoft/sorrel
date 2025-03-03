@@ -287,7 +287,7 @@ def agents_sampling(agents):
     return focal_agent, partner_choices
 
 
-def create_agent_appearances(num_agents):
+def create_agent_appearances(num_agents, with_group_id=True):
     """
     Create the appearances for num_agents agents, used in partner selection process.
 
@@ -295,6 +295,12 @@ def create_agent_appearances(num_agents):
     num_agents - number of agents
     """
     appearances = 1. * np.eye(num_agents)
+    if with_group_id:
+        group_id = np.array([1., 0.])
+        group_id = np.repeat(group_id[np.newaxis, :], num_agents, axis=0)
+        print(group_id, appearances)
+        appearances = np.concatenate([group_id, appearances], axis=-1)
+
     return appearances
 
 

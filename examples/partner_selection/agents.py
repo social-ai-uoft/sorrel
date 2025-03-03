@@ -329,6 +329,9 @@ class Agent:
         # reward = self.preferences[self_SB_choice] > 0
         # print(self.ixs, reward, self_SB_choice, self.preferences)
         # partner_reward = -1
+
+        # update memory if needed
+
         return reward, partner_reward, \
             self.preferences[self_SB_choice] > 0, \
                 self_SB_choice == partner_action, \

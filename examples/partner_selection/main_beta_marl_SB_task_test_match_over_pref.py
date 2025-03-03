@@ -45,21 +45,25 @@ def run(cfg, **kwargs):
     sanity_check = cfg.sanity_check
     if sanity_check:
         print('sanity check')
-        partner_selection_models = create_partner_selection_models_PPO(3, 'cpu')
+        partner_selection_models = create_partner_selection_models_PPO(5, 'cpu')
         appearances = create_agent_appearances(cfg.agent.agent.num)
 
         agents = []
         agent1 = Agent(partner_selection_models[0], cfg, 0)
         agent2 = Agent(partner_selection_models[1], cfg, 1)
         agent3 = Agent(partner_selection_models[2], cfg, 2)
+        agent4 = Agent(partner_selection_models[3], cfg, 3)
+        agent5 = Agent(partner_selection_models[4], cfg, 4)
         agents.append(agent1)
         agents.append(agent2)
         agents.append(agent3)
+        agents.append(agent4)
+        agents.append(agent5)
 
         # agent model
         agent1.partner_choice_model = PPO(
                 device='cpu', 
-                state_dim=20,
+                state_dim=36,
                 action_dim=4, 
                 lr_actor=0.0001,
                 lr_critic=0.00005,
@@ -77,7 +81,7 @@ def run(cfg, **kwargs):
 
         agent2.partner_choice_model = PPO(
                 device='cpu', 
-                state_dim=20,
+                state_dim=36,
                 action_dim=2,
                 lr_actor=0.0001,
                 lr_critic=0.00005,
@@ -96,7 +100,7 @@ def run(cfg, **kwargs):
 
         agent3.partner_choice_model = PPO(
                 device='cpu', 
-                state_dim=20,
+                state_dim=36,
                 action_dim=2,
                 lr_actor=0.0001,
                 lr_critic=0.00005,
@@ -111,6 +115,42 @@ def run(cfg, **kwargs):
         agent3.frozen = True
         agent3.role = 'partner'
         agent3.action_size = 2
+
+        agent4.partner_choice_model = PPO(
+                device='cpu', 
+                state_dim=36,
+                action_dim=2,
+                lr_actor=0.0001,
+                lr_critic=0.00005,
+                gamma=0.99,
+                K_epochs=10,
+                eps_clip=0.2,
+                entropy_coefficient=0.005  
+            )
+        agent4.partner_choice_model.name = 'PPO'
+        agent4.preferences = [0.3, 0.7]
+        agent4.trainable = True
+        agent4.frozen = True
+        agent4.role = 'partner'
+        agent4.action_size = 2
+
+        agent5.partner_choice_model = PPO(
+                device='cpu', 
+                state_dim=36,
+                action_dim=2,
+                lr_actor=0.0001,
+                lr_critic=0.00005,
+                gamma=0.99,
+                K_epochs=10,
+                eps_clip=0.2,
+                entropy_coefficient=0.005  
+            )
+        agent5.partner_choice_model.name = 'PPO'
+        agent5.preferences = [0.3, 0.7]
+        agent5.trainable = True 
+        agent5.frozen = True
+        agent5.role = 'partner'
+        agent5.action_size = 2
 
     else:
         partner_selection_models = create_partner_selection_models_PPO(cfg.agent.agent.num, 'cpu')
@@ -265,6 +305,7 @@ def run(cfg, **kwargs):
         preferences_track = [[] for _ in range(len(agents))]
         avg_val_bach = [[] for _ in range(len(agents))]
         avg_val_stravinsky = [[] for _ in range(len(agents))]
+        act_match_pref = [[] for _ in range(len(agents))]
         same_choices_lst = 0
         choice_matches_preference_lst = 0 
         # Container for data within epoch
@@ -328,7 +369,7 @@ def run(cfg, **kwargs):
                     cfg,
                     mode=cfg.interaction_task.mode
                     )
-
+               
                 if not is_focal: 
                     agent.cached_action = action
                 
@@ -382,6 +423,11 @@ def run(cfg, **kwargs):
                         selected_parnter_reward = partner.preferences[partner.cached_action]
                     else:
                         selected_parnter_reward = 0
+                    
+                    if partner.cached_action == partner.preferences.index(max(partner.preferences)):
+                        act_match_pref[partner.ixs].append(1)
+                    else:
+                        act_match_pref[partner.ixs].append(0)
 
                     # update the delayed reward for the partners
                     for a in partner_choices:
@@ -451,6 +497,7 @@ def run(cfg, **kwargs):
                     writer.add_scalar("same_choices", same_choices_lst/cfg.experiment.max_turns, epoch)
                     writer.add_scalar("choice_matches_preference", choice_matches_preference_lst/cfg.experiment.max_turns, epoch)
                 # Use agent-specific tags for logging
+                writer.add_scalar(f'Agent_{i}/act_match_pref', np.mean(act_match_pref[i]), epoch)
                 writer.add_scalar(f"Agent_{i}/Loss", losses[i], epoch)
                 writer.add_scalar(f"Agent_{i}/dominant_pref", dominant_pref[i]/cfg.experiment.max_turns, epoch)
                 writer.add_scalar(f"Agent_{i}/Reward", game_points[i], epoch)
