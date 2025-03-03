@@ -4,7 +4,7 @@ import numpy as np
 
 from agentarium.agents import Agent
 from agentarium.environments import GridworldEnv
-from agentarium.observation.observation import ObservationSpec
+from agentarium.observation.observation_spec import ObservationSpec
 
 
 class EconEnvObsSpec(ObservationSpec):
