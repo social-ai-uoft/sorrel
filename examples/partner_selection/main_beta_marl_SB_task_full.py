@@ -47,7 +47,8 @@ def run(cfg, **kwargs):
     appearances = create_agent_appearances(cfg.agent.agent.num)
     agents: list[Agent] = create_agents(cfg, partner_selection_models)
 
-    preferences_lst = [random.choices([[0.7, 0.3], [0.3, 0.7]], k=1)[0] for _ in range(cfg.agent.agent.num)]
+    # preferences_lst = [random.choices([[0.7, 0.3], [0.3, 0.7]], k=1)[0] for _ in range(cfg.agent.agent.num)]
+    preferences_lst = [[0.7, 0.3], [0.3, 0.7],[0.7, 0.3], [0.3, 0.7], [0.7, 0.3], [0.3, 0.7]] 
     trainable_lst = []
     frozen_lst = []
 
@@ -301,6 +302,7 @@ def run(cfg, **kwargs):
             agent.episode_memory.clear()
         
             # Add the game variables to the game object
+            game_points = [round(val,2) for val in game_points]
             game_vars.record_turn(epoch, turn, losses, game_points)
         
         # Print the variables to the console
