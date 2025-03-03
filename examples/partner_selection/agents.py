@@ -436,9 +436,9 @@ class Agent:
                     action = 2*random.randint(0,1) + pref_act
 
         # execute the selection model action
-        if cfg.experiment.is_SB_task:
+        if cfg.experiment.is_SB_task and (not cfg.test_against_pref):
             self.change_preferences(action)
-        else:
+        elif not cfg.experiment.is_SB_task:
             self.selection_task_action(action, is_focal)
 
         # Select the partner
