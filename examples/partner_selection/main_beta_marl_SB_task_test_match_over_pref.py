@@ -91,7 +91,7 @@ def run(cfg, **kwargs):
         agent2.trainable = True
         agent2.frozen = True
         agent2.role = 'partner'
-        agent2.action_size = 3
+        agent2.action_size = 2
         
 
         agent3.partner_choice_model = PPO(
@@ -110,7 +110,7 @@ def run(cfg, **kwargs):
         agent3.trainable = True
         agent3.frozen = True
         agent3.role = 'partner'
-        agent3.action_size = 3
+        agent3.action_size = 2
 
     else:
         partner_selection_models = create_partner_selection_models_PPO(cfg.agent.agent.num, 'cpu')
@@ -299,7 +299,7 @@ def run(cfg, **kwargs):
             # max_var_ixs = partner_pool_env.get_max_variability_partner_ixs()
             max_entropy_agent, max_var_ixs = partner_pool_env.get_max_entropic_partner_ixs()
             partner_choices_ixs.append(focal_ixs)
-            agents_to_act = get_agents_by_ixs(agents, partner_choices_ixs)
+            agents_to_act = get_agents_by_ixs(agents, partner_choices_ixs, True)
 
             # check whether the focal agent is agent 0
             if focal_ixs != 0:
@@ -312,10 +312,6 @@ def run(cfg, **kwargs):
 
                 # if not cfg.random_selection:
                 #     assert max_var_ixs != min_partner_ixs, f'error: {[a.variability for a in agents], max_var_ixs, partner_ixs}'
-
-            # #TODO: double check
-            # if cfg.test_against_pref:
-            #     agents_to_act = partner_choices
 
             for agent in agents_to_act:
                 is_focal = (0 == agent.ixs) and (agent.ixs == focal_ixs)
@@ -335,8 +331,6 @@ def run(cfg, **kwargs):
 
                 if not is_focal: 
                     agent.cached_action = action
-                if agent.ixs != 0:
-                    print(agent.ixs, agent.cached_action)
                 
                 if cfg.hardcoded:
                     partner = min_partner
@@ -440,7 +434,7 @@ def run(cfg, **kwargs):
             agent.episode_memory.clear()
         
             # Add the game variables to the game object
-            game_vars.record_turn(epoch, turn, losses, game_points)
+            game_vars.record_turn(epoch, turn, losses, [round(val, 2) for val in game_points])
 
         # print(preferences_track)
         # ll

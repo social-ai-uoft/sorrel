@@ -268,6 +268,15 @@ class Agent:
         # print(partner.ixs, partner.delay_reward)
         return reward 
     
+    def add_memory(self, is_ppo, tuple):
+        if is_ppo: 
+            state, action, action_logprob, reward, done = tuple
+            self.episode_memory.states.append(torch.tensor(state))
+            self.episode_memory.actions.append(torch.tensor(action))
+            self.episode_memory.logprobs.append(torch.tensor(action_logprob))
+            self.episode_memory.rewards.append(torch.tensor(reward))
+            self.episode_memory.is_terminals.append(torch.tensor(done))
+    
     def SB_task(
             self, 
             action, 

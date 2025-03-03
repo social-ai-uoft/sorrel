@@ -312,7 +312,7 @@ def generate_variability(X, max=0.5):
     return values.tolist()
 
 
-def get_agents_by_ixs(agents, target_ixs):
+def get_agents_by_ixs(agents, target_ixs, is_two_partners_condition=False):
     """
     Filters agents whose 'ixs' value is in the target_ixs list.
 
@@ -320,5 +320,16 @@ def get_agents_by_ixs(agents, target_ixs):
     :param target_ixs: List or set of desired ixs values.
     :return: List of matching agents.
     """
-    target_ixs = set(target_ixs)  # Convert to set for faster lookup
-    return [agent for agent in agents if agent.ixs in target_ixs]
+    # target_ixs = set(target_ixs)  # Convert to set for faster lookup
+    res = []
+
+    if is_two_partners_condition:
+        for ixs in target_ixs:
+            for agent in agents:
+                if agent.ixs == ixs:
+                    res.append(agent)
+
+    else:
+        res =[agent for agent in agents if agent.ixs in target_ixs]
+
+    return res
