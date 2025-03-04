@@ -24,10 +24,10 @@ import random
 from agentarium.models.iqn import iRainbowModel
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
-from examples.partner_selection.agents import Agent
-from examples.partner_selection.partner_selection_env import partner_pool
-from examples.partner_selection.env import partner_selection
-from examples.partner_selection.utils import (create_agents, create_entities, create_interaction_task_models,
+from examples.partner_selection_policy_predictability.agents import Agent
+from examples.partner_selection_policy_predictability.partner_selection_env import partner_pool
+from examples.partner_selection_policy_predictability.env import partner_selection
+from examples.partner_selection_policy_predictability.utils import (create_agents, create_entities, create_interaction_task_models,
                                 init_log, load_config, save_config_backup, 
                                 create_agent_appearances,
                                 generate_preferences, generate_variability, get_agents_by_ixs,
@@ -157,7 +157,7 @@ def run(cfg, **kwargs):
         from torch.utils.tensorboard import SummaryWriter
 
         writer = SummaryWriter(
-            log_dir=f'{root}/examples/partner_selection/runs/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
+            log_dir=f'{root}/examples/partner_selection_policy_predictability/runs/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
         )
 
     # Container for game variables (epoch, turn, loss, reward)
@@ -365,14 +365,14 @@ def run(cfg, **kwargs):
                 for a_ixs, agent in enumerate(agents):
                     # agent.model.save(file_path=kwargs.get("save_weights"))
                     # agent.model.save(file_path=
-                    #                 f'{cfg.root}/examples/partner_selection/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
+                    #                 f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
                     #                 )
                     agent.partner_choice_model.save(
-                                    f'{cfg.root}/examples/partner_selection/models/checkpoints/'
+                                    f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/'
                                     f'{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
                                     )
                     torch.save(agent.task_model,
-                                f'{cfg.root}/examples/partner_selection/models/checkpoints/'
+                                f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/'
                                 +f'{cfg.exp_name}_agent{a_ixs}_{cfg.interaction_task.model.type}.pkl')
         
     # Close the tensorboard log
@@ -390,13 +390,13 @@ def main():
     
     print(os.path.abspath("."))
     args = parser.parse_args()
-    save_config_backup(args.config, 'examples/partner_selection/configs/records')
+    save_config_backup(args.config, 'examples/partner_selection_policy_predictability/configs/records')
     cfg = load_config(args)
     init_log(cfg)
     run(
         cfg,
-        # load_weights=f'{cfg.root}/examples/partner_selection/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
-        save_weights=f'{cfg.root}/examples/partner_selection/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
+        # load_weights=f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
+        save_weights=f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
     )
 
 

@@ -1,7 +1,7 @@
 
 experiment:
   name: state_punishment_beta
-  epochs: 100000
+  epochs: 1000000
   max_turns: 10
   epsilon_decay: 0.0001
   is_SB_task: True
@@ -111,15 +111,15 @@ root: '/Users/yikaitang/Documents/Github/agentarium_predictive_regularity'
 log: True
 
 partner_free_choice: False
-partner_free_choice_beforehand: True
+partner_free_choice_beforehand: False
 random_selection: False
 hardcoded: False
-preference_reset: True 
+preference_reset: False 
 social_comparison: False
 with_self_preferences: True
 with_partner_preferences: False
 with_partner_to_select_appearance: True
-test_against_pref: True
+test_against_pref: False
 focal_vary: False
 study: 1
 sanity_check: True
@@ -127,5 +127,6 @@ default: True
 # exp_name: 'SB_task/v5_diff_init_entropy_sanity_check_two_trainable_selection_SB_choice_learned_without_partner_preference' # with variability in the state info [learned selection, hardcoded, random]
 # exp_name: 'debug_study2_v3'
 exp_name: 'SB_task_v2/sanity_check_two_trainable_learned_selection_with_reset_fixeddecider_len10'
-exp_name: 'SB_task_v2/test_match_over_pref_learned_with_reset_fixeddecider_len10'
+exp_name: 'SB_task_v2/test_match_over_pref_learned_with_reset_fixeddecider_len10_v2'
+exp_name: 'SB_task_v2/test_match_over_pref_learned_maj_min_condition_with_reset_fixeddecider_len10'
 exp_name: 'test_learned'

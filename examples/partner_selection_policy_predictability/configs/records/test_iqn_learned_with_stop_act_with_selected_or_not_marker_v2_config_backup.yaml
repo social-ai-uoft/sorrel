@@ -2,7 +2,7 @@
 experiment:
   name: state_punishment_beta
   epochs: 1000000
-  max_turns: 100
+  max_turns: 15
   epsilon_decay: 0.0001
   is_SB_task: True
 
@@ -20,17 +20,17 @@ interaction_task:
       lr: 0.6 # 0.01
 
 model:
-  PPO:
-    type: PPO
+  iqn:
+    type: iRainbowModel
     num: 3
     device: cpu
     parameters:
-      state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
-      extra_percept_size: 1 # added for extra percept
+      state_size: [1, 29] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      extra_percept_size: 0 # added for extra percept
       action_size: 4
       layer_size: 250
       num_frames: 5
-      n_step: 1
+      n_step: 3
       BATCH_SIZE: 64
       BUFFER_SIZE: 1024
       LR: 0.00025
@@ -129,4 +129,4 @@ default: True
 exp_name: 'SB_task_v2/sanity_check_two_trainable_learned_selection_with_reset_fixeddecider_len10'
 exp_name: 'SB_task_v2/test_match_over_pref_learned_with_reset_fixeddecider_len10_v2'
 exp_name: 'SB_task_v2/test_match_over_pref_learned_maj_min_condition_with_reset_fixeddecider_len10'
-exp_name: 'test_pp_learned_with_stop_act_with_selected_or_not_marker'
+exp_name: 'test_iqn_learned_with_stop_act_with_selected_or_not_marker_v2'

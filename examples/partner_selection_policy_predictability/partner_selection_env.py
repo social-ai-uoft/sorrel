@@ -80,7 +80,7 @@ class partner_pool:
         else:
             # add preferences
             if cfg.with_self_preferences:
-                state = np.concatenate([state, np.array(agent.preferences)])
+                state = np.concatenate([state, 10*np.array(agent.preferences)])
             else:
                 state = np.concatenate([state, np.array([0,0])])
             # add partner preferences
@@ -94,7 +94,8 @@ class partner_pool:
                 else:
                     state = np.concatenate([state, np.array(partner.appearance)*0])
 
-
+        # add marker of being selected
+        state = np.concatenate([state, np.array([1.*agent.selected_in_last_turn])])
         # add time
         state = np.concatenate([state, np.array([self.time])])
       

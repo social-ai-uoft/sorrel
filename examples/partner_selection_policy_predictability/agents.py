@@ -1,4 +1,4 @@
-from examples.partner_selection.entities import Wall, EmptyObject
+from examples.partner_selection_policy_predictability.entities import Wall, EmptyObject
 # from examples.trucks.utils import color_map
 
 from ast import literal_eval as make_tuple
@@ -87,7 +87,7 @@ class Agent:
 
     def current_state(self, env: GridworldEnv, partner_selection=True) -> np.ndarray:
         if partner_selection:
-            state = env.state(self)
+            state = env.state(self, self.cfg)
         else:
             state = self.pov(env)
         # state = np.concatenate([state, np.array([self.is_punished])])
@@ -268,14 +268,14 @@ class Agent:
         # print(partner.ixs, partner.delay_reward)
         return reward 
     
-    def add_memory(self, is_ppo, tuple):
-        if is_ppo: 
-            state, action, action_logprob, reward, done = tuple
-            self.episode_memory.states.append(torch.tensor(state))
-            self.episode_memory.actions.append(torch.tensor(action))
-            self.episode_memory.logprobs.append(torch.tensor(action_logprob))
-            self.episode_memory.rewards.append(torch.tensor(reward))
-            self.episode_memory.is_terminals.append(torch.tensor(done))
+    # def add_memory(self, is_ppo, tuple):
+    #     if is_ppo: 
+    #         state, action, action_logprob, reward, done = tuple
+    #         self.episode_memory.states.append(torch.tensor(state))
+    #         self.episode_memory.actions.append(torch.tensor(action))
+    #         self.episode_memory.logprobs.append(torch.tensor(action_logprob))
+    #         self.episode_memory.rewards.append(torch.tensor(reward))
+    #         self.episode_memory.is_terminals.append(torch.tensor(done))
     
     def SB_task(
             self, 
@@ -305,6 +305,7 @@ class Agent:
             parnter_learning_tuples = None
         else:
             partner_action = random.choices([0, 1], partner.preferences, k=1)[0]
+            partner.cached_action = partner_action
             parnter_learning_tuples = None
 
         # determine the outcomes 
@@ -317,12 +318,11 @@ class Agent:
                     r = self.preferences[self_SB_choice]
                 else:
                     r = 1 * (self.preferences[self_SB_choice] > 0.)
-                reward = r
-                # partner_reward = r
-                partner_reward = partner.preferences[self_SB_choice]
+                reward = float(self.reward_matrix[self_SB_choice, partner_action])
+                partner_reward = float(partner.reward_matrix[partner_action, self_SB_choice])
             else:
-                reward = 0
-                partner_reward = 0
+                reward = float(self.reward_matrix[self_SB_choice, partner_action])
+                partner_reward = float(partner.reward_matrix[partner_action, self_SB_choice])
         else: 
             reward = 0
             partner_reward = 0 
@@ -353,7 +353,7 @@ class Agent:
         """
         Change the prefernces values based on the actions taken
         """
-        v = 0.05 # 0.02
+        v = 0.0005 # 0.02
         if hasattr(self, 'role'):
             if self.role == 'partner':
                 assert action in [0, 1, 2], ValueError('Action not in action space')

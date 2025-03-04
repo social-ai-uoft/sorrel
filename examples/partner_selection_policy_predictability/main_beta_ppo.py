@@ -23,10 +23,10 @@ import random
 from agentarium.models.PPO_mb import RolloutBuffer
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
-from examples.partner_selection.agents import Agent
-from examples.partner_selection.env import partner_selection
-from examples.partner_selection.state_sys import state_sys
-from examples.partner_selection.utils import (create_agents, create_entities, create_models_PPO,
+from examples.partner_selection_policy_predictability.agents import Agent
+from examples.partner_selection_policy_predictability.env import partner_selection
+from examples.partner_selection_policy_predictability.state_sys import state_sys
+from examples.partner_selection_policy_predictability.utils import (create_agents, create_entities, create_models_PPO,
                                 init_log, load_config, save_config_backup)
 import torch
 

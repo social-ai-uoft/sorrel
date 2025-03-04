@@ -24,10 +24,10 @@ import random
 from agentarium.models.PPO import RolloutBuffer
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
-from examples.partner_selection.agents import Agent
-from examples.partner_selection.partner_selection_env import partner_pool
-from examples.partner_selection.env import partner_selection
-from examples.partner_selection.utils import (create_agents, create_entities, create_interaction_task_models,
+from examples.partner_selection_policy_predictability.agents import Agent
+from examples.partner_selection_policy_predictability.partner_selection_env import partner_pool
+from examples.partner_selection_policy_predictability.env import partner_selection
+from examples.partner_selection_policy_predictability.utils import (create_agents, create_entities, create_interaction_task_models,
                                 init_log, load_config, save_config_backup, 
                                 create_partner_selection_models_PPO, create_agent_appearances,
                                 generate_preferences, generate_variability,

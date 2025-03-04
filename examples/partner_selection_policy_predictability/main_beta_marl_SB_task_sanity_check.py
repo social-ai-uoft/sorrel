@@ -24,10 +24,10 @@ import random
 from agentarium.models.PPO import RolloutBuffer, PPO
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
-from examples.partner_selection.agents import Agent
-from examples.partner_selection.partner_selection_env import partner_pool
-from examples.partner_selection.env import partner_selection
-from examples.partner_selection.utils import (create_agents, create_entities, create_interaction_task_models,
+from examples.partner_selection_policy_predictability.agents import Agent
+from examples.partner_selection_policy_predictability.partner_selection_env import partner_pool
+from examples.partner_selection_policy_predictability.env import partner_selection
+from examples.partner_selection_policy_predictability.utils import (create_agents, create_entities, create_interaction_task_models,
                                 init_log, load_config, save_config_backup, 
                                 create_partner_selection_models_PPO, create_agent_appearances,
                                 generate_preferences, generate_variability, get_agents_by_ixs)
@@ -45,25 +45,25 @@ def run(cfg, **kwargs):
     sanity_check = cfg.sanity_check
     if sanity_check:
         print('sanity check')
-        partner_selection_models = create_partner_selection_models_PPO(5, 'cpu')
+        partner_selection_models = create_partner_selection_models_PPO(3, 'cpu')
         appearances = create_agent_appearances(cfg.agent.agent.num)
 
         agents = []
         agent1 = Agent(partner_selection_models[0], cfg, 0)
         agent2 = Agent(partner_selection_models[1], cfg, 1)
         agent3 = Agent(partner_selection_models[2], cfg, 2)
-        agent4 = Agent(partner_selection_models[3], cfg, 3)
-        agent5 = Agent(partner_selection_models[4], cfg, 4)
+        # agent4 = Agent(partner_selection_models[3], cfg, 3)
+        # agent5 = Agent(partner_selection_models[4], cfg, 4)
         agents.append(agent1)
         agents.append(agent2)
         agents.append(agent3)
-        agents.append(agent4)
-        agents.append(agent5)
+        # agents.append(agent4)
+        # agents.append(agent5)
 
         # agent model
         agent1.partner_choice_model = PPO(
                 device='cpu', 
-                state_dim=36,
+                state_dim=29,
                 action_dim=4, 
                 lr_actor=0.0001,
                 lr_critic=0.00005,
@@ -74,6 +74,7 @@ def run(cfg, **kwargs):
             )
         agent1.partner_choice_model.name = 'PPO'
         agent1.preferences = [0.5, 0.5]
+        agent1.reward_matrix = np.array([[2, 0], [0, 2]])
         agent1.trainable = True
         agent1.frozen = False
         agent1.role = 'focal'
@@ -81,8 +82,8 @@ def run(cfg, **kwargs):
 
         agent2.partner_choice_model = PPO(
                 device='cpu', 
-                state_dim=36,
-                action_dim=2,
+                state_dim=29,
+                action_dim=3,
                 lr_actor=0.0001,
                 lr_critic=0.00005,
                 gamma=0.99,
@@ -92,16 +93,17 @@ def run(cfg, **kwargs):
             )
         agent2.partner_choice_model.name = 'PPO'
         agent2.preferences = [.7, 0.3]
+        agent2.reward_matrix = np.array([[2, 1], [1, 2]])
         agent2.trainable = True
-        agent2.frozen = True
+        agent2.frozen = False
         agent2.role = 'partner'
-        agent2.action_size = 2
+        agent2.action_size = 3
         
 
         agent3.partner_choice_model = PPO(
                 device='cpu', 
-                state_dim=36,
-                action_dim=2,
+                state_dim=29,
+                action_dim=3,
                 lr_actor=0.0001,
                 lr_critic=0.00005,
                 gamma=0.99,
@@ -110,47 +112,48 @@ def run(cfg, **kwargs):
                 entropy_coefficient=0.005  
             )
         agent3.partner_choice_model.name = 'PPO'
-        agent3.preferences = [0.3, 0.7]
+        agent3.preferences = [0.5, 0.5]
+        agent3.reward_matrix = np.array([[2, 1], [1, 2]])
         agent3.trainable = True
-        agent3.frozen = True
+        agent3.frozen = False
         agent3.role = 'partner'
-        agent3.action_size = 2
+        agent3.action_size = 3
 
-        agent4.partner_choice_model = PPO(
-                device='cpu', 
-                state_dim=36,
-                action_dim=2,
-                lr_actor=0.0001,
-                lr_critic=0.00005,
-                gamma=0.99,
-                K_epochs=10,
-                eps_clip=0.2,
-                entropy_coefficient=0.005  
-            )
-        agent4.partner_choice_model.name = 'PPO'
-        agent4.preferences = [0.3, 0.7]
-        agent4.trainable = True
-        agent4.frozen = True
-        agent4.role = 'partner'
-        agent4.action_size = 2
+        # agent4.partner_choice_model = PPO(
+        #         device='cpu', 
+        #         state_dim=36,
+        #         action_dim=2,
+        #         lr_actor=0.0001,
+        #         lr_critic=0.00005,
+        #         gamma=0.99,
+        #         K_epochs=10,
+        #         eps_clip=0.2,
+        #         entropy_coefficient=0.005  
+        #     )
+        # agent4.partner_choice_model.name = 'PPO'
+        # agent4.preferences = [0.3, 0.7]
+        # agent4.trainable = True
+        # agent4.frozen = True
+        # agent4.role = 'partner'
+        # agent4.action_size = 2
 
-        agent5.partner_choice_model = PPO(
-                device='cpu', 
-                state_dim=36,
-                action_dim=2,
-                lr_actor=0.0001,
-                lr_critic=0.00005,
-                gamma=0.99,
-                K_epochs=10,
-                eps_clip=0.2,
-                entropy_coefficient=0.005  
-            )
-        agent5.partner_choice_model.name = 'PPO'
-        agent5.preferences = [0.3, 0.7]
-        agent5.trainable = True 
-        agent5.frozen = True
-        agent5.role = 'partner'
-        agent5.action_size = 2
+        # agent5.partner_choice_model = PPO(
+        #         device='cpu', 
+        #         state_dim=36,
+        #         action_dim=2,
+        #         lr_actor=0.0001,
+        #         lr_critic=0.00005,
+        #         gamma=0.99,
+        #         K_epochs=10,
+        #         eps_clip=0.2,
+        #         entropy_coefficient=0.005  
+        #     )
+        # agent5.partner_choice_model.name = 'PPO'
+        # agent5.preferences = [0.3, 0.7]
+        # agent5.trainable = True 
+        # agent5.frozen = True
+        # agent5.role = 'partner'
+        # agent5.action_size = 2
 
     else:
         partner_selection_models = create_partner_selection_models_PPO(cfg.agent.agent.num, 'cpu')
@@ -262,7 +265,7 @@ def run(cfg, **kwargs):
         from torch.utils.tensorboard import SummaryWriter
 
         writer = SummaryWriter(
-            log_dir=f'{root}/examples/partner_selection/runs/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
+            log_dir=f'{root}/examples/partner_selection_policy_predictability/runs/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
         )
 
     # Container for game variables (epoch, turn, loss, reward)
@@ -325,7 +328,10 @@ def run(cfg, **kwargs):
 
 
             for agent in agents:
+                # if agent.ixs == 1:
+                #     print(agent.preferences, agent.ixs, epoch, turn)
                 agent.reward = 0
+                agent.selected_in_last_turn = 0
                 dominant_pref[agent.ixs] += agent.preferences.index(max(agent.preferences))
                 preferences_track[agent.ixs].append(agent.preferences)
                 avg_val_bach[agent.ixs].append(agent.preferences[0])
@@ -385,6 +391,7 @@ def run(cfg, **kwargs):
                 # record the ixs of the selected partner
                 if is_focal:
                     assert agent.ixs != partner_ixs, 'select oneself'
+                    partner.selected_in_last_turn = 1
                     partner_selection_freqs[agent.ixs][partner_ixs] += 1
                     selecting_more_entropic_partner[agent.ixs].append(partner_ixs==max_var_ixs)
                     # selecting_more_variable_partner[agent.ixs].append(partner_ixs==max_var_ixs)
@@ -416,13 +423,7 @@ def run(cfg, **kwargs):
                         partner_pool_env
                     )
 
-                    nonselected_partner_reward = -1 
-
-                    # for this condition specifically (match over pref)
-                    if action == partner.cached_action:
-                        selected_parnter_reward = partner.preferences[partner.cached_action]
-                    else:
-                        selected_parnter_reward = 0
+                    nonselected_partner_reward = 0
                     
                     if partner.cached_action == partner.preferences.index(max(partner.preferences)):
                         act_match_pref[partner.ixs].append(1)
@@ -540,14 +541,14 @@ def run(cfg, **kwargs):
                 for a_ixs, agent in enumerate(agents):
                     # agent.model.save(file_path=kwargs.get("save_weights"))
                     # agent.model.save(file_path=
-                    #                 f'{cfg.root}/examples/partner_selection/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
+                    #                 f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
                     #                 )
                     agent.partner_choice_model.save(
-                                    f'{cfg.root}/examples/partner_selection/models/checkpoints/'
+                                    f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/'
                                     f'{cfg.exp_name}_agent{a_ixs}_{cfg.model.PPO.type}.pkl'
                                     )
                     # torch.save(agent.task_model,
-                    #             f'{cfg.root}/examples/partner_selection/models/checkpoints/'
+                    #             f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/'
                     #             +f'{cfg.exp_name}_agent{a_ixs}_{cfg.interaction_task.model.type}.pkl')
         
     # Close the tensorboard log
@@ -565,13 +566,13 @@ def main():
     
     print(os.path.abspath("."))
     args = parser.parse_args()
-    save_config_backup(args.config, 'examples/partner_selection/configs/records')
+    save_config_backup(args.config, 'examples/partner_selection_policy_predictability/configs/records')
     cfg = load_config(args)
     init_log(cfg)
     run(
         cfg,
-        # load_weights=f'{cfg.root}/examples/partner_selection/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
-        save_weights=f'{cfg.root}/examples/partner_selection/models/checkpoints/{cfg.exp_name}_{cfg.model.PPO.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
+        # load_weights=f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
+        save_weights=f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/{cfg.exp_name}_{cfg.model.PPO.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
     )
 
 
