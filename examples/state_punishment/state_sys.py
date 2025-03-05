@@ -5,7 +5,7 @@ from examples.state_punishment.utils import inspect_the_env, add_extra_info
 from copy import deepcopy
 
 class state_sys():
-    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote, is_dynamic, potential_taboo) -> None:
+    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote, is_dynamic, potential_taboo, only_taboo) -> None:
         self.prob = init_prob
         self.prob_list = prob_list
         self.init_prob = init_prob 
@@ -14,6 +14,7 @@ class state_sys():
         self.change_per_vote = change_per_vote
         self.resource_punishment_schedule_is_dynamic = is_dynamic
         self.potential_taboo = potential_taboo
+        self.only_punish_taboo = only_taboo
         self.prob_record = []
     
     def reset_prob_record(self):

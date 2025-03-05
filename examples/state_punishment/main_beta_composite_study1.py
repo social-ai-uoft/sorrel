@@ -66,8 +66,9 @@ def run(cfg, **kwargs):
     transgression_punishment_record = pd.DataFrame(columns=['agent', 'transgression', 'punished', 'time'])
 
     # load weights
-    # for count, agent in enumerate(agents):
-    #     agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/fixed_punishment_rate_0.0_0.0_1.0_3As_size15_3Resources_ambiguity_v2_init0.2_agent{count}_iRainbowModel.pkl')
+    for count, agent in enumerate(agents):
+        agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_agent{agent.ixs}_iRainbowModel.pkl')
+    
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:
@@ -96,7 +97,8 @@ def run(cfg, **kwargs):
             cfg.state_sys.taboo,
             cfg.state_sys.change_per_vote,
             cfg.state_sys.resource_punishment_schedule_is_dynamic,
-            cfg.state_sys.potential_taboo
+            cfg.state_sys.potential_taboo,
+            cfg.state_sys.only_punish_taboo
             )
 
         state_mode = cfg.state_mode
@@ -258,8 +260,8 @@ def run(cfg, **kwargs):
                                     f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
                                     )
                     
-        epoch_transgression_df = build_transgression_and_punishment_record(agents)
-        transgression_punishment_record = pd.concat([transgression_punishment_record, epoch_transgression_df], ignore_index=True)
+        # epoch_transgression_df = build_transgression_and_punishment_record(agents)
+        # transgression_punishment_record = pd.concat([transgression_punishment_record, epoch_transgression_df], ignore_index=True)
         for agent in agents:
             agent.reset_record()
 
@@ -268,8 +270,8 @@ def run(cfg, **kwargs):
     if cfg.log:
         writer.close()
 
-    # save punishment record
-    transgression_punishment_record.to_csv(f'data/{cfg.exp_name}_transgression_record.csv')
+    # # save punishment record
+    # transgression_punishment_record.to_csv(f'data/{cfg.exp_name}_transgression_record.csv')
 
 def main():
     import argparse
