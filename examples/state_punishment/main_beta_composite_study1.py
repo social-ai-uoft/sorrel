@@ -32,12 +32,22 @@ from examples.state_punishment.utils import (create_agents, create_entities, cre
                                 calculate_sdt_metrics_np, calculate_d_prime)
 from copy import deepcopy
 import numpy as np
+import torch
 
 # endregion                #
 # ------------------------ #
 
 
 def run(cfg, **kwargs):
+
+    # set seed 
+    random.seed(cfg.seed)
+    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
+    torch.cuda.manual_seed_all(cfg.seed)
+
+    cfg.exp_name = cfg.exp_name + f'_seed{cfg.seed}'
+
     # Initialize the environment and get the agents
     models = create_models(cfg)
     agents: list[Agent] = create_agents(cfg, models)
@@ -66,8 +76,8 @@ def run(cfg, **kwargs):
     transgression_punishment_record = pd.DataFrame(columns=['agent', 'transgression', 'punished', 'time'])
 
     # load weights
-    for count, agent in enumerate(agents):
-        agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_agent{agent.ixs}_iRainbowModel.pkl')
+    # for count, agent in enumerate(agents):
+    #     agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_agent{agent.ixs}_iRainbowModel.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
@@ -85,6 +95,14 @@ def run(cfg, **kwargs):
     elif cfg.action_mode == 'simple':
         assert cfg.model.iqn.parameters.action_size == 6, ValueError('Number of actions should be 6 when the action mode is simple')
     
+    # conditions
+    if cfg.state_sys.resource_punishment_schedule_is_dynamic:
+        assert '_dynamic' in cfg.exp_name, ValueError('The exp name should contain [dynamic]')
+    else:
+        if cfg.state_sys.only_punish_taboo:
+            assert "only_taboo" in cfg.exp_name, ValueError("The exp name should contain 'only taboo'")
+        else:
+            assert 'nondynamic' in cfg.exp_name, ValueError("The exp name should contain 'nondynamic'")
 
     for epoch in range(cfg.experiment.epochs):
 
