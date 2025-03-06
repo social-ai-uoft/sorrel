@@ -20,17 +20,17 @@ interaction_task:
       lr: 0.6 # 0.01
 
 model:
-  iqn:
-    type: iRainbowModel
+  PPO:
+    type: PPO
     num: 3
     device: cpu
     parameters:
-      state_size: [1, 29] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
-      extra_percept_size: 0 # added for extra percept
+      state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      extra_percept_size: 1 # added for extra percept
       action_size: 4
       layer_size: 250
       num_frames: 5
-      n_step: 3
+      n_step: 1
       BATCH_SIZE: 64
       BUFFER_SIZE: 1024
       LR: 0.00025
@@ -108,7 +108,7 @@ entity:
 
 # Root folder for accessing file structure and modules
 root: '/Users/yikaitang/Documents/Github/agentarium_predictive_regularity'
-log: False
+log: True
 
 partner_free_choice: False
 partner_free_choice_beforehand: False
@@ -120,14 +120,16 @@ with_self_preferences: True
 with_partner_preferences: False
 with_partner_to_select_appearance: True
 test_against_pref: False
-focal_vary: False
+focal_vary: True 
 study: 1
 sanity_check: True
 default: True
+multi_deciders: True
 # exp_name: 'SB_task/v5_diff_init_entropy_sanity_check_two_trainable_selection_SB_choice_learned_without_partner_preference' # with variability in the state info [learned selection, hardcoded, random]
 # exp_name: 'debug_study2_v3'
 exp_name: 'SB_task_v2/sanity_check_two_trainable_learned_selection_with_reset_fixeddecider_len10'
 exp_name: 'SB_task_v2/test_match_over_pref_learned_with_reset_fixeddecider_len10_v2'
 exp_name: 'SB_task_v2/test_match_over_pref_learned_maj_min_condition_with_reset_fixeddecider_len10'
-exp_name: 'test_iqn_learned_with_stop_act_with_selected_or_not_marker_v8_model_update_freq_every_epoch'
-exp_name: 'test_error_v3_random'
+exp_name: 'test_pp_learned_with_stop_act_with_selected_or_not_marker'
+exp_name: "test_s6_random_with_cost_sym0.1_without_variation"
+exp_name: 'test_multiple_deciders_random_sym_cost0.2_VarFreq_100'

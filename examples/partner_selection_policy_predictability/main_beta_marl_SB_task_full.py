@@ -118,7 +118,6 @@ def run(cfg, **kwargs):
     init_diversity = entropy(softmax(list(init_pref_dist.values())))
 
 
-
     for epoch in range(cfg.experiment.epochs):        
 
         # Reset the environment at the start of each epoch

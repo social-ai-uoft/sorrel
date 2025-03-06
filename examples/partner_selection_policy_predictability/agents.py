@@ -333,7 +333,7 @@ class Agent:
         # update memory if needed
 
         return reward, partner_reward, \
-            self.preferences[self_SB_choice] > 0, \
+            np.argmax(self.reward_matrix.sum(axis=1)) == self_SB_choice, \
                 self_SB_choice == partner_action, \
                     parnter_learning_tuples
 
@@ -385,13 +385,18 @@ class Agent:
                    partner_choices,
                    is_focal,
                    cfg, 
-                   mode='prediction') -> tuple:
+                   mode='prediction',
+                   epoch=None) -> tuple:
         '''
         Changes the world based on the action taken.
         '''
 
         # Get current state
-        state = env.state(self, cfg)
+        if cfg.random_selection:
+            state, selected_partner_ixs = env.state(self, cfg)
+            selected_partner = [a for a in partner_choices if a.ixs == selected_partner_ixs][0]
+        else:
+            state = env.state(self, cfg)
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
         if self.model_type == 'PPO':
@@ -424,6 +429,8 @@ class Agent:
             else:
                 action = self.partner_choice_model.take_action(model_input)
             action_prob = None
+            if (epoch < 40) and (not is_focal):
+                action = random.randint(0, 2)
 
         # set random actions
         if cfg.study == 3:
@@ -453,21 +460,22 @@ class Agent:
         elif not cfg.experiment.is_SB_task:
             self.selection_task_action(action, is_focal)
 
-        # Select the partner
-        if cfg.experiment.is_SB_task:
-            if action <= 3: 
-                selected_partner = partner_choices[int(action//2)]
-                selected_partner_ixs = selected_partner.ixs
+        # # Select the partner
+        if not cfg.random_selection:
+            if cfg.experiment.is_SB_task:
+                if action <= 3: 
+                    selected_partner = partner_choices[int(action//2)]
+                    selected_partner_ixs = selected_partner.ixs
+                else:
+                    selected_partner = None
+                    selected_partner_ixs = None
             else:
-                selected_partner = None
-                selected_partner_ixs = None
-        else:
-            if int(action) <= 1:
-                selected_partner = partner_choices[action]
-                selected_partner_ixs = selected_partner.ixs
-            else:
-                selected_partner = None
-                selected_partner_ixs = None
+                if int(action) <= 1:
+                    selected_partner = partner_choices[action]
+                    selected_partner_ixs = selected_partner.ixs
+                else:
+                    selected_partner = None
+                    selected_partner_ixs = None
 
         if self.model_type == 'PPO':
             return state, action, selected_partner, False, action_prob, selected_partner_ixs

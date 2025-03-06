@@ -236,7 +236,8 @@ def run(cfg, **kwargs):
                     partner_choices, 
                     is_focal,
                     cfg,
-                    mode=cfg.interaction_task.mode
+                    mode=cfg.interaction_task.mode,
+                    epoch = epoch,
                     )
                 
                 if cfg.hardcoded:

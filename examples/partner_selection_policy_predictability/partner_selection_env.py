@@ -83,8 +83,13 @@ class partner_pool:
                 state = np.concatenate([state, 10*np.array(agent.preferences)])
             else:
                 state = np.concatenate([state, np.array([0,0])])
-            # add partner preferences
+            # add partner preferences & appearances
+            if cfg.random_selection:
+                selected_partner = random.choices(self.partner_to_select, k=1)[0]
+                selected_partner_ixs = selected_partner.ixs
             for partner in self.partner_to_select:
+                if cfg.random_selection:
+                    partner = selected_partner
                 if cfg.with_partner_preferences:
                     state = np.concatenate([state, np.array(partner.preferences)])
                 else:
@@ -98,8 +103,11 @@ class partner_pool:
         state = np.concatenate([state, np.array([1.*agent.selected_in_last_turn])])
         # add time
         state = np.concatenate([state, np.array([self.time])])
-      
-        return state
+
+        if not cfg.random_selection:
+            return state
+        else:
+            return state, selected_partner_ixs
     
     def get_max_variability_partner_ixs(self):
         """
