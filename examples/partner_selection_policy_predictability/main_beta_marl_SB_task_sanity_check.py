@@ -362,12 +362,13 @@ def run(cfg, **kwargs):
         
         
         # vary focal agent preferences
-        if cfg.focal_vary:
-            if epoch % cfg.focal_shift_freq == 0:
-                random_decider_ixs = random.randint(0, 1)
-                agent1.partner_choice_model = decider_models[random_decider_ixs]
-                agent1.reward_matrix = decider_rm[random_decider_ixs]
-                agent1.appearance = decider_appearances[random_decider_ixs]
+        if cfg.multi_deciders:
+            if cfg.focal_vary:
+                if epoch % cfg.focal_shift_freq == 0:
+                    random_decider_ixs = random.randint(0, 1)
+                    agent1.partner_choice_model = decider_models[random_decider_ixs]
+                    agent1.reward_matrix = decider_rm[random_decider_ixs]
+                    agent1.appearance = decider_appearances[random_decider_ixs]
 
         while not done:
 
@@ -475,13 +476,16 @@ def run(cfg, **kwargs):
                     reward = 0 
 
                     # add cost to changing preferences
-                    if not is_focal:
-                        if action in [0, 1]:
-                            # if agent.preferences.index(max(agent.preferences)) == 1-action:
-                            #     reward -= 0
-                            # else: 
-                            #     reward -= (max(agent.preferences)- 0.5) # *1.5
-                            reward -= cfg.cost_of_changing_preferences
+                    if cfg.cost_of_changing_preferences > 0:
+                        if not is_focal:
+                            if action in [0, 1]:
+                                if not cfg.sym_cost:
+                                    if agent.preferences.index(max(agent.preferences)) == 1-action:
+                                        reward -= 0
+                                    else: 
+                                        reward -= (max(agent.preferences)- 0.5) # *1.5
+                                else:
+                                    reward -= cfg.cost_of_changing_preferences
 
                   
                     # execute the interaction task only when the agent is the focal one in this trial
@@ -598,10 +602,10 @@ def run(cfg, **kwargs):
                                 {f'Agent_{j}_selected':np.array(partner_selection_freqs[i][j]) for j in range(len(agents))}, 
                                 epoch)
                 if cfg.focal_vary:
-                    writer.add_scalar(f'Agent_{i}/decider_A_selection_freq', 
+                    writer.add_scalars(f'Agent_{i}/decider_A_selection_freq', 
                                       {f'Agent_{j}_selected':np.array(decider_A_partner_selection_freqs[i][j]) for j in range(len(agents))},
                                       epoch)
-                    writer.add_scalar(f'Agent_{i}/decider_B_selection_freq',
+                    writer.add_scalars(f'Agent_{i}/decider_B_selection_freq',
                                       {f'Agent_{j}_selected':np.array(decider_B_partner_selection_freqs[i][j]) for j in range(len(agents))},
                                       epoch)
                 writer.add_scalars(f'Agent_{i}/action_freq',
