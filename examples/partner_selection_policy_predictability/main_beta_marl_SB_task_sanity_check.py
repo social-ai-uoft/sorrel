@@ -303,7 +303,7 @@ def run(cfg, **kwargs):
 
     # initial diversity
     init_pref_dist = {0:0, 1:0}
-    for a in agents:
+    for a in agents[1:]:
         pref_type = a.preferences.index(max(a.preferences))
         init_pref_dist[pref_type] += 1
     init_diversity = entropy(softmax(list(init_pref_dist.values())))
@@ -566,7 +566,7 @@ def run(cfg, **kwargs):
         
         # calculate diversity
         pref_dist = {0:0, 1:0}
-        for a in agents:
+        for a in agents[1:]:
             pref_type = a.preferences.index(max(a.preferences))
             pref_dist[pref_type] += 1
         diversity = entropy(softmax(list(pref_dist.values())))
