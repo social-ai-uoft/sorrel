@@ -369,6 +369,13 @@ def run(cfg, **kwargs):
                     agent1.partner_choice_model = decider_models[random_decider_ixs]
                     agent1.reward_matrix = decider_rm[random_decider_ixs]
                     agent1.appearance = decider_appearances[random_decider_ixs]
+        else:
+            if cfg.focal_vary:
+                if epoch % cfg.focal_shift_freq == 0:
+                    random_decider_ixs = random.randint(0, 1)
+                    # agent1.partner_choice_model = decider_model÷s[random_decider_ixs]
+                    agent1.reward_matrix = decider_rm[random_decider_ixs]
+                    agent1.appearance = decider_appearances[random_decider_ixs]
 
         while not done:
 

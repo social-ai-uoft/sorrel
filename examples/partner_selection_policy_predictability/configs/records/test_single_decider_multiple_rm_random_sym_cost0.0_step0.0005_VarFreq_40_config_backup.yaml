@@ -1,0 +1,136 @@
+
+experiment:
+  name: state_punishment_beta
+  epochs: 1000000
+  max_turns: 15
+  epsilon_decay: 0.0001
+  is_SB_task: True
+
+interaction_task:
+  mode: prediction
+  task_max_turns: 25
+  n_trials: 40
+  model: 
+    type: Classification
+    num: 3
+    parameters:
+      input_size: 3
+      hidden_size: 16 # 16
+      output_size: 2
+      lr: 0.6 # 0.01
+
+model:
+  PPO:
+    type: PPO
+    num: 3
+    device: cpu
+    parameters:
+      state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      extra_percept_size: 1 # added for extra percept
+      action_size: 4
+      layer_size: 250
+      num_frames: 5
+      n_step: 1
+      BATCH_SIZE: 64
+      BUFFER_SIZE: 1024
+      LR: 0.00025
+      TAU: .001
+      GAMMA: 0.99
+      N: 12
+      sync_freq: 200
+      model_update_freq: 4
+      epsilon: 0.01
+
+agent:
+  agent:
+    num: 3
+    preference_var: 0.5
+    model: PPO
+    num_memories: 5 # Should match num_frames in the model above
+    vision: 7
+    # appearance: (0.0, 0.0, 255.0)
+    appearance: 
+      - [0.0, 0.0, 255.0, 255.0, 0., 0., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 255., 0., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 255., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0., 255., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0., 0., 255., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0., 0., 0., 255.]
+    memory_size: 100 # If this is larger than max_turns above, could cause issues
+    # Not used right now
+    tile_size: (1, 1)
+    pov_size: 9
+    health: 10
+    extra_percept_size: 1 # added for extra percept
+    preference_len: 3
+    trainable: True
+    frozen: False
+    action_size: 4
+
+
+
+# Parameters for the coordination stage
+env:
+  height: 15
+  width: 15
+  layers: 1
+  channels: 9
+  default_object: EmptyObject
+  full_mdp: False # Whether to return the full agent 
+  tile_size: [16, 16] # Default sprite size for visualization (not used as model input yet) [16, 16]
+  prob:
+    item_spawn: 0.2 # 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
+    # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
+    item_choice: [0.5, 0.5] # [0.3, 0.7] [0.8, 0.2]
+    respawn_rate: 0.02
+
+
+entity:
+  Gem:
+    start_num: 1
+    value: 5 # 10
+    appearance: (0.0, 255.0, 0.0) # Green
+  Coin:
+    start_num: 1
+    value: 10 # 2
+    appearance: (255.0, 0.0, 0.0) # Yellow
+    social_harm: 40 # 5
+  # Food:
+  #   start_num: 0
+  #   value: 1
+  #   appearance: (255.0, 0.0, 0.0) # Red
+  # Bone:
+  #   start_num: 0
+  #   value: -4
+  #   appearance: (0, 0, 0) # Black
+
+
+
+# Root folder for accessing file structure and modules
+root: '/Users/socialai2/Documents/partner_selection'
+log: True
+
+partner_free_choice: False
+partner_free_choice_beforehand: False
+random_selection: True
+hardcoded: False
+preference_reset: False 
+social_comparison: False
+with_self_preferences: True
+with_partner_preferences: False
+with_partner_to_select_appearance: True
+test_against_pref: False
+focal_vary: True 
+study: 1
+sanity_check: True
+default: True
+multi_deciders: False
+cost_of_changing_preferences: 0.0
+sym_cost: True
+focal_shift_freq: 40
+# exp_name: 'SB_task/v5_diff_init_entropy_sanity_check_two_trainable_selection_SB_choice_learned_without_partner_preference' # with variability in the state info [learned selection, hardcoded, random]
+# exp_name: 'debug_study2_v3'
+
+exp_name: 'test_multiple_deciders_learned_sym_cost0.1_VarFreq_40'
+exp_name: 'test_single_deciders_random_sym_cost0.0_step0.0005'
+exp_name: 'test_single_decider_multiple_rm_random_sym_cost0.0_step0.0005_VarFreq_40'
