@@ -336,6 +336,8 @@ def run(cfg, **kwargs):
         avg_val_bach = [[] for _ in range(len(agents))]
         avg_val_stravinsky = [[] for _ in range(len(agents))]
         act_match_pref = [[] for _ in range(len(agents))]
+        decider_A_partner_selection_freqs = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
+        decider_B_partner_selection_freqs = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
         same_choices_lst = 0
         choice_matches_preference_lst = 0 
         # Container for data within epoch
@@ -360,14 +362,14 @@ def run(cfg, **kwargs):
         
         
         # vary focal agent preferences
-        if epoch % 20 == 0:
-            random_decider_ixs = random.randint(0, 1)
-            agent1.partner_choice_model = decider_models[random_decider_ixs]
-            agent1.reward_matrix = decider_rm[random_decider_ixs]
-            agent1.appearance = decider_appearances[random_decider_ixs]
+        if cfg.focal_vary:
+            if epoch % cfg.focal_shift_freq == 0:
+                random_decider_ixs = random.randint(0, 1)
+                agent1.partner_choice_model = decider_models[random_decider_ixs]
+                agent1.reward_matrix = decider_rm[random_decider_ixs]
+                agent1.appearance = decider_appearances[random_decider_ixs]
 
         while not done:
-
 
             for agent in agents:
                 # if agent.ixs == 1:
@@ -454,6 +456,11 @@ def run(cfg, **kwargs):
                         assert agent.ixs != partner_ixs, 'select oneself'
                         partner.selected_in_last_turn = 1
                         partner_selection_freqs[agent.ixs][partner_ixs] += 1
+                        if cfg.focal_vary:
+                            if random_decider_ixs == 0:
+                                decider_A_partner_selection_freqs[agent.ixs][partner_ixs] += 1
+                            elif random_decider_ixs == 1:
+                                decider_B_partner_selection_freqs[agent.ixs][partner_ixs] += 1
                         selecting_more_entropic_partner[agent.ixs].append(partner_ixs==max_var_ixs)
                         # selecting_more_variable_partner[agent.ixs].append(partner_ixs==max_var_ixs)
                         selected_partner_entropy[agent.ixs].append(entropy(partner.preferences))
@@ -474,7 +481,7 @@ def run(cfg, **kwargs):
                             #     reward -= 0
                             # else: 
                             #     reward -= (max(agent.preferences)- 0.5) # *1.5
-                            reward -= 0.1
+                            reward -= cfg.cost_of_changing_preferences
 
                   
                     # execute the interaction task only when the agent is the focal one in this trial
@@ -590,6 +597,13 @@ def run(cfg, **kwargs):
                 writer.add_scalars(f'Agent_{i}/selection_freq', 
                                 {f'Agent_{j}_selected':np.array(partner_selection_freqs[i][j]) for j in range(len(agents))}, 
                                 epoch)
+                if cfg.focal_vary:
+                    writer.add_scalar(f'Agent_{i}/decider_A_selection_freq', 
+                                      {f'Agent_{j}_selected':np.array(decider_A_partner_selection_freqs[i][j]) for j in range(len(agents))},
+                                      epoch)
+                    writer.add_scalar(f'Agent_{i}/decider_B_selection_freq',
+                                      {f'Agent_{j}_selected':np.array(decider_B_partner_selection_freqs[i][j]) for j in range(len(agents))},
+                                      epoch)
                 writer.add_scalars(f'Agent_{i}/action_freq',
                                 {f'action_{j}': np.array(action_record[i][j]) for j in range(agent.action_size)},
                                 epoch)
