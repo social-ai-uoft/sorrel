@@ -128,3 +128,52 @@ class EconEnv(GridworldEnv):
             stonecutter.reset()
         for market in self.markets:
             market.reset()
+
+    def new_place_agents(self, epoch, total_epochs):
+        """
+        Places the agents into the environment with progressive spawning distance from the market.
+        """
+        market_location = (25, 25, 2)
+        self.add(market_location, self.markets[0])
+
+        # Initial spawn area: 2 tiles away from the market.
+        close_spawn_area = [
+            (y, x, 2)
+            for y in range(23, 28)  # 23,24,25,26,27
+            for x in range(23, 28)
+            if abs(y - 25) + abs(x - 25) == 2
+        ]
+
+        # Determine spawn distance progression
+        max_distance = max(self.height, self.width) // 2  # Maximum possible distance from market
+        if epoch < total_epochs * 0.2:
+            # First 20% of epochs: spawn 2 tiles away from the market
+            spawn_area = close_spawn_area
+        else:
+            # Progressively increase distance from the market
+            progress_factor = (epoch - total_epochs * 0.2) / (total_epochs * 0.8)  # Scales from 0 to 1
+            spawn_radius = int(progress_factor * max_distance)
+            spawn_area = [
+                (y, x, 2)
+                for y in range(max(0, 25 - spawn_radius), min(self.height, 25 + spawn_radius))
+                for x in range(max(0, 25 - spawn_radius), min(self.width, 25 + spawn_radius))
+            ]
+
+        # Ensure valid spawn area (avoid the market location itself)
+        spawn_area = [loc for loc in spawn_area if loc != market_location]
+
+        # Shuffle and sample locations
+        random.shuffle(spawn_area)
+        woodcutters_spawn_locations = spawn_area[: len(self.woodcutters)]
+        stonecutters_spawn_locations = spawn_area[
+            len(self.woodcutters) : len(self.woodcutters) + len(self.stonecutters)
+        ]
+
+        # Place woodcutters
+        for woodcutter, woodcutter_location in zip(self.woodcutters, woodcutters_spawn_locations):
+            self.add(woodcutter_location, woodcutter)
+
+        # Place stonecutters
+        for stonecutter, stonecutter_location in zip(self.stonecutters, stonecutters_spawn_locations):
+            self.add(stonecutter_location, stonecutter)
+ 

@@ -7,6 +7,7 @@ from agentarium.utils.visualization import (animate, image_from_array,
                                             visual_field_sprite)
 # imports from our example
 from examples.ai_econ.env import EconEnv
+import examples.ai_econ.env 
 from examples.ai_econ.utils import create_agents, create_models
 
 
@@ -29,9 +30,20 @@ def run(env: EconEnv, cfg):
     total_seller_score = 0
     total_seller_loss = 0
     total_buyer_loss = 0
+    percent_marker = int(0.2 * cfg.experiment.epochs)
     for epoch in range(cfg.experiment.epochs + 1):
         # Reset the environment at the start of each epoch
         env.reset()
+
+        env.new_place_agents(epoch, cfg.experiment.epochs)
+
+        # if epoch is less than 20%
+        if epoch < percent_marker: 
+           for i in range(cfg.agent.seller.num):
+               env.woodcutters[i].wood_owned = 5
+               env.stonecutters[i].stone_owned = 5
+
+
         for i in range(cfg.agent.seller.num):
             env.woodcutters[i].model.start_epoch_action(**locals())
             env.stonecutters[i].model.start_epoch_action(**locals())

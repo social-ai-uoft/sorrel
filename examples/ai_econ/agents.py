@@ -170,10 +170,10 @@ class Seller(Agent):
 
             r = self.observation_spec.vision_radius
             for H in range(
-                max(self.location[0] - r, 0), min(self.location[0] + r), env.height
+                max(self.location[0] - r, 0), min(self.location[0] + r, env.height)
             ):
                 for W in range(
-                    max(self.location[1] - r, 0), min(self.location[1] + r), env.width
+                    max(self.location[1] - r, 0), min(self.location[1] + r, env.width)
                 ):
                     if env.observe((H, W, self.location[2])).kind == "Buyer":
                         self.wood_owned -= 1
@@ -189,10 +189,10 @@ class Seller(Agent):
 
             r = self.observation_spec.vision_radius
             for H in range(
-                max(self.location[0] - r, 0), min(self.location[0] + r), env.height
+                max(self.location[0] - r, 0), min(self.location[0] + r, env.height)
             ):
                 for W in range(
-                    max(self.location[1] - r, 0), min(self.location[1] + r), env.width
+                    max(self.location[1] - r, 0), min(self.location[1] + r, env.width) 
                 ):
                     if env.observe((H, W, self.location[2])).kind == "Buyer":
                         self.stone_owned -= 1
@@ -216,7 +216,6 @@ class Buyer(Agent):
         # the actions are (for now): buy wood, buy stone
         action_space = [0, 1]
         super().__init__(observation_spec, model, action_space)
-
         self.appearance = appearance  # the "id" of the agent
 
         self.buy_reward = cfg.agent.buyer.buy_reward
