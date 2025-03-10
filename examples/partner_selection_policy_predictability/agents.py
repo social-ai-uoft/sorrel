@@ -309,32 +309,25 @@ class Agent:
             parnter_learning_tuples = None
 
         # determine the outcomes 
+        choice_matches_preference = None
+        same_choices = None
+        
         if action <= 3:
             self_SB_choice = action % 2
-            # print('pair', self_SB_choice, partner_action)
-            if self_SB_choice == partner_action:
-                if cfg.study == 1.5:
-                    # r = self.preferences[self_SB_choice] > 0.35 # 0.1
-                    r = self.preferences[self_SB_choice]
-                else:
-                    r = 1 * (self.preferences[self_SB_choice] > 0.)
-                reward = float(self.reward_matrix[self_SB_choice, partner_action])
-                partner_reward = float(partner.reward_matrix[partner_action, self_SB_choice])
-            else:
-                reward = float(self.reward_matrix[self_SB_choice, partner_action])
-                partner_reward = float(partner.reward_matrix[partner_action, self_SB_choice])
+            reward = float(self.reward_matrix[self_SB_choice, partner_action])
+            partner_reward = float(partner.reward_matrix[partner_action, self_SB_choice])
+            choice_matches_preference = np.argmax(self.reward_matrix.sum(axis=1)) == self_SB_choice
+            same_choices = self_SB_choice == partner_action
         else: 
             reward = 0
             partner_reward = 0 
-        # reward = self.preferences[self_SB_choice] > 0
-        # print(self.ixs, reward, self_SB_choice, self.preferences)
-        # partner_reward = -1
+       
 
         # update memory if needed
 
         return reward, partner_reward, \
-            np.argmax(self.reward_matrix.sum(axis=1)) == self_SB_choice, \
-                self_SB_choice == partner_action, \
+                choice_matches_preference, \
+                same_choices, \
                     parnter_learning_tuples
 
     def selection_task_action(self, action, is_focal):
@@ -397,9 +390,10 @@ class Agent:
             selected_partner = [a for a in partner_choices if a.ixs == selected_partner_ixs][0]
         else:
             state = env.state(self, cfg)
+
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
-        if self.model_type == 'PPO':
+        else:
             model_input = torch.from_numpy(state).double()
 
         reward = 0
@@ -413,7 +407,6 @@ class Agent:
                     action, action_prob, hidden = self.partner_choice_model.take_action(model_input, self.hidden_in)
                     self.hidden_out = hidden
             else:
-                
                 action, action_prob = self.partner_choice_model.take_action(model_input)
                 # set the strategy
                 if cfg.hardcoded:
@@ -429,20 +422,12 @@ class Agent:
             else:
                 action = self.partner_choice_model.take_action(model_input)
             action_prob = None
-            if (epoch < 40) and (not is_focal):
-                action = random.randint(0, 2)
+            # # set the strategy for random exploration
+            # if (epoch < 40) and (not is_focal):
+            #     action = random.randint(0, 2)
 
         # set random actions
-        if cfg.study == 3:
-            if cfg.random_selection:
-                if action in [0,1]:
-                    action = random.randint(0,1)
-                    
-        elif cfg.study == 2:
-            if self.ixs == 0 and cfg.random_selection:
-                action = random.randint(0,1)
-
-        elif cfg.study == 1.5:
+        if cfg.study == 2:
             if cfg.random_selection:
                 if action <= 3:
                     pref_act = action % 2
@@ -476,7 +461,11 @@ class Agent:
                 else:
                     selected_partner = None
                     selected_partner_ixs = None
-
+        else:
+            if action >= 4:
+                selected_partner = None
+                selected_partner_ixs = None
+      
         if self.model_type == 'PPO':
             return state, action, selected_partner, False, action_prob, selected_partner_ixs
         else:

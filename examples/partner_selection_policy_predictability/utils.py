@@ -94,20 +94,31 @@ def create_partner_selection_models_PPO(
     """Create models for agents."""
     models = deque(maxlen=num_model)
     for _ in range(num_model):
+        # model = PPO(
+        #     device=device, 
+        #     state_dim=32,
+        #     action_dim=6,
+        #     # lr_actor=0.0001,
+        #     # lr_critic=0.00005,
+        #     lr_actor=0.0001,
+        #     lr_critic=0.00005,
+        #     gamma=0.99,
+        #     K_epochs=10,
+        #     eps_clip=0.2,
+        #     # entropy_coefficient=0.01  
+        #     entropy_coefficient=0.005
+        # )
         model = PPO(
-            device=device, 
-            state_dim=32,
-            action_dim=6,
-            # lr_actor=0.0001,
-            # lr_critic=0.00005,
-            lr_actor=0.0001,
-            lr_critic=0.00005,
-            gamma=0.99,
-            K_epochs=10,
-            eps_clip=0.2,
-            # entropy_coefficient=0.01  
-            entropy_coefficient=0.005
-        )
+                device='cpu', 
+                state_dim=41,
+                action_dim=6, 
+                lr_actor=0.0001,
+                lr_critic=0.00005,
+                gamma=0.90,
+                K_epochs=10,
+                eps_clip=0.2,
+                entropy_coefficient=0.005 
+            )
         model.name = 'PPO'
         models.append(model)
     # convert to device

@@ -107,7 +107,7 @@ entity:
 
 
 # Root folder for accessing file structure and modules
-root: '/Users/socialai2/Documents/partner_selection'
+root: '/Users/yikaitang/Documents/Github/agentarium_predictive_regularity'
 log: True
 
 partner_free_choice: False
@@ -127,6 +127,7 @@ default: True
 multi_deciders: True
 cost_of_changing_preferences: 0.1
 focal_shift_freq: 40
+sym_cost: True
 # exp_name: 'SB_task/v5_diff_init_entropy_sanity_check_two_trainable_selection_SB_choice_learned_without_partner_preference' # with variability in the state info [learned selection, hardcoded, random]
 # exp_name: 'debug_study2_v3'
 exp_name: 'SB_task_v2/sanity_check_two_trainable_learned_selection_with_reset_fixeddecider_len10'
