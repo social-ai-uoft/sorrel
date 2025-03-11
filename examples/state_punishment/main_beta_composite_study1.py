@@ -76,8 +76,11 @@ def run(cfg, **kwargs):
     transgression_punishment_record = pd.DataFrame(columns=['agent', 'transgression', 'punished', 'time'])
 
     # load weights
-    # for count, agent in enumerate(agents):
-    #     agent.model.load(f'{root}/examples/state_punishment/models/checkpoints/test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_agent{agent.ixs}_iRainbowModel.pkl')
+    if cfg.load_weights:
+        assert 's1' not in cfg.exp_name, ValueError('incorrect configurations')
+        for count, agent in enumerate(agents):
+            agent.model.load(
+                f'{root}/examples/state_punishment/models/checkpoints/test_study1__dynamic_stacked_view_simple_actions_3agents_respawn_0.04_v0_s3_seed1_agent{agent.ixs}_iRainbowModel.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
@@ -183,6 +186,9 @@ def run(cfg, **kwargs):
                 elif action == 5:
                     punishment_decrease_record[agent.ixs] += 1 
 
+                # if add direct cost of voting
+                if action >= 4:
+                    reward -= cfg.with_direct_cost
                 # agent.add_memory(state, action, reward, done)
 
                 if turn >= cfg.experiment.max_turns or done_:
