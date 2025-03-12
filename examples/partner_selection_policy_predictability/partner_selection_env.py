@@ -2,6 +2,7 @@ import numpy as np
 import random 
 from copy import deepcopy
 from scipy.stats import entropy
+from scipy.special import softmax
 
 class partner_pool:
     def __init__(self, agents):
@@ -22,13 +23,30 @@ class partner_pool:
                 sampled_agents = random.sample(qualified_pool, 2)
                 partner_choices = sampled_agents
             else:
-                sampled_agents = random.sample(self.pool, 3)
-                sampled_agents_indices = [agent.ixs for agent in sampled_agents]
-                # pick the focal agent
-                focal_agent_ixs = random.sample([i for i in range(len(sampled_agents_indices))], 1)[0]
-                focal_agent = sampled_agents[focal_agent_ixs]
-                partner_choices = [sampled_agents[i] for i in range(len(sampled_agents)) 
-                                if i != focal_agent_ixs]
+                # sampled_agents = random.sample(self.pool, 3)
+                # sampled_agents_indices = [agent.ixs for agent in sampled_agents]
+                # # pick the focal agent
+                # focal_agent_ixs = random.sample([i for i in range(len(sampled_agents_indices))], 1)[0]
+                # focal_agent = sampled_agents[focal_agent_ixs]
+                # partner_choices = [sampled_agents[i] for i in range(len(sampled_agents)) 
+                #                 if i != focal_agent_ixs]
+                sampled_agents = random.sample(self.pool, 1)
+                focal_agent = sampled_agents[0]
+                focal_agent_ixs = focal_agent.ixs
+                qualified_pool = [agent for agent in self.pool if agent.ixs != focal_agent_ixs]
+                probs = softmax(focal_agent.sampling_weight)
+                if np.count_nonzero(probs) == 1:
+                    first_idx = np.where(probs == 1.0)[0][0]
+                    first_choice = qualified_pool[first_idx]
+                    # Pick second randomly from the remaining items
+                    remaining_pool = np.delete(qualified_pool, first_idx)
+                    second_choice = np.random.choice(remaining_pool)
+                    partner_choices = [first_choice, second_choice]
+                else:
+                    partner_choices = np.random.choice(qualified_pool, p=probs, size=2, replace=False)
+                # except:
+                #     print(f'{len(qualified_pool)}, {len(probs)}, {len(self.pool)}, {len(probs)}, {probs}')
+
             partner_ixs = [a.ixs for a in partner_choices]
             self.partner_to_select = deepcopy(partner_choices)
             self.focal_ixs = focal_agent.ixs

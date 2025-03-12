@@ -41,6 +41,16 @@ from scipy.stats import entropy
 
 
 def run(cfg, **kwargs):
+
+    # set seed
+    seed = cfg.seed
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    cfg.exp_name = f"{cfg.exp_name}_seed{seed}"
+
     # Initialize the environment and get the agents
     sanity_check = cfg.sanity_check
     if sanity_check:

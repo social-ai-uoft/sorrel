@@ -41,19 +41,37 @@ from scipy.stats import entropy
 
 
 def run(cfg, **kwargs):
+
+    # set seed
+    seed = cfg.seed
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    cfg.exp_name = f"{cfg.exp_name}_seed{seed}"
+
     # Initialize the environment and get the agents
     partner_selection_models = create_partner_selection_models_PPO(cfg.agent.agent.num, 'cpu')
     appearances = create_agent_appearances(cfg.agent.agent.num)
     agents: list[Agent] = create_agents(cfg, partner_selection_models)
 
     preferences_lst = [[0.5, 0.5],[0.5, 0.5],[0.5, 0.5],[0.5, 0.5],[0.5, 0.5],[0.5, 0.5]] 
+    # reward_matrices = [
+    #     np.array([[3, 1], [1, 2]]),
+    #     np.array([[2, 1], [1, 3]]),
+    #     np.array([[3, 1], [1, 2]]),
+    #     np.array([[2, 1], [1, 3]]),
+    #     np.array([[3, 1], [1, 2]]),
+    #     np.array([[2, 1], [1, 3]]),
+    # ]
     reward_matrices = [
-        np.array([[3, 1], [1, 2]]),
-        np.array([[2, 1], [1, 3]]),
-        np.array([[3, 1], [1, 2]]),
-        np.array([[2, 1], [1, 3]]),
-        np.array([[3, 1], [1, 2]]),
-        np.array([[2, 1], [1, 3]]),
+        np.array([[5, 1], [1, 2]]),
+        np.array([[2, 1], [1, 5]]),
+        np.array([[5, 1], [1, 2]]),
+        np.array([[2, 1], [1, 5]]),
+        np.array([[5, 1], [1, 2]]),
+        np.array([[2, 1], [1, 5]]),
     ]
     trainable_lst = []
     frozen_lst = []
@@ -80,7 +98,7 @@ def run(cfg, **kwargs):
         a.base_preferences = deepcopy(a.preferences)
         a.trainable = True
         a.frozen = False
-        a.action_size = 6
+        a.action_size = 7
         a.sampling_weight = [1 for _ in range(cfg.agent.agent.num-1)]
 
         print('appearance:', a.appearance)
@@ -276,6 +294,10 @@ def run(cfg, **kwargs):
                             if choice_matches_preference is not None:
                                 choice_matches_preference_lst[agent.ixs].append(choice_matches_preference) # choice_matches_preference
                                 same_choices_lst[agent.ixs].append(same_choices) # same_choices
+                            
+                            # update the sampling weight
+                            index = partner.ixs - 1 if partner.ixs > agent.ixs else partner.ixs
+                            agent.sampling_weight[index] += reward * 0.1
 
                     if turn >= cfg.experiment.max_turns or done_:
                         done = 1

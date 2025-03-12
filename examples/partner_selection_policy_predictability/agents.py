@@ -361,7 +361,7 @@ class Agent:
                         self.preferences[i] = min(max(0., self.preferences[i]), 1.)
               
         else:
-            assert action in range(6), ValueError("Action not in action space")
+            assert action in range(self.action_size), ValueError("Action not in action space")
             if not self.frozen:
                 if action == 4:
                         self.preferences[0] -= v

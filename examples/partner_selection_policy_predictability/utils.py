@@ -111,7 +111,7 @@ def create_partner_selection_models_PPO(
         model = PPO(
                 device='cpu', 
                 state_dim=41,
-                action_dim=6, 
+                action_dim=7, 
                 lr_actor=0.0001,
                 lr_critic=0.00005,
                 gamma=0.90,
