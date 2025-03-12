@@ -28,6 +28,7 @@ iRainbowModel (contains two IQN networks; one for local and one for target)
 # ------------------------ #
 # region: Imports          #
 # ------------------------ #
+from memory_profiler import profile
 
 # Import base packages
 import random
@@ -291,7 +292,8 @@ class iRainbowModel(DoubleANN):
 
             action = random.choices(np.arange(self.action_size), k=1)
             return action[0]
-
+        
+    # @profile
     def train_model(self) -> torch.Tensor:
         """Update value parameters using given batch of experience tuples.
         Note that the training loop CANNOT be named `train()` or training()`
@@ -412,8 +414,10 @@ class iRainbowModel(DoubleANN):
 
         if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
             kwargs["loss"] = self.train_model()
+            kwargs["loss"] = kwargs["loss"].detach() # memory can explode without this line!!!
             if "game_vars" in kwargs:
                 kwargs["game_vars"].losses.append(kwargs["loss"])
+
             else:
                 kwargs["losses"] += kwargs["loss"]
 

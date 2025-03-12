@@ -29,15 +29,47 @@ from examples.state_punishment.state_sys import state_sys
 from examples.state_punishment.utils import (create_agents, create_entities, create_models,
                                 init_log, load_config, save_config_backup,
                                 build_transgression_and_punishment_record,
-                                calculate_sdt_metrics_np, calculate_d_prime)
+                                calculate_sdt_metrics_np, calculate_d_prime,
+                                safe_get_size, print_top_largest_vars,
+                                print_top_largest_tensors)
 from copy import deepcopy
 import numpy as np
 import torch
+import gc
+import tracemalloc
+
+
+def safe_get_size(obj):
+    """
+    Returns shallow memory size of an object in bytes using sys.getsizeof().
+    No recursive traversal.
+    """
+    return sys.getsizeof(obj)
+
+
+def print_all_var_sizes(namespace=None):
+    """
+    Prints shallow memory size of all variables in the given namespace.
+    """
+    if namespace is None:
+        namespace = globals()
+
+    print("\nAll variable sizes (by shallow size):")
+    for name, val in namespace.items():
+        if name.startswith('__') or callable(val):
+            continue
+        try:
+            size = safe_get_size(val)
+            print(f"{name:<30} {size / 1024 / 1024:.2f} MB")
+        except Exception:
+            continue
 
 # endregion                #
 # ------------------------ #
 
+from memory_profiler import profile 
 
+# @profile
 def run(cfg, **kwargs):
 
     # set seed 
@@ -108,6 +140,9 @@ def run(cfg, **kwargs):
             assert 'nondynamic' in cfg.exp_name, ValueError("The exp name should contain 'nondynamic'")
 
     for epoch in range(cfg.experiment.epochs):
+        gc.collect()
+        # tracemalloc.start()
+
 
         # initialize state system
         
@@ -204,7 +239,8 @@ def run(cfg, **kwargs):
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
             loss = agent.model.train_model()
-            losses[agent.ixs] += loss.detach().numpy()
+            loss = loss.detach()
+            losses[agent.ixs] += loss
 
             # Add the game variables to the game object
             game_vars.record_turn(epoch, turn, losses, game_points)
@@ -288,6 +324,7 @@ def run(cfg, **kwargs):
         # transgression_punishment_record = pd.concat([transgression_punishment_record, epoch_transgression_df], ignore_index=True)
         for agent in agents:
             agent.reset_record()
+
 
     # Close the tensorboard log
 

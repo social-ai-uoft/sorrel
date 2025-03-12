@@ -10,6 +10,9 @@ from PIL import Image
 import shutil
 import pandas as pd
 import numpy as np
+import sys
+import torch
+import gc
 
 DEVICES = ['cpu', 'cuda']
 MODELS = {
@@ -301,6 +304,60 @@ def calculate_d_prime(hits, misses, false_alarms, correct_rejections):
     
     return d_prime
 
+def safe_get_size(obj, seen=None):
+    """
+    Recursively finds size of objects in bytes, with robust error handling.
+    Handles dicts, objects with __dict__, and iterables safely.
+    """
+    if seen is None:
+        seen = set()
+
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    seen.add(obj_id)
+
+    size = sys.getsizeof(obj)
+
+    try:
+        if isinstance(obj, dict):
+            size += sum(safe_get_size(k, seen) + safe_get_size(v, seen) for k, v in obj.items())
+        elif hasattr(obj, '__dict__'):
+            size += safe_get_size(vars(obj), seen)
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+            size += sum(safe_get_size(i, seen) for i in obj)
+    except Exception:
+        pass  # Catch anything that breaks introspection
+
+    return size
 
 
-    
+def print_top_largest_vars(n=10, namespace=None):
+    """
+    Prints top N largest variables by recursive memory size.
+    """
+    if namespace is None:
+        namespace = globals()
+
+    var_sizes = []
+    for name, val in namespace.items():
+        if name.startswith('__') or callable(val):
+            continue
+        try:
+            size = safe_get_size(val)
+            var_sizes.append((name, size))
+        except Exception:
+            continue
+
+    var_sizes.sort(key=lambda x: x[1], reverse=True)
+    print(f"\nTop {n} largest variables (by recursive size):")
+    for name, size in var_sizes[:n]:
+        print(f"{name:<30} {size / 1024 / 1024:.2f} MB")
+
+def print_top_largest_tensors(n=10):
+    tensor_list = [obj for obj in gc.get_objects() if torch.is_tensor(obj)]
+    tensor_sizes = [(type(t), t.size(), t.element_size() * t.nelement() / 1024 / 1024) for t in tensor_list]
+    tensor_sizes.sort(key=lambda x: x[2], reverse=True)
+    print(f"\nTop {n} largest tensors:")
+    for i, (typ, shape, size_mb) in enumerate(tensor_sizes[:n]):
+        print(f"{i+1:>2}. {typ.__name__:<15} shape={tuple(shape)} size={size_mb:.2f} MB")

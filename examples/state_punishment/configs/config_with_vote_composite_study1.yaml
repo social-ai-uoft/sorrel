@@ -21,7 +21,7 @@ env:
 
 state_sys:
   resource_punishment_schedule_is_dynamic: False
-  only_punish_taboo: True
+  only_punish_taboo: False
   prob_list: 
     Gem: 0.0
     Coin: 0.0
@@ -119,20 +119,9 @@ action_mode: 'simple'
 load_weights: True
 with_direct_cost: 0.0
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
-# exp_name: 'test_punishment_noncomposite_oneA_po' #"test_composite_input_fixed_punishment_1.0_clear_detection_v0_oneA_instant_only_coin_hs500"
-exp_name: 'test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_s2_r2' 
-# exp_name: 'test_study1__nondynamic_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1'
+exp_name: 'test_punishment_noncomposite_oneA_po' #"test_composite_input_fixed_punishment_1.0_clear_detection_v0_oneA_instant_only_coin_hs500"
+# exp_name: 'test_study1__fixed_only_taboo_cost0.2_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1' 
+exp_name: 'test_study1__nondynamic_cost0.2_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1'
 # exp_name: 'test_study1__dynamic_with_cost0.2_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1'
-# exp_name: 'test_study1__dynamic_stacked_view_simple_actions_3agents_respawn_0.04_v0_s2_r2'
-
-# # Root folder for accessing file structure and modules
-# root: '/Users/socialai/Documents/state_punishment'
-# log: True
-# random: False
-# seed: 3
-# state_mode: 'composite'
-# action_mode: 'simple'
-# # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
-# exp_name: 'test_punishment_noncomposite_oneA_po' #"test_composite_input_fixed_punishment_1.0_clear_detection_v0_oneA_instant_only_coin_hs500"
-# # exp_name: 'test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1_r2' 
-# exp_name: 'test_study1__dynamic_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1_r2'
+# exp_name: 'test_nondynamic'
+# stacked_views,single_view
