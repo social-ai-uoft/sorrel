@@ -123,5 +123,5 @@ exp_name: 'test_punishment_noncomposite_oneA_po' #"test_composite_input_fixed_pu
 # exp_name: 'test_study1__fixed_only_taboo_cost0.2_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1' 
 exp_name: 'test_study1__nondynamic_cost0.2_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1'
 # exp_name: 'test_study1__dynamic_with_cost0.2_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1'
-# exp_name: 'test_nondynamic'
+exp_name: 'test_nondynamic'
 # stacked_views,single_view
