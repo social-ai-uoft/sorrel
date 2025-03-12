@@ -53,6 +53,10 @@ def run(cfg, **kwargs):
 
     cfg.exp_name = cfg.exp_name + f'_seed{cfg.seed}'
 
+    # check load weights or not
+    if 's1' not in cfg.exp_name:
+        assert cfg.load_weights, ValueError('incorrect configurations')
+
     # Initialize the environment and get the agents
     models = create_models(cfg)
     agents: list[Agent] = create_agents(cfg, models)
