@@ -39,37 +39,10 @@ import gc
 import tracemalloc
 
 
-def safe_get_size(obj):
-    """
-    Returns shallow memory size of an object in bytes using sys.getsizeof().
-    No recursive traversal.
-    """
-    return sys.getsizeof(obj)
-
-
-def print_all_var_sizes(namespace=None):
-    """
-    Prints shallow memory size of all variables in the given namespace.
-    """
-    if namespace is None:
-        namespace = globals()
-
-    print("\nAll variable sizes (by shallow size):")
-    for name, val in namespace.items():
-        if name.startswith('__') or callable(val):
-            continue
-        try:
-            size = safe_get_size(val)
-            print(f"{name:<30} {size / 1024 / 1024:.2f} MB")
-        except Exception:
-            continue
-
 # endregion                #
 # ------------------------ #
 
-from memory_profiler import profile 
 
-# @profile
 def run(cfg, **kwargs):
 
     # set seed 
@@ -112,7 +85,7 @@ def run(cfg, **kwargs):
         assert 's1' not in cfg.exp_name, ValueError('incorrect configurations')
         for count, agent in enumerate(agents):
             agent.model.load(
-                f'{root}/examples/state_punishment/models/checkpoints/test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1_r2_seed2_agent{agent.ixs}_iRainbowModel.pkl')
+                f'{root}/examples/state_punishment/models/checkpoints/test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_s2_r2_seed2_agent{agent.ixs}_iRainbowModel.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
