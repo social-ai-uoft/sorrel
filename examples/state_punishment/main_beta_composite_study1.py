@@ -80,7 +80,7 @@ def run(cfg, **kwargs):
         assert 's1' not in cfg.exp_name, ValueError('incorrect configurations')
         for count, agent in enumerate(agents):
             agent.model.load(
-                f'{root}/examples/state_punishment/models/checkpoints/test_study1__dynamic_stacked_view_simple_actions_3agents_respawn_0.04_v0_s3_seed1_agent{agent.ixs}_iRainbowModel.pkl')
+                f'{root}/examples/state_punishment/models/checkpoints/test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1_r2_seed2_agent{agent.ixs}_iRainbowModel.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
