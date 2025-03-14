@@ -15,7 +15,7 @@ model:
     iqn:
       type: iRainbowModel
       parameters:
-        action_space: 5
+        action_space: 7
         num_frames: 5
         layer_size: 250
         n_step: 3
@@ -33,7 +33,7 @@ model:
     iqn:
       type: iRainbowModel
       parameters:
-        action_space: 5
+        action_space: 7
         num_frames: 5
         layer_size: 250
         n_step: 3
@@ -58,11 +58,11 @@ agent:
     unskilled_success_rate: 0.25
     sell_reward: 1
     obs:
-      entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer"]
+      entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer", "SellWoodBeam", "SellStoneBeam"]
       vision_radius: 10
   buyer:
     model: iqn
     num: 1
     buy_reward: 1
     obs:
-      entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer"]
+      entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer", "SellWoodBeam", "SellStoneBeam"]

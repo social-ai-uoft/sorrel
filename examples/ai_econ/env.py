@@ -13,7 +13,7 @@ class EconEnv(GridworldEnv):
     """
 
     def __init__(self, cfg, woodcutters, stonecutters, markets):
-        layers = 3
+        layers = 4
         default_entity = EmptyEntity()
         super().__init__(cfg.env.height, cfg.env.width, layers, default_entity)
 
