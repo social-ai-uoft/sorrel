@@ -2,12 +2,18 @@
 
 import numpy as np
 
-from agentarium.agents import Agent
-from agentarium.environments import GridworldEnv
-from agentarium.observation.observation import ObservationSpec
+from sorrel.action.action_spec import ActionSpec
+from sorrel.agents import Agent
+from sorrel.config import Cfg
+from sorrel.environments import GridworldEnv
+from sorrel.entities import Entity
+from sorrel.models.base_model import SorrelModel
+from sorrel.observation.observation_spec import ObservationSpec, OneHotObservationSpec
+
+from examples.ai_econ.entities import EmptyEntity
 
 
-class EconEnvObsSpec(ObservationSpec):
+class EconEnvObsSpec(OneHotObservationSpec):
 
     def observe(
         self,
@@ -21,6 +27,33 @@ class EconEnvObsSpec(ObservationSpec):
         else:
             resources = np.array([0, 0])
         return np.concatenate((visual_field, resources))
+    
+class Beam(Entity):
+    """Generic beam class for agent beams."""
+
+    def __init__(self):
+        super().__init__()
+        self.turn_counter = 0
+        self.has_transitions = True
+
+    def transition(self, env: GridworldEnv):
+        # Beams persist for one full turn, then disappear.
+        if self.turn_counter >= 1:
+            env.add(self.location, EmptyEntity())
+        else:
+            self.turn_counter += 1
+
+class SellWoodBeam(Beam):
+    def __init__(self):
+        super().__init__()
+        self.sprite = f"./assets/beam.png"
+
+
+class SellStoneBeam(Beam):
+    def __init__(self):
+        super().__init__()
+        self.sprite = f"./assets/zap.png"
+
 
 
 class Seller(Agent):
@@ -28,16 +61,16 @@ class Seller(Agent):
 
     def __init__(
         self,
-        cfg,
-        appearance,
-        is_woodcutter,
-        is_majority,
-        observation_spec: ObservationSpec,
-        model,
+        cfg: Cfg,
+        appearance: list,
+        is_woodcutter: bool,
+        is_majority: bool,
+        observation_spec: EconEnvObsSpec,
+        action_spec: ActionSpec,
+        model: SorrelModel,
     ):
         # the actions are: move north, move south, move west, move east, extract resource, sell wood, sell stone
-        action_space = [0, 1, 2, 3, 4, 5, 6]
-        super().__init__(observation_spec, model, action_space)
+        super().__init__(observation_spec, action_spec=action_spec, model=model)
 
         self.appearance = appearance  # the "id" of the agent
         self.is_woodcutter = (
@@ -165,6 +198,11 @@ class Seller(Agent):
         # if the agent chooses to sell wood (attempts to sell 1 unit for now)
         # for now, reward the agent for a successful trade so long as there is a market in range (visual range for now)
         if action == 5:
+            
+            # Beam
+            beam_loc = (self.location[0], self.location[1], 3)
+            env.add(beam_loc, SellWoodBeam())
+
             if self.wood_owned < 1:
                 return 0  # not enough resources on hand
 
@@ -184,15 +222,19 @@ class Seller(Agent):
 
         # if the agent chooses to sell stone (attempts to sell 1 unit for now)
         if action == 6:
+
+            beam_loc = (self.location[0], self.location[1], 3)
+            env.add(beam_loc, SellStoneBeam())
+
             if self.stone_owned < 1:
                 return 0  # not enough resources on hand
 
             r = self.observation_spec.vision_radius
             for H in range(
-                max(self.location[0] - r, 0), min(self.location[0] + r, env.height)
+                max(self.location[0] - r, 0), min(self.location[0] + r, env.height),
             ):
                 for W in range(
-                    max(self.location[1] - r, 0), min(self.location[1] + r, env.width) 
+                    max(self.location[1] - r, 0), min(self.location[1] + r, env.width), 
                 ):
                     if env.observe((H, W, self.location[2])).kind == "Buyer":
                         self.stone_owned -= 1
@@ -214,8 +256,9 @@ class Buyer(Agent):
 
     def __init__(self, cfg, appearance, observation_spec: ObservationSpec, model):
         # the actions are (for now): buy wood, buy stone
-        action_space = [0, 1]
-        super().__init__(observation_spec, model, action_space)
+        action_spec = ActionSpec([0, 1])
+        super().__init__(observation_spec, action_spec, model)
+
         self.appearance = appearance  # the "id" of the agent
 
         self.buy_reward = cfg.agent.buyer.buy_reward

@@ -1,7 +1,7 @@
 import random
 
-from agentarium.entities import Entity
-from agentarium.environments import GridworldEnv
+from sorrel.entities import Entity
+from sorrel.environments import GridworldEnv
 
 # --------------------------------------------------- #
 # region: Environment Entity classes for Cleanup Task #

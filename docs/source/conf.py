@@ -10,15 +10,48 @@ sys.path.insert(0, os.path.abspath(os.path.join("..", "..")))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "agentarium"
-copyright = "2024, Yibing Ju"
-author = "Yibing Ju"
-release = "0.0.0"
+project = "sorrel"
+copyright = "2024, Yibing Ju, Rebekah Gelpi"
+author = "Yibing Ju, Rebekah Gelpi, Ethan Jackson, Shon Verch, Yikai Tang, Claas Voelcker, Wil Cunningham"
+release = "0.1.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ["myst_nb", "sphinx.ext.autodoc"]
+extensions = [
+    "myst_nb",
+    "autodoc2",
+    # "sphinx.ext.autodoc",
+    "sphinx.ext.imgmath",
+    "sphinx.ext.napoleon",
+]
+
+# extensions for math support and other qol in markdown files
+# see https://myst-parser.readthedocs.io/en/latest/syntax/optional.html
+myst_enable_extensions = [
+    "amsmath",
+    "attrs_inline",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "fieldlist",
+    "html_admonition",
+    "html_image",
+    "replacements",
+    "smartquotes",
+    "strikethrough",
+    "substitution",
+    "tasklist",
+]
+
+autodoc2_packages = [
+    {
+        "path": "../../sorrel",
+        "auto_mode": False,
+    },
+]
+autodoc2_module_summary = False
+
 
 templates_path = ["_templates"]
 exclude_patterns = []

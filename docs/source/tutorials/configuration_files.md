@@ -8,7 +8,7 @@ especially attributes that may need to be tweaked between different experiments.
 
 For example, if you expect to tweak the number of apples in your environment frequently, 
 you might create a config ``yaml`` file that contains the following lines:
-```
+```python
 # ...
 
 env:
@@ -18,7 +18,7 @@ env:
 # ...
 ```
 And write the constructor like so:
-```
+```python
 class MyGridworldEnv(GridworldEnv):
 
     num_apples: int
@@ -36,7 +36,7 @@ instead of having to modify the code itself as is the case for `num_bananas`.
 Start by creating a ``config`` directory in your experiment folder, and creating a file in the new directory called ``config.yaml``.
 
 Here is a template that contains some frequently used parameters to get you started.
-```
+```yaml
 experiment:
   name:
   epochs:
@@ -57,13 +57,13 @@ agent:
     model:
     appearance:
 
-root: '~/Documents/GitHub/agentarium'
+root: '~/Documents/GitHub/sorrel'
 log:
 ```
 
 To load the config file into a `Cfg` object named `cfg`, do:
 
-```
+```python
 cfg = load_config(argparse.Namespace(config='../configs/config.yaml'))
 ```
 

@@ -20,7 +20,6 @@ model:
   iqn:
     type: iRainbowModel
     parameters:
-      action_space: 6
       layer_size: 250
       n_step: 3
       BATCH_SIZE: 64
@@ -46,5 +45,5 @@ agent:
       num_frames: 5
       embeddings: 3
 
-root: '~/Documents/GitHub/agentarium'
+root: '~/Documents/GitHub/sorrel'
 log: False

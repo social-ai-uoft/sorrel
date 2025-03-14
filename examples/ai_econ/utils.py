@@ -1,8 +1,9 @@
 import torch
 
-from agentarium.models.base_model import AgentariumModel
-from agentarium.models.pytorch.iqn import iRainbowModel
-from agentarium.observation.observation import ObservationSpec
+from sorrel.action.action_spec import ActionSpec
+from sorrel.models.base_model import SorrelModel
+from sorrel.models.pytorch.iqn import iRainbowModel
+from sorrel.observation.observation_spec import ObservationSpec
 from examples.ai_econ.agents import Buyer, EconEnvObsSpec, Seller
 
 
@@ -85,6 +86,7 @@ def create_agents(cfg, woodcutter_models, stonecutter_models, market_models):
                     cfg.agent.seller.obs.entity_list,
                     vision_radius=cfg.agent.seller.obs.vision_radius,
                 ),
+                action_spec=ActionSpec([0, 1, 2, 3, 4, 5, 6]),
                 model=woodcutter_models[i],
             )
         )
@@ -100,6 +102,7 @@ def create_agents(cfg, woodcutter_models, stonecutter_models, market_models):
                     cfg.agent.seller.obs.entity_list,
                     vision_radius=cfg.agent.seller.obs.vision_radius,
                 ),
+                action_spec=ActionSpec([0, 1, 2, 3, 4, 5, 6]),
                 model=stonecutter_models[i],
             )
         )
@@ -109,8 +112,8 @@ def create_agents(cfg, woodcutter_models, stonecutter_models, market_models):
             Buyer(
                 cfg,
                 appearance=2,
-                observation_spec=ObservationSpec(cfg.agent.buyer.obs.entity_list),
-                model=AgentariumModel(0, 0, 0, 0),
+                observation_spec=ObservationSpec(cfg.agent.buyer.obs.entity_list, vision_radius=1),
+                model=SorrelModel(0, 0, 0, 0),
             )
         )
 

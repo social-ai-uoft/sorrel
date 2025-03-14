@@ -1,13 +1,15 @@
 """The environment for treasurehunt, a simple example for the purpose of a tutorial."""
 
-
+# begin imports
 # Import base packages
 import numpy as np
 
-# Import primitive types
-from agentarium.environments import GridworldEnv
 # Import experiment specific classes
-from examples.treasurehunt.entities import Wall, Sand, Gem, EmptyEntity
+from examples.treasurehunt.entities import EmptyEntity, Gem, Sand, Wall
+# Import primitive types
+from sorrel.environments import GridworldEnv
+
+# end imports
 
 
 class Treasurehunt(GridworldEnv):
@@ -42,7 +44,9 @@ class Treasurehunt(GridworldEnv):
                 self.add(index, Wall())
             elif z == 0:  # if location is on the bottom layer, put sand there
                 self.add(index, Sand())
-            elif z == 1: # if location is on the top layer, indicate that it's possible for an agent to spawn there
+            elif (
+                z == 1
+            ):  # if location is on the top layer, indicate that it's possible for an agent to spawn there
                 # valid spawn location
                 valid_spawn_locations.append(index)
 
