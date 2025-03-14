@@ -38,6 +38,18 @@ files = [
 ]
 
 [[package]]
+name = "astroid"
+version = "3.3.8"
+description = "An abstract syntax tree for Python with inference support."
+optional = false
+python-versions = ">=3.9.0"
+groups = ["dev"]
+files = [
+    {file = "astroid-3.3.8-py3-none-any.whl", hash = "sha256:187ccc0c248bfbba564826c26f070494f7bc964fd286b6d9fff4420e55de828c"},
+    {file = "astroid-3.3.8.tar.gz", hash = "sha256:a88c7994f914a4ea8572fac479459f4955eeccc877be3f2d959a33273b0cf40b"},
+]
+
+[[package]]
 name = "asttokens"
 version = "3.0.0"
 description = "Annotate AST trees with source code positions"
@@ -3232,6 +3244,28 @@ lint = ["betterproto (==2.0.0b6)", "mypy (==1.15.0)", "pypi-attestations (==0.0.
 test = ["cython (>=3.0)", "defusedxml (>=0.7.1)", "pytest (>=8.0)", "pytest-xdist[psutil] (>=3.4)", "setuptools (>=70.0)", "typing_extensions (>=4.9)"]
 
 [[package]]
+name = "sphinx-autodoc2"
+version = "0.5.0"
+description = "Analyse a python project and create documentation for it."
+optional = false
+python-versions = ">=3.8"
+groups = ["dev"]
+files = [
+    {file = "sphinx_autodoc2-0.5.0-py3-none-any.whl", hash = "sha256:e867013b1512f9d6d7e6f6799f8b537d6884462acd118ef361f3f619a60b5c9e"},
+    {file = "sphinx_autodoc2-0.5.0.tar.gz", hash = "sha256:7d76044aa81d6af74447080182b6868c7eb066874edc835e8ddf810735b6565a"},
+]
+
+[package.dependencies]
+astroid = ">=2.7,<4"
+typing-extensions = "*"
+
+[package.extras]
+cli = ["typer[all]"]
+docs = ["furo", "myst-parser", "sphinx (>=4.0.0)"]
+sphinx = ["sphinx (>=4.0.0)"]
+testing = ["pytest", "pytest-cov", "pytest-regressions", "sphinx (>=4.0.0,<7)"]
+
+[[package]]
 name = "sphinx-rtd-theme"
 version = "3.0.2"
 description = "Read the Docs theme for Sphinx"
@@ -3838,4 +3872,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11.0"
-content-hash = "91224a48a6523f521241f62bed4f2d883b39ee0e236a1e4ecf64f3c85bc5fdc7"
+content-hash = "a96cdbefa1c8ae5adaff20bfe7b45ef5b0e286924905aa75500250724ed9f3f9"

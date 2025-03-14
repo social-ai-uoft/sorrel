@@ -1,7 +1,7 @@
 # Cfg
 
 ```{eval-rst}
-.. autoclass:: agentarium.config.Cfg
+.. autoclass:: sorrel.config.Cfg
     :members:
     :undoc-members:
     
@@ -12,6 +12,6 @@
 ## Functions
 Note that these are functions, not class methods.
 ```{eval-rst}
-.. autofunction:: agentarium.config.parse_args
-.. autofunction:: agentarium.config.load_config
+.. autofunction:: sorrel.config.parse_args
+.. autofunction:: sorrel.config.load_config
 ```

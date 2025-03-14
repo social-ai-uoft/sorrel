@@ -1,20 +1,22 @@
 import numpy as np
 
-from agentarium.agents import Agent
-from agentarium.entities import Entity
-from agentarium.environments import GridworldEnv
-from agentarium.location import Location, Vector
-from agentarium.observation import embedding, observation_spec
+from sorrel.action.action_spec import ActionSpec
+from sorrel.agents import Agent
+from sorrel.entities import Entity
+from sorrel.environments import GridworldEnv
+from sorrel.location import Location, Vector
+from sorrel.models import SorrelModel
+from sorrel.observation import embedding, observation_spec
 from examples.cleanup.entities import EmptyEntity
 
 # --------------------------- #
 # region: Cleanup agent class #
 # --------------------------- #
 
-"""The agent for treasurehunt, a simple example for the purpose of a tutorial."""
+"""The agent and observation class for Cleanup."""
 
 
-class CleanupObservation(observation_spec.ObservationSpec):
+class CleanupObservation(observation_spec.OneHotObservationSpec):
     """Custom observation function for the Cleanup agent class."""
 
     def __init__(
@@ -26,6 +28,21 @@ class CleanupObservation(observation_spec.ObservationSpec):
 
         super().__init__(entity_list, vision_radius)
         self.embedding_size = embedding_size
+        if self.full_view:
+            self.input_size = (1,
+                (len(entity_list) * 21 * 31) + # Environment size;
+                # Cleanup uses a fixed environment size of 21 * 31
+                (4 * self.embedding_size) # Embedding size
+                )
+        else:
+            self.input_size = (1,
+                (
+                    len(entity_list) * 
+                    (2 * self.vision_radius + 1) *
+                    (2 * self.vision_radius + 1)
+                ) +
+                (4 * self.embedding_size) # Embedding size
+            )
 
     def observe(self, env: GridworldEnv, location: tuple | Location | None = None):
 
@@ -42,9 +59,8 @@ class CleanupAgent(Agent):
     A treasurehunt agent that uses the iqn model.
     """
 
-    def __init__(self, observation_spec: CleanupObservation, model):
-        action_space = [0, 1, 2, 3]  # the agent can move up, down, left, or right
-        super().__init__(observation_spec, model, action_space)
+    def __init__(self, observation_spec: CleanupObservation, action_spec: ActionSpec, model: SorrelModel):
+        super().__init__(observation_spec, action_spec=action_spec, model=model)
 
         self.direction = 2  # 90 degree rotation: default at 180 degrees (facing down)
         self.sprite = "./assets/hero.png"
@@ -71,11 +87,15 @@ class CleanupAgent(Agent):
         )
         stacked_states = np.vstack((prev_states, state))
 
+        # Flatten the model input
         model_input = stacked_states.reshape(1, -1)
-        action = self.model.take_action(model_input)
-        return action
+        # Get the model output
+        model_output = self.model.take_action(model_input)
+        
 
-    def spawn_beam(self, env: GridworldEnv, action: int):
+        return model_output
+
+    def spawn_beam(self, env: GridworldEnv, action: str):
         """Generate a beam extending cfg.agent.agent.beam_radius pixels
         out in front of the agent."""
 
@@ -115,31 +135,34 @@ class CleanupAgent(Agent):
 
         # Then, place beams in all of the remaining valid locations.
         for loc in placeable_locs:
-            if action == 4:
+            if action == "clean":
                 env.remove(loc.to_tuple())
                 env.add(loc.to_tuple(), CleanBeam())
-            elif action == 5:
+            elif action == "zap":
                 env.remove(loc.to_tuple())
                 env.add(loc.to_tuple(), ZapBeam())
 
     def act(self, env: GridworldEnv, action: int) -> float:
         """Act on the environment, returning the reward."""
 
+        # Translate the model output to an action string
+        action = self.action_spec.get_readable_action(action)
+        
         # Attempt to move
         new_location = self.location
-        if action == 0:  # UP
+        if action == "up":
             self.direction = 0
             self.sprite = "./assets/hero-back.png"
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
-        if action == 1:  # DOWN
+        if action == "down":
             self.direction = 2
             self.sprite = "./assets/hero.png"
             new_location = (self.location[0] + 1, self.location[1], self.location[2])
-        if action == 2:  # LEFT
+        if action == "left":
             self.direction = 3
             self.sprite = "./assets/hero-left.png"
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
-        if action == 3:  # RIGHT
+        if action == "right":
             self.direction = 1
             self.sprite = "./assets/hero-right.png"
             new_location = (self.location[0], self.location[1] + 1, self.location[2])

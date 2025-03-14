@@ -1,9 +1,13 @@
 """The entities for treasurehunt, a simple example for the purpose of a tutorial."""
 
+# begin imports
 import numpy as np
 
-from agentarium.entities import Entity
-from agentarium.environments import GridworldEnv
+from sorrel.entities import Entity
+from sorrel.environments import GridworldEnv
+
+# end imports
+
 
 class Wall(Entity):
     """An entity that represents a wall in the treasurehunt environment."""

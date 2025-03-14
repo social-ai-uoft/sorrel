@@ -5,10 +5,10 @@
 # Import base packages
 import numpy as np
 
-# Import agentarium-specific packages
-from agentarium.agents import Agent
-from agentarium.entities import Entity
-from agentarium.environments import GridworldEnv
+# Import sorrel-specific packages
+from sorrel.agents import Agent
+from sorrel.entities import Entity
+from sorrel.environments import GridworldEnv
 from examples.cleanup.entities import (
     EmptyEntity,
     Sand,
@@ -19,7 +19,7 @@ from examples.cleanup.entities import (
     Apple
 )
 from examples.cleanup.agents import CleanupAgent
-from agentarium.config import Cfg
+from sorrel.config import Cfg
 
 # --------------------------------- #
 # endregion: Imports                #

@@ -1,9 +1,12 @@
 """The agent for treasurehunt, a simple example for the purpose of a tutorial."""
 
+# begin imports
 import numpy as np
 
-from agentarium.agents import Agent
-from agentarium.environments import GridworldEnv
+from sorrel.agents import Agent
+from sorrel.environments import GridworldEnv
+
+# end imports
 
 
 class TreasurehuntAgent(Agent):
@@ -11,10 +14,8 @@ class TreasurehuntAgent(Agent):
     A treasurehunt agent that uses the iqn model.
     """
 
-    def __init__(self, observation_spec, model):
-        action_space = [0, 1, 2, 3]  # the agent can move up, down, left, or right
-        super().__init__(observation_spec, model, action_space)
-
+    def __init__(self, observation_spec, action_spec, model):
+        super().__init__(observation_spec, action_spec, model)
         self.sprite = "./assets/hero.png"
 
     def reset(self) -> None:
@@ -46,14 +47,17 @@ class TreasurehuntAgent(Agent):
     def act(self, env: GridworldEnv, action: int) -> float:
         """Act on the environment, returning the reward."""
 
-        new_location = tuple()
-        if action == 0:  # UP
+        # Translate the model output to an action string
+        action = self.action_spec.get_readable_action(action)
+
+        new_location = self.location
+        if action == "up":
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
-        if action == 1:  # DOWN
+        if action == "down":
             new_location = (self.location[0] + 1, self.location[1], self.location[2])
-        if action == 2:  # LEFT
+        if action == "left":
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
-        if action == 3:  # RIGHT
+        if action == "right":
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
 
         # get reward obtained from object at new_location

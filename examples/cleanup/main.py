@@ -7,12 +7,12 @@ from datetime import datetime
 
 import torch
 
-from agentarium.config import Cfg, load_config
-from agentarium.entities import Entity
-# agentarium imports
-from agentarium.models.pytorch import PyTorchIQN
-from agentarium.observation.observation_spec import ObservationSpec
-from agentarium.utils.visualization import (animate, image_from_array,
+# sorrel imports
+from sorrel.action.action_spec import ActionSpec
+from sorrel.config import Cfg, load_config
+from sorrel.entities import Entity
+from sorrel.models.pytorch import PyTorchIQN
+from sorrel.utils.visualization import (animate, image_from_array,
                                             visual_field_sprite)
 from examples.cleanup.agents import CleanupAgent, CleanupObservation
 from examples.cleanup.env import Cleanup
@@ -45,15 +45,11 @@ def setup(cfg: Cfg, **kwargs) -> Cleanup:
 
         agent_vision_radius = cfg.agent.agent.obs.vision
         observation_spec = CleanupObservation(ENTITY_LIST, agent_vision_radius)
+        action_spec = ActionSpec(["up", "down", "left", "right", "clean", "zap"])
 
         model = PyTorchIQN(
-            input_size=(
-                1,
-                len(ENTITY_LIST)
-                * (2 * agent_vision_radius + 1)
-                * (2 * agent_vision_radius + 1)
-                + (4 * observation_spec.embedding_size),
-            ),
+            input_size=observation_spec.input_size,
+            action_space=action_spec.n_actions,
             seed=torch.random.seed(),
             num_frames=cfg.agent.agent.obs.num_frames,
             **cfg.model.iqn.parameters.to_dict(),
@@ -62,7 +58,11 @@ def setup(cfg: Cfg, **kwargs) -> Cleanup:
         if "load_weights" in kwargs:
             model.load(file_path=kwargs.get("load_weights"))
 
-        agents.append(CleanupAgent(observation_spec=observation_spec, model=model))
+        agents.append(CleanupAgent(
+            observation_spec=observation_spec, 
+            action_spec=action_spec, 
+            model=model
+        ))
 
     env = Cleanup(cfg, agents)
     return env
