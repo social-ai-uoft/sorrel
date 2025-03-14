@@ -3,6 +3,7 @@ import random
 import numpy as np
 
 from sorrel.environments import GridworldEnv
+from sorrel.location import Location
 from examples.ai_econ.entities import (EmptyEntity, Land, StoneNode, Wall,
                                        WoodNode)
 
@@ -41,14 +42,43 @@ class EconEnv(GridworldEnv):
         for index in np.ndindex(self.world.shape):
             y, x, z = index
 
+            # Specify locations
+            CENTREPOINT = Location(self.height // 2, self.width // 2, 2)
+
+            WALL_INNER_BEGIN_X = (self.height // 3) - 2 # 51 -> 15 
+            WALL_INNER_END_X = WALL_INNER_BEGIN_X + (self.height // 10) # 51 -> 20
+            WALL_OUTER_BEGIN_X = self.height - WALL_INNER_END_X # 51 -> 31
+            WALL_OUTER_END_X = self.height - WALL_INNER_BEGIN_X # 51 -> 36
+
+            WALL_INNER_BEGIN_Y = (self.width // 3) - 2 # 51 -> 15 
+            WALL_INNER_END_Y = WALL_INNER_BEGIN_Y + (self.width // 10) # 51 -> 20
+            WALL_OUTER_BEGIN_Y = self.width - WALL_INNER_END_Y # 51 -> 31
+            WALL_OUTER_END_Y = self.width - WALL_INNER_BEGIN_Y # 51 -> 36
+
+            locs = {
+                "centre": CENTREPOINT,
+                "inner_begin_x": WALL_INNER_BEGIN_X,
+                "inner_end_x": WALL_INNER_END_X,
+                "outer_begin_x": WALL_OUTER_BEGIN_X,
+                "outer_end_x": WALL_OUTER_END_X,
+                "inner_begin_y": WALL_INNER_BEGIN_Y,
+                "inner_end_y": WALL_INNER_END_Y,
+                "outer_begin_y": WALL_OUTER_BEGIN_Y,
+                "outer_end_y": WALL_OUTER_END_Y,
+            }
+
             # walls
             if y in [0, self.height - 1] or x in [0, self.width - 1]:
                 # Add walls around the edge of the world (when indices are first or last)
                 self.add(index, Wall())
-            if (x == 15 or x == 35) and (y in range(15, 20) or y in range(31, 36)):
+            if (x == locs["inner_begin_x"] or x == locs["outer_end_x"] - 1) and \
+                (y in range(locs["inner_begin_y"], locs["inner_end_y"]) or \
+                 y in range(locs["outer_begin_y"], locs["outer_end_y"])):
                 # Add top & bottom walls around the market area
                 self.add(index, Wall())
-            if (y == 15 or y == 35) and (x in range(15, 20) or x in range(31, 36)):
+            if (y == locs["inner_begin_y"] or y == locs["outer_end_y"] - 1) and \
+                (x in range(locs["inner_begin_x"], locs["inner_end_x"]) or \
+                 x in range(locs["outer_begin_x"], locs["outer_end_x"])):
                 # Add left & right walls around the market area
                 self.add(index, Wall())
 
@@ -58,23 +88,23 @@ class EconEnv(GridworldEnv):
             # resource nodes, which are on the bottom layer
             if z == 1:
                 # wood nodes
-                if x in range(1, 15) and y in range(1, 15):
+                if x in range(1, locs["inner_begin_x"]) and y in range(1, locs["inner_begin_y"]):
                     self.add(index, WoodNode(self.cfg))
-                elif x in range(36, 50) and y in range(36, 50):
+                elif x in range(locs["outer_end_x"], self.height - 1) and y in range(locs["outer_end_y"], self.width - 1):
                     self.add(index, WoodNode(self.cfg))
                 # stone nodes
-                elif x in range(1, 15) and y in range(36, 50):
+                elif x in range(1, locs["inner_begin_x"]) and y in range(locs["outer_end_y"], self.width - 1):
                     self.add(index, StoneNode(self.cfg))
-                elif x in range(36, 50) and y in range(1, 15):
+                elif x in range(locs["outer_end_x"], self.height - 1) and y in range(1, locs["inner_begin_y"]):
                     self.add(index, StoneNode(self.cfg))
                 # land
                 else:
                     self.add(index, EmptyEntity())
 
         # finished filling in entities; spawn agents in a separate method cause this one is getting long
-        self.place_agents()
+        self.place_agents(locs)
 
-    def place_agents(self):
+    def place_agents(self, locs: dict[str, int]):
         """
         Places the agents into the environment.
         """
@@ -83,15 +113,15 @@ class EconEnv(GridworldEnv):
         east_spawn_area = []
         west_spawn_area = []
         for y, x in np.ndindex(self.height, self.width):
-            if x in range(20, 31):
-                if y in range(1, 15):
+            if x in range(locs["inner_end_x"], locs["outer_begin_x"]):
+                if y in range(1, locs["inner_begin_y"]):
                     north_spawn_area.append((y, x, 2))
-                if y in range(36, 50):
+                if y in range(locs["outer_end_y"], self.width - 1):
                     south_spawn_area.append((y, x, 2))
-            if y in range(20, 31):
-                if x in range(1, 15):
+            if y in range(locs["inner_end_y"], locs["outer_begin_y"]):
+                if x in range(1, locs["inner_begin_x"]):
                     west_spawn_area.append((y, x, 2))
-                if x in range(36, 50):
+                if x in range(locs["outer_end_x"], self.height - 1):
                     east_spawn_area.append((y, x, 2))
 
         # woodcutters: north area & south area
@@ -116,7 +146,11 @@ class EconEnv(GridworldEnv):
 
         # NOTE: for now we are only placing a single market (markets[0]) in the middle of the map
         #       regardless of how many markets there are.
-        self.add((25, 25, 2), self.markets[0])
+
+        self.add(locs["centre"] + (-4, -4), self.markets[0])
+        self.add(locs["centre"] + (-4, 4), self.markets[0])
+        self.add(locs["centre"] + (4, -4), self.markets[0])
+        self.add(locs["centre"] + (4, 4), self.markets[0])
 
     def reset(self):
         """Reset the environment and all its agents."""

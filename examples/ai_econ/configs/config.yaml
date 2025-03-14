@@ -5,8 +5,8 @@ experiment:
   record_period: 50 # how many epochs in each data recording period
 
 env:
-  height: 51
-  width: 51
+  height: 41
+  width: 41
   resource_renew_chance: 0.001
   resource_renew_amount: 1
 
