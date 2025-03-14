@@ -12,7 +12,7 @@ from sorrel.observation.observation_spec import ObservationSpec
 class Agent(Entity):
     """An abstract class for agents, a special type of entities.
 
-    Note that this is a subclass of :py:class:`agentarium.entities.Entity`.
+    Note that this is a subclass of :py:class:`sorrel.entities.Entity`.
 
     Attributes:
         observation_spec: The observation specification to use for this agent.

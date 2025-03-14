@@ -2,7 +2,7 @@ import random
 
 import numpy as np
 
-from agentarium.environments import GridworldEnv
+from sorrel.environments import GridworldEnv
 from examples.ai_econ.entities import (EmptyEntity, Land, StoneNode, Wall,
                                        WoodNode)
 

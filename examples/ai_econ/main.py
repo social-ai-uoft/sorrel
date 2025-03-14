@@ -1,9 +1,9 @@
 # general imports
 import argparse
 
-# agentarium imports
-from agentarium.config import load_config
-from agentarium.utils.visualization import (animate, image_from_array,
+# sorrel imports
+from sorrel.config import load_config
+from sorrel.utils.visualization import (animate, image_from_array,
                                             visual_field_sprite)
 # imports from our example
 from examples.ai_econ.env import EconEnv

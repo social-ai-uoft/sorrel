@@ -2,12 +2,15 @@
 
 import numpy as np
 
-from agentarium.agents import Agent
-from agentarium.environments import GridworldEnv
-from agentarium.observation.observation_spec import ObservationSpec
+from sorrel.action.action_spec import ActionSpec
+from sorrel.agents import Agent
+from sorrel.config import Cfg
+from sorrel.environments import GridworldEnv
+from sorrel.models.base_model import SorrelModel
+from sorrel.observation.observation_spec import ObservationSpec, OneHotObservationSpec
 
 
-class EconEnvObsSpec(ObservationSpec):
+class EconEnvObsSpec(OneHotObservationSpec):
 
     def observe(
         self,
@@ -28,16 +31,16 @@ class Seller(Agent):
 
     def __init__(
         self,
-        cfg,
-        appearance,
-        is_woodcutter,
-        is_majority,
-        observation_spec: ObservationSpec,
-        model,
+        cfg: Cfg,
+        appearance: list,
+        is_woodcutter: bool,
+        is_majority: bool,
+        observation_spec: EconEnvObsSpec,
+        action_spec: ActionSpec,
+        model: SorrelModel,
     ):
         # the actions are: move north, move south, move west, move east, extract resource, sell wood, sell stone
-        action_space = [0, 1, 2, 3, 4, 5, 6]
-        super().__init__(observation_spec, model, action_space)
+        super().__init__(observation_spec, action_spec=action_spec, model=model)
 
         self.appearance = appearance  # the "id" of the agent
         self.is_woodcutter = (
@@ -214,8 +217,8 @@ class Buyer(Agent):
 
     def __init__(self, cfg, appearance, observation_spec: ObservationSpec, model):
         # the actions are (for now): buy wood, buy stone
-        action_space = [0, 1]
-        super().__init__(observation_spec, model, action_space)
+        action_spec = ActionSpec([0, 1])
+        super().__init__(observation_spec, action_spec, model)
 
         self.appearance = appearance  # the "id" of the agent
 
