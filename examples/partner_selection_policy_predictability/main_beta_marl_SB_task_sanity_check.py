@@ -76,7 +76,7 @@ def run(cfg, **kwargs):
             decider_models.append(
                 PPO(
                 device='cpu', 
-                state_dim=33,
+                state_dim=34,
                 action_dim=4, 
                 lr_actor=0.0001,
                 lr_critic=0.00005,
@@ -92,7 +92,7 @@ def run(cfg, **kwargs):
         # agent model
         agent1.partner_choice_model = PPO(
                 device='cpu', 
-                state_dim=33,
+                state_dim=34,
                 action_dim=4, 
                 lr_actor=0.0001,
                 lr_critic=0.00005,
@@ -113,8 +113,8 @@ def run(cfg, **kwargs):
 
         agent2.partner_choice_model = PPO(
                 device='cpu', 
-                state_dim=33,
-                action_dim=3,
+                state_dim=34,
+                action_dim=2,
                 lr_actor=0.0001,
                 lr_critic=0.00005,
                 gamma=0.90,
@@ -123,18 +123,18 @@ def run(cfg, **kwargs):
                 entropy_coefficient=0.005  
             )
         agent2.partner_choice_model.name = 'PPO'
-        agent2.preferences = [.7, 0.3]
+        agent2.preferences = [.5, 0.5]
         agent2.reward_matrix = np.array([[2, 1], [1, 2]])
         agent2.trainable = True
         agent2.frozen = False
         agent2.role = 'partner'
-        agent2.action_size = 3
+        agent2.action_size = 2
         
 
         agent3.partner_choice_model = PPO(
                 device='cpu', 
-                state_dim=33,
-                action_dim=3,
+                state_dim=34,
+                action_dim=2,
                 lr_actor=0.0001,
                 lr_critic=0.00005,
                 gamma=0.90,
@@ -148,7 +148,7 @@ def run(cfg, **kwargs):
         agent3.trainable = True
         agent3.frozen = False
         agent3.role = 'partner'
-        agent3.action_size = 3
+        agent3.action_size = 2
 
         # agent4.partner_choice_model = PPO(
         #         device='cpu', 
@@ -283,6 +283,7 @@ def run(cfg, **kwargs):
             raise ValueError('agent appearance should not be none')
         # a.preferences = preferences_lst[a.ixs]
         a.base_preferences = deepcopy(a.preferences)
+        a.internal_state = 0
 
         print(a.appearance)
         print(a.base_preferences)
@@ -317,6 +318,9 @@ def run(cfg, **kwargs):
         pref_type = a.preferences.index(max(a.preferences))
         init_pref_dist[pref_type] += 1
     init_diversity = entropy(softmax(list(init_pref_dist.values())))
+
+
+    random_decider_ixs = 0
 
     for epoch in range(cfg.experiment.epochs):        
 
@@ -357,6 +361,7 @@ def run(cfg, **kwargs):
         for agent in agents:
             agent.delay_reward = 0
             agent.reward = 0
+            agent.selected_in_last_turn = 0
             if cfg.preference_reset:
                 agent.preferences = deepcopy(agent.base_preferences)
         
@@ -371,29 +376,46 @@ def run(cfg, **kwargs):
                 ]
         
         
-        # vary focal agent preferences
-        if cfg.multi_deciders:
-            if cfg.focal_vary:
-                if epoch % cfg.focal_shift_freq == 0:
-                    random_decider_ixs = random.randint(0, 1)
-                    agent1.partner_choice_model = decider_models[random_decider_ixs]
-                    agent1.reward_matrix = decider_rm[random_decider_ixs]
-                    agent1.appearance = decider_appearances[random_decider_ixs]
-        else:
-            if cfg.focal_vary:
-                if epoch % cfg.focal_shift_freq == 0:
-                    random_decider_ixs = random.randint(0, 1)
-                    # agent1.partner_choice_model = decider_model÷s[random_decider_ixs]
-                    agent1.reward_matrix = decider_rm[random_decider_ixs]
-                    agent1.appearance = decider_appearances[random_decider_ixs]
+        # # vary focal agent preferences
+        # if cfg.multi_deciders:
+        #     if cfg.focal_vary:
+        #         if epoch % cfg.focal_shift_freq == 0:
+        #             random_decider_ixs = random.randint(0, 1)
+        #             agent1.partner_choice_model = decider_models[random_decider_ixs]
+        #             agent1.reward_matrix = decider_rm[random_decider_ixs]
+        #             agent1.appearance = decider_appearances[random_decider_ixs]
+        # else:
+        #     if cfg.focal_vary:
+        #         if epoch % cfg.focal_shift_freq == 0:
+        #             random_decider_ixs = 1 - random_decider_ixs
+        #             # agent1.partner_choice_model = decider_model÷s[random_decider_ixs]
+        #             agent1.reward_matrix = decider_rm[random_decider_ixs]
+        #             agent1.internal_state = random_decider_ixs
+        #             # agent1.appearance = decider_appearances[random_decider_ixs]
 
         while not done:
+
+             # vary focal agent preferences
+            if cfg.multi_deciders:
+                if cfg.focal_vary:
+                    if turn % cfg.focal_shift_freq == 0:
+                        random_decider_ixs = random.randint(0, 1)
+                        agent1.partner_choice_model = decider_models[random_decider_ixs]
+                        agent1.reward_matrix = decider_rm[random_decider_ixs]
+                        agent1.appearance = decider_appearances[random_decider_ixs]
+            else:
+                if cfg.focal_vary:
+                    if turn % cfg.focal_shift_freq == 0:
+                        random_decider_ixs = 1 - random_decider_ixs
+                        # agent1.partner_choice_model = decider_model÷s[random_decider_ixs]
+                        agent1.reward_matrix = decider_rm[random_decider_ixs]
+                        agent1.internal_state = random_decider_ixs
+                        # agent1.appearance = decider_appearances[random_decider_ixs]
 
             for agent in agents:
                 # if agent.ixs == 1:
                 #     print(agent.preferences, agent.ixs, epoch, turn)
                 agent.reward = 0
-                agent.selected_in_last_turn = 0
                 # print('here', np.argmax(agent.reward_matrix.sum(axis=1)))
                 dominant_pref[agent.ixs] += np.argmax(agent.reward_matrix.sum(axis=1))
                 preferences_track[agent.ixs].append(agent.preferences)
@@ -456,9 +478,12 @@ def run(cfg, **kwargs):
                         cfg,
                         mode=cfg.interaction_task.mode
                         )
-                
+                    agent.selected_in_last_turn = 0
+
                     if not is_focal: 
                         agent.cached_action = action
+                    else:
+                        agent.cached_action = None
                     
                     if cfg.hardcoded:
                         partner = min_partner

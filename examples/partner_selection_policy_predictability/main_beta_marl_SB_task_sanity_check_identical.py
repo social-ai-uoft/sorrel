@@ -65,13 +65,21 @@ def run(cfg, **kwargs):
     #     np.array([[3, 1], [1, 2]]),
     #     np.array([[2, 1], [1, 3]]),
     # ]
+    # reward_matrices = [
+    #     np.array([[5, 1], [1, 2]]),
+    #     np.array([[2, 1], [1, 5]]),
+    #     np.array([[5, 1], [1, 2]]),
+    #     np.array([[2, 1], [1, 5]]),
+    #     np.array([[5, 1], [1, 2]]),
+    #     np.array([[2, 1], [1, 5]]),
+    # ]
     reward_matrices = [
-        np.array([[5, 1], [1, 2]]),
-        np.array([[2, 1], [1, 5]]),
-        np.array([[5, 1], [1, 2]]),
-        np.array([[2, 1], [1, 5]]),
-        np.array([[5, 1], [1, 2]]),
-        np.array([[2, 1], [1, 5]]),
+        np.array([[9, 5], [5, 6]]),
+        np.array([[6, 5], [5, 9]]),
+        np.array([[9, 5], [5, 6]]),
+        np.array([[6, 5], [5, 9]]),
+        np.array([[9, 5], [5, 6]]),
+        np.array([[6, 5], [5, 9]]),
     ]
     trainable_lst = []
     frozen_lst = []
@@ -176,7 +184,6 @@ def run(cfg, **kwargs):
 
             for agent in agents:
                 agent.reward = 0
-                agent.selected_in_last_turn = 0
                 dominant_pref[agent.ixs] += np.argmax(agent.reward_matrix.sum(axis=1))
                 preferences_track[agent.ixs].append(agent.preferences)
                 avg_val_bach[agent.ixs].append(agent.preferences[0])
@@ -192,7 +199,7 @@ def run(cfg, **kwargs):
             agents_to_act = get_agents_by_ixs(
                 agents, 
                 partner_choices_ixs, 
-                is_two_partners_condition=False
+                is_two_partners_condition=True
                 )
 
             turn = turn + 1
@@ -220,6 +227,7 @@ def run(cfg, **kwargs):
                     cfg,
                     mode=cfg.interaction_task.mode
                     )
+                    agent.selected_in_last_turn = 0
                 
                     if not is_focal: 
                         agent.cached_action = action

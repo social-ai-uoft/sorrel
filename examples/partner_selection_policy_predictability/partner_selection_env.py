@@ -121,6 +121,8 @@ class partner_pool:
         state = np.concatenate([state, np.array([1.*agent.selected_in_last_turn])])
         # add time
         state = np.concatenate([state, np.array([self.time])])
+        # add internal state
+        state = np.concatenate([state, np.array([agent.internal_state])])
 
         if not cfg.random_selection:
             return state

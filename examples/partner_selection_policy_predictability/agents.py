@@ -299,10 +299,12 @@ class Agent:
             partner_action, partner_action_prob = self.partner_choice_model.take_action(model_input)
             parnter_learning_tuples = {'state': state, 
                                        'action': partner_action, 
-                                       'action_prob': partner_action_prob}
+                                       'action_prob': partner_action_prob,
+                                       }
         elif cfg.partner_free_choice_beforehand:
             partner_action = partner.cached_action
             parnter_learning_tuples = None
+            partner.cached_action = None
         else:
             partner_action = random.choices([0, 1], partner.preferences, k=1)[0]
             partner.cached_action = partner_action
@@ -427,29 +429,31 @@ class Agent:
             #     action = random.randint(0, 2)
 
         # set random actions
-        if cfg.study == 2:
-            if cfg.random_selection:
-                if action <= 3:
-                    pref_act = action % 2
-                    action = 2*random.randint(0,1) + pref_act
-        
-        elif cfg.study == 1:
-            if self.ixs == 0 and cfg.random_selection:
-                if action <= 3:
-                    pref_act = action % 2
-                    action = 2*random.randint(0,1) + pref_act
+        selection = action//2
+        if is_focal:
+            if cfg.study == 2:
+                if cfg.random_selection:
+                    if action <= 3:
+                        pref_act = action % 2
+                        selection = random.randint(0,1)
+            
+            elif cfg.study == 1:
+                if self.ixs == 0 and cfg.random_selection:
+                    if action <= 3:
+                        pref_act = action % 2
+                        selection = random.randint(0,1)
 
         # execute the selection model action
         if cfg.experiment.is_SB_task and (not cfg.test_against_pref):
-            self.change_preferences(action)
+            if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
+                self.change_preferences(action)
         elif not cfg.experiment.is_SB_task:
             self.selection_task_action(action, is_focal)
-
         # # Select the partner
         if not cfg.random_selection:
             if cfg.experiment.is_SB_task:
                 if action <= 3: 
-                    selected_partner = partner_choices[int(action//2)]
+                    selected_partner = partner_choices[selection]
                     selected_partner_ixs = selected_partner.ixs
                 else:
                     selected_partner = None

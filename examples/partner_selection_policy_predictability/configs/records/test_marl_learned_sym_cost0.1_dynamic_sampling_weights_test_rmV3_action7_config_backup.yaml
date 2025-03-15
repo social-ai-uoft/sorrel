@@ -112,7 +112,7 @@ log: True
 seed: 1
 partner_free_choice: False
 partner_free_choice_beforehand: False
-random_selection: True
+random_selection: False
 hardcoded: False
 preference_reset: False 
 social_comparison: False
@@ -127,4 +127,4 @@ cost_of_changing_preferences: 0.1
 focal_shift_freq: 40
 sym_cost: True
 
-exp_name: 'test_marl_random_sym_cost0.1_dynamic_sampling_weights_test_rmV3_action7'
+exp_name: 'test_marl_learned_sym_cost0.1_dynamic_sampling_weights_test_rmV3_action7'
