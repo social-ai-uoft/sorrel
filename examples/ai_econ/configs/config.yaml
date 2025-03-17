@@ -1,8 +1,9 @@
 experiment:
   seller_epsilon_decay: 0.0001
-  epochs: 1000
+  epochs: 10000
   max_turns: 100
-  record_period: 50 # how many epochs in each data recording period
+  record_period: 100 # how many epochs in each data recording period
+  log: True
 
 env:
   height: 41
@@ -59,7 +60,7 @@ agent:
     sell_reward: 1
     obs:
       entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer", "SellWoodBeam", "SellStoneBeam"]
-      vision_radius: 10
+      vision_radius: 7
   buyer:
     model: iqn
     num: 1

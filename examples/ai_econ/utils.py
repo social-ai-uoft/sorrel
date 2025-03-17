@@ -7,7 +7,7 @@ from sorrel.observation.observation_spec import ObservationSpec
 from examples.ai_econ.agents import Buyer, EconEnvObsSpec, Seller
 
 
-def create_models(cfg):
+def create_models(cfg) -> tuple[list[iRainbowModel], list[iRainbowModel], list[iRainbowModel]]:
     """
     Create models given a configuration.
 
@@ -63,7 +63,7 @@ def create_models(cfg):
     return woodcutter_models, stonecutter_models, market_models
 
 
-def create_agents(cfg, woodcutter_models, stonecutter_models, market_models):
+def create_agents(cfg, woodcutter_models, stonecutter_models, market_models) -> tuple[list[Seller], list[Seller], list[Buyer]]:
     """
     Creates the agents for this environment.
     Appearances are placeholders for now; 0 for woodcutters, 1 for stonecutters, and 2 for markets.

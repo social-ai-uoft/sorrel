@@ -1,11 +1,13 @@
 import random
-
 import numpy as np
 
 from sorrel.environments import GridworldEnv
 from sorrel.location import Location
+
+from examples.ai_econ.agents import Seller, Buyer
 from examples.ai_econ.entities import (EmptyEntity, Land, StoneNode, Wall,
                                        WoodNode)
+
 
 
 class EconEnv(GridworldEnv):
@@ -19,9 +21,9 @@ class EconEnv(GridworldEnv):
         super().__init__(cfg.env.height, cfg.env.width, layers, default_entity)
 
         self.cfg = cfg
-        self.woodcutters = woodcutters
-        self.stonecutters = stonecutters
-        self.markets = markets
+        self.woodcutters: list[Seller] = woodcutters
+        self.stonecutters: list[Seller] = stonecutters
+        self.markets: list[Buyer] = markets
 
         # TODO: based on the size of the environment, have a hard limit on the number of agents
 
