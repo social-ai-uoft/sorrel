@@ -158,6 +158,8 @@ class EconEnv(GridworldEnv):
         """Reset the environment and all its agents."""
         self.create_world()
         self.populate()
+        self.seller_score = 0
+        self.buyer_score = 0
         for woodcutter in self.woodcutters:
             woodcutter.reset()
         for stonecutter in self.stonecutters:
