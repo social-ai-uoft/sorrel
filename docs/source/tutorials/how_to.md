@@ -21,12 +21,6 @@ treasurehunt
 └── main.py
 ```
 
-```{eval-rst}
-.. note::
-   Unlike the rest of the files in this example, the data folder may not already exist in the repository because it is ignored by git. 
-   If you want to run the provided :code:`examples\treasurehunt\main.py`, you may need to create the data folder. 
-```
-
 We will create a custom environment named `Treasurehunt`, custom entities `EmptyEntity`, `Wall`, `Sand`, and `Gem`, and a custom agent `TreasurehuntAgent`.
 The environment will have two layers: `TreasurehuntAgent` and `EmptyEntity` will be on the top layer, and `Sand` will be on the bottom layer.
 We will then write a `main.py` script that carries out the experiment, and render parts of the experiment as gifs.
@@ -54,6 +48,9 @@ These sprites should be placed in a ``./assets/`` folder. All of these entities 
 ```
 ```{literalinclude} /../../examples/treasurehunt/entities.py
 :pyobject: Gem
+```
+```{note}
+We use `Path(__file__)` to ensure that the animation sprite paths are always relative to the path to this `entities.py` file, no matter where one may be running this code from.
 ```
 
 We then create `EmptyEntity`, which requires a custom transition method.
@@ -120,7 +117,7 @@ We make our custom constructor:
 :pyobject: TreasurehuntAgent.__init__
 ```
 
-We will use {class}`sorrel.observation.obvservation_spec.OneHotObservationSpec` for `TreasurehuntAgent`'s observation, and {class}`sorrel.models.pytorch.PyTorchIQN` for `TreasurehuntAgent`'s model.
+We will use {class}`sorrel.observation.obvservation_spec.OneHotObservationSpec` for `TreasurehuntAgent`'s observation, {class}`sorrel.action.action_spec.AcionSpec` for `TreasurehuntAgent`'s actions, and {class}`sorrel.models.pytorch.PyTorchIQN` for `TreasurehuntAgent`'s model.
 We do not create them in this file (they will be passed into `TreasurehuntAgent`'s constructor externally), 
 but we will use the functionality that they provide by accessing the attributes of this class.
 
@@ -187,9 +184,6 @@ In addition to printing information about each recording period on the terminal,
 we also use functions from {mod}`sorrel.utils.visualization` to record states as images and animate them into a gif.
 ```{literalinclude} /../../examples/treasurehunt/main.py
 :pyobject: run
-```
-```{note}
-Since the sprite paths for the entities are relative, the animation will only generate properly if you are running the script from its file location. If you are encountering errors of the form ```FileNotFoundError: [Errno 2] No such file or directory``` thrown by `animate()`, double check that you are working in the same directory as this `main.py`.
 ```
 
 Finally, write the main block:

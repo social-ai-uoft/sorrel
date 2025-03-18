@@ -1,6 +1,8 @@
 """The entities for treasurehunt, a simple example for the purpose of a tutorial."""
 
 # begin imports
+from pathlib import Path
+
 import numpy as np
 
 from sorrel.entities import Entity
@@ -15,7 +17,7 @@ class Wall(Entity):
     def __init__(self):
         super().__init__()
         self.value = -1  # Walls penalize contact
-        self.sprite = "./assets/wall.png"
+        self.sprite = Path(__file__).parent / "./assets/wall.png"
 
 
 class Sand(Entity):
@@ -25,7 +27,7 @@ class Sand(Entity):
         super().__init__()
         # We technically don't need to make Sand passable here since it's on a different layer from Agent
         self.passable = True
-        self.sprite = "./assets/sand.png"
+        self.sprite = Path(__file__).parent / "./assets/sand.png"
 
 
 class Gem(Entity):
@@ -35,7 +37,7 @@ class Gem(Entity):
         super().__init__()
         self.passable = True  # Agents can move onto Gems
         self.value = gem_value
-        self.sprite = "./assets/gem.png"
+        self.sprite = Path(__file__).parent / "./assets/gem.png"
 
 
 class EmptyEntity(Entity):
@@ -45,7 +47,7 @@ class EmptyEntity(Entity):
         super().__init__()
         self.passable = True  # Agents can enter EmptySpaces
         self.has_transitions = True  # EmptyEntity can transition into Gems
-        self.sprite = "./assets/empty.png"
+        self.sprite = Path(__file__).parent / "./assets/empty.png"
 
     def transition(self, env: GridworldEnv):
         """

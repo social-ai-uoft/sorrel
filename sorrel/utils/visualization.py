@@ -2,14 +2,15 @@
 # region: Imports #
 # --------------- #
 
+import os
+from pathlib import Path
+from typing import Optional, Sequence
+
 # Import base packages
 import numpy as np
-import os
-from PIL import Image
-
-from PIL.PngImagePlugin import PngImageFile
 from matplotlib import pyplot as plt
-from typing import Sequence, Optional
+from PIL import Image
+from PIL.PngImagePlugin import PngImageFile
 
 # Import sorrel-specific packages
 from sorrel.environments import GridworldEnv
@@ -21,6 +22,7 @@ from sorrel.environments import GridworldEnv
 # --------------------------- #
 # region: Visualizations      #
 # --------------------------- #
+
 
 def visual_field_sprite(
     env: GridworldEnv,
@@ -189,9 +191,9 @@ def animate(
         folder: The path to save the gif to
     """
     if not os.path.exists(folder):
-        print(f"Directory {folder} does not exist. Creating directory...")
-        os.mkdir(folder)
-    path = folder + filename + ".gif"
+        print(f"Directory {folder} does not exist; creating directory.")
+    Path(folder).mkdir(parents=True, exist_ok=True)
+    path = os.path.join(folder, filename + ".gif")
 
     frames[0].save(
         os.path.expanduser(path),
@@ -201,6 +203,7 @@ def animate(
         duration=100,
         loop=0,
     )
+
 
 # --------------------------- #
 # endregion: Visualizations   #

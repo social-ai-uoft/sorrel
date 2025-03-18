@@ -2,20 +2,20 @@
 # region: Imports          #
 # general imports
 import os
-import sys
 from datetime import datetime
+from pathlib import Path
 
 import torch
 
+from examples.cleanup.agents import CleanupAgent, CleanupObservation
+from examples.cleanup.env import Cleanup
 # sorrel imports
 from sorrel.action.action_spec import ActionSpec
 from sorrel.config import Cfg, load_config
 from sorrel.entities import Entity
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.utils.visualization import (animate, image_from_array,
-                                            visual_field_sprite)
-from examples.cleanup.agents import CleanupAgent, CleanupObservation
-from examples.cleanup.env import Cleanup
+                                        visual_field_sprite)
 
 # endregion                #
 # ------------------------ #
@@ -58,11 +58,11 @@ def setup(cfg: Cfg, **kwargs) -> Cleanup:
         if "load_weights" in kwargs:
             model.load(file_path=kwargs.get("load_weights"))
 
-        agents.append(CleanupAgent(
-            observation_spec=observation_spec, 
-            action_spec=action_spec, 
-            model=model
-        ))
+        agents.append(
+            CleanupAgent(
+                observation_spec=observation_spec, action_spec=action_spec, model=model
+            )
+        )
 
     env = Cleanup(cfg, agents)
     return env
@@ -101,7 +101,7 @@ def run(env: Cleanup, **kwargs):
             print(
                 f"Epoch: {epoch}; Epsilon: {env.agents[0].model.epsilon}; Losses this period: {total_loss}; Avg. score this period: {avg_score}"
             )
-            animate(imgs, f"cleanup_epoch{epoch}", "./data/")
+            animate(imgs, f"cleanup_epoch{epoch}", Path(__file__).parent / "./data/")
             # reset the data
             imgs = []
             total_score = 0
@@ -129,7 +129,7 @@ def main():
         "-c",
         type=str,
         help="Path to configuration file",
-        default="./configs/config.yaml",
+        default=Path(__file__).parent / "./configs/config.yaml",
     )
     parser.add_argument(
         "--load-weights", "-l", type=str, help="Path to pretrained model.", default=""

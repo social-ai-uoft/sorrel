@@ -1,7 +1,7 @@
 [project]
 readme = "README.md"
 name = "sorrel"
-version = "0.1.0"
+version = "1.0.0"
 description = "A flexible framework for developing reinforcement learning algorithms."
 license = "MIT"
 maintainers = [
@@ -11,7 +11,7 @@ maintainers = [
 contributors = [
     {name = "Ethan Jackson", email = "jackson.ethan.c@gmail.com"},
     {name = "Shon Verch", email = "verchshon@gmail.com"},
-    {name = "Yikai Tang"},
+    {name = "Yikai Tang", email = "yikai.tang@mail.utoronto.ca"},
     {name = "Claas Voelcker", email = "claas@voelcker.net"},
     {name = "Wil Cunningham"}
 ]
@@ -24,6 +24,7 @@ python = "^3.11.0"
 matplotlib = "^3.6.1"
 numpy = "^1.23.4"
 pyyaml = "^6.0.2"
+pytest = "^8.3.5"
 
 torch = "^2.5.1"
 jax = "^0.4.35"
@@ -53,6 +54,16 @@ optional = true
 
 [tool.poetry.group.extras.dependencies]
 tensorboard = "^2.18.0"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "sorrel",
+  "examples"
+]
+addopts = [
+  "--doctest-modules", 
+  "--import-mode=importlib"
+]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -10,7 +10,7 @@ import torch.optim as optim
 from typing import Sequence
 from matplotlib import pyplot as plt
 
-from sorrel.buffers import ReplayBuffer
+from sorrel.buffers import Buffer
 from sorrel.models.pytorch.pytorch_base import PyTorchModel
 
 # --------------- #
@@ -123,7 +123,7 @@ class MLPBCModel(PyTorchModel):
         # BC model parameters
         n_channels: int,
         frames: int,
-        memory: ReplayBuffer,
+        memory: Buffer,
         LR: float
         ):
 
@@ -267,7 +267,7 @@ class WorldModel(PyTorchModel):
         # BC model parameters
         n_channels: int,
         frames: int,
-        memory: ReplayBuffer,
+        memory: Buffer,
         LR: float
     ):
         

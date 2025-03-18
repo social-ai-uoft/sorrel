@@ -1,5 +1,7 @@
 # begin imports
 # general imports
+from pathlib import Path
+
 import numpy as np
 import torch
 
@@ -106,10 +108,9 @@ def run(env: Treasurehunt):
 
         if epoch % RECORD_PERIOD == 0:
             avg_score = total_score / RECORD_PERIOD
-            print(
-                f"Epoch: {epoch}; Epsilon: {env.agents[0].model.epsilon}; Losses this period: {total_loss}; Avg. score this period: {avg_score}"
+            animate(
+                imgs, f"treasurehunt_epoch{epoch}", Path(__file__).parent / "./data/"
             )
-            animate(imgs, f"treasurehunt_epoch{epoch}", "./data/")
             # reset the data
             imgs = []
             total_score = 0
