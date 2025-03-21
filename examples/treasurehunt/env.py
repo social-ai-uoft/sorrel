@@ -32,7 +32,7 @@ class Treasurehunt(GridworldEnv):
 
     def populate(self):
         """
-        Populate the treasurehunt world by creating walls, then randomly spawning 1 gem and 1 agent.
+        Populate the treasurehunt world by creating walls, then randomly spawning the agents.
         Note that every space is already filled with EmptyEntity as part of super().__init__().
         """
         valid_spawn_locations = []

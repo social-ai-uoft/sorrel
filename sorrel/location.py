@@ -12,7 +12,7 @@ class Location(tuple):
         >>> Location(1, 2, 3) + Location(2, 4, 8)
         Location(3, 6, 11)
         >>> Location(2, 4) * 3
-        Location(6, 12)
+        Location(6, 12, 0)
     """
 
     def __init__(self, *coords):

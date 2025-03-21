@@ -380,6 +380,7 @@ class iRainbowModel(DoublePyTorchModel):
         """
         if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
             kwargs["loss"] = self.train_step()
+            kwargs["loss"] = kwargs["loss"].detach()
             if "game_vars" in kwargs:
                 kwargs["game_vars"].losses.append(kwargs["loss"])
             else:

@@ -2,7 +2,7 @@
 import argparse
 
 # sorrel imports
-from sorrel.config import load_config
+from sorrel.config import load_config, Cfg
 from sorrel.utils.visualization import (animate, image_from_array,
                                             visual_field_sprite)
 # imports from our example
@@ -11,7 +11,7 @@ import examples.ai_econ.env
 from examples.ai_econ.utils import create_agents, create_models
 
 
-def setup(cfg) -> EconEnv:
+def setup(cfg: Cfg) -> EconEnv:
     """Set up all the whole environment and everything within."""
 
     # make the agents
@@ -24,13 +24,26 @@ def setup(cfg) -> EconEnv:
     return EconEnv(cfg, woodcutters, stonecutters, markets)
 
 
-def run(env: EconEnv, cfg):
+def run(env: EconEnv, cfg: Cfg):
     """Run the experiment."""
     imgs = []
     total_seller_score = 0
     total_seller_loss = 0
     total_buyer_loss = 0
     percent_marker = int(0.2 * cfg.experiment.epochs)
+
+    if cfg.experiment.log:
+        from torch.utils.tensorboard import SummaryWriter
+        from datetime import datetime
+        from os import path, mkdir
+        log_dir = './data/tensorboard/'
+        if not path.exists(log_dir):
+            mkdir(log_dir)
+        log_dir += f'{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
+        writer = SummaryWriter(
+            log_dir=log_dir
+        )
+
     for epoch in range(cfg.experiment.epochs + 1):
 
         # env.reset() # <- toggle this for original spawn 
@@ -64,14 +77,16 @@ def run(env: EconEnv, cfg):
         current_seller_epsilon = env.woodcutters[0].model.epsilon
 
         if epoch % cfg.experiment.record_period == 0:
-            avg_seller_score = total_seller_score / cfg.experiment.record_period
-            print(
-                f"Epoch: {epoch}; Epsilon: {current_seller_epsilon}; Losses this period: {total_seller_loss}; Avg. score this period: {avg_seller_score}"
-            )
-            animate(imgs, f"econ_epoch{epoch}", "./data/")
+            animate(imgs, f"econ_epoch{epoch}", "./data/animations/")
+            # reset the data
             imgs = []
-            total_score = 0
-            total_loss = 0
+        
+        if cfg.experiment.log:
+            writer.add_scalar('score', env.seller_score, epoch)
+            writer.add_scalar('loss', total_seller_loss, epoch)
+            writer.add_scalar('epsilon', current_seller_epsilon, epoch)
+        total_seller_score = 0
+        total_seller_loss = 0
 
         for i in range(cfg.agent.seller.num):
             new_epsilon = current_seller_epsilon - cfg.experiment.seller_epsilon_decay

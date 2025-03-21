@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import numpy as np
 
+from examples.cleanup.entities import EmptyEntity
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.entities import Entity
@@ -7,7 +10,6 @@ from sorrel.environments import GridworldEnv
 from sorrel.location import Location, Vector
 from sorrel.models import SorrelModel
 from sorrel.observation import embedding, observation_spec
-from examples.cleanup.entities import EmptyEntity
 
 # --------------------------- #
 # region: Cleanup agent class #
@@ -29,19 +31,21 @@ class CleanupObservation(observation_spec.OneHotObservationSpec):
         super().__init__(entity_list, vision_radius)
         self.embedding_size = embedding_size
         if self.full_view:
-            self.input_size = (1,
-                (len(entity_list) * 21 * 31) + # Environment size;
+            self.input_size = (
+                1,
+                (len(entity_list) * 21 * 31) +  # Environment size;
                 # Cleanup uses a fixed environment size of 21 * 31
-                (4 * self.embedding_size) # Embedding size
-                )
+                (4 * self.embedding_size),  # Embedding size
+            )
         else:
-            self.input_size = (1,
+            self.input_size = (
+                1,
                 (
-                    len(entity_list) * 
-                    (2 * self.vision_radius + 1) *
-                    (2 * self.vision_radius + 1)
-                ) +
-                (4 * self.embedding_size) # Embedding size
+                    len(entity_list)
+                    * (2 * self.vision_radius + 1)
+                    * (2 * self.vision_radius + 1)
+                )
+                + (4 * self.embedding_size),  # Embedding size
             )
 
     def observe(self, env: GridworldEnv, location: tuple | Location | None = None):
@@ -59,11 +63,16 @@ class CleanupAgent(Agent):
     A treasurehunt agent that uses the iqn model.
     """
 
-    def __init__(self, observation_spec: CleanupObservation, action_spec: ActionSpec, model: SorrelModel):
+    def __init__(
+        self,
+        observation_spec: CleanupObservation,
+        action_spec: ActionSpec,
+        model: SorrelModel,
+    ):
         super().__init__(observation_spec, action_spec=action_spec, model=model)
 
         self.direction = 2  # 90 degree rotation: default at 180 degrees (facing down)
-        self.sprite = "./assets/hero.png"
+        self.sprite = Path(__file__).parent / "./assets/hero.png"
 
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
@@ -91,7 +100,6 @@ class CleanupAgent(Agent):
         model_input = stacked_states.reshape(1, -1)
         # Get the model output
         model_output = self.model.take_action(model_input)
-        
 
         return model_output
 
@@ -147,24 +155,24 @@ class CleanupAgent(Agent):
 
         # Translate the model output to an action string
         action = self.action_spec.get_readable_action(action)
-        
+
         # Attempt to move
         new_location = self.location
         if action == "up":
             self.direction = 0
-            self.sprite = "./assets/hero-back.png"
+            self.sprite = Path(__file__).parent / "./assets/hero-back.png"
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
         if action == "down":
             self.direction = 2
-            self.sprite = "./assets/hero.png"
+            self.sprite = Path(__file__).parent / "./assets/hero.png"
             new_location = (self.location[0] + 1, self.location[1], self.location[2])
         if action == "left":
             self.direction = 3
-            self.sprite = "./assets/hero-left.png"
+            self.sprite = Path(__file__).parent / "./assets/hero-left.png"
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
         if action == "right":
             self.direction = 1
-            self.sprite = "./assets/hero-right.png"
+            self.sprite = Path(__file__).parent / "./assets/hero-right.png"
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
 
         # Attempt to spawn beam
@@ -199,7 +207,7 @@ class Beam(Entity):
 
     def __init__(self):
         super().__init__()
-        self.sprite = f"./assets/beam.png"
+        self.sprite = Path(__file__).parent / "./assets/beam.png"
         self.turn_counter = 0
 
     def transition(self, env: GridworldEnv):
@@ -218,7 +226,7 @@ class CleanBeam(Beam):
 class ZapBeam(Beam):
     def __init__(self):
         super().__init__()
-        self.sprite = f"./assets/zap.png"
+        self.sprite = Path(__file__).parent / "./assets/zap.png"
         self.value = -1
 
 

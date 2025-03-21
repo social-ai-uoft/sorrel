@@ -1,6 +1,8 @@
 """The agent for treasurehunt, a simple example for the purpose of a tutorial."""
 
 # begin imports
+from pathlib import Path
+
 import numpy as np
 
 from sorrel.agents import Agent
@@ -16,7 +18,7 @@ class TreasurehuntAgent(Agent):
 
     def __init__(self, observation_spec, action_spec, model):
         super().__init__(observation_spec, action_spec, model)
-        self.sprite = "./assets/hero.png"
+        self.sprite = Path(__file__).parent / "./assets/hero.png"
 
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
