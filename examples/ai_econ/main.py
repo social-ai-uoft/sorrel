@@ -32,17 +32,14 @@ def run(env: EconEnv, cfg):
     total_buyer_loss = 0
     percent_marker = int(0.2 * cfg.experiment.epochs)
     for epoch in range(cfg.experiment.epochs + 1):
-        # Reset the environment at the start of each epoch
-        env.reset()
 
-        env.new_place_agents(epoch, cfg.experiment.epochs)
+        # env.reset() # <- toggle this for original spawn 
+        env.new_place_agents(epoch, cfg.experiment.epochs) # <- toggle this for new agents spawn
 
-        # if epoch is less than 20%
         if epoch < percent_marker: 
-           for i in range(cfg.agent.seller.num):
-               env.woodcutters[i].wood_owned = 5
-               env.stonecutters[i].stone_owned = 5
-
+            for i in range(cfg.agent.seller.num):
+                env.woodcutters[i].wood_owned = 5
+                env.stonecutters[i].stone_owned = 5
 
         for i in range(cfg.agent.seller.num):
             env.woodcutters[i].model.start_epoch_action(**locals())
@@ -54,10 +51,8 @@ def run(env: EconEnv, cfg):
             if epoch % cfg.experiment.record_period == 0:
                 full_sprite = visual_field_sprite(env)
                 imgs.append(image_from_array(full_sprite))
-
             env.take_turn()
 
-        # At the end of each epoch, train as long as the batch size is large enough.
         if epoch > 10:
             for i in range(cfg.agent.seller.num):
                 total_seller_loss += env.woodcutters[i].model.train_step()
@@ -74,12 +69,10 @@ def run(env: EconEnv, cfg):
                 f"Epoch: {epoch}; Epsilon: {current_seller_epsilon}; Losses this period: {total_seller_loss}; Avg. score this period: {avg_seller_score}"
             )
             animate(imgs, f"econ_epoch{epoch}", "./data/")
-            # reset the data
             imgs = []
             total_score = 0
             total_loss = 0
 
-        # update epsilon
         for i in range(cfg.agent.seller.num):
             new_epsilon = current_seller_epsilon - cfg.experiment.seller_epsilon_decay
             env.woodcutters[i].model.epsilon = max(new_epsilon, 0.01)
