@@ -171,6 +171,8 @@ class EconEnv(GridworldEnv):
         # Reset the environment
         self.world = np.full((self.height, self.width, self.layers), self.default_entity)
         self.turn = 0
+        self.seller_score = 0
+        self.buyer_score = 0
 
         # Locations and progression
         progress = round((epoch / total_epochs) * 5) / 5.0

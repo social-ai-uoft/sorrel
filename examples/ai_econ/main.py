@@ -39,7 +39,7 @@ def run(env: EconEnv, cfg: Cfg):
         log_dir = './data/tensorboard/'
         if not path.exists(log_dir):
             mkdir(log_dir)
-        log_dir += f'{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
+        log_dir += f'{datetime.now().strftime("%Y%m%d-%H%M%S")}/'
         writer = SummaryWriter(
             log_dir=log_dir
         )
