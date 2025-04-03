@@ -30,7 +30,7 @@ def run(env: EconEnv, cfg: Cfg):
     total_seller_score = 0
     total_seller_loss = 0
     total_buyer_loss = 0
-    percent_marker = int(0.2 * cfg.experiment.epochs)
+    percent_marker = int(0.5 * cfg.experiment.epochs)
 
     if cfg.experiment.log:
         from torch.utils.tensorboard import SummaryWriter
@@ -39,13 +39,13 @@ def run(env: EconEnv, cfg: Cfg):
         log_dir = './data/tensorboard/'
         if not path.exists(log_dir):
             mkdir(log_dir)
-        log_dir += f'{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
+        log_dir += f'{datetime.now().strftime("%Y%m%d-%H%M")}/'
         writer = SummaryWriter(
             log_dir=log_dir
         )
 
     for epoch in range(cfg.experiment.epochs + 1):
-
+        print(f"[Epoch {epoch}/{cfg.experiment.epochs}] Running simulation...")
         # env.reset() # <- toggle this for original spawn 
         env.new_place_agents(epoch, cfg.experiment.epochs) # <- toggle this for new agents spawn
 

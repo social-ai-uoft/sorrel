@@ -171,9 +171,10 @@ class EconEnv(GridworldEnv):
         # Reset the environment
         self.world = np.full((self.height, self.width, self.layers), self.default_entity)
         self.turn = 0
+        self.seller_score = 0
+        self.buyer_score = 0
 
         # Locations and progression
-        progress = round((epoch / total_epochs) * 5) / 5.0
         centre_row = self.height // 2
         centre_col = self.width // 2
         CENTREPOINT = Location(centre_row, centre_col, 2)
@@ -200,28 +201,27 @@ class EconEnv(GridworldEnv):
             "outer_end_y": WALL_OUTER_END_Y,
         }
 
-        # Populate the environment with walls, land, and resource nodes
+        # Populate environment
         for index in np.ndindex(self.world.shape):
             y, x, z = index
 
-            # Add walls along the borders
+            # Borders
             if y in [0, self.height - 1] or x in [0, self.width - 1]:
                 self.add(index, Wall())
-            # Add walls around the market area
+
             if (x == locs["inner_begin_x"] or x == locs["outer_end_x"] - 1) and \
             (y in range(locs["inner_begin_y"], locs["inner_end_y"]) or \
                 y in range(locs["outer_begin_y"], locs["outer_end_y"])):
                 self.add(index, Wall())
+
             if (y == locs["inner_begin_y"] or y == locs["outer_end_y"] - 1) and \
             (x in range(locs["inner_begin_x"], locs["inner_end_x"]) or \
                 x in range(locs["outer_begin_x"], locs["outer_end_x"])):
                 self.add(index, Wall())
 
-            # On layer 0, add Land
             if z == 0:
                 self.add(index, Land())
 
-            # On layer 1, add resource nodes or empty entities
             if z == 1:
                 if x in range(1, locs["inner_begin_x"]) and y in range(1, locs["inner_begin_y"]):
                     self.add(index, WoodNode(self.cfg))
@@ -234,80 +234,105 @@ class EconEnv(GridworldEnv):
                 else:
                     self.add(index, EmptyEntity())
 
-        # Progressive Agent Placement
+        # Resource spawning
+        if epoch >= 5000:
+            # Spawn agents near resource nodes
+            wood_area = []
+            stone_area = []
 
-        # Define narrow spawn (if progress==0, agents spawn very near the market)
-        narrow_north_lower = centre_row - 4
-        narrow_north_upper = centre_row - 1
-        narrow_south_lower = centre_row + 1
-        narrow_south_upper = centre_row + 4
-
-        # Define bounds from the original spawn areas 
-        target_north_lower = 1
-        target_north_upper = locs["inner_begin_y"]
-        target_south_lower = locs["outer_end_y"] - 1
-        target_south_upper = self.width - 2
-
-        effective_north_lower = int(round((1 - progress) * narrow_north_lower + progress * target_north_lower))
-        effective_north_upper = int(round((1 - progress) * narrow_north_upper + progress * target_north_upper))
-        effective_south_lower = int(round((1 - progress) * narrow_south_lower + progress * target_south_lower))
-        effective_south_upper = int(round((1 - progress) * narrow_south_upper + progress * target_south_upper))
-
-        # x-range for agent spawn: between inner_end_x and outer_begin_x
-        x_lower = locs["inner_end_x"]
-        x_upper = locs["outer_begin_x"]
-
-        def build_spawn_area(north_lower, north_upper, south_lower, south_upper):
-            area = []
+            # Find adjacent tiles to resource nodes
             for y, x in np.ndindex(self.height, self.width):
-                if x in range(x_lower, x_upper):
-                    if north_lower <= y <= north_upper or south_lower <= y <= south_upper:
-                        area.append((y, x, 2))
-            return area
+                if self.world[y, x, 1].__class__.__name__ == "WoodNode":
+                    for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        ny, nx = y + dy, x + dx
+                        if 0 < ny < self.height - 1 and 0 < nx < self.width - 1:
+                            if isinstance(self.world[ny, nx, 2], EmptyEntity):
+                                wood_area.append((ny, nx, 2))
 
-        common_spawn_area = build_spawn_area(effective_north_lower, effective_north_upper,
-                                            effective_south_lower, effective_south_upper)
+                if self.world[y, x, 1].__class__.__name__ == "StoneNode":
+                    for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        ny, nx = y + dy, x + dx
+                        if 0 < ny < self.height - 1 and 0 < nx < self.width - 1:
+                            if isinstance(self.world[ny, nx, 2], EmptyEntity):
+                                stone_area.append((ny, nx, 2))
 
-        total_agents = len(self.woodcutters) + len(self.stonecutters)
-        min_required_positions = max(20, total_agents)
-        while len(common_spawn_area) < min_required_positions:
-            if effective_north_lower > 0:
-                effective_north_lower -= 1
-            if effective_north_upper < centre_row - 1:
-                effective_north_upper += 1
-            if effective_south_lower > centre_row + 1:
-                effective_south_lower -= 1
-            if effective_south_upper < self.height - 1:
-                effective_south_upper += 1
+            # Shuffle
+            random.shuffle(wood_area)
+            random.shuffle(stone_area)
+
+            # Sample
+            spawn_locations = []
+            spawn_locations += random.sample(wood_area, len(self.woodcutters))
+            spawn_locations += random.sample(stone_area, len(self.stonecutters))
+            random.shuffle(spawn_locations)
+        else:
+            # Before 1000 epochs, slow progression 
+            step = epoch // 500
+            offset = step * 1
+
+            narrow_north_lower = centre_row - 4
+            narrow_north_upper = centre_row - 1
+            narrow_south_lower = centre_row + 1
+            narrow_south_upper = centre_row + 4
+
+            target_north_lower = 1
+            target_north_upper = locs["inner_begin_y"]
+            target_south_lower = locs["outer_end_y"] - 1
+            target_south_upper = self.width - 2
+
+            effective_north_lower = max(narrow_north_lower - offset, target_north_lower)
+            effective_north_upper = max(narrow_north_upper - offset, target_north_upper)
+            effective_south_lower = min(narrow_south_lower + offset, target_south_lower)
+            effective_south_upper = min(narrow_south_upper + offset, target_south_upper)
+
+            def build_spawn_area(north_lower, north_upper, south_lower, south_upper):
+                area = []
+                for y, x in np.ndindex(self.height, self.width):
+                    if x in range(locs["inner_end_x"], locs["outer_begin_x"]):
+                        if north_lower <= y <= north_upper or south_lower <= y <= south_upper:
+                            area.append((y, x, 2))
+                return area
+
             common_spawn_area = build_spawn_area(effective_north_lower, effective_north_upper,
                                                 effective_south_lower, effective_south_upper)
 
-        if len(common_spawn_area) < total_agents:
-            raise ValueError("Not enough spawn locations available in the common spawn area.")
+            total_agents = len(self.woodcutters) + len(self.stonecutters)
+            min_required_positions = max(20, total_agents)
+            while len(common_spawn_area) < min_required_positions:
+                if effective_north_lower > 0:
+                    effective_north_lower -= 1
+                if effective_north_upper < centre_row - 1:
+                    effective_north_upper += 1
+                if effective_south_lower > centre_row + 1:
+                    effective_south_lower -= 1
+                if effective_south_upper < self.height - 1:
+                    effective_south_upper += 1
+                common_spawn_area = build_spawn_area(effective_north_lower, effective_north_upper,
+                                                    effective_south_lower, effective_south_upper)
 
-        spawn_locations = random.sample(common_spawn_area, total_agents)
-        random.shuffle(spawn_locations)
+            if len(common_spawn_area) < total_agents:
+                raise ValueError("Not enough spawn locations available in the common spawn area.")
 
-        # Assign agents
+            spawn_locations = random.sample(common_spawn_area, total_agents)
+            random.shuffle(spawn_locations)
+
+        # Place agents
         for woodcutter, pos in zip(self.woodcutters, spawn_locations[:len(self.woodcutters)]):
             self.add(pos, woodcutter)
         for stonecutter, pos in zip(self.stonecutters, spawn_locations[len(self.woodcutters):]):
             self.add(pos, stonecutter)
 
-        # Place markets at fixed positions around the centre
+        # Markets
         market = self.markets[0]
         self.add(locs["centre"] + (-4, -4), market)
         self.add(locs["centre"] + (-4, 4), market)
         self.add(locs["centre"] + (4, -4), market)
-        self.add(locs["centre"] + (4, 4), market) 
+        self.add(locs["centre"] + (4, 4), market)
 
-        # Reset each agent
+        # Reset agents
         for woodcutter in self.woodcutters:
             woodcutter.reset()
         for stonecutter in self.stonecutters:
             stonecutter.reset()
         for market in self.markets:
             market.reset()
-
-
-
