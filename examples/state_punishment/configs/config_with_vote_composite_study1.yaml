@@ -16,12 +16,12 @@ env:
   prob:
     item_spawn: 0.2 # 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
     # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
-    item_choice: [0.33, 0.33, 0.34] # [0.3, 0.7] [0.8, 0.2]
+    item_choice: [0.45, 0.45, 0.1] # [0.3, 0.7] [0.8, 0.2]
     respawn_rate: 0.04
 
 state_sys:
-  resource_punishment_schedule_is_dynamic: False
-  only_punish_taboo: True
+  resource_punishment_schedule_is_dynamic: True
+  only_punish_taboo: False
   prob_list: 
     Gem: 0.0
     Coin: 0.0
@@ -111,17 +111,17 @@ replay:
 
 # Root folder for accessing file structure and modules
 root: '/Users/socialai/Documents/state_punishment'
-seed: 2
+seed: 3
 log: True
 random: False
 state_mode: 'composite'
 action_mode: 'simple'
-load_weights: True
+load_weights: False
 with_direct_cost: 0.0
 # exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
 # exp_name: 'test_punishment_noncomposite_oneA_po' #"test_composite_input_fixed_punishment_1.0_clear_detection_v0_oneA_instant_only_coin_hs500"
-exp_name: 'test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_s3_r2' 
+# exp_name: 'test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_s3_r2' 
 # exp_name: 'test_study1__nondynamic_cost0.2_stacked_view_simple_actions_3agents_respawn_0.04_v0_s3_r2'
-# exp_name: 'test_study1__dynamic_with_stacked_view_simple_actions_3agents_respawn_0.04_v0_s3_r2'
+exp_name: 'test_study1__dynamic_v2_stacked_view_simple_actions_3agents_respawn_0.04_v0_scarce_bad_s1'
 # exp_name: 'test_nondynamic'
 # stacked_views,single_view
