@@ -195,3 +195,15 @@ examples/state_punishment/configs/records/test_clear_detection_3agents_simple_ac
 examples/state_punishment/configs/records/test_clear_detection_3agents_simple_actions_v0_config_backup.yaml
 /examples/state_punishment/runs_
 /examples/state_punishment/runs_to_analyze
+*.26
+*.25
+*.27
+*.28
+*.29
+*.23
+*.21
+*.19
+*.20
+*.24
+*.22
+*.30
