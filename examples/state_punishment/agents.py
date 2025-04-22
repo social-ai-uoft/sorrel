@@ -133,11 +133,15 @@ class Agent:
                 new_location = self.location
                 state_sys.prob += state_sys.change_per_vote
                 state_sys.prob = np.clip(state_sys.prob, 0, 1)
+                state_sys.level += 1
+                state_sys.level = int(np.clip(state_sys.level, 0, state_sys.max_level))
             if action == 5: # vote against state punishment
                 self.sprite = self.sprite
                 new_location = self.location
                 state_sys.prob -= state_sys.change_per_vote
                 state_sys.prob = np.clip(state_sys.prob, 0, 1)
+                state_sys.level -= 1
+                state_sys.level = int(np.clip(state_sys.level, 0, state_sys.max_level))
 
         elif mode == 'composite':
             if action%4 == 0: # UP

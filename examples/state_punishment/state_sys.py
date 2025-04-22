@@ -4,9 +4,70 @@ import numpy as np
 from examples.state_punishment.utils import inspect_the_env, add_extra_info
 from copy import deepcopy
 
+
+def smooth_punishments(punishments, weight, intercept_increment, upper_bound):
+    """
+    Smooths a list of punishments by iteratively propagating values from higher indices to lower ones.
+    
+    Args:
+        punishments (list): The original list of punishment values
+        weight (float): The smoothing factor to apply
+        
+    Returns:
+        list: The smoothed list of punishments
+    """
+    # Create a copy of the list to avoid modifying the original
+    result = punishments.copy()
+    
+    for i in range(len(result)):
+        if i > 0:
+            result[i] = result[i] + (weight) * result[i - 1] + intercept_increment
+        # Ensure the value does not exceed the upper bound
+        result[i] = np.clip(result[i], 0.0, upper_bound[i])
+    result = np.clip(result, 0.0, 1.0)
+    return result
+
+
+def increase_punishments(punishments, intercept, slope, num_steps):
+    """
+    Increases the punishment values based on a linear function defined by intercept and slope.
+    
+    Args:
+        punishments (list): The original list of punishment values
+        intercept (float): The y-intercept of the linear function
+        slope (float): The slope of the linear function
+        
+    Returns:
+        list: The increased list of punishments
+    """
+    # Create a copy of the list to avoid modifying the original
+    result = punishments.copy()
+    
+    # Apply the linear function to each element
+    for i in range(len(result)):
+        result[i] = intercept + slope * i
+        result[i] = intercept + ((i)/(2*num_steps))**1.2
+
+    result = np.clip(result, 0.0, 1.0)
+    return result
+
+
+def compile_punishment_vals(num_steps, num_resources, intercept, slope, weight, intercept_increment, upper_bound):
+    """
+    Create the punishment prob arrays.
+    """
+    punishments = np.zeros(num_steps)
+    punishments_start = increase_punishments(punishments, intercept, slope, num_steps)
+    punishments_all = np.stack([punishments_start]*num_resources, axis=0)
+    punishments_all = smooth_punishments(punishments_all, weight, intercept_increment, upper_bound)
+    return punishments_all
+
+
 class state_sys():
-    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote, is_dynamic, potential_taboo, only_taboo) -> None:
+    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote, is_dynamic, potential_taboo, only_taboo, cfg) -> None:
         self.prob = init_prob
+        self.level = 0
+        self.max_level = cfg.state_sys.max_level
         self.prob_list = prob_list
         self.init_prob = init_prob 
         self.magnitude = magnitude
@@ -15,6 +76,18 @@ class state_sys():
         self.resource_punishment_schedule_is_dynamic = is_dynamic
         self.potential_taboo = potential_taboo
         self.only_punish_taboo = only_taboo
+        self.cfg = cfg
+        self.punishments_prob_matrix = compile_punishment_vals(
+            cfg.state_sys.num_steps,
+            cfg.state_sys.num_resources,
+            cfg.state_sys.intercept,
+            cfg.state_sys.slope,
+            cfg.state_sys.weight,
+            cfg.state_sys.intercept_increment,
+            cfg.state_sys.upper_bound
+        )
+        self.manual_punishment_prob = False
+        self.resources = cfg.state_sys.resources
         self.prob_record = []
     
     def reset_prob_record(self):
@@ -30,40 +103,44 @@ class state_sys():
         #TODO:design the schedule funcs
         assert base_prob in [0., 0.2, 0.4, 0.6, 0.8, 1.], ValueError(f'Punishment base prob value is incorrect, {self.prob}')
         punishment_prob = 0 
-        if resource_name == 'Gem':
-            if self.prob in [0., 0.2, 0.4]:
-                punishment_prob = 0.
-            elif self.prob == 0.6:
-                punishment_prob = 0.01
-            elif self.prob == 0.8:
-                punishment_prob = 0.03
-            elif self.prob == 1.:
-                punishment_prob = 0.05
-        elif resource_name == 'Coin':
-            if self.prob == 0.:
-                punishment_prob = 0.
-            elif self.prob == 0.2:
-                punishment_prob = 0.1
-            elif self.prob == 0.4:
-                punishment_prob = 0.2
-            elif self.prob == 0.6:
-                punishment_prob = 0.3
-            elif self.prob in [0.8, 1.]:
-                punishment_prob = 0.4 
-        elif resource_name == 'Bone':
-            punishment_prob = self.prob
-            # if self.prob == 0.:
-            #     punishment_prob = 0.2
-            # elif self.prob == 0.2:
-            #     punishment_prob = 0.4
-            # elif self.prob == 0.4:
-            #     punishment_prob = 0.6
-            # elif self.prob == 0.6:
-            #     punishment_prob = 0.75
-            # elif self.prob == 0.8:
-            #     punishment_prob = 0.9
-            # elif self.prob == 1.0:
-            #     punishment_prob = 1.
+        if self.manual_punishment_prob:
+            if resource_name == 'Gem':
+                if self.prob in [0., 0.2, 0.4]:
+                    punishment_prob = 0.
+                elif self.prob == 0.6:
+                    punishment_prob = 0.01
+                elif self.prob == 0.8:
+                    punishment_prob = 0.03
+                elif self.prob == 1.:
+                    punishment_prob = 0.05
+            elif resource_name == 'Coin':
+                if self.prob == 0.:
+                    punishment_prob = 0.
+                elif self.prob == 0.2:
+                    punishment_prob = 0.1
+                elif self.prob == 0.4:
+                    punishment_prob = 0.2
+                elif self.prob == 0.6:
+                    punishment_prob = 0.3
+                elif self.prob in [0.8, 1.]:
+                    punishment_prob = 0.4 
+            elif resource_name == 'Bone':
+                punishment_prob = self.prob
+                # if self.prob == 0.:
+                #     punishment_prob = 0.2
+                # elif self.prob == 0.2:
+                #     punishment_prob = 0.4
+                # elif self.prob == 0.4:
+                #     punishment_prob = 0.6
+                # elif self.prob == 0.6:
+                #     punishment_prob = 0.75
+                # elif self.prob == 0.8:
+                #     punishment_prob = 0.9
+                # elif self.prob == 1.0:
+                #     punishment_prob = 1.
+        else:
+            resource_index = self.resources.index(resource_name)
+            punishment_prob = self.punishments_prob_matrix[resource_index][self.level]
         return punishment_prob
 
 

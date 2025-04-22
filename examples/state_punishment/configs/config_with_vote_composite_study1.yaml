@@ -31,6 +31,19 @@ state_sys:
   taboo: ['Bone']
   potential_taboo: ['Gem', 'Coin', 'Bone']
   change_per_vote: 0.2 # 0.25
+  max_level: 9
+  num_resources: 5
+  num_steps: 10
+  intercept: 0.0
+  slope: 0.01
+  weight: 0.9
+  intercept_increment: 0.05
+  upper_bound: [0.2, 0.4, 0.55, 0.85, 1.0]
+  rewards: [4, 6, 8, 10, 12]
+  resources: ['A', 'B', 'C', 'D', 'E']
+
+
+
 
 model:
   iqn:
