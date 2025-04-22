@@ -240,7 +240,7 @@ class Agent:
             if mode == 'certain':
                 # prob = state_sys.punishment_schedule_func(str(target_object))
                 #TODO: merge the conditions/simplify
-                if state_sys.resource_punishment_schedule_is_dynamic:
+                if state_sys.resource_punishment_is_ambiguous:
                     punishment_prob = state_sys.punishment_schedule_func(str(target_object))
                     r_of_state_punishment = state_sys.magnitude * (random.random() < punishment_prob)
                     reward -= r_of_state_punishment
@@ -446,7 +446,12 @@ def color_map(channels: int) -> dict:
             'Gem': [255 if x == 2 else 0 for x in range(channels)],
             'Food': [255 if x == 3 else 0 for x in range(channels)],
             'Coin': [255 if x == 4 else 0 for x in range(channels)],
-            'Bone': [255 if x == 5 else 0 for x in range(channels)]
+            'Bone': [255 if x == 5 else 0 for x in range(channels)],
+            'A': [255 if x == 6 else 0 for x in range(channels)],
+            'B': [255 if x == 7 else 0 for x in range(channels)],
+            'C': [255 if x == 8 else 0 for x in range(channels)],
+            'D': [255 if x == 9 else 0 for x in range(channels)],
+            'E': [255 if x == 10 else 0 for x in range(channels)],
         }
     else:
         colors = {

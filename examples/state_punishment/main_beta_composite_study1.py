@@ -75,7 +75,7 @@ def run(cfg, **kwargs):
         from torch.utils.tensorboard import SummaryWriter
 
         writer = SummaryWriter(
-            log_dir=f'{root}/examples/state_punishment/runs/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
+            log_dir=f'{root}/examples/state_punishment/runs_v2/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
         )
 
     # Container for game variables (epoch, turn, loss, reward)

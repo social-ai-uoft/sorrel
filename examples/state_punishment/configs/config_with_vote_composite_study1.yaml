@@ -9,27 +9,27 @@ env:
   height: 15
   width: 15
   layers: 1
-  channels: 9
+  channels: 10
   default_object: EmptyObject
   full_mdp: False # Whether to return the full agent # the result is not normal when True
   tile_size: [16, 16] # Default sprite size for visualization (not used as model input yet) [16, 16]
   prob:
     item_spawn: 0.2 # 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
     # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
-    item_choice: [0.45, 0.45, 0.1] # [0.3, 0.7] [0.8, 0.2]
+    item_choice: [0.25, 0.25, 0.25, 0.125, 0.125] # [0.3, 0.7] [0.8, 0.2]
     respawn_rate: 0.04
 
 state_sys:
-  resource_punishment_schedule_is_dynamic: True
+  resource_punishment_is_ambiguous: True
   only_punish_taboo: False
   prob_list: 
     Gem: 0.0
     Coin: 0.0
     Bone: 1.
   init_prob: 0.
-  magnitude: 20  # 20 # positive - punishment, negative - reward 
-  taboo: ['Bone']
-  potential_taboo: ['Gem', 'Coin', 'Bone']
+  magnitude: 14  # 20 # positive - punishment, negative - reward 
+  taboo: ['D', 'E']
+  potential_taboo: ['A', 'B', 'C', 'D', 'E']
   change_per_vote: 0.2 # 0.25
   max_level: 9
   num_resources: 5
@@ -51,7 +51,7 @@ model:
     num: 3
     device: cpu
     parameters:
-      state_size: [6, 9, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      state_size: [6, 10, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
       extra_percept_size: 2 # added for extra percept
       action_size: 6
       layer_size: 250 # 250
@@ -75,13 +75,13 @@ agent:
     vision: 3
     # appearance: (0.0, 0.0, 255.0)
     appearance: 
-      - [0.0, 0.0, 255.0, 255.0, 0., 0.0, 0.0, 0.0, 0.0, ]
-      - [0.0, 0.0, 255.0, 0., 255., 0.0, 0.0, 0.0, 0.0, ]
-      - [0.0, 0.0, 255.0, 0.0, 0.0, 255., 0., 0.0, 0.0,]
-      - [0.0, 0.0, 255.0, 0.0, 0.0, 0., 255., 0.0, 0.0, ]
-      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 255., 0.0, ]
-      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 0., 255.0, ]
-      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 0., 0.0, 255.]
+      - [0.0, 0.0, 255.0, 255.0, 0., 0.0, 0.0, 0.0, 0.0, 0.0]
+      - [0.0, 0.0, 255.0, 0., 255., 0.0, 0.0, 0.0, 0.0, 0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0.0, 255., 0., 0.0, 0.0, 0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0.0, 0., 255., 0.0, 0.0,  0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 255., 0.0, 0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 0., 255.0, 0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 0., 0.0, 255., 0.0]
     memory_size: 100 # If this is larger than max_turns above, could cause issues
     # Not used right now
     tile_size: (1, 1)
@@ -90,25 +90,50 @@ agent:
     extra_percept_size: 2 # added for extra percept
 
 entity:
-  Gem:
+  # Gem:
+  #   start_num: 1
+  #   value: 1 # 5
+  #   appearance: (0.0, 255.0, 0.0) # Green
+  #   social_harm: 0
+  # Coin:
+  #   start_num: 1
+  #   value: 5 # 2 #10
+  #   appearance: (255.0, 0.0, 0.0) # Yellow
+  #   social_harm: 0 # 5
+  # # Food:
+  # #   start_num: 0
+  # #   value: 1
+  # #   appearance: (255.0, 0.0, 0.0) # Red
+  # Bone:
+  #   start_num: 1
+  #   value: 10
+  #   appearance: (0, 0, 0) # Black
+  #   social_harm: 40 # 5
+  A:
     start_num: 1
-    value: 1 # 5
-    appearance: (0.0, 255.0, 0.0) # Green
+    value: 4
+    appearance: (0.0, 0.0, 255.0)
     social_harm: 0
-  Coin:
+  B:
     start_num: 1
-    value: 5 # 2 #10
-    appearance: (255.0, 0.0, 0.0) # Yellow
-    social_harm: 0 # 5
-  # Food:
-  #   start_num: 0
-  #   value: 1
-  #   appearance: (255.0, 0.0, 0.0) # Red
-  Bone:
+    value: 6
+    appearance: (0.0, 0.0, 255.0)
+    social_harm: 0
+  C:
+    start_num: 1
+    value: 8
+    appearance: (0.0, 0.0, 255.0)
+    social_harm: 0
+  D:
     start_num: 1
     value: 10
-    appearance: (0, 0, 0) # Black
-    social_harm: 40 # 5
+    appearance: (0.0, 0.0, 255.0)
+    social_harm: 40
+  E:
+    start_num: 1
+    value: 12
+    appearance: (0.0, 0.0, 255.0)
+    social_harm: 40
 
 # Not used right now
 replay:
@@ -124,17 +149,13 @@ replay:
 
 # Root folder for accessing file structure and modules
 root: '/Users/socialai/Documents/state_punishment'
-seed: 3
+seed: 1
 log: True
 random: False
 state_mode: 'composite'
 action_mode: 'simple'
 load_weights: False
 with_direct_cost: 0.0
-# exp_name: "fixed_punishment_rate_0.75_twoAs_extra_percept_v2_higher_harm_gem_has_value_save_model" #'sanity_check_state_reward'
-exp_name: 'test_punishment_noncomposite_oneA_po' #"test_composite_input_fixed_punishment_1.0_clear_detection_v0_oneA_instant_only_coin_hs500"
-# exp_name: 'test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_s4' 
-# exp_name: 'test_study1__nondynamic_cost0.2_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1'
-exp_name: 'test_study1__dynamic_stacked_view_simple_actions_3agents_respawn_0.04_v0_s1_scarce_bad'
-# exp_name: 'test_nondynamic'
+
+exp_name: 'test_study1_experiment_cond_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
 # stacked_views,single_view

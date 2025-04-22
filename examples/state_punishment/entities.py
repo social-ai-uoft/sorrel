@@ -125,6 +125,92 @@ class Coin(Entity):
         # self.appearance = cfg.entity.Coin.appearance
         self.type = 'coin'
 
+
+class A(Entity):
+    '''
+    Base gem object.
+
+    Parameters:
+        appearance: The appearance of the gem. \n
+        cfg: The configuration object.
+    '''
+    def __init__(self, appearance, cfg):
+        super().__init__(appearance)
+        self.cfg = cfg
+        self.value = cfg.entity.A.value
+        self.passable = True
+        self.social_harm = cfg.entity.A.social_harm
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
+        self.type = 'A'
+
+class B(Entity):
+    '''
+    Base gem object.
+
+    Parameters:
+        appearance: The appearance of the gem. \n
+        cfg: The configuration object.
+    '''
+    def __init__(self, appearance, cfg):
+        super().__init__(appearance)
+        self.cfg = cfg
+        self.value = cfg.entity.B.value
+        self.passable = True
+        self.social_harm = cfg.entity.B.social_harm
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
+        self.type = 'B'
+
+class C(Entity):
+    '''
+    Base gem object.
+
+    Parameters:
+        appearance: The appearance of the gem. \n
+        cfg: The configuration object.
+    '''
+    def __init__(self, appearance, cfg):
+        super().__init__(appearance)
+        self.cfg = cfg
+        self.value = cfg.entity.C.value
+        self.passable = True
+        self.social_harm = cfg.entity.C.social_harm
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
+        self.type = 'C'
+
+class D(Entity):
+    '''
+    Base gem object.
+
+    Parameters:
+        appearance: The appearance of the gem. \n
+        cfg: The configuration object.
+    '''
+    def __init__(self, appearance, cfg):
+        super().__init__(appearance)
+        self.cfg = cfg
+        self.value = cfg.entity.D.value
+        self.passable = True
+        self.social_harm = cfg.entity.D.social_harm
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
+        self.type = 'D'
+
+class E(Entity):
+    '''
+    Base gem object.
+
+    Parameters:
+        appearance: The appearance of the gem. \n
+        cfg: The configuration object.
+    '''
+    def __init__(self, appearance, cfg):
+        super().__init__(appearance)
+        self.cfg = cfg
+        self.value = cfg.entity.E.value
+        self.passable = True
+        self.social_harm = cfg.entity.E.social_harm
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
+        self.type = 'E'
+
 # ----------------------------------------------------- #
 # endregion                                             #
 # ----------------------------------------------------- #
