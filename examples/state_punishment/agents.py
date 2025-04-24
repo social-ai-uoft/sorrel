@@ -41,11 +41,7 @@ class Agent:
         self.num_frames = cfg.agent.agent.num_memories
         self.init_rnn_state = None
         self.encounters = {
-            'Gem': 0,
-            'Coin': 0,
-            'Food': 0,
-            'Bone': 0,
-            'Wall': 0
+            entity_name: 0 for entity_name in cfg.env.entity_names
         }
 
 
@@ -376,12 +372,7 @@ class Agent:
     def reset(self, env: GridworldEnv, state_mode='simple') -> None:
         self.init_replay(env, state_mode)
         self.encounters = {
-            'Gem': 0,
-            'Coin': 0,
-            'Food': 0,
-            'Bone': 0,
-            'Wall': 0,
-            'Agent': 0,
+            entity_name: 0 for entity_name in self.cfg.env.entity_names
         }
     
     def reset_record(self) -> None:

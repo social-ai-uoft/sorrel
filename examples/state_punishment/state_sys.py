@@ -64,7 +64,7 @@ def compile_punishment_vals(num_steps, num_resources, intercept, slope, weight, 
 
 
 class state_sys():
-    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote, is_dynamic, potential_taboo, only_taboo, cfg) -> None:
+    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote, is_ambiguous, potential_taboo, only_taboo, cfg) -> None:
         self.prob = init_prob
         self.level = 0
         self.max_level = cfg.state_sys.max_level
@@ -73,7 +73,7 @@ class state_sys():
         self.magnitude = magnitude
         self.taboo = taboo
         self.change_per_vote = change_per_vote
-        self.resource_punishment_schedule_is_dynamic = is_dynamic
+        self.resource_punishment_is_ambiguous = is_ambiguous
         self.potential_taboo = potential_taboo
         self.only_punish_taboo = only_taboo
         self.cfg = cfg

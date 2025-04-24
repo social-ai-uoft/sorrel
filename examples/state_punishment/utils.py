@@ -1,5 +1,5 @@
 from examples.state_punishment.agents import Agent, color_map
-from examples.state_punishment.entities import Coin, Gem, Wall, Bone
+from examples.state_punishment.entities import Coin, Gem, Wall, Bone, A, B, C, D, E
 
 from agentarium.models.iqn import iRainbowModel
 import argparse
@@ -27,7 +27,12 @@ ENTITIES = {
     # 'Wall' : Wall,
     # 'EmptyObject': EmptyObject, 
     'Bone': Bone,
-    # 'Food': Food
+    # 'Food': Food,
+    'A': A,
+    'B': B,
+    'C': C,
+    'D': D,
+    'E': E
 }
 
 def init_log(cfg):

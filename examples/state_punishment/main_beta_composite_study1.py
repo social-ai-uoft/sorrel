@@ -108,13 +108,13 @@ def run(cfg, **kwargs):
         assert cfg.model.iqn.parameters.action_size == 6, ValueError('Number of actions should be 6 when the action mode is simple')
     
     # conditions
-    if cfg.state_sys.resource_punishment_schedule_is_dynamic:
-        assert '_dynamic' in cfg.exp_name, ValueError('The exp name should contain [dynamic]')
+    if cfg.state_sys.resource_punishment_is_ambiguous:
+        assert '_experiment_cond' in cfg.exp_name, ValueError('The exp name should contain [_experiment_cond]')
     else:
         if cfg.state_sys.only_punish_taboo:
             assert "only_taboo" in cfg.exp_name, ValueError("The exp name should contain 'only taboo'")
         else:
-            assert 'nondynamic' in cfg.exp_name, ValueError("The exp name should contain 'nondynamic'")
+            assert 'fixed_punishment' in cfg.exp_name, ValueError("The exp name should contain 'fixed punishment'")
 
     for epoch in range(cfg.experiment.epochs):
         gc.collect()
@@ -129,9 +129,10 @@ def run(cfg, **kwargs):
             cfg.state_sys.magnitude, 
             cfg.state_sys.taboo,
             cfg.state_sys.change_per_vote,
-            cfg.state_sys.resource_punishment_schedule_is_dynamic,
+            cfg.state_sys.resource_punishment_is_ambiguous,
             cfg.state_sys.potential_taboo,
-            cfg.state_sys.only_punish_taboo
+            cfg.state_sys.only_punish_taboo,
+            cfg = cfg
             )
 
         state_mode = cfg.state_mode
@@ -224,7 +225,7 @@ def run(cfg, **kwargs):
 
             # debug
             # if agent.encounters['Agent'] >  0:
-            print(agent.encounters)
+            # print(agent.encounters)
 
         # Print the variables to the console
         game_vars.pretty_print()
@@ -258,13 +259,7 @@ def run(cfg, **kwargs):
                 # Log encounters for each agent
                 writer.add_scalars(
                     f"Agent_{i}/Encounters",
-                    {
-                        "Gem": agent.encounters["Gem"],
-                        "Coin": agent.encounters["Coin"],
-                        # "Food": agent.encounters["Food"],
-                        "Bone": agent.encounters["Bone"],
-                        "Wall": agent.encounters["Wall"],
-                    },
+                    {entity_name: agent.encounters[entity_name] for entity_name in cfg.env.entity_names},
                     epoch,
                 )
                 writer.add_scalars(

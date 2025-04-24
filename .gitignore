@@ -207,3 +207,5 @@ examples/state_punishment/configs/records/test_clear_detection_3agents_simple_ac
 *.24
 *.22
 *.30
+*.31
+/examples/state_punishment/runs_v2
