@@ -31,7 +31,7 @@ state_sys:
   magnitude: 14  # 20 # positive - punishment, negative - reward 
   taboo: ['D', 'E']
   potential_taboo: ['A', 'B', 'C', 'D', 'E']
-  change_per_vote: 0.2 # 0.25
+  change_per_vote: 0.1 # 0.25
   max_level: 9
   num_resources: 5
   num_steps: 10
