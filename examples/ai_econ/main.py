@@ -46,8 +46,8 @@ def run(env: EconEnv, cfg: Cfg):
 
     for epoch in range(cfg.experiment.epochs + 1):
         print(f"[Epoch {epoch}/{cfg.experiment.epochs}] Running simulation...")
-        # env.reset() # <- toggle this for original spawn 
-        env.new_place_agents(epoch, cfg.experiment.epochs) # <- toggle this for new agents spawn
+        env.reset() # <- hash tag this if you don't want to use original spawn (I will fix this later) 
+        # env.new_place_agents(epoch, cfg.experiment.epochs) # <- toggle this for new agents spawn
 
         if epoch < percent_marker: 
             for i in range(cfg.agent.seller.num):

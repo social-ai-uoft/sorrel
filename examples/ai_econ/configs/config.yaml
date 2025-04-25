@@ -16,7 +16,7 @@ model:
     iqn:
       type: iRainbowModel
       parameters:
-        action_space: 7
+        action_space: 8
         num_frames: 5
         layer_size: 250
         n_step: 3
