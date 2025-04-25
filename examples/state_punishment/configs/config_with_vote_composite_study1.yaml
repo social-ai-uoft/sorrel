@@ -153,6 +153,7 @@ root: '/Users/socialai/Documents/state_punishment'
 seed: 1
 log: True
 random: False
+seed: 3
 state_mode: 'composite'
 action_mode: 'simple'
 load_weights: False
