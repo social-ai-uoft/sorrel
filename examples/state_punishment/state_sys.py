@@ -125,19 +125,19 @@ class state_sys():
                 elif self.prob in [0.8, 1.]:
                     punishment_prob = 0.4 
             elif resource_name == 'Bone':
-                punishment_prob = self.prob
-                # if self.prob == 0.:
-                #     punishment_prob = 0.2
-                # elif self.prob == 0.2:
-                #     punishment_prob = 0.4
-                # elif self.prob == 0.4:
-                #     punishment_prob = 0.6
-                # elif self.prob == 0.6:
-                #     punishment_prob = 0.75
-                # elif self.prob == 0.8:
-                #     punishment_prob = 0.9
-                # elif self.prob == 1.0:
-                #     punishment_prob = 1.
+                # punishment_prob = self.prob
+                if self.prob == 0.:
+                    punishment_prob = 0.2
+                elif self.prob == 0.2:
+                    punishment_prob = 0.4
+                elif self.prob == 0.4:
+                    punishment_prob = 0.6
+                elif self.prob == 0.6:
+                    punishment_prob = 0.75
+                elif self.prob == 0.8:
+                    punishment_prob = 0.9
+                elif self.prob == 1.0:
+                    punishment_prob = 1.
         else:
             resource_index = self.resources.index(resource_name)
             punishment_prob = self.punishments_prob_matrix[resource_index][self.level]
