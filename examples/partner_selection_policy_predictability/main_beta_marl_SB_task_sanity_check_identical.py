@@ -107,6 +107,10 @@ def run(cfg, **kwargs):
         a.trainable = True
         a.frozen = False
         a.action_size = 7
+        a.choice_S = 0
+        a.choice_B = 0
+        a.choice_S_decider = 0
+        a.choice_B_decider = 0
         a.sampling_weight = [1 for _ in range(cfg.agent.agent.num-1)]
 
         print('appearance:', a.appearance)
@@ -139,9 +143,25 @@ def run(cfg, **kwargs):
     # initial diversity
     init_pref_dist = {0:0, 1:0}
     for a in agents:
-        pref_type = a.preferences.index(max(a.preferences))
+        if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
+                pref_type = a.preferences.index(max(a.preferences))
+        else:
+            choices_summary = [a.choice_S, a.choice_B]
+            pref_type = choices_summary.index(max(choices_summary))
         init_pref_dist[pref_type] += 1
     init_diversity = entropy(softmax(list(init_pref_dist.values())))
+
+    init_diversity_decider = {0:0, 1:0}
+    for a in agents:
+        if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
+                pref_type = a.preferences.index(max(a.preferences))
+        else:
+            choices_summary = [a.choice_S_decider, a.choice_B_decider]
+            pref_type = choices_summary.index(max(choices_summary))
+        init_pref_dist[pref_type] += 1
+    init_diversity_decider = entropy(softmax(list(init_pref_dist.values())))
+
+
 
 
     for epoch in range(cfg.experiment.epochs):        
@@ -152,6 +172,7 @@ def run(cfg, **kwargs):
         turn = 0
         losses = [0 for _ in range(len(agents))]
         entropy_record = [[] for _ in range(len(agents))]
+        entropy_record_decider = [[] for _ in range(len(agents))]
         game_points = [0 for _ in range(len(agents))]
         partner_selection_freqs = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
         partner_occurence_freqs = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
@@ -169,18 +190,40 @@ def run(cfg, **kwargs):
         decider_B_partner_selection_freqs = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
         same_choices_lst = [[] for _ in range(len(agents))]
         choice_matches_preference_lst = [[] for _ in range(len(agents))]
+        choice_matches_preference_as_decider_lst = [[] for _ in range(len(agents))]
+        choice_matches_preference_as_partner_lst = [[] for _ in range(len(agents))]
        
 
         for agent in agents:
-            agent.delay_reward = 0
             agent.reward = 0
             if cfg.preference_reset:
                 agent.preferences = deepcopy(agent.base_preferences)
+            agent.choice_S = 0
+            agent.choice_B = 0
+            agent.choice_S_decider = 0
+            agent.choice_B_decider = 0
+            agent.selected_in_last_turn = 0
+            agent.entropy = 0
+            agent.internal_state = np.argmax(agent.reward_matrix.sum(axis=1))
+            agent.preferences = [agent.internal_state, agent.internal_state]
         
         # reset time
         partner_pool_env.time = 0
         
         while not done:
+
+            # vary the internal state
+            if cfg.focal_vary:
+                if turn % cfg.focal_shift_freq == 0:
+                    rand_num = np.random.rand()
+                    for agent in agents:
+                        if rand_num < 0.5:
+                            # internal_state = 1- agent.internal_state
+                            agent.reward_matrix = np.flip(agent.reward_matrix, axis=0)
+                            # agent.internal_state = internal_state
+                            agent.internal_state = np.argmax(agent.reward_matrix.sum(axis=1))
+                            agent.preferences = [agent.internal_state, agent.internal_state]
+                    
 
             for agent in agents:
                 agent.reward = 0
@@ -188,11 +231,12 @@ def run(cfg, **kwargs):
                 preferences_track[agent.ixs].append(agent.preferences)
                 avg_val_bach[agent.ixs].append(agent.preferences[0])
                 avg_val_stravinsky[agent.ixs].append(agent.preferences[1])
+                agent.entropy = entropy(softmax([agent.choice_S, agent.choice_B]))
 
             focal_agent, partner_choices, partner_choices_ixs = partner_pool_env.agents_sampling(
                 default=False)
             focal_ixs = partner_pool_env.focal_ixs
-            max_entropy_agent, max_var_ixs = partner_pool_env.get_max_entropic_partner_ixs()
+            max_entropy_agent, max_var_ixs, _ = partner_pool_env.get_max_entropic_partner_ixs()
             partner_choices_ixs.append(
                 focal_ixs
                 )
@@ -211,7 +255,8 @@ def run(cfg, **kwargs):
                 do_this_turn = True
                 if do_this_turn:
                     is_focal = agent.ixs == focal_ixs
-                    entropy_record[agent.ixs].append(entropy(agent.preferences))
+                    if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
+                        entropy_record[agent.ixs].append(entropy(agent.preferences))
 
                     (
                     state, 
@@ -231,11 +276,32 @@ def run(cfg, **kwargs):
                 
                     if not is_focal: 
                         agent.cached_action = action
+                        if action in [4, 5]:
+                            choice_matches_preference_as_partner_lst[agent.ixs].append(
+                                np.argmax(agent.reward_matrix.sum(axis=1)) == (action-4)
+                                )
+                            choice_matches_preference_lst[agent.ixs].append(
+                                np.argmax(agent.reward_matrix.sum(axis=1)) == (action-4)
+                                )
+                    else:
+                        agent.cached_action = None
                     
                     if cfg.hardcoded:
                         partner = min_partner
                         partner_ixs = min_partner_ixs
 
+                    # record choices
+                    if (cfg.partner_free_choice_beforehand) or (cfg.partner_free_choice):
+                        if not is_focal:
+                            if action == 4:
+                                agent.choice_S += 1
+                            elif action == 5:
+                                agent.choice_B += 1
+                        else:
+                            if action%2 == 0:
+                                agent.choice_S_decider += 1
+                            elif action%2 == 1:
+                                agent.choice_B_decider += 1
 
                     # record the action
                     action_record[agent.ixs][action] += 1
@@ -246,27 +312,30 @@ def run(cfg, **kwargs):
                         if partner is not None:
                             partner.selected_in_last_turn = 1
                             partner_selection_freqs[agent.ixs][partner_ixs] += 1
-                            selecting_more_entropic_partner[agent.ixs].append(partner_ixs==max_var_ixs)
-                            selected_partner_entropy[agent.ixs].append(entropy(partner.preferences))
+                            # selecting_more_entropic_partner[agent.ixs].append(partner_ixs==max_var_ixs)
+                            selecting_more_entropic_partner[agent.ixs].append(
+                            partner_ixs==max_var_ixs
+                            )
+                            selected_partner_entropy[agent.ixs].append(partner.entropy)
                     if is_focal:
                         for potential_partner in partner_choices:
                             if potential_partner.ixs != focal_ixs:
                                 partner_occurence_freqs[agent.ixs][potential_partner.ixs] += 1
-                                presented_partner_entropy[agent.ixs].append(entropy(potential_partner.preferences))
+                                presented_partner_entropy[agent.ixs].append(potential_partner.entropy)
                 
                     reward = 0 
 
-                    # add cost to changing preferences
-                    if cfg.cost_of_changing_preferences > 0:
-                        if not is_focal:
-                            if action in [0, 1]:
-                                if not cfg.sym_cost:
-                                    if agent.preferences.index(max(agent.preferences)) == 1-action:
-                                        reward -= 0
-                                    else: 
-                                        reward -= (max(agent.preferences)- 0.5) # *1.5
-                                else:
-                                    reward -= cfg.cost_of_changing_preferences
+                    # # add cost to changing preferences
+                    # if cfg.cost_of_changing_preferences > 0:
+                    #     if not is_focal:
+                    #         if action in [0, 1]:
+                    #             if not cfg.sym_cost:
+                    #                 if agent.preferences.index(max(agent.preferences)) == 1-action:
+                    #                     reward -= 0
+                    #                 else: 
+                    #                     reward -= (max(agent.preferences)- 0.5) # *1.5
+                    #             else:
+                    #                 reward -= cfg.cost_of_changing_preferences
 
                     # record whether the action matches the preference
                     if is_focal:
@@ -296,38 +365,52 @@ def run(cfg, **kwargs):
                             # update the delayed reward for the partners
                             for a in partner_choices:
                                 if a.ixs != partner.ixs:
-                                    a.delay_reward += nonselected_partner_reward
+                                    a.episode_memory.rewards.append(torch.tensor(nonselected_partner_reward))
+                                    game_points[a.ixs] += nonselected_partner_reward
                                 elif a.ixs == partner.ixs:
-                                    a.delay_reward += selected_parnter_reward
+                                    a.episode_memory.rewards.append(torch.tensor(selected_parnter_reward))
+                                    game_points[a.ixs] += selected_parnter_reward
+                                # if a.ixs == 0:
+                                    # print('turn_reward', turn, len(a.episode_memory.states))
                             if choice_matches_preference is not None:
                                 choice_matches_preference_lst[agent.ixs].append(choice_matches_preference) # choice_matches_preference
+                                choice_matches_preference_as_decider_lst[agent.ixs].append(choice_matches_preference) # choice_matches_preference_as_decider
                                 same_choices_lst[agent.ixs].append(same_choices) # same_choices
                             
                             # update the sampling weight
                             index = partner.ixs - 1 if partner.ixs > agent.ixs else partner.ixs
                             agent.sampling_weight[index] += reward * 0.1
+                        
+                        if partner is None:
+                            partner_reward = 0
+                            for a in partner_choices:
+                                a.episode_memory.rewards.append(torch.tensor(partner_reward))
 
                     if turn >= cfg.experiment.max_turns or done_:
                         done = 1
-
-                    
-                    # calculate total reward
-                    reward += agent.delay_reward
 
                     # Update the agent's memory buffer
                     agent.episode_memory.states.append(torch.tensor(state))
                     agent.episode_memory.actions.append(torch.tensor(action))
                     agent.episode_memory.logprobs.append(torch.tensor(action_logprob))
-                    agent.episode_memory.rewards.append(torch.tensor(reward))
                     agent.episode_memory.is_terminals.append(torch.tensor(done))
+                    if is_focal:
+                        agent.episode_memory.rewards.append(torch.tensor(reward))
 
                     game_points[agent.ixs] += reward
 
-                    # clear delayed reward
-                    agent.delay_reward = 0
+                    # if agent.ixs == 0:
+                    #     if not is_focal:
+                    #         print('turn_state', turn, len(agent.episode_memory.states))
+
+
 
         # mean_variability = np.mean([a.variability for a in agents])
-        mean_entropy = np.mean([entropy(a.preferences) for a in agents])
+        if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
+            mean_entropy = np.mean([entropy(a.preferences) for a in agents])
+        else:
+            mean_entropy = np.mean([entropy(softmax([a.choice_S, a.choice_B])) for a in agents])
+            mean_entropy_decider = np.mean([entropy(softmax([a.choice_S_decider, a.choice_B_decider])) for a in agents])
 
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
@@ -357,9 +440,31 @@ def run(cfg, **kwargs):
         # calculate diversity
         pref_dist = {0:0, 1:0}
         for a in agents:
-            pref_type = a.preferences.index(max(a.preferences))
+            if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
+                pref_type = a.preferences.index(max(a.preferences))
+            else:
+                choices_summary = [a.choice_S, a.choice_B]
+                pref_type = choices_summary.index(max(choices_summary))
             pref_dist[pref_type] += 1
+            # entropy record 
+            if cfg.partner_free_choice_beforehand or cfg.partner_free_choice:
+                entropy_record[agent.ixs].append(entropy(softmax([a.choice_S, a.choice_B])))
         diversity = entropy(softmax(list(pref_dist.values())))
+
+        pref_dist_decider = {0:0, 1:0}
+        for a in agents:
+            if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
+                pref_type = a.preferences.index(max(a.preferences))
+            else:
+                choices_summary = [a.choice_S_decider, a.choice_B_decider]
+                pref_type = choices_summary.index(max(choices_summary))
+            pref_dist_decider[pref_type] += 1
+            # entropy record 
+            if cfg.partner_free_choice_beforehand or cfg.partner_free_choice:
+                entropy_record_decider[agent.ixs].append(entropy(softmax([a.choice_S_decider, a.choice_B_decider])))
+        diversity_decider = entropy(softmax(list(pref_dist_decider.values())))
+
+
 
         # Add scalars to Tensorboard (multiple agents)
         if cfg.log:
@@ -368,11 +473,14 @@ def run(cfg, **kwargs):
                 i = agent.ixs
                 writer.add_scalar(f"Agent_{i}/same_choices", np.mean(same_choices_lst[i]), epoch)
                 writer.add_scalar(f"Agent_{i}/choice_matches_preference", np.mean(choice_matches_preference_lst[i]), epoch)
+                writer.add_scalar(f"Agent_{i}/choice_matches_preference_as_partner", np.mean(choice_matches_preference_as_partner_lst[i]), epoch)
+                writer.add_scalar(f"Agent_{i}/choice_matches_preference_as_decider", np.mean(choice_matches_preference_as_decider_lst[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/act_match_pref', np.mean(act_match_pref[i]), epoch)
                 writer.add_scalar(f"Agent_{i}/Loss", losses[i], epoch)
                 writer.add_scalar(f"Agent_{i}/dominant_pref", dominant_pref[i]/cfg.experiment.max_turns, epoch)
                 writer.add_scalar(f"Agent_{i}/Reward", game_points[i], epoch)
                 writer.add_scalar(f'Agent_{i}/entropy', np.mean(entropy_record[i]), epoch)
+                writer.add_scalar(f'Agent_{i}/entropy_decider', np.mean(entropy_record_decider[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/selected_partner_entropy', np.mean(selected_partner_entropy[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/presented_partner_entropy', np.mean(presented_partner_entropy[i]), epoch)
                 writer.add_scalar(f'Agent_{i}/select_more_entropic_one', np.mean(selecting_more_entropic_partner[i]), epoch)
@@ -395,12 +503,19 @@ def run(cfg, **kwargs):
                 writer.add_scalar(f'Agent_{i}/stravinsky_preference', np.mean(avg_val_stravinsky[i]), epoch)
             if epoch == 0:
                 writer.add_scalar(f'diversity', init_diversity, epoch)
+                writer.add_scalar(f'diversity_decider', init_diversity_decider, epoch)
             writer.add_scalar(f'diversity', diversity, epoch+1)
+            writer.add_scalar(f'diversity_decider', diversity_decider, epoch+1)
+            writer.add_scalar(f'diversity_combined', (diversity + diversity_decider)/2, epoch+1)
             writer.add_scalar(f'population_mean_entropy', mean_entropy, epoch)
+            writer.add_scalar(f'population_mean_entropy_decider', mean_entropy_decider, epoch)
+            writer.add_scalar(f'population_mean_entropy_combined', (mean_entropy + mean_entropy_decider)/2, epoch)
             writer.add_scalars('occurence_sum_freq', {f'Agent_{j}': np.sum(partner_occurence_freqs[j]) for j in range(len(agents))}, 
                                epoch)
             writer.add_scalar('population_avg_reward', np.mean(game_points), epoch)
             writer.add_scalar('population_avg_choice_matches_preference', np.mean([item for sublist in choice_matches_preference_lst for item in sublist]), epoch)
+            writer.add_scalar('population_avg_choice_matches_preference_as_partner', np.mean([item for sublist in choice_matches_preference_as_partner_lst for item in sublist]), epoch)
+            writer.add_scalar('population_avg_choice_matches_preference_as_decider', np.mean([item for sublist in choice_matches_preference_as_decider_lst for item in sublist]), epoch)
             writer.add_scalar('population_avg_same_choices', np.mean([item for sublist in same_choices_lst for item in sublist]), epoch)
 
         # # Special action: update epsilon

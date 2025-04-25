@@ -22,7 +22,7 @@ interaction_task:
 model:
   PPO:
     type: PPO
-    num: 6
+    num: 3
     device: cpu
     parameters:
       state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
@@ -43,7 +43,7 @@ model:
 
 agent:
   agent:
-    num: 6
+    num: 3
     preference_var: 0.5
     model: PPO
     num_memories: 5 # Should match num_frames in the model above
@@ -109,27 +109,34 @@ entity:
 # Root folder for accessing file structure and modules
 root: '/Users/yikaitang/Documents/Github/agentarium_predictive_regularity'
 log: True
-seed: 1
+seed: 2
 partner_free_choice: False
 partner_free_choice_beforehand: True
-random_selection: False
+random_selection: True
 hardcoded: False
 preference_reset: False 
 social_comparison: False
 with_self_preferences: True
 with_partner_preferences: True
-with_partner_entropy: False
 with_partner_to_select_appearance: True
 test_against_pref: False
-focal_vary: True
-focal_shift_freq: 10
-study: 2
-default: False
+focal_vary: False 
+study: 1
+sanity_check: True
+default: True
+multi_deciders: False
 cost_of_changing_preferences: 0.0
+focal_shift_freq: 3
 sym_cost: True
-with_time: True
-
-exp_name: 'test_marl_random_sym_cost0.0_dynamic_sampling_weights_test_rmV3_action7'
-exp_name: 'test_marl_learned_sym_cost0.0_dynamic_test_rmV3_action7_free_choice_beforehand'
-exp_name: 'random_baseline_free_choice_beforehand'
-exp_name: 'learned_marl_free_choice_beforehand_num_steps_30_vary_Freq_10_with_time_with_expression_with_dynamic_sampling'
+with_time: False
+# exp_name: 'SB_task/v5_diff_init_entropy_sanity_check_two_trainable_selection_SB_choice_learned_without_partner_preference' # with variability in the state info [learned selection, hardcoded, random]
+# exp_name: 'debug_study2_v3'
+exp_name: 'SB_task_v2/sanity_check_two_trainable_learned_selection_with_reset_fixeddecider_len10'
+exp_name: 'SB_task_v2/test_match_over_pref_learned_with_reset_fixeddecider_len10_v2'
+exp_name: 'SB_task_v2/test_match_over_pref_learned_maj_min_condition_with_reset_fixeddecider_len10'
+exp_name: 'test_pp_learned_with_stop_act_with_selected_or_not_marker'
+exp_name: "test_s6_random_with_cost_sym0.1_without_variation"
+exp_name: 'test_multiple_deciders_learned_sym_cost0.1_VarFreq_2_rep2'
+exp_name: 'test_neutral_rm_partner_free_choice_vary_Freq_40_learned_sym_cost0.0_v0'
+exp_name: 'test_opposite_rm_partner_free_choice_multi_decider_nonvary_random_v1'
+exp_name: 'test_random'

@@ -268,14 +268,7 @@ class Agent:
         # print(partner.ixs, partner.delay_reward)
         return reward 
     
-    # def add_memory(self, is_ppo, tuple):
-    #     if is_ppo: 
-    #         state, action, action_logprob, reward, done = tuple
-    #         self.episode_memory.states.append(torch.tensor(state))
-    #         self.episode_memory.actions.append(torch.tensor(action))
-    #         self.episode_memory.logprobs.append(torch.tensor(action_logprob))
-    #         self.episode_memory.rewards.append(torch.tensor(reward))
-    #         self.episode_memory.is_terminals.append(torch.tensor(done))
+   
     
     def SB_task(
             self, 
@@ -297,6 +290,8 @@ class Agent:
             if self.model_type == 'PPO':
                 model_input = torch.from_numpy(state).double()
             partner_action, partner_action_prob = self.partner_choice_model.take_action(model_input)
+            # random baseline
+            # partner_action = random.choices([0,1], k=1)[0]
             parnter_learning_tuples = {'state': state, 
                                        'action': partner_action, 
                                        'action_prob': partner_action_prob,
@@ -314,23 +309,32 @@ class Agent:
         choice_matches_preference = None
         same_choices = None
         
+        partner_action_valid = True
         if action <= 3:
             self_SB_choice = action % 2
-            reward = float(self.reward_matrix[self_SB_choice, partner_action])
-            partner_reward = float(partner.reward_matrix[partner_action, self_SB_choice])
-            choice_matches_preference = np.argmax(self.reward_matrix.sum(axis=1)) == self_SB_choice
-            same_choices = self_SB_choice == partner_action
+            if cfg.study == 2:
+                partner_action -= 4
+                if (partner_action < 0) or (partner_action > 1):
+                    partner_action_valid = False
+            if partner_action_valid:
+                # print(self_SB_choice, partner_action, partner.ixs)
+                assert partner_action in [0, 1], ValueError('Partner action not in action space')
+                reward = float(self.reward_matrix[self_SB_choice, partner_action])
+                partner_reward = float(partner.reward_matrix[partner_action, self_SB_choice])
+                choice_matches_preference = np.argmax(self.reward_matrix.sum(axis=1)) == self_SB_choice
+                same_choices = self_SB_choice == partner_action
+            else: 
+                reward = 0
+                partner_reward = 0
         else: 
             reward = 0
             partner_reward = 0 
        
-
-        # update memory if needed
-
         return reward, partner_reward, \
                 choice_matches_preference, \
                 same_choices, \
                     parnter_learning_tuples
+    
 
     def selection_task_action(self, action, is_focal):
         """

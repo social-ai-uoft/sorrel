@@ -11,17 +11,21 @@ class partner_pool:
         self.pool = agents
         self.time = 0
     
-    def agents_sampling(self, focal_agent=None, default=False):
+    def agents_sampling(self, focal_agent=None, default=False, cfg=None, epoch=None):
         """
         Sample two agents as potential partner choices and one agent as the focal agent.
         """
         if not default:
             # sample all needed agents
             if focal_agent:
-                focal_agent_ixs = focal_agent.ixs
-                qualified_pool = [agent for agent in self.pool if agent.ixs != focal_agent_ixs]
-                sampled_agents = random.sample(qualified_pool, 2)
-                partner_choices = sampled_agents
+                if cfg.study == 1:
+                    focal_agent_ixs = focal_agent.ixs
+                    qualified_pool = [agent for agent in self.pool if agent.ixs != focal_agent_ixs]
+                    sampled_agents = [agent for agent in self.pool if agent.ixs in [1, 2]]
+                    if epoch % 1 == 0:
+                        random.shuffle(sampled_agents)
+                    # sampled_agents = random.sample(qualified_pool, 2)
+                    partner_choices = sampled_agents
             else:
                 # sampled_agents = random.sample(self.pool, 3)
                 # sampled_agents_indices = [agent.ixs for agent in sampled_agents]
@@ -66,7 +70,7 @@ class partner_pool:
     
     def state(self, agent, cfg):
         assert len(self.partner_to_select) == 2, 'number of partners to select larger than 2'
-
+        # print('agent ixs', [a.ixs for a in self.partner_to_select])
         # add stage marker
         if agent.ixs == self.focal_ixs:
             if cfg.with_partner_to_select_appearance:
@@ -78,6 +82,7 @@ class partner_pool:
                 state = np.concatenate([self.partner_to_select_appearance, np.array([0])])
             else:
                 state = np.concatenate([self.partner_to_select_appearance*0, np.array([0])])
+            
         
         if not cfg.experiment.is_SB_task:
             # add variability
@@ -105,13 +110,22 @@ class partner_pool:
             if cfg.random_selection:
                 selected_partner = random.choices(self.partner_to_select, k=1)[0]
                 selected_partner_ixs = selected_partner.ixs
+
             for partner in self.partner_to_select:
+
                 if cfg.random_selection:
                     partner = selected_partner
+
                 if cfg.with_partner_preferences:
                     state = np.concatenate([state, np.array(partner.preferences)])
                 else:
                     state = np.concatenate([state, np.array([0,0])])
+                
+                if cfg.with_partner_entropy:
+                    state = np.concatenate([state, np.array([partner.entropy*100])])
+                else:
+                    state = np.concatenate([state, np.array([0])])
+
                 if cfg.with_partner_to_select_appearance:
                     state = np.concatenate([state, np.array(partner.appearance)])
                 else:
@@ -120,7 +134,10 @@ class partner_pool:
         # add marker of being selected
         state = np.concatenate([state, np.array([1.*agent.selected_in_last_turn])])
         # add time
-        state = np.concatenate([state, np.array([self.time])])
+        if cfg.with_time:
+            state = np.concatenate([state, np.array([self.time])])
+        else:
+            state = np.concatenate([state, np.array([0])])
         # add internal state
         state = np.concatenate([state, np.array([agent.internal_state])])
 
@@ -149,7 +166,7 @@ class partner_pool:
         """
         Get the ixs of the most entropic partner among all options.
         """
-        entropy_val = [entropy(partner.preferences) for partner in self.partner_to_select]
+        entropy_val = [partner.entropy for partner in self.partner_to_select]
 
         # Sort indices based on entropy values in descending order
         sorted_ixs = sorted(range(len(entropy_val)), key=lambda x: entropy_val[x], reverse=True)
@@ -161,7 +178,11 @@ class partner_pool:
 
         agent = self.partner_to_select[sorted_ixs[0]]
 
-        return agent, agent_ixs
+        entropy_val_diff_among_partner_choices = abs(
+            self.partner_to_select[0].entropy - self.partner_to_select[1].entropy
+            )
+        # print(agent_ixs, entropy_val_diff_among_partner_choices, [(partner.ixs, partner.entropy) for partner in self.partner_to_select])
+        return agent, agent_ixs, entropy_val_diff_among_partner_choices
     
     def get_min_variability_partner_ixs(self):
         """

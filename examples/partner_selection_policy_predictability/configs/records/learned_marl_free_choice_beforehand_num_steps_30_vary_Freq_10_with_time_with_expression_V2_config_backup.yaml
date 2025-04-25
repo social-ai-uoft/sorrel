@@ -118,7 +118,6 @@ preference_reset: False
 social_comparison: False
 with_self_preferences: True
 with_partner_preferences: True
-with_partner_entropy: False
 with_partner_to_select_appearance: True
 test_against_pref: False
 focal_vary: True
@@ -132,4 +131,4 @@ with_time: True
 exp_name: 'test_marl_random_sym_cost0.0_dynamic_sampling_weights_test_rmV3_action7'
 exp_name: 'test_marl_learned_sym_cost0.0_dynamic_test_rmV3_action7_free_choice_beforehand'
 exp_name: 'random_baseline_free_choice_beforehand'
-exp_name: 'learned_marl_free_choice_beforehand_num_steps_30_vary_Freq_10_with_time_with_expression_with_dynamic_sampling'
+exp_name: 'learned_marl_free_choice_beforehand_num_steps_30_vary_Freq_10_with_time_with_expression_V2'
