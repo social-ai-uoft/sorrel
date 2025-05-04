@@ -262,12 +262,6 @@ def run(cfg, **kwargs):
         agents[4].role = 'partner'
         agents[4].action_size = 3
 
-    # generate preferences and variability
-    # preferences_lst = [generate_preferences(2) for _ in range(cfg.agent.agent.num)]
-    # variability_lst = generate_variability(cfg.agent.agent.num, cfg.agent.agent.preference_var)
-
-    # mean_variability = np.mean(variability_lst)
-
     # check if the condition is random 
     if cfg.random_selection:
         if 'random' not in cfg.exp_name:
@@ -314,31 +308,8 @@ def run(cfg, **kwargs):
         for agent in agents:
             agent.model.load(file_path=kwargs.get("load_weights"))
 
-
     # initialize the dynamic sampling mechanism
     frequencies = [[0 for _ in range(len(agents))] for _ in range(len(agents))]
-
-    # initial diversity
-    # init_pref_dist = {0:0, 1:0}
-    # for a in agents[1:]:
-    #     pref_type = a.preferences.index(max(a.preferences))
-    #     init_pref_dist[pref_type] += 1
-    # init_diversity = entropy(softmax(list(init_pref_dist.values())))
-
-    # initial diversity
-    init_pref_dist = {0:0, 1:0}
-    for a in agents:
-        if a.ixs in [1, 2]:
-            if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
-                    pref_type = a.preferences.index(max(a.preferences))
-            else:
-                choices_summary = [a.choice_S, a.choice_B]
-                pref_type = choices_summary.index(max(choices_summary))
-            init_pref_dist[pref_type] += 1
-    init_diversity = entropy(softmax(list(init_pref_dist.values())))
-
-
-    random_decider_ixs = 0
 
     for epoch in range(cfg.experiment.epochs):        
 
@@ -399,9 +370,9 @@ def run(cfg, **kwargs):
                     np.array([[1, 0], [0, 2]])
                 ]
 
-        for stage in range(num_stages):
+        for stage in range(cfg.num_stages):
 
-            num_steps_in_stage = dict_steps_of_stages[stage]
+            num_steps_in_stage = cfg.dict_steps_of_stages[stage]
 
             for step in range(num_steps_in_stage):
 
@@ -464,7 +435,6 @@ def run(cfg, **kwargs):
 
                         # execute the interaction task only when the agent is the focal one in this trial
                         if is_focal:
-                            # print(partner.ixs)
                             reward, \
                             selected_partner_reward, \
                             choice_matches_preference, \
@@ -516,12 +486,6 @@ def run(cfg, **kwargs):
                             agent.episode_memory.rewards.append(torch.tensor(reward))
                         game_points[agent.ixs] += reward
 
-                
-        if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
-            mean_entropy = np.mean([entropy(a.preferences) for a in agents])
-        else:
-            mean_entropy = np.mean([entropy(softmax([a.choice_S, a.choice_B])) 
-                                    for a in agents if a.ixs in [1,2]])
 
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
@@ -538,34 +502,8 @@ def run(cfg, **kwargs):
             # Add the game variables to the game object
             game_vars.record_turn(epoch, turn, losses, [round(val, 2) for val in game_points])
 
-       
         # Print the variables to the console
         game_vars.pretty_print()
-        
-        # calculate diversity
-        # pref_dist = {0:0, 1:0}
-        # for a in agents[1:]:
-        #     pref_type = a.preferences.index(max(a.preferences))
-        #     pref_dist[pref_type] += 1
-        # diversity = entropy(softmax(list(pref_dist.values())))
-
-        # calculate diversity
-        pref_dist = {0:0, 1:0}
-        for a in agents:
-            if a.ixs in [1, 2]:
-                if (not cfg.partner_free_choice_beforehand) and (not cfg.partner_free_choice):
-                    pref_type = a.preferences.index(max(a.preferences))
-                else:
-                    choices_summary = [a.choice_S, a.choice_B]
-                    pref_type = choices_summary.index(max(choices_summary))
-                pref_dist[pref_type] += 1
-
-                # # entropy record 
-                # if cfg.partner_free_choice_beforehand or cfg.partner_free_choice:
-                #     entropy_record[agent.ixs].append(entropy(softmax([a.choice_S, a.choice_B])))
-
-        diversity = entropy(softmax(list(pref_dist.values())))
-
        
         # Add scalars to Tensorboard (multiple agents)
         if cfg.log:
@@ -611,38 +549,19 @@ def run(cfg, **kwargs):
                 writer.add_scalar(f'diversity', init_diversity, epoch)
             writer.add_scalar(f'diversity', diversity, epoch+1)
             writer.add_scalar(f'population_mean_entropy', np.mean(entropy_record), epoch)
-            # writer.add_histogram("population_variability", 
-            #                     np.array(variability_lst))
             writer.add_scalars('occurence_sum_freq', {f'Agent_{j}': np.sum(partner_occurence_freqs[j]) for j in range(len(agents))}, 
                                epoch)
-            # print(partner_occurence_freqs, sum(partner_occurence_freqs))
-            
-        
-
-        # # Special action: update epsilon
-        # for agent in agents:
-        #     new_epsilon = agent.model.epsilon - cfg.experiment.epsilon_decay
-        #     agent.model.epsilon = max(new_epsilon, 0.01)
-
 
         if (epoch % 1000 == 0) or (epoch == cfg.experiment.epochs - 1):
             # If a file path has been specified, save the weights to the specified path
             if "save_weights" in kwargs:
                 for a_ixs, agent in enumerate(agents):
-                    # agent.model.save(file_path=kwargs.get("save_weights"))
-                    # agent.model.save(file_path=
-                    #                 f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
-                    #                 )
                     agent.partner_choice_model.save(
                                     f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/'
                                     f'{cfg.exp_name}_agent{a_ixs}_{cfg.model.PPO.type}.pkl'
                                     )
-                    # torch.save(agent.task_model,
-                    #             f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/'
-                    #             +f'{cfg.exp_name}_agent{a_ixs}_{cfg.interaction_task.model.type}.pkl')
         
     # Close the tensorboard log
-
     if cfg.log:
         writer.close()
 
@@ -661,7 +580,6 @@ def main():
     init_log(cfg)
     run(
         cfg,
-        # load_weights=f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
         save_weights=f'{cfg.root}/examples/partner_selection_policy_predictability/models/checkpoints/{cfg.exp_name}_{cfg.model.PPO.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
     )
 

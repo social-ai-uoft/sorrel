@@ -240,41 +240,10 @@ class Agent:
                         self_points += reward
 
             return self_points 
-    
-    
-    def interaction_task(self,
-                         partner,
-                         cfg,
-                         env
-                         ):
-        '''
-        Conduct the interaction task with the selected partner.
-        '''
-        reward = 0 
-        for _ in range(cfg.interaction_task.n_trials):
-            if cfg.interaction_task.mode == 'prediction':
-                prediction = self.task_model(torch.from_numpy(partner.appearance).float())
-                partner_choice_in_task = np.argmax(partner.preferences)
-                # partner_choice_in_task = random.choices([v for v in range(len(partner.preferences))], 
-                #                                         partner.preferences, k=1)[0]
-                # print(prediction, partner_choice_in_task)
-                if int(torch.max(prediction, dim=0)[1]) == int(partner_choice_in_task):
-                    reward += 1
-                self.social_task_memory['pred'].append(prediction)
-                self.social_task_memory['gt'].append(torch.tensor(partner_choice_in_task))
-            elif cfg.interaction_task.mode == 'grid':
-                # agents = [self, partner]
-                # entities = create_entities(cfg)
-                # env = partner_selection(cfg, agents, entities)
-                reward += self.frozen_network_foraging(partner, env, cfg.task_max_turns)
-        partner.delay_reward = reward
-        # print(partner.ixs, partner.delay_reward)
-        return reward 
-    
 
     def social_interaction(self, agent_dyad, cfg, interaction_form):
         '''
-        Execute the social interaction task between two agents.
+        Execute the social interaction task between two agents, and return the reward.
         '''
         interaction_reward_matrix = self.dict_interaction_rms[interaction_form]
         if agent_dyad[-1].role == 'partner':
@@ -297,7 +266,6 @@ class Agent:
         self.presented_identity = identity_options_lst[action_identity_selection]
         self.presented_identity = torch.concat([torch.zeros(10), self.presented_identity])
     """
-   
     
     def SB_task(
             self, 
@@ -431,8 +399,6 @@ class Agent:
         else:
             model_input = torch.from_numpy(state).double()
 
-        reward = 0
-
         # Take action based on current state
         if self.model_type == 'PPO':
             if hasattr(self, 'lstm'):
@@ -447,7 +413,6 @@ class Agent:
                 if cfg.hardcoded:
                     if self.ixs != 0:
                         action = 2
-
         else:
             if hasattr(self, 'lstm'):
                 if self.lstm:
@@ -457,10 +422,23 @@ class Agent:
             else:
                 action = self.partner_choice_model.take_action(model_input)
             action_prob = None
-            # # set the strategy for random exploration
-            # if (epoch < 40) and (not is_focal):
-            #     action = random.randint(0, 2)
-
+   
+        # select partner and decide whether to save the action as identity
+        if env.is_parter_selection:
+            selected_partner, selected_partner_ixs = self.partner_selection_process(self, action, is_focal, cfg, partner_choices)
+        else:
+            selected_partner, selected_partner_ixs = None, None
+        # save the action in the identity
+        if self.save_action_as_identity[env.stage]:
+            self.picking_identity(action, cfg)
+            
+        # return the results based on the model type
+        if self.model_type == 'PPO':
+            return state, action, selected_partner, False, action_prob, selected_partner_ixs
+        else:
+            return state, action, selected_partner, False, selected_partner_ixs
+        
+    def partner_selection_process(self, action, is_focal, cfg, partner_choices):
         # set random actions
         selection = action//2
         if is_focal:
@@ -502,14 +480,10 @@ class Agent:
             if action >= 4:
                 selected_partner = None
                 selected_partner_ixs = None
-      
-        if self.model_type == 'PPO':
-            return state, action, selected_partner, False, action_prob, selected_partner_ixs
-        else:
-            return state, action, selected_partner, False, selected_partner_ixs
+        
+        return selected_partner, selected_partner_ixs
         
 
-        
     def reset(self, env: GridworldEnv) -> None:
         self.init_replay(env)
         self.encounters = {
@@ -532,46 +506,6 @@ class Agent:
                 probs = np.zeros(num_categories)
                 probs[np.random.randint(num_categories)] = 1.
                 self.preferences = probs
-
-
-# def color_map(channels: int) -> dict:
-#     '''
-#     Generates a color map for the food truck environment.
-
-#     Parameters:
-#         channels: the number of appearance channels in the environment
-
-#     Return:
-#         A dict of object-color mappings
-#     '''
-#     if channels > 5:
-#         colors = {
-#             # 'EmptyObject': [0 for _ in range(channels)],
-#             'EmptyObject': [1. if x == 0 else 0 for x in range(channels)],
-#             'Wall': [1. if x == 1 else 0 for x in range(channels)],
-#             'Gem': None,
-#             'Coin': None
-#             # 'Agent': [255 if x == 0 else 0 for x in range(channels)],
-#             # 'Wall': [255 if x == 1 else 0 for x in range(channels)],
-#             # 'Gem': [255 if x == 2 else 0 for x in range(channels)],
-#             # 'Food': [255 if x == 3 else 0 for x in range(channels)],
-#             # 'Coin': [255 if x == 4 else 0 for x in range(channels)],
-#             # 'Evil_coin': [255 if x == 4 else 0 for x in range(channels)],
-#             # 'Bone': [255 if x == 5 else 0 for x in range(channels)]
-#         }
-#     else:
-#         colors = {
-#             'EmptyObject': [255., 255., 255.],
-#             'Agent': [0., 0., 255.],
-#             'Wall': [153.0, 51.0, 102.0],
-#             'Gem': [0., 255., 0.],
-#             'Coin': [255., 255., 0.],
-#             'Evil_Coin': [255., 255., 0.],
-#             'Food': [255., 0., 0.],
-#             'Bone': [0., 0., 0.]
-#         }
-#     return colors
-
 
 
 def color_map(channels: int) -> dict:
