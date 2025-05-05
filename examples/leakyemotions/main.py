@@ -69,12 +69,12 @@ def setup() -> LeakyemotionsEnv:
 
         agents.append(
             LeakyEmotionAgent(
-                observation_spec=observation_spec, action_spec=action_spec, model=model
+                observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
             )
         )
         agents.append(
             Wolf(
-                observation_spec=observation_spec, action_spec=action_spec, model=model
+                observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
             )
         )
 

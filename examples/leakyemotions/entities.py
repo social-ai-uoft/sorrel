@@ -40,6 +40,15 @@ class Wall(Entity):
         self.value = -1  # Walls penalize contact
          #TODO: Put the image for this into the assets folder ---> self.sprite = Path(__file__).parent / "./assets/wall.png"
 
+class Grass(Entity):
+    """An entity that represents a block of grass in the treasurehunt environment."""
+
+    def __init__(self):
+        super().__init__()
+        # We technically don't need to make Grass passable here since it's on a different layer from Agent
+        self.passable = True
+        #TODO: self.sprite = Path(__file__).parent / "./assets/grass.png"
+
 class EmptyEntity(Entity):
     """An entity that represents an empty space in the leakyemotions environment."""
 

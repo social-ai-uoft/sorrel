@@ -6,7 +6,7 @@ import torch
 
 from sorrel.agents import Agent
 from sorrel.models import base_model
-from sorrel.environments import gridworld
+from sorrel.environments.gridworld import GridworldEnv
 from sorrel.observation import visual_field
 ###
 
@@ -26,7 +26,7 @@ class LeakyEmotionAgent(Agent):
         for i in range(self.model.num_frames):
             self.add_memory(state, action, reward, done)
     
-    def pov(self, env: gridworld) -> np.ndarray:
+    def pov(self, env: GridworldEnv) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
         image = self.observation_spec.observe(env, self.location)
         # Flatten the image to get the state
@@ -43,7 +43,7 @@ class LeakyEmotionAgent(Agent):
         action = self.model.take_action(model_input)
         return action
 
-    def act(self, env: gridworld, action: int) -> float:
+    def act(self, env: GridworldEnv, action: int) -> float:
         """Act on the environment, returning the reward."""
 
         # Translate the model output to an action string
@@ -69,7 +69,7 @@ class LeakyEmotionAgent(Agent):
 
         return reward
     
-    def is_done(self, env: gridworld) -> bool:
+    def is_done(self, env: GridworldEnv) -> bool:
         """Returns whether this Agent is done."""
         return env.turn >= env.max_turns
     
@@ -81,7 +81,7 @@ class Wolf(Agent):
     Represents a wolf agent in the environment.
     """
 
-    def __init__(self, observation_spec, action_spec, model:gridworld, location: tuple | None):
+    def __init__(self, observation_spec, action_spec, model:GridworldEnv, location: tuple | None):
         """
         Initializes a Wolf object.
 
@@ -102,7 +102,7 @@ class Wolf(Agent):
         for i in range(self.model.num_frames):
             self.add_memory(state, action, reward, done)
     
-    def pov(self, env: gridworld) -> np.ndarray:
+    def pov(self, env: GridworldEnv) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
         image = self.observation_spec.observe(env, self.location)
         # Flatten the image to get the state
@@ -119,7 +119,7 @@ class Wolf(Agent):
         action = self.model.take_action(model_input)
         return action
 
-    def act(self, env: gridworld, action: int) -> float:
+    def act(self, env: GridworldEnv, action: int) -> float:
         """Act on the environment, returning the reward."""
 
         # Translate the model output to an action string
@@ -145,7 +145,90 @@ class Wolf(Agent):
 
         return reward
     
-    def is_done(self, env: gridworld) -> bool:
+    def chase(self, env: GridworldEnv) -> int:
+        """
+        Chases the nearest agent with a deterministic action policy.
+
+        Parameters:
+            env: The environment object.
+
+        Returns:
+            int: The action to take.
+        """
+        # Get all agent targets
+        targets = env.get_entities_of_kind("agent")
+
+        # Get locations of all agents
+        target_locations = []
+        for target in targets:
+            target_locations.append(target.location)
+
+        # Compute distances ~ an array of taxicab distances from the wolf to each agent 
+        distances = self.compute_taxicab_distance(self.location, target_locations)
+
+        # Choose an agent with the minimum distance to the wolf.
+        min_locs = np.where(distances == distances.min())[0]
+        chosen_agent = targets[np.random.choice(min_locs)]
+
+        # Compute possible paths
+        ACTIONS = [0, 1, 2, 3]
+        TOO_FAR = 999999999
+        attempted_paths = [self.movement(action) for action in ACTIONS]
+        paths = self.compute_taxicab_distance(chosen_agent.location, attempted_paths)
+        candidate_paths = np.array([paths[action] if env.world.is_valid_location(attempted_paths[action]) else TOO_FAR for action in ACTIONS])
+
+        # Choose a candidate action that minimizes the taxicab distance
+        candidate_actions = np.where(candidate_paths == candidate_paths.min())[0]
+        chosen_action = np.random.choice(candidate_actions)
+
+        return chosen_action
+    
+    @staticmethod
+    def compute_taxicab_distance(location, targets: list[tuple]) -> np.array:
+        """
+        Computes taxicab distance between one location and a list of other locations.
+
+        Parameters:
+            targets: A list of locations.
+        
+        Returns:
+            np.array: The taxicab distance between the wolf and each agent
+        """
+
+        distances = []
+        # Get taxicab distance for each agent in the list
+        for target in targets:
+            distance = sum([abs(x - y) for x, y in zip(location, target)])
+            distances.append(distance)
+
+        return np.array(distances)
+
+    def movement(self, action: int) -> tuple:
+        """
+        Takes an action and returns the location the agent would end up at if it chose that action.
+
+        Parameters:
+            action (int): Action to take.
+
+        Returns:
+            tuple: New location after the action in the form (x, y, z).
+        """
+        # Translate the model output to an action string
+        action = self.action_spec.get_readable_action(action)
+
+        location = self.location
+        if action == "up":
+            new_location = (self.location[0] - 1, self.location[1], self.location[2])
+        if action == "down":
+            new_location = (self.location[0] + 1, self.location[1], self.location[2])
+        if action == "left":
+            new_location = (self.location[0], self.location[1] - 1, self.location[2])
+        if action == "right":
+            new_location = (self.location[0], self.location[1] + 1, self.location[2])
+        
+        return new_location
+
+    def is_done(self, env: GridworldEnv) -> bool:
         """Returns whether this Agent is done."""
         return env.turn >= env.max_turns
     
