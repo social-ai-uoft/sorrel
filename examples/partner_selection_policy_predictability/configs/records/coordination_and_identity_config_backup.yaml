@@ -1,0 +1,82 @@
+
+experiment:
+  name: state_punishment_beta
+  epochs: 1000000
+  max_turns: 30
+  epsilon_decay: 0.0001
+  num_blocks: 10
+  num_stages: 2
+  dict_steps_of_stages: {
+    0: 1, 
+    1: 5,
+    }
+
+model:
+  PPO:
+    type: PPO
+    num: 3
+    device: cpu
+    parameters:
+      state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      extra_percept_size: 1 # added for extra percept
+      action_size: 4
+      layer_size: 250
+      num_frames: 5
+      n_step: 1
+      BATCH_SIZE: 64
+      BUFFER_SIZE: 1024
+      LR: 0.00025
+      TAU: .001
+      GAMMA: 0.99
+      N: 12
+      sync_freq: 200
+      model_update_freq: 4
+      epsilon: 0.01
+
+agent:
+  agent:
+    num: 3
+    preference_var: 0.5
+    model: PPO
+    num_memories: 5 # Should match num_frames in the model above
+    vision: 7
+    # appearance: (0.0, 0.0, 255.0)
+    appearance: 
+      - [0.0, 0.0, 255.0, 255.0, 0., 0., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 255., 0., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 255., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0., 255., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0., 0., 255., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0., 0., 0., 255.]
+    memory_size: 100 # If this is larger than max_turns above, could cause issues
+    # Not used right now
+    tile_size: (1, 1)
+    pov_size: 9
+    health: 10
+    extra_percept_size: 1 # added for extra percept
+    preference_len: 3
+    trainable: True
+    frozen: False
+    action_size: 4
+
+# Root folder for accessing file structure and modules
+root: 'D:/coordination_and_identity'
+log: True
+seed: 2
+random_selection: False
+default: True
+with_time: True
+pretraining: False
+num_identities: 2
+
+dict_interaction_rms:
+  agent: {
+      'identity_selection': [[[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]]],
+      'SB_task': [[[1, 0], [0, 2]], [[2, 0], [0, 1]], [[1.5, 0], [0, 1.5]]],
+      }
+  decider: {
+      'identity_selection': [[[0, 0], [0, 0]]],
+      'SB_task': [[[1, 0], [0, 1]]],
+      }
+
+exp_name: 'coordination_and_identity'

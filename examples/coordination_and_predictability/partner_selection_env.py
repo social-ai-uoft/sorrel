@@ -57,100 +57,31 @@ class partner_pool:
 
         return focal_agent, partner_choices, partner_ixs
     
-    def state(self, agent, cfg, env_info):
-
-        assert len(self.partner_to_select) == 2, 'number of partners to select larger than 2'
+    def state(self, focal_agent, agent_list, cfg): #TODO: block num + stage number + step number + self icon + other icons  
         
-        # add stage marker
-        if agent.ixs == self.focal_ixs:
-            if cfg.with_appearance_of_others:
-                state = np.concatenate([self.appearance_of_others, np.array([1])])
-            else:
-                state = np.concatenate([self.appearance_of_others*0, np.array([1])])
-        else:
-            if cfg.with_appearance_of_others:
-                state = np.concatenate([self.appearance_of_others, np.array([0])])
-            else:
-                state = np.concatenate([self.appearance_of_others*0, np.array([0])])
-        
-        # add agent appearance
-        state = np.concatenate([state, np.array(agent.appearance)])
-            
-        # add partner preferences & appearances
-        if cfg.random_selection:
-            selected_partner = random.choices(self.partner_to_select, k=1)[0]
-            selected_partner_ixs = selected_partner.ixs
-
         # add time marker
-        state = np.concatenate([state, env_info['stage']])
-        state = np.concatenate([state, env_info['step']])
+        stage = np.array([state, self.block])
+        state = np.concatenate([state, self.stage_number])
+        state = np.concatenate([state, self.step_number])
 
-        # add marker of being selected
-        state = np.concatenate([state, np.array([1.*agent.selected_in_last_turn])])
-       
-        # add internal state
-        state = np.concatenate([state, np.array([agent.internal_state])])
+        # add agent icon
+        state = np.concatenate([state, focal_agent.generate_icon()])
+
+        # add all agents' icons
+        for agent in agent_list:
+            state = np.concatenate([state, agent.generate_icon()])
+
+        # # add partner preferences & appearances
+        # if cfg.random_selection:
+        #     selected_partner = random.choices(self.partner_to_select, k=1)[0]
+        #     selected_partner_ixs = selected_partner.ixs
+
+        # # add marker of being selected
+        # state = np.concatenate([state, np.array([1.*focal_agent.selected_in_last_turn])])
 
         if not cfg.random_selection:
             return state
         else:
             return state, selected_partner_ixs
     
-    def get_max_variability_partner_ixs(self):
-        """
-        Get the ixs of the most variable partner among all options.
-        """
-        variability = [partner.variability for partner in self.partner_to_select]
-        
-        # Sort indices based on variability values in descending order
-        sorted_ixs = sorted(range(len(variability)), key=lambda x: variability[x], reverse=True)
-        
-        # Get sorted variability values
-        sorted_vals = [variability[j] for j in sorted_ixs]
-
-        agent_ixs = self.partner_to_select[sorted_ixs[0]].ixs
-        
-        return agent_ixs
-    
-    def get_max_entropic_partner_ixs(self):
-        """
-        Get the ixs of the most entropic partner among all options.
-        """
-        entropy_val = [partner.entropy for partner in self.partner_to_select]
-
-        # Sort indices based on entropy values in descending order
-        sorted_ixs = sorted(range(len(entropy_val)), key=lambda x: entropy_val[x], reverse=True)
-
-        # Get sorted entropy values
-        sorted_vals = [entropy_val[j] for j in sorted_ixs]
-
-        agent_ixs = self.partner_to_select[sorted_ixs[0]].ixs
-
-        agent = self.partner_to_select[sorted_ixs[0]]
-
-        entropy_val_diff_among_partner_choices = abs(
-            self.partner_to_select[0].entropy - self.partner_to_select[1].entropy
-            )
-        # print(agent_ixs, entropy_val_diff_among_partner_choices, [(partner.ixs, partner.entropy) for partner in self.partner_to_select])
-        return agent, agent_ixs, entropy_val_diff_among_partner_choices
-    
-    def get_min_variability_partner_ixs(self):
-        """
-        Get the ixs of the least variable partner among all options.
-        """
-        variability = [partner.variability for partner in self.partner_to_select]
-        
-        # Sort indices based on variability values in descending order
-        sorted_ixs = sorted(range(len(variability)), key=lambda x: variability[x], reverse=True)
-        
-        # Get sorted variability values
-        sorted_vals = [variability[j] for j in sorted_ixs]
-
-        agent_ixs = self.partner_to_select[sorted_ixs[-1]].ixs
-
-        agent = self.partner_to_select[sorted_ixs[-1]]
-        
-        return agent, agent_ixs
-
-    
-    
+ 

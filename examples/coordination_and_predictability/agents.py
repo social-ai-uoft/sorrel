@@ -241,15 +241,12 @@ class Agent:
 
             return self_points 
 
-    def social_interaction(self, agent_dyad, cfg, interaction_form):
+    def social_interaction(self, interacting_partner, cfg, interaction_form):
         '''
         Execute the social interaction task between two agents, and return the reward.
         '''
-        interaction_reward_matrix = self.dict_interaction_rms[interaction_form]
-        if agent_dyad[-1].role == 'partner':
-            self_reward = interaction_reward_matrix[self.cached_action, agent_dyad[-1].cached_action]
-        else:
-            self_reward = interaction_reward_matrix[self.cached_action, agent_dyad[-1].cached_action[self.ixs]]
+        interaction_reward_matrix = self.dict_interaction_rms[interaction_form][self.ixs]
+        self_reward = interaction_reward_matrix[self.cached_action, interacting_partner.cached_action]
         return self_reward
     
     def picking_identity(self, action_identity_selection, cfg):
@@ -266,6 +263,13 @@ class Agent:
         self.presented_identity = identity_options_lst[action_identity_selection]
         self.presented_identity = torch.concat([torch.zeros(10), self.presented_identity])
     """
+
+    def generate_icon(self):
+        '''
+        Generate the icon of the agent based on the appearance and the presented identity.
+        '''        
+        self.icon = np.concatenate([self.appearance, self.presented_identity])
+        return self.icon
     
     def SB_task(
             self, 
@@ -381,7 +385,6 @@ class Agent:
                    partner_choices,
                    is_focal,
                    cfg, 
-                   mode='prediction',
                    epoch=None) -> tuple:
         '''
         Changes the world based on the action taken.
