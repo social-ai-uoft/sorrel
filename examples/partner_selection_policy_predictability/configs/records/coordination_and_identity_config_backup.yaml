@@ -7,8 +7,8 @@ experiment:
   num_blocks: 10
   num_stages: 2
   dict_steps_of_stages: {
-    0: 1, 
-    1: 5,
+    '0': 1, 
+    '1': 5,
     }
 
 model:
@@ -60,7 +60,7 @@ agent:
     action_size: 4
 
 # Root folder for accessing file structure and modules
-root: 'D:/coordination_and_identity'
+root: 'D:/interaction_and_predictability'
 log: True
 seed: 2
 random_selection: False

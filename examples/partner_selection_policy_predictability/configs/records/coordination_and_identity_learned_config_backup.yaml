@@ -6,10 +6,10 @@ experiment:
   epsilon_decay: 0.0001
   num_blocks: 10
   num_stages: 2
-  dict_steps_of_stages:
-    "0": 1
-    "1": 5
-    
+  dict_steps_of_stages: {
+    '0': 1, 
+    '1': 5,
+    }
 
 model:
   PPO:
@@ -40,20 +40,14 @@ agent:
     model: PPO
     num_memories: 5 # Should match num_frames in the model above
     vision: 7
-    # appearance: (0.0, 0.0, 1.0)
+    # appearance: (0.0, 0.0, 255.0)
     appearance: 
-      - [0.0, 0.0, 1.0, 0.2, 0., 0., 0., 0., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0.2, 0., 0., 0., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0., 0.2, 0., 0., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0., 0., 0.2, 0., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0., 0., 0., 0.2, 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0., 0., 0., 0., 0.2]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 255.0, 0., 0., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 255., 0., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 255., 0., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0., 255., 0., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0., 0., 255., 0.]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0., 0., 0., 255.]
     memory_size: 100 # If this is larger than max_turns above, could cause issues
     # Not used right now
     tile_size: (1, 1)
@@ -64,7 +58,6 @@ agent:
     trainable: True
     frozen: False
     action_size: 4
-    num_identities: 3
 
 # Root folder for accessing file structure and modules
 root: 'D:/interaction_and_predictability'
@@ -74,17 +67,16 @@ random_selection: False
 default: True
 with_time: True
 pretraining: False
-interaction_form: ['identity_selection', 'SB_task']
-is_partner_selection: False
-save_action_as_identity: [True, False]
-# dict_interaction_rms:
-#   agent: {
-#       'identity_selection': [[[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]]],
-#       'SB_task': [[[1, 0], [0, 2]], [[2, 0], [0, 1]], [[1.5, 0], [0, 1.5]]],
-#       }
-#   decider: {
-#       'identity_selection': [[[0, 0], [0, 0]]],
-#       'SB_task': [[[1, 0], [0, 1]]],
-#       }
+num_identities: 2
 
-exp_name: 'coordination_and_identity_learned_diff_id_slow_decider_test'
+dict_interaction_rms:
+  agent: {
+      'identity_selection': [[[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]]],
+      'SB_task': [[[1, 0], [0, 2]], [[2, 0], [0, 1]], [[1.5, 0], [0, 1.5]]],
+      }
+  decider: {
+      'identity_selection': [[[0, 0], [0, 0]]],
+      'SB_task': [[[1, 0], [0, 1]]],
+      }
+
+exp_name: 'coordination_and_identity_learned'

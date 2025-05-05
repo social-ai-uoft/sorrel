@@ -2,8 +2,8 @@
 # region: Imports                   #
 # --------------------------------- #
 
-from examples.partner_selection_policy_predictability.entities import Gem, Coin, EmptyObject, Wall
-from examples.partner_selection_policy_predictability.agents import color_map
+from examples.coordination_and_predictability.entities import Gem, Coin, EmptyObject, Wall
+from examples.coordination_and_predictability.agents import color_map
 
 from agentarium.primitives import GridworldEnv, Entity
 

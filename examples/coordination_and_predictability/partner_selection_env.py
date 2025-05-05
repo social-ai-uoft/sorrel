@@ -60,9 +60,11 @@ class partner_pool:
     def state(self, focal_agent, agent_list, cfg): #TODO: block num + stage number + step number + self icon + other icons  
         
         # add time marker
-        stage = np.array([state, self.block])
-        state = np.concatenate([state, self.stage_number])
-        state = np.concatenate([state, self.step_number])
+        state = np.array([])
+        state = np.concatenate([state, np.array([self.block])]) 
+        state = np.concatenate([state, np.array([self.stage])])
+        state = np.concatenate([state, np.array([self.step])])
+       
 
         # add agent icon
         state = np.concatenate([state, focal_agent.generate_icon()])
@@ -71,10 +73,10 @@ class partner_pool:
         for agent in agent_list:
             state = np.concatenate([state, agent.generate_icon()])
 
-        # # add partner preferences & appearances
-        # if cfg.random_selection:
-        #     selected_partner = random.choices(self.partner_to_select, k=1)[0]
-        #     selected_partner_ixs = selected_partner.ixs
+        # add partner preferences & appearances
+        if cfg.random_selection:
+            selected_partner = random.choices(self.partner_to_select, k=1)[0]
+            selected_partner_ixs = selected_partner.ixs
 
         # # add marker of being selected
         # state = np.concatenate([state, np.array([1.*focal_agent.selected_in_last_turn])])

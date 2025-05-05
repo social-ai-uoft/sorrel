@@ -1,4 +1,4 @@
-from examples.partner_selection_policy_predictability.entities import Wall, EmptyObject
+from examples.coordination_and_predictability.entities import Wall, EmptyObject
 # from examples.trucks.utils import color_map
 
 from ast import literal_eval as make_tuple
@@ -45,7 +45,7 @@ class Agent:
         self.trainable = cfg.agent.agent.trainable
         self.frozen = cfg.agent.agent.frozen
         self.action_size = cfg.agent.agent.action_size
-        self.dict_interaction_rms = cfg.agent.agent.dict_interaction_rms
+        self.dict_interaction_rms = {'identity_selection': None, 'SB_task': None}
 
         # training-related features
         self.task_model = None  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
@@ -241,20 +241,27 @@ class Agent:
 
             return self_points 
 
-    def social_interaction(self, interacting_partner, cfg, interaction_form):
+    def social_interaction(self, interacting_partner, interaction_form):
         '''
         Execute the social interaction task between two agents, and return the reward.
         '''
-        interaction_reward_matrix = self.dict_interaction_rms[interaction_form][self.ixs]
-        self_reward = interaction_reward_matrix[self.cached_action, interacting_partner.cached_action]
+        interaction_reward_matrix = self.dict_interaction_rms[interaction_form]
+        self_reward = interaction_reward_matrix[int(self.cached_action)][int(interacting_partner.cached_action)]
         return self_reward
     
     def picking_identity(self, action_identity_selection, cfg):
         '''
         Pick the identity of the agent based on the action taken.
         '''
-        identity_options_lst = F.one_hot(torch.arange(0, cfg.agent.agent.num_identities), num_classes=cfg.agent.agent.num_identities).tolist()
-        self.presented_identity = identity_options_lst[action_identity_selection]
+        if action_identity_selection >= 2:
+            action_identity_selection = action_identity_selection - 2
+            identity_options_lst = (
+                F.one_hot(
+                    torch.arange(0, cfg.agent.agent.num_identities), 
+                    num_classes=cfg.agent.agent.num_identities
+                    )
+                    ).tolist()
+            self.presented_identity = identity_options_lst[action_identity_selection]
         # the presented identity should be combined with the unique identity of the agent in the observation space
     
     """
@@ -268,6 +275,7 @@ class Agent:
         '''
         Generate the icon of the agent based on the appearance and the presented identity.
         '''        
+        # print(self.appearance, self.presented_identity)
         self.icon = np.concatenate([self.appearance, self.presented_identity])
         return self.icon
     
@@ -382,6 +390,7 @@ class Agent:
             
     def transition(self,
                    env,
+                   agent_lst,
                    partner_choices,
                    is_focal,
                    cfg, 
@@ -395,7 +404,7 @@ class Agent:
             state, selected_partner_ixs = env.state(self, cfg)
             selected_partner = [a for a in partner_choices if a.ixs == selected_partner_ixs][0]
         else:
-            state = env.state(self, cfg)
+            state = env.state(self, agent_lst, cfg)
 
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
@@ -412,10 +421,7 @@ class Agent:
                     self.hidden_out = hidden
             else:
                 action, action_prob = self.partner_choice_model.take_action(model_input)
-                # set the strategy
-                if cfg.hardcoded:
-                    if self.ixs != 0:
-                        action = 2
+
         else:
             if hasattr(self, 'lstm'):
                 if self.lstm:
@@ -427,7 +433,7 @@ class Agent:
             action_prob = None
    
         # select partner and decide whether to save the action as identity
-        if env.is_parter_selection:
+        if env.is_partner_selection:
             selected_partner, selected_partner_ixs = self.partner_selection_process(self, action, is_focal, cfg, partner_choices)
         else:
             selected_partner, selected_partner_ixs = None, None

@@ -7,9 +7,9 @@ from agentarium.config import (
     Cfg
 )
 from agentarium.models.iqn import iRainbowModel
-from examples.partner_selection_policy_predictability.agents import Agent
-from examples.partner_selection_policy_predictability.entities import Entity
-from examples.partner_selection_policy_predictability.utils import color_map
+from examples.coordination_and_predictability.agents import Agent
+from examples.coordination_and_predictability.entities import Entity
+from examples.coordination_and_predictability.utils import color_map
 
 # --------------- #
 # endregion       #

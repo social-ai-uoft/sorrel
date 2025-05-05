@@ -1,5 +1,5 @@
-from examples.partner_selection_policy_predictability.agents import Agent, color_map
-from examples.partner_selection_policy_predictability.entities import Coin, Gem, Wall, Bone
+from examples.coordination_and_predictability.agents import Agent, color_map
+from examples.coordination_and_predictability.entities import Coin, Gem, Wall, Bone
 
 from agentarium.models.iqn import iRainbowModel
 import argparse
@@ -9,7 +9,7 @@ from PIL import Image
 import shutil
 from collections import deque
 from agentarium.models.PPO import PPO
-from examples.partner_selection_policy_predictability.task_models import Classification
+from examples.coordination_and_predictability.task_models import Classification
 import random 
 import itertools
 import numpy as np
