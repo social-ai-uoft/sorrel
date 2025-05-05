@@ -343,10 +343,12 @@ def run(cfg, **kwargs):
                             reward = 0
                             a.episode_memory.rewards.append(torch.tensor(reward))
                             game_points[a.ixs] += reward
-                            if turn >= num_steps_in_stage or done_:
-                                done = 1
 
                         turn += 1
+                        if turn >= num_steps_in_stage or done_:
+                            done = 1
+
+                        
                     
                     # record num_same_identity
                     count = 0
@@ -419,11 +421,12 @@ def run(cfg, **kwargs):
                             decider.episode_memory.logprobs.append(torch.tensor(action_logprob))
                             decider.episode_memory.is_terminals.append(torch.tensor(done))
 
-                            # if the game is done, break the loop
-                            if turn >= num_steps_in_stage or done_:
-                                done = 1
-
+                        # if the game is done, break the loop
                         turn += 1
+                        if turn >= num_steps_in_stage or done_:
+                            done = 1
+
+                        
 
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
