@@ -128,7 +128,6 @@ def run(cfg, **kwargs):
             fixed_prob_dict,
             cfg.state_sys.magnitude, 
             cfg.state_sys.taboo,
-            cfg.state_sys.change_per_vote,
             cfg.state_sys.resource_punishment_is_ambiguous,
             cfg.state_sys.potential_taboo,
             cfg.state_sys.only_punish_taboo,

@@ -5,66 +5,55 @@ from examples.state_punishment.utils import inspect_the_env, add_extra_info
 from copy import deepcopy
 
 
-def smooth_punishments(punishments, weight, intercept_increment, upper_bound):
+def generate_exponential_function(intercept: float, base: float):
     """
-    Smooths a list of punishments by iteratively propagating values from higher indices to lower ones.
-    
-    Args:
-        punishments (list): The original list of punishment values
-        weight (float): The smoothing factor to apply
-        
+    Returns an exponential function of the form:
+    y = intercept * (base ** x)
+
+    Parameters:
+    intercept (float): The multiplicative constant (scales the output).
+    base (float): The base of the exponential.
+
     Returns:
-        list: The smoothed list of punishments
+    function: A function that computes y for a given x.
     """
-    # Create a copy of the list to avoid modifying the original
-    result = punishments.copy()
+    def exponential_function(x):
+        return intercept + (base ** (x))
     
-    for i in range(len(result)):
-        if i > 0:
-            result[i] = result[i] + (weight) * result[i - 1] + intercept_increment
-        # Ensure the value does not exceed the upper bound
-        result[i] = np.clip(result[i], 0.0, upper_bound[i])
-    result = np.clip(result, 0.0, 1.0)
-    return result
+    return exponential_function
 
-
-def increase_punishments(punishments, intercept, slope, num_steps):
+def compile_punishment_vals(num_resources=5, num_steps=10, exponentialness=0.12, intercept_increase_speed=2):
     """
-    Increases the punishment values based on a linear function defined by intercept and slope.
-    
+    Generates a set of punishment values based on an exponential function.
+
     Args:
-        punishments (list): The original list of punishment values
-        intercept (float): The y-intercept of the linear function
-        slope (float): The slope of the linear function
-        
-    Returns:
-        list: The increased list of punishments
+        num_resources (int): Number of resources to consider.
+        num_steps (int): Number of steps in the exponential growth.
+        exponentialness (float): Parameter controlling the steepness of the curve.
+        intercept_increase_speed (float): Parameter controlling the speed of the increase of the intercept.
     """
-    # Create a copy of the list to avoid modifying the original
-    result = punishments.copy()
-    
-    # Apply the linear function to each element
-    for i in range(len(result)):
-        result[i] = intercept + slope * i
-        result[i] = intercept + ((i)/(2*num_steps))**1.2
 
-    result = np.clip(result, 0.0, 1.0)
-    return result
+    vals = []
 
+    # Generate exponential functions for each step
+    # and calculate the values for each resource
+    for i in range(num_steps):
+        exp_func = generate_exponential_function(1+(i/intercept_increase_speed), exponentialness*i+2)
+        vals.append([exp_func(k) for k in range(num_resources)])
 
-def compile_punishment_vals(num_steps, num_resources, intercept, slope, weight, intercept_increment, upper_bound):
-    """
-    Create the punishment prob arrays.
-    """
-    punishments = np.zeros(num_steps)
-    punishments_start = increase_punishments(punishments, intercept, slope, num_steps)
-    punishments_all = np.stack([punishments_start]*num_resources, axis=0)
-    punishments_all = smooth_punishments(punishments_all, weight, intercept_increment, upper_bound)
-    return punishments_all
+    vals = np.array(vals)
+    max = np.max(vals)
+    max = int(max)
+
+    # Normalized values
+    punishment_probs = vals/max
+    punishment_probs = np.clip(punishment_probs, 0.0, 1.0)
+
+    return punishment_probs.T
 
 
 class state_sys():
-    def __init__(self, init_prob, prob_list, magnitude, taboo, change_per_vote, is_ambiguous, potential_taboo, only_taboo, cfg) -> None:
+    def __init__(self, init_prob, prob_list, magnitude, taboo, is_ambiguous, potential_taboo, only_taboo, cfg) -> None:
         self.prob = init_prob
         self.level = 0
         self.max_level = cfg.state_sys.max_level
@@ -72,19 +61,16 @@ class state_sys():
         self.init_prob = init_prob 
         self.magnitude = magnitude
         self.taboo = taboo
-        self.change_per_vote = change_per_vote
+        self.change_per_vote = round(1/cfg.state_sys.num_steps, 1)
         self.resource_punishment_is_ambiguous = is_ambiguous
         self.potential_taboo = potential_taboo
         self.only_punish_taboo = only_taboo
         self.cfg = cfg
         self.punishments_prob_matrix = compile_punishment_vals(
-            cfg.state_sys.num_steps,
             cfg.state_sys.num_resources,
-            cfg.state_sys.intercept,
-            cfg.state_sys.slope,
-            cfg.state_sys.weight,
-            cfg.state_sys.intercept_increment,
-            cfg.state_sys.upper_bound
+            cfg.state_sys.num_steps,
+            cfg.state_sys.exponentialness,
+            cfg.state_sys.intercept_increase_speed
         )
         self.manual_punishment_prob = False
         self.resources = cfg.state_sys.resources
