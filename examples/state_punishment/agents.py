@@ -253,7 +253,7 @@ class Agent:
                                                         < state_sys.prob_list[str(target_object)]*state_sys.prob) # instant punishment
                         reward -= val_of_state_punishment
                 # record being punished or not
-                self.punishment_record.append(1*(val_of_state_punishment > 0))
+                self.punishment_record[str(target_object)].append(1*(val_of_state_punishment > 0))
 
             cache_harm = [env.cache['harm'][k] - target_object.social_harm 
                                         if k != self.ixs else env.cache['harm'][k]

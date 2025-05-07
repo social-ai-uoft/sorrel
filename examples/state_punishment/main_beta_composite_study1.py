@@ -75,7 +75,7 @@ def run(cfg, **kwargs):
         from torch.utils.tensorboard import SummaryWriter
 
         writer = SummaryWriter(
-            log_dir=f'{root}/examples/state_punishment/runs_v2/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
+            log_dir=f'{root}/examples/state_punishment/runs/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%s")}/'
         )
 
     # Container for game variables (epoch, turn, loss, reward)
@@ -219,12 +219,8 @@ def run(cfg, **kwargs):
             loss = loss.detach()
             losses[agent.ixs] += loss
 
-            # Add the game variables to the game object
-            game_vars.record_turn(epoch, turn, losses, game_points)
-
-            # debug
-            # if agent.encounters['Agent'] >  0:
-            # print(agent.encounters)
+        # Add the game variables to the game object
+        game_vars.record_turn(epoch, turn, losses, [round(val, 2) for val in game_points])
 
         # Print the variables to the console
         game_vars.pretty_print()
@@ -245,10 +241,10 @@ def run(cfg, **kwargs):
         for resource in cfg.state_sys.resources:
             punishment_prob_dict[resource] = np.sum(
                 [val for agent in agents for val in agent.punishment_record[resource]]) / \
-                np.sum([val for agent in agents for val in agent.transgression_record[resource]])
+                (np.sum([val for agent in agents for val in agent.transgression_record[resource]])+1e-6)
 
         # calculate the sum of transgressions
-        sum_transgressions = np.sum([val for agent in agents for val in agent.transgression_record])
+        sum_transgressions = np.sum([val for agent in agents for resource in cfg.state_sys.resources for val in agent.transgression_record[resource]])
 
 
         # Add scalars to Tensorboard (multiple agents)

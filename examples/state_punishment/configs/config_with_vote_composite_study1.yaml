@@ -128,7 +128,7 @@ replay:
   turns: 100
 
 # Root folder for accessing file structure and modules
-root: '/Users/socialai/Documents/state_punishment'
+root: '/Users/socialai/Documents/state_punishment_May6'
 seed: 1
 log: True
 random: False

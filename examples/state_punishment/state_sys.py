@@ -56,12 +56,13 @@ class state_sys():
     def __init__(self, init_prob, prob_list, magnitude, taboo, is_ambiguous, potential_taboo, only_taboo, cfg) -> None:
         self.prob = init_prob
         self.level = 0
-        self.max_level = cfg.state_sys.max_level
+        self.max_level = cfg.state_sys.num_steps -1 
         self.prob_list = prob_list
         self.init_prob = init_prob 
         self.magnitude = magnitude
         self.taboo = taboo
         self.change_per_vote = round(1/cfg.state_sys.num_steps, 1)
+        self.levels_lst = [round(i*self.change_per_vote,1) for i in range(cfg.state_sys.num_steps+1)]
         self.resource_punishment_is_ambiguous = is_ambiguous
         self.potential_taboo = potential_taboo
         self.only_punish_taboo = only_taboo
@@ -87,7 +88,7 @@ class state_sys():
         self.prob = round(self.prob, 1)
         base_prob = deepcopy(self.prob)
         #TODO:design the schedule funcs
-        assert base_prob in [0., 0.2, 0.4, 0.6, 0.8, 1.], ValueError(f'Punishment base prob value is incorrect, {self.prob}')
+        assert base_prob in self.levels_lst, ValueError(f'Punishment base prob value is incorrect, {self.prob}, {self.levels_lst}')
         punishment_prob = 0 
         if self.manual_punishment_prob:
             if resource_name == 'Gem':
