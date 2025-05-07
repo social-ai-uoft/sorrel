@@ -32,8 +32,8 @@ class Agent:
         self.extra_percept_size = cfg.agent.agent.extra_percept_size
         self.is_punished = 0.
         self.to_be_punished = {'Gem':0, 'Bone':0, 'Coin':0}
-        self.transgression_record = []
-        self.punishment_record = []
+        self.transgression_record = {resource: [] for resource in cfg.state_sys.resources}
+        self.punishment_record = {resource: [] for resource in cfg.state_sys.resources}
 
         # training-related features
         self.model = model  # agent model here. need to add a tad that tells the learning somewhere that it is DQN
@@ -229,31 +229,31 @@ class Agent:
         if str(target_object) in state_sys.potential_taboo:
 
             if str(target_object) in state_sys.taboo:
-                self.transgression_record.append(1)
-            else:
-                self.transgression_record.append(0)
+                self.transgression_record[str(target_object)].append(1)
+            # else:
+                # self.transgression_record.append(0)
 
             if mode == 'certain':
                 # prob = state_sys.punishment_schedule_func(str(target_object))
                 #TODO: merge the conditions/simplify
                 if state_sys.resource_punishment_is_ambiguous:
                     punishment_prob = state_sys.punishment_schedule_func(str(target_object))
-                    r_of_state_punishment = state_sys.magnitude * (random.random() < punishment_prob)
-                    reward -= r_of_state_punishment
+                    val_of_state_punishment = state_sys.magnitude * (random.random() < punishment_prob)
+                    reward -= val_of_state_punishment
                 else:
                     if state_sys.only_punish_taboo:
                         if str(target_object) in state_sys.taboo:
                             punishment_prob = state_sys.punishment_schedule_func(str(target_object))
-                            r_of_state_punishment = state_sys.magnitude * (random.random() < punishment_prob)
-                            reward -= r_of_state_punishment
+                            val_of_state_punishment = state_sys.magnitude * (random.random() < punishment_prob)
+                            reward -= val_of_state_punishment
                         else:
-                            r_of_state_punishment = 0
+                            val_of_state_punishment = 0
                     else:
-                        r_of_state_punishment = state_sys.magnitude * (random.random() 
+                        val_of_state_punishment = state_sys.magnitude * (random.random() 
                                                         < state_sys.prob_list[str(target_object)]*state_sys.prob) # instant punishment
-                        reward -= r_of_state_punishment
+                        reward -= val_of_state_punishment
                 # record being punished or not
-                self.punishment_record.append(1*(r_of_state_punishment > 0))
+                self.punishment_record.append(1*(val_of_state_punishment > 0))
 
             cache_harm = [env.cache['harm'][k] - target_object.social_harm 
                                         if k != self.ixs else env.cache['harm'][k]
@@ -376,8 +376,8 @@ class Agent:
         }
     
     def reset_record(self) -> None:
-        self.transgression_record = []
-        self.punishment_record = []
+        self.transgression_record = {resource: [] for resource in self.cfg.state_sys.resources}
+        self.punishment_record = {resource: [] for resource in self.cfg.state_sys.resources}
 
 # def color_map(channels: int) -> dict:
 #     '''

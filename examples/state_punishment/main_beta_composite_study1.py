@@ -36,7 +36,7 @@ from copy import deepcopy
 import numpy as np
 import torch
 import gc
-import tracemalloc
+from collections import defaultdict
 
 
 # endregion                #
@@ -229,16 +229,23 @@ def run(cfg, **kwargs):
         # Print the variables to the console
         game_vars.pretty_print()
 
-        # calculate signal detection theory related statistics
-        combined_transgression_marker_lst = np.array([val for agent in agents for val in agent.transgression_record]).flatten()
-        combined_punishment_marker_lst = np.array([val for agent in agents for val in agent.punishment_record]).flatten()
-        assert len(combined_punishment_marker_lst) == len(combined_transgression_marker_lst), \
-        ValueError('There should be the same number of transgression records and punishment records')
-        hits, misses, false_alarms, correct_rejections = calculate_sdt_metrics_np(
-            combined_transgression_marker_lst, 
-            combined_punishment_marker_lst
-            )
-        d_prime = calculate_d_prime(hits, misses, false_alarms, correct_rejections)
+        # # calculate signal detection theory related statistics
+        # combined_transgression_marker_lst = np.array([val for agent in agents for val in agent.transgression_record]).flatten()
+        # combined_punishment_marker_lst = np.array([val for agent in agents for val in agent.punishment_record]).flatten()
+        # assert len(combined_punishment_marker_lst) == len(combined_transgression_marker_lst), \
+        # ValueError('There should be the same number of transgression records and punishment records')
+        # hits, misses, false_alarms, correct_rejections = calculate_sdt_metrics_np(
+        #     combined_transgression_marker_lst, 
+        #     combined_punishment_marker_lst
+        #     )
+        # d_prime = calculate_d_prime(hits, misses, false_alarms, correct_rejections)
+
+        # calculate the probability of each resource being punished in each epoch
+        punishment_prob_dict = defaultdict(float)
+        for resource in cfg.state_sys.resources:
+            punishment_prob_dict[resource] = np.sum(
+                [val for agent in agents for val in agent.punishment_record[resource]]) / \
+                np.sum([val for agent in agents for val in agent.transgression_record[resource]])
 
         # calculate the sum of transgressions
         sum_transgressions = np.sum([val for agent in agents for val in agent.transgression_record])
@@ -269,8 +276,9 @@ def run(cfg, **kwargs):
             writer.add_scalar(f'state_punishment_level_avg', np.mean(state_entity.prob_record), epoch)
             writer.add_scalar(f'state_punishment_level_end', state_entity.prob, epoch)
             writer.add_scalar(f'state_punishment_level_init', state_entity.init_prob, epoch)
-            writer.add_scalar(f'd_prime', d_prime, epoch)
+            # writer.add_scalar(f'd_prime', d_prime, epoch)
             writer.add_scalar(f'transgressions', sum_transgressions, epoch)
+            writer.add_scalars(f'punishment_prob_each_resource', punishment_prob_dict, epoch)
             
 
         # Special action: update epsilon

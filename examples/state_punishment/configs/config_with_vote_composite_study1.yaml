@@ -29,7 +29,7 @@ state_sys:
     Bone: 1.
   init_prob: 0.
   magnitude: 30  # 20 # positive - punishment, negative - reward 
-  taboo: ['D', 'E']
+  taboo: ['A', 'B', 'C', 'D', 'E']
   potential_taboo: ['A', 'B', 'C', 'D', 'E']
   num_resources: 5
   num_steps: 10
