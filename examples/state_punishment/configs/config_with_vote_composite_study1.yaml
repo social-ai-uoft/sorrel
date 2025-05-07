@@ -138,5 +138,5 @@ action_mode: 'simple'
 load_weights: False
 with_direct_cost: 0.0
 
-exp_name: 'test_study1_experiment_cond_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
+exp_name: 'Study1_experiment_cond_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
 # stacked_views,single_view
