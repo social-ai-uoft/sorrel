@@ -57,18 +57,24 @@ class partner_pool:
 
         return focal_agent, partner_choices, partner_ixs
     
-    def state(self, focal_agent, agent_list, cfg): #TODO: block num + stage number + step number + self icon + other icons  
+    def state(self, focal_agent, agent_list, cfg, partner=None): #TODO: block num + stage number + step number + self icon + partner icon + other icons  
         
         # add time marker
         state = np.array([])
         state = np.concatenate([state, np.array([self.block])]) 
         state = np.concatenate([state, np.array([self.stage])])
         state = np.concatenate([state, np.array([self.step])])
-       
 
+        
+
+        # add partner icon
+        if partner is None:
+            state = np.concatenate([state, np.zeros(focal_agent.generate_icon().shape)])
+        else:
+            state = np.concatenate([state, partner.generate_icon()])
+       
         # add agent icon
         state = np.concatenate([state, focal_agent.generate_icon()])
-
         # add all agents' icons
         for agent in agent_list:
             state = np.concatenate([state, agent.generate_icon()])

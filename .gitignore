@@ -193,3 +193,5 @@ examples/state_punishment/configs/config_fixed_rate_no_vote.yaml
 /examples/partner_selection/runs
 *.19
 /examples/partner_selection_policy_predictability/runs
+/examples/coordination_and_predictability/configs/records
+/examples/coordination_and_predictability/runs

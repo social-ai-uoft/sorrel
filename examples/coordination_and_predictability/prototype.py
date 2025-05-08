@@ -53,7 +53,7 @@ def run(cfg, **kwargs):
     cfg.exp_name = f"{cfg.exp_name}_seed{seed}"
 
     # Initialize the environment and get the agents   
-    partner_selection_models = create_partner_selection_models_PPO(4, 'cpu')
+    partner_selection_models = create_partner_selection_models_PPO(7, 'cpu')
     appearances = create_agent_appearances(cfg.agent.agent.num+2)
 
     agents = []
@@ -61,10 +61,16 @@ def run(cfg, **kwargs):
     agent1 = Agent(partner_selection_models[1], cfg, 0)
     agent2 = Agent(partner_selection_models[2], cfg, 1)
     agent3 = Agent(partner_selection_models[3], cfg, 2)
+    agent4 = Agent(partner_selection_models[4], cfg, 3)
+    agent5 = Agent(partner_selection_models[5], cfg, 4)
+    agent6 = Agent(partner_selection_models[6], cfg, 5)
 
     agents.append(agent1)
     agents.append(agent2)
     agents.append(agent3)
+    agents.append(agent4)
+    agents.append(agent5)
+    agents.append(agent6)
 
     # copy the original list
     agents_lst_copy = deepcopy(agents)
@@ -91,10 +97,10 @@ def run(cfg, **kwargs):
     # decider model
     decider.partner_choice_model = PPO(
             device='cpu', 
-            state_dim=43,
+            state_dim=131,
             action_dim=2, 
-            lr_actor=0.000001,
-            lr_critic=0.0000005,
+            lr_actor=0.000001, #0.000001
+            lr_critic=0.0000005, #0.0000005
             gamma=0.90,
             K_epochs=10,
             eps_clip=0.2,
@@ -107,11 +113,15 @@ def run(cfg, **kwargs):
     decider.role = 'focal'
     decider.action_size = 2
 
+
+    # agent action size
+    action_size = decider.action_size + cfg.agent.agent.num_identities
+
     # agent model
     agent1.partner_choice_model = PPO(
             device='cpu', 
-            state_dim=43,
-            action_dim=2+cfg.agent.agent.num_identities, 
+            state_dim=131,
+            action_dim=action_size, 
             lr_actor=0.0001,
             lr_critic=0.00005,
             gamma=0.90,
@@ -127,8 +137,8 @@ def run(cfg, **kwargs):
 
     agent2.partner_choice_model = PPO(
             device='cpu', 
-            state_dim=43,
-            action_dim=2+cfg.agent.agent.num_identities,
+            state_dim=131,
+            action_dim=action_size,
             lr_actor=0.0001,
             lr_critic=0.00005,
             gamma=0.90,
@@ -146,8 +156,8 @@ def run(cfg, **kwargs):
 
     agent3.partner_choice_model = PPO(
             device='cpu', 
-            state_dim=43,
-            action_dim=2+cfg.agent.agent.num_identities,
+            state_dim=131,
+            action_dim=action_size,
             lr_actor=0.0001,
             lr_critic=0.00005,
             gamma=0.90,
@@ -162,12 +172,69 @@ def run(cfg, **kwargs):
     agent3.role = 'partner'
     agent3.action_size = 2+cfg.agent.agent.num_identities
 
+    agent4.partner_choice_model = PPO(
+            device='cpu', 
+            state_dim=131,
+            action_dim=action_size,
+            lr_actor=0.0001,
+            lr_critic=0.00005,
+            gamma=0.90,
+            K_epochs=10,
+            eps_clip=0.2,
+            entropy_coefficient=0.005  
+        )
+    agent4.partner_choice_model.name = 'PPO'
+    agent4.backup_model = deepcopy(agent3.partner_choice_model)
+    agent4.trainable = True
+    agent4.frozen = False
+    agent4.role = 'partner'
+    agent4.action_size = 2+cfg.agent.agent.num_identities
+
+    agent5.partner_choice_model = PPO(
+            device='cpu', 
+            state_dim=131,
+            action_dim=action_size,
+            lr_actor=0.0001,
+            lr_critic=0.00005,
+            gamma=0.90,
+            K_epochs=10,
+            eps_clip=0.2,
+            entropy_coefficient=0.005  
+        )
+    agent5.partner_choice_model.name = 'PPO'
+    agent5.backup_model = deepcopy(agent3.partner_choice_model)
+    agent5.trainable = True
+    agent5.frozen = False
+    agent5.role = 'partner'
+    agent5.action_size = 2+cfg.agent.agent.num_identities
+
+    agent6.partner_choice_model = PPO(
+            device='cpu', 
+            state_dim=131,
+            action_dim=action_size,
+            lr_actor=0.0001,
+            lr_critic=0.00005,
+            gamma=0.90,
+            K_epochs=10,
+            eps_clip=0.2,
+            entropy_coefficient=0.005  
+        )
+    agent6.partner_choice_model.name = 'PPO'
+    agent6.backup_model = deepcopy(agent3.partner_choice_model)
+    agent6.trainable = True
+    agent6.frozen = False
+    agent6.role = 'partner'
+    agent6.action_size = 2+cfg.agent.agent.num_identities
+    
+
+    
+
     # check if the condition is random 
-    if cfg.random_selection:
-        if 'random' not in cfg.exp_name:
-            raise ValueError('random_selection is True but exp_name does not contain "random"')
-    else:
+    if cfg.adaptive_decider:
         if 'learned' not in cfg.exp_name:
+            raise ValueError('random_selection is True but exp_name does not contain "frozen"')
+    else:
+        if 'frozen' not in cfg.exp_name:
             raise ValueError('random_selection is False but exp_name does not contain "learned"')
     
 
@@ -202,8 +269,8 @@ def run(cfg, **kwargs):
     # initialize reward matrices
     dict_interaction_rms ={
         'agent': {
-            'identity_selection': [[[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]]],
-            'SB_task': [[[1, 0], [0, 10]], [[10, 0], [0, 1]], [[5.5, 0], [0, 5.5]]],
+            'identity_selection': [[[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]]],
+            'SB_task': [[[1, 0], [0, 10]], [[10, 0], [0, 1]], [[5.5, 0], [0, 5.5]], [[1, 0], [0, 10]], [[10, 0], [0, 1]],[[5.5, 0], [0, 5.5]]]
             },
         'decider': {
             'identity_selection': [[[0, 0], [0, 0]]],
@@ -223,14 +290,13 @@ def run(cfg, **kwargs):
         num_classes=cfg.agent.agent.num_identities
         )
         ).tolist()
-    for agent in agents:
-        agent.presented_identity = identity_options_lst[0]
+    for i, agent in enumerate(agents):
+        agent.presented_identity = identity_options_lst[i]
 
     # initialize decider attributes
     decider.presented_identity = [0 for _ in range(cfg.agent.agent.num_identities)]
     decider.appearance = [0 for _ in range(len(agent1.appearance))]
     decider.model_type = 'PPO'
-    decider.trainable = True
     decider.frozen = False
     decider.episode_memory = RolloutBuffer()
     decider.save_action_as_identity = [False for _ in range(cfg.experiment.num_stages)]
@@ -243,16 +309,20 @@ def run(cfg, **kwargs):
 
         random.shuffle(agents)
 
+        # sanity check
+        decider.trainable = False
+        if epoch >100:
+            decider.trainable = cfg.adaptive_decider
+
         # data collection
         losses = [0 for _ in range(len(agents))]
         decider_losses = 0
         game_points = [0 for _ in range(len(agents))]
         decider_points = 0
         identity_choices = [[0 for _ in range(cfg.agent.agent.num_identities)] for _ in range(len(agents))]
-        # print(identity_choices)
-        # ll
         identity_switch = [0 for _ in range(len(agents))]
         num_same_identity = []
+        nonsense_actions = [0 for _ in range(len(agents))]
 
         count_check = 0
 
@@ -271,6 +341,8 @@ def run(cfg, **kwargs):
             agent.reward = 0
             agent.choice_S = 0
             agent.choice_B = 0
+            # reset the presented identity
+            # agent.presented_identity = identity_options_lst[0]
           
         
         # reset time
@@ -307,12 +379,14 @@ def run(cfg, **kwargs):
                             # transition
                             is_focal = None
                             partner_choices = None
+                            partner = None
                             agent.last_presented_identity = agent.presented_identity
 
                             (state, action, partner, done_, action_logprob, _) = agent.transition(
                                 partner_pool_env, 
                                 agents,
-                                partner_choices, 
+                                partner_choices,
+                                partner, 
                                 is_focal,
                                 cfg,
                                 )
@@ -324,8 +398,8 @@ def run(cfg, **kwargs):
                             # record the identity choice
                             if action >= 2:
                                 identity_choices[agent.ixs][action-2] += 1
-                                if identity_options_lst.index(agent.last_presented_identity) != action-2:
-                                    identity_switch[agent.ixs] += 1
+                            if agent.last_presented_identity != agent.presented_identity:
+                                identity_switch[agent.ixs] += 1
                                     
                             
                             # update the agent's cached action
@@ -341,6 +415,10 @@ def run(cfg, **kwargs):
                         for a in agents:
                             # reward = a.social_interaction(a.partner, cfg.interaction_form[stage])
                             reward = 0
+                            # punish nonsense actions
+                            if a.cached_action <= 1:
+                                reward = -1000 
+                                nonsense_actions[a.ixs] += 1
                             a.episode_memory.rewards.append(torch.tensor(reward))
                             game_points[a.ixs] += reward
 
@@ -371,11 +449,13 @@ def run(cfg, **kwargs):
                             # transition
                             is_focal = None
                             partner_choices = None
+                            partner = None
 
                             (state, action, partner, done_, action_logprob, _) = agent.transition(
                                 partner_pool_env, 
                                 agents,
                                 partner_choices, 
+                                partner,
                                 is_focal,
                                 cfg,
                                 )
@@ -390,10 +470,12 @@ def run(cfg, **kwargs):
                             agent.episode_memory.is_terminals.append(torch.tensor(done))
 
                             # decider takes the action
+                            partner = agent
                             (state, action, partner, done_, action_logprob, _) = decider.transition(
                                 partner_pool_env, 
                                 agents,
                                 partner_choices, 
+                                partner,
                                 is_focal,
                                 cfg,
                                 )
@@ -405,7 +487,9 @@ def run(cfg, **kwargs):
                                 agent_reward = agent.social_interaction(agent.partner,  cfg.interaction_form[stage])
                                 decider_reward = decider.social_interaction(agent, cfg.interaction_form[stage])
                             else:
-                                agent_reward = 0
+                                # punish nonsense actions
+                                agent_reward = -100
+                                nonsense_actions[agent.ixs] += 1
                                 decider_reward = 0
 
                             # update the agent's memory buffer regarding the reward
@@ -466,6 +550,7 @@ def run(cfg, **kwargs):
                     f'identity_{j}': identity_choices[i][j] for j in range(cfg.agent.agent.num_identities)
                     }, epoch)
                 writer.add_scalar(f"Agent_{i}/Identity_Switch", identity_switch[i], epoch)
+                writer.add_scalar(f"Agent_{i}/Nonsense_Actions", nonsense_actions[i], epoch)
             
             writer.add_scalar(f'Decider/Reward', decider_points, epoch)
             writer.add_scalar(f'Decider/Loss', decider_losses, epoch)

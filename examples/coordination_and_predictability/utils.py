@@ -306,9 +306,9 @@ def create_agent_appearances(num_agents, with_group_id=True, num_required=None):
     num_agents - number of agents
     """
     num_ids = num_agents if num_required is None else num_required
-    appearances = 1. * np.eye(num_ids)
+    appearances = 10. * np.eye(num_ids)
     if with_group_id:
-        group_id = np.array([1., 0.])
+        group_id = np.array([10., 0.])
         group_id = np.repeat(group_id[np.newaxis, :], num_ids, axis=0)
         appearances = np.concatenate([group_id, appearances], axis=-1)
 

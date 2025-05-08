@@ -8,13 +8,13 @@ experiment:
   num_stages: 2
   dict_steps_of_stages:
     "0": 1
-    "1": 5
+    "1": 20
     
 
 model:
   PPO:
     type: PPO
-    num: 3
+    num: 6
     device: cpu
     parameters:
       state_size: [2, 3] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
@@ -35,25 +35,25 @@ model:
 
 agent:
   agent:
-    num: 3
+    num: 6
     preference_var: 0.5
     model: PPO
     num_memories: 5 # Should match num_frames in the model above
     vision: 7
-    # appearance: (0.0, 0.0, 1.0)
+    # appearance: (0.0, 0.0, 10.0)
     appearance: 
-      - [0.0, 0.0, 1.0, 0.2, 0., 0., 0., 0., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0.2, 0., 0., 0., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0., 0.2, 0., 0., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0., 0., 0.2, 0., 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0., 0., 0., 0.2, 0.]
-      - [0.0, 0.0, 1.0, 0.0, 0., 0., 0., 0., 0.2]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
-      # - [1.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
+      - [0.0, 0.0, 10.0, 10.0, 0., 0., 0., 0., 0.]
+      - [0.0, 0.0, 10.0, 0.0, 10.0, 0., 0., 0., 0.]
+      - [0.0, 0.0, 10.0, 0.0, 0., 10.0, 0., 0., 0.]
+      - [0.0, 0.0, 10.0, 0.0, 0., 0., 10.0, 0., 0.]
+      - [0.0, 0.0, 10.0, 0.0, 0., 0., 0., 10.0, 0.]
+      - [0.0, 0.0, 10.0, 0.0, 0., 0., 0., 0., 10.0]
+      # - [10.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
+      # - [10.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
+      # - [10.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
+      # - [10.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
+      # - [10.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
+      # - [10.0, 0.0, 0.0, 0.0, 0., 0., 0., 0., 0.]
     memory_size: 100 # If this is larger than max_turns above, could cause issues
     # Not used right now
     tile_size: (1, 1)
@@ -64,10 +64,10 @@ agent:
     trainable: True
     frozen: False
     action_size: 4
-    num_identities: 3
+    num_identities: 6
 
 # Root folder for accessing file structure and modules
-root: 'D:/interaction_and_predictability'
+root: '/Users/yikaitang/Documents/Github/agentarium_predictive_regularity'
 log: True
 seed: 2
 random_selection: False
@@ -77,6 +77,8 @@ pretraining: False
 interaction_form: ['identity_selection', 'SB_task']
 is_partner_selection: False
 save_action_as_identity: [True, False]
+random_identity: False
+adaptive_decider: False
 # dict_interaction_rms:
 #   agent: {
 #       'identity_selection': [[[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]]],
@@ -87,4 +89,5 @@ save_action_as_identity: [True, False]
 #       'SB_task': [[[1, 0], [0, 1]]],
 #       }
 
-exp_name: 'coordination_and_identity_learned_diff_id_slow_decider_test'
+exp_name: 'learned_diff_id_slow2_decider_6agents_chosen_identity_continuous_identity'
+exp_name: 'frozen_sanity_check_allow_identity_selection_punish_nonsense_acts'

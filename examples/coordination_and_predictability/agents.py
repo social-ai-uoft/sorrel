@@ -253,15 +253,17 @@ class Agent:
         '''
         Pick the identity of the agent based on the action taken.
         '''
-        if action_identity_selection >= 2:
-            action_identity_selection = action_identity_selection - 2
-            identity_options_lst = (
+        identity_options_lst = (
                 F.one_hot(
                     torch.arange(0, cfg.agent.agent.num_identities), 
                     num_classes=cfg.agent.agent.num_identities
                     )
                     ).tolist()
+        if action_identity_selection >= 2:
+            action_identity_selection = action_identity_selection - 2
             self.presented_identity = identity_options_lst[action_identity_selection]
+            if cfg.random_identity:
+                self.presented_identity = random.choice(identity_options_lst)
         # the presented identity should be combined with the unique identity of the agent in the observation space
     
     """
@@ -392,6 +394,7 @@ class Agent:
                    env,
                    agent_lst,
                    partner_choices,
+                   partner_picked,
                    is_focal,
                    cfg, 
                    epoch=None) -> tuple:
@@ -404,7 +407,7 @@ class Agent:
             state, selected_partner_ixs = env.state(self, cfg)
             selected_partner = [a for a in partner_choices if a.ixs == selected_partner_ixs][0]
         else:
-            state = env.state(self, agent_lst, cfg)
+            state = env.state(self, agent_lst, cfg, partner_picked)
 
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)
