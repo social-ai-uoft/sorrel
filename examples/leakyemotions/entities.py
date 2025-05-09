@@ -18,7 +18,7 @@ class Bush(Entity):
         super().__init__()
         self.value = 0 
         self.ripeness = ripe_num
-        #TODO Insert image here ----> self.sprite = Path(__file__).parent / "./assets/bush.png"
+        self.sprite = Path(__file__).parent / "./assets/bush.png"
     
     def transition(self, env: GridworldEnv):
         self.ripeness += 1
@@ -38,7 +38,7 @@ class Wall(Entity):
     def __init__(self):
         super().__init__()
         self.value = -1  # Walls penalize contact
-         #TODO: Put the image for this into the assets folder ---> self.sprite = Path(__file__).parent / "./assets/wall.png"
+        self.sprite = Path(__file__).parent / "./assets/wall.png"
 
 class Grass(Entity):
     """An entity that represents a block of grass in the treasurehunt environment."""
@@ -47,7 +47,7 @@ class Grass(Entity):
         super().__init__()
         # We technically don't need to make Grass passable here since it's on a different layer from Agent
         self.passable = True
-        #TODO: self.sprite = Path(__file__).parent / "./assets/grass.png"
+        self.sprite = Path(__file__).parent / "./assets/grass.png"
 
 class EmptyEntity(Entity):
     """An entity that represents an empty space in the leakyemotions environment."""
@@ -56,7 +56,7 @@ class EmptyEntity(Entity):
         super().__init__()
         self.passable = True  # Agents can enter EmptySpaces
         self.has_transitions = True  # EmptyEntity can transition into Bushes
-        #TODO: Put the image for this into the assets folder ---> self.sprite = Path(__file__).parent / "./assets/empty.png"
+        self.sprite = Path(__file__).parent / "./assets/empty.png"
 
     def transition(self, env: GridworldEnv):
         """EmptySpaces can randomly spawn into Bushes based on the item spawn probabilities dictated in the evironment."""
@@ -64,4 +64,4 @@ class EmptyEntity(Entity):
         if (  # NOTE: If the spawn prob is too high, the environment gets overrun
             np.random.random() < env.spawn_prob
         ):
-            env.add(self.location, Bush(env.gem_value))
+            env.add(self.location, Bush())

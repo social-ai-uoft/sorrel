@@ -5,7 +5,7 @@
 import numpy as np
 
 # Import experiment specific classes
-from examples.leakyemotions.entities import EmptyEntity, Wall, Bush, Grass
+from examples.leakyemotions.entities import EmptyEntity, Wall, Grass
 # Import primitive types
 from sorrel.environments import GridworldEnv
 

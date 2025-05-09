@@ -1,8 +1,8 @@
 "The agents for the leaky emotions project."
 
 ### Imports
+from pathlib import Path
 import numpy as np
-import torch
 
 from sorrel.agents import Agent
 from sorrel.models import base_model
@@ -15,7 +15,7 @@ class LeakyEmotionAgent(Agent):
 
     def __init__(self, observation_spec, action_spec, model: base_model.SorrelModel, location: tuple | None):
         super().__init__(observation_spec, action_spec, model, location)
-        #TODO insert image here -----> self.sprite = Path(__file__).parent / "./assets/leakyemotionagent.png"
+        self.sprite = Path(__file__).parent / "./assets/leakyemotionagent.png"
     
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
@@ -91,7 +91,7 @@ class Wolf(Agent):
             location (tuple): The initial location of the wolf. Parameter is optional, and often set by the env.spawn method.
         """
         super().__init__(observation_spec, action_spec, model, location)
-        #TODO insert image here -----> self.sprite = Path(__file__).parent / "./assets/wolfagent.png"
+        self.sprite = Path(__file__).parent / "./assets/wolfagent.png"
 
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""

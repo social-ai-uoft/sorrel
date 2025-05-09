@@ -9,9 +9,10 @@ import torch
 from examples.leakyemotions.agents import LeakyEmotionAgent, Wolf
 from examples.leakyemotions.env import LeakyemotionsEnv
 from sorrel.action.action_spec import ActionSpec
+from examples.leakyemotions.custom_observation_spec import OneHotObservationSpec
+from examples.leakyemotions.entities import Bush
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.observation.observation_spec import OneHotObservationSpec
 from sorrel.utils.visualization import (animate, image_from_array,
                                         visual_field_sprite)
 
@@ -21,7 +22,7 @@ from sorrel.utils.visualization import (animate, image_from_array,
 EPOCHS = 500
 MAX_TURNS = 100
 EPSILON_DECAY = 0.0001
-ENTITY_LIST = ["EmptyEntity", "Wall", "Bush", "LeakyEmotionAgent", "Wolf"]
+ENTITY_LIST = ["EmptyEntity", "Wall", "Grass", "Bush", "LeakyEmotionAgent", "Wolf"]
 RECORD_PERIOD = 50  # how many epochs in each data recording period
 # end parameters
 
@@ -35,7 +36,7 @@ def setup() -> LeakyemotionsEnv:
     spawn_prob = 0.002
     agent_vision_radius = 2
 
-    # make the agents
+    # make the agents (assume number of wolves = number of bushes)
     agent_num = 2
     agents = []
     for _ in range(agent_num):
@@ -77,10 +78,16 @@ def setup() -> LeakyemotionsEnv:
                 observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
             )
         )
+    
+    # make the bushes
+    bush_num = 4
+    bushes = []
+    for _ in range(bush_num):
+        bushes.append(Bush())
 
     # make the environment
     env = LeakyemotionsEnv(
-        world_height, world_width, bush_value, spawn_prob, MAX_TURNS, agents
+        world_height, world_width, bush_value, spawn_prob, MAX_TURNS, agents, bushes
     )
     return env
 
@@ -114,7 +121,7 @@ def run(env: LeakyemotionsEnv):
         if epoch % RECORD_PERIOD == 0:
             avg_score = total_score / RECORD_PERIOD
             animate(
-                imgs, f"leayemotions_epoch{epoch}", Path(__file__).parent / "./data/"
+                imgs, f"leakyemotions_epoch{epoch}", Path(__file__).parent / "./data/"
             )
             # reset the data
             imgs = []
