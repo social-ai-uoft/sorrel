@@ -17,6 +17,7 @@ def visual_field(
     vision: Optional[int] = None,
     channels: int = 5,
     return_rgb=False,
+    has_value_map=False,
 ) -> np.ndarray:
     """
     Visualize the world.
@@ -50,7 +51,11 @@ def visual_field(
             new[:, H, W] = colors[world[H, W, 0].kind]
         else:
             # print(world[H, W, 0], world[H, W, 0].appearance)
-            new[:, H, W] = world[H, W, 0].appearance
+            if has_value_map:
+                new[:, H, W] = world[H, W, 0].value + world[H, W, 0].appearance
+            else:
+                new[:, H, W] = world[H, W, 0].appearance
+        
 
     # If no location, return the full visual field
     if location is None:
