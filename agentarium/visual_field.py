@@ -37,6 +37,9 @@ def visual_field(
         colors = color_map(C)
 
     # Create an array of equivalent shape to the world map, with C appearance channels
+    if has_value_map:
+        if not return_rgb:
+            C += 1
     new = np.stack([np.zeros_like(world, dtype=np.float64) for _ in range(C)], axis=0)[
         :, :, :, 0
     ]
@@ -52,7 +55,7 @@ def visual_field(
         else:
             # print(world[H, W, 0], world[H, W, 0].appearance)
             if has_value_map:
-                new[:, H, W] = world[H, W, 0].value + world[H, W, 0].appearance
+                new[:, H, W] = [world[H, W, 0].value] + world[H, W, 0].appearance
             else:
                 new[:, H, W] = world[H, W, 0].appearance
         
@@ -89,6 +92,10 @@ def visual_field(
         crop_w = (world.shape[1] // 2 - vision, world.shape[1] // 2 + vision + 1)
         # Crop the array to the selected dimensions
         new = new[:, slice(*crop_h), slice(*crop_w)]
+
+        # append value to wall_appearance
+        if has_value_map:
+            wall_appearance = np.append(wall_appearance, 0)
 
         for index, x in np.ndenumerate(new):
             C, H, W = index  # Get the coordinates

@@ -22,7 +22,6 @@ from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
 from examples.puppet_training.agents import Agent
 from examples.puppet_training.env import puppet_training
-from examples.puppet_training.state_sys import state_sys
 from examples.puppet_training.utils import (create_agents, create_entities, create_models,
                                 init_log, load_config, save_config_backup, define_resource_values)
 
@@ -55,45 +54,26 @@ def run(cfg, **kwargs):
 
 
     # load weights
-    for count, agent in enumerate(agents):
-        agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/\
-                         test_voting_single_view_composite_actions_3agents_v0_agent{agent.ixs}_iRainbowModel.pkl')
+    if cfg.load_weights:
+        for count, agent in enumerate(agents):
+            agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/\
+                            test_voting_single_view_composite_actions_3agents_v0_agent{agent.ixs}_iRainbowModel.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:
             agent.model.load(file_path=kwargs.get("load_weights"))
 
-
-    fixed_prob_dict = {'Gem': cfg.state_sys.prob_list.Gem,
-                        'Coin': cfg.state_sys.prob_list.Coin,
-                        'Bone': cfg.state_sys.prob_list.Bone}
-    
-     # check action space size
-    if cfg.action_mode == 'composite':
-        assert cfg.model.iqn.parameters.action_size == 8, \
-            ValueError('Number of actions should be 8 when the action mode is compound')
-    elif cfg.action_mode == 'simple':
-        assert cfg.model.iqn.parameters.action_size == 6, \
-            ValueError('Number of actions should be 6 when the action mode is compound')
-
     for epoch in range(cfg.experiment.epochs):
 
         # randomly reset the reward values of the entities
-        new_entity_vals = define_resource_values(cfg, 
-                                                 cfg.resource_val.min_val, 
-                                                 cfg.resource_val.max_val)
-        for e in env.entities:
-            e.value = new_entity_vals[str(e)]
-
-        # initialize state system
-        state_entity = state_sys(
-            cfg.state_sys.init_prob, 
-            fixed_prob_dict,
-            cfg.state_sys.magnitude, 
-            cfg.state_sys.taboo,
-            cfg.state_sys.change_per_vote
-            )
+        if epoch % cfg.resource_val.reset_interval == 0:
+            new_entity_vals = define_resource_values(cfg, 
+                                                    cfg.resource_val.min_val, 
+                                                    cfg.resource_val.max_val)
+            for e in env.entities:
+                e.value = new_entity_vals[str(e)]
+            # print(env.entities)
 
         # Reset the environment at the start of each epoch
         env.reset()
@@ -113,9 +93,6 @@ def run(cfg, **kwargs):
                          for _ in range(len(agents))]
 
         while not done:
-
-            # update prob record for state punishment
-            state_entity.update_prob_record()
 
             turn = turn + 1
 
@@ -137,29 +114,10 @@ def run(cfg, **kwargs):
 
                 (state, action, reward, next_state, done_) = agent.transition(
                     env, 
-                    state_entity, 
-                    'certain', 
-                    action_mode= action_mode,
-                    state_is_composite=False,
-                    envs=None,
-
                     )
                 
                 # record actions
                 action_record[agent.ixs][action] += 1
-
-                # record voting behaviors
-                if action_mode == 'simple':
-                    if action == 4:
-                        punishment_increase_record[agent.ixs] += 1
-                    elif action == 5:
-                        punishment_decrease_record[agent.ixs] += 1 
-
-                else:
-                    if action//4 == 0:
-                        punishment_increase_record[agent.ixs] += 1
-                    elif action//4 == 1:
-                        punishment_decrease_record[agent.ixs] += 1 
 
                 if turn >= cfg.experiment.max_turns or done_:
                     done = 1

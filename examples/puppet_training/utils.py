@@ -368,11 +368,17 @@ def define_resource_values(cfg, min_val, max_val):
     Define the resource values for the environment.
     """
     resource_values = {}
+
+    # create a dictionary of resource values
+    new_vals = {entity:random.randint(min_val, max_val) for entity in vars(cfg.entity)}
+    while sum(new_vals.values()) == 0:
+        new_vals = {entity: random.randint(min_val, max_val) for entity in vars(cfg.entity)}
+    # assign resource values
     for entity in vars(cfg.entity):
         if entity in ['Wall', 'EmptyObject']:
             resource_values[entity] = 0
         else:
             # Randomly assign values between min_val and max_val
-            resource_values[entity] = random.randint(min_val, max_val)
+            resource_values[entity] = new_vals[entity]
     
     return resource_values
