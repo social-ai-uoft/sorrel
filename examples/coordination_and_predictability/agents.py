@@ -273,12 +273,15 @@ class Agent:
         self.presented_identity = torch.concat([torch.zeros(10), self.presented_identity])
     """
 
-    def generate_icon(self):
+    def generate_icon(self, hide_presented_identity=False):
         '''
         Generate the icon of the agent based on the appearance and the presented identity.
         '''        
         # print(self.appearance, self.presented_identity)
-        self.icon = np.concatenate([self.appearance, self.presented_identity])
+        if hide_presented_identity:
+            self.icon = np.concatenate([self.appearance, [0 for _ in range(len(self.presented_identity))]])
+        else:
+            self.icon = np.concatenate([self.appearance, self.presented_identity])
         return self.icon
     
     def SB_task(
@@ -397,7 +400,8 @@ class Agent:
                    partner_picked,
                    is_focal,
                    cfg, 
-                   epoch=None) -> tuple:
+                   epoch=None,
+                   hide_presented_identity=False) -> tuple:
         '''
         Changes the world based on the action taken.
         '''
@@ -407,7 +411,7 @@ class Agent:
             state, selected_partner_ixs = env.state(self, cfg)
             selected_partner = [a for a in partner_choices if a.ixs == selected_partner_ixs][0]
         else:
-            state = env.state(self, agent_lst, cfg, partner_picked)
+            state = env.state(self, agent_lst, cfg, partner_picked, hide_presented_identity)
 
         if self.model_type != 'PPO':
             model_input = torch.from_numpy(self.current_state(env=env, partner_selection=True)).view(1, -1)

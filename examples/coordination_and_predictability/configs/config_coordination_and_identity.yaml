@@ -70,15 +70,19 @@ agent:
 root: '/Users/yikaitang/Documents/Github/agentarium_predictive_regularity'
 log: True
 seed: 2
-random_selection: False
+
 default: True
 with_time: True
 pretraining: False
 interaction_form: ['identity_selection', 'SB_task']
 is_partner_selection: False
 save_action_as_identity: [True, False]
+
+random_selection: False
 random_identity: False
-adaptive_decider: False
+adaptive_decider: True
+random_decider: False
+decider_blind_to_presented_identity: True
 # dict_interaction_rms:
 #   agent: {
 #       'identity_selection': [[[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]]],
@@ -90,4 +94,4 @@ adaptive_decider: False
 #       }
 
 exp_name: 'learned_diff_id_slow2_decider_6agents_chosen_identity_continuous_identity'
-exp_name: 'frozen_sanity_check_allow_identity_selection_punish_nonsense_acts'
+exp_name: 'learned_nonvisible_identity_to_decider_sanity_check_allow_identity_selection_punish_nonsense_acts'

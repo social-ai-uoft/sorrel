@@ -232,10 +232,11 @@ def run(cfg, **kwargs):
     # check if the condition is random 
     if cfg.adaptive_decider:
         if 'learned' not in cfg.exp_name:
-            raise ValueError('random_selection is True but exp_name does not contain "frozen"')
+            raise ValueError('adaptive_decider is True but exp_name does not contain "learned"')
     else:
         if 'frozen' not in cfg.exp_name:
-            raise ValueError('random_selection is False but exp_name does not contain "learned"')
+            if not cfg.random_decider:
+                raise ValueError('adaptive_decider is False but exp_name does not contain "frozen"')
     
 
     for a in agents:
@@ -323,6 +324,8 @@ def run(cfg, **kwargs):
         identity_switch = [0 for _ in range(len(agents))]
         num_same_identity = []
         nonsense_actions = [0 for _ in range(len(agents))]
+        partner_expectations = [{str(k):0 for k in range(2)} for _ in range(len(agents))]
+        agent_SB_actions = [{str(k):0 for k in range(2)} for _ in range(len(agents))]
 
         count_check = 0
 
@@ -397,7 +400,8 @@ def run(cfg, **kwargs):
                             
                             # record the identity choice
                             if action >= 2:
-                                identity_choices[agent.ixs][action-2] += 1
+                                identity_index = identity_options_lst.index(agent.presented_identity)
+                                identity_choices[agent.ixs][identity_index] += 1
                             if agent.last_presented_identity != agent.presented_identity:
                                 identity_switch[agent.ixs] += 1
                                     
@@ -463,6 +467,11 @@ def run(cfg, **kwargs):
                             # update the agent's cached action
                             agent.cached_action = action 
 
+                            # record the agent SB action
+                            if action <= 1:
+                                agent_SB_actions[agent.ixs][str(int(agent.cached_action))] += 1
+
+
                             # Update the agent's memory buffer
                             agent.episode_memory.states.append(torch.tensor(state))
                             agent.episode_memory.actions.append(torch.tensor(action))
@@ -471,16 +480,25 @@ def run(cfg, **kwargs):
 
                             # decider takes the action
                             partner = agent
-                            (state, action, partner, done_, action_logprob, _) = decider.transition(
-                                partner_pool_env, 
-                                agents,
-                                partner_choices, 
-                                partner,
-                                is_focal,
-                                cfg,
-                                )
-                            agent.partner = decider
-                            decider.cached_action = action
+                            if not cfg.random_decider:
+                                (state, action, partner, done_, action_logprob, _) = decider.transition(
+                                    partner_pool_env, 
+                                    agents,
+                                    partner_choices, 
+                                    partner,
+                                    is_focal,
+                                    cfg,
+                                    hide_presented_identity=cfg.decider_blind_to_presented_identity
+                                    )
+                                agent.partner = decider
+                                decider.cached_action = action
+                            else:
+                                action = random.choices([0,1], k=1)[0]
+                                decider.cached_action = action
+                                agent.partner = decider
+
+                            # record the decider SB action
+                            partner_expectations[agent.ixs][str(int(decider.cached_action))] += 1
 
                             # deciding the outcome
                             if agent.cached_action < 2:
@@ -551,10 +569,13 @@ def run(cfg, **kwargs):
                     }, epoch)
                 writer.add_scalar(f"Agent_{i}/Identity_Switch", identity_switch[i], epoch)
                 writer.add_scalar(f"Agent_{i}/Nonsense_Actions", nonsense_actions[i], epoch)
+                writer.add_scalars(f"Agent_{i}/SB_Actions", agent_SB_actions[i], epoch)
+                writer.add_scalars(f"Agent_{i}/Expectations", partner_expectations[i], epoch)
             
             writer.add_scalar(f'Decider/Reward', decider_points, epoch)
             writer.add_scalar(f'Decider/Loss', decider_losses, epoch)
             writer.add_scalar(f'num_same_identity', np.mean(num_same_identity), epoch) 
+            writer.add_scalar(f'total_identity_switch', np.mean(identity_switch), epoch)
             
             writer.add_scalar(f'stage0_count_check', count_check, epoch)
 
