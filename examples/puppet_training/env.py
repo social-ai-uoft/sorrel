@@ -25,7 +25,7 @@ class puppet_training(GridworldEnv):
         self.agents: list[Agent] = agents
         self.entities: list[Entity] = entities
         self.item_spawn_prob = cfg.env.prob.item_spawn
-        self.item_choice_prob = cfg.env.prob.item_choice
+        self.item_choice_prob = np.divide(cfg.env.prob.item_choice,sum(cfg.env.prob.item_choice))
         self.tile_size = cfg.env.tile_size
         self.cache = {'delayed_r':{}}
         super().__init__(cfg.env.height, cfg.env.width, cfg.env.layers, eval(cfg.env.default_object)(self.colors['EmptyObject'], self.cfg))

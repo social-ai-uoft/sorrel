@@ -45,8 +45,7 @@ def run(cfg, **kwargs):
         from torch.utils.tensorboard import SummaryWriter
 
         writer = SummaryWriter(
-            log_dir=f'{root}/examples/puppet_training/runs/\
-                {cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%S")}/'
+            log_dir=f'{root}/examples/puppet_training/runs/{cfg.exp_name}_{datetime.now().strftime("%Y%m%d-%H%m%S")}/'
         )
 
     # Container for game variables (epoch, turn, loss, reward)
@@ -67,17 +66,22 @@ def run(cfg, **kwargs):
     for epoch in range(cfg.experiment.epochs):
 
         # randomly reset the reward values of the entities
-        if epoch % cfg.resource_val.reset_interval == 0:
-            new_entity_vals = define_resource_values(cfg, 
-                                                    cfg.resource_val.min_val, 
-                                                    cfg.resource_val.max_val)
-            for e in env.entities:
-                e.value = new_entity_vals[str(e)]
-            # print(env.entities)
+        new_entity_vals = define_resource_values(cfg, 
+                                                cfg.resource_val.min_val, 
+                                                cfg.resource_val.max_val)
+        for e in env.entities:
+            e.value = new_entity_vals[str(e)]
+        if cfg.resource_val.reset_interval > 0:
+            if epoch % cfg.resource_val.reset_interval == 0:
+                new_entity_vals = define_resource_values(cfg, 
+                                                        cfg.resource_val.min_val, 
+                                                        cfg.resource_val.max_val)
+                for e in env.entities:
+                    e.value = new_entity_vals[str(e)]
+        # print(env.entities)
 
         # Reset the environment at the start of each epoch
         env.reset()
-        env.cache['harm'] = [0 for _ in range(len(agents))]
 
         random.shuffle(agents)
 
@@ -87,8 +91,6 @@ def run(cfg, **kwargs):
         game_points = [0 for _ in range(len(agents))]
 
         # Container for data within epoch
-        punishment_increase_record = [0 for _ in range(len(agents))]
-        punishment_decrease_record = [0 for _ in range(len(agents))]
         action_record = [[0 for _ in range(cfg.model.iqn.parameters.action_size)] 
                          for _ in range(len(agents))]
 
@@ -110,7 +112,6 @@ def run(cfg, **kwargs):
             # Agent transition
             for agent in agents:
                 
-                action_mode = cfg.action_mode
 
                 (state, action, reward, next_state, done_) = agent.transition(
                     env, 
@@ -129,12 +130,13 @@ def run(cfg, **kwargs):
                 agent.model.end_epoch_action(**locals())
 
         # At the end of each epoch, train as long as the batch size is large enough.
-        for agent in agents:
-            loss = agent.model.train_model()
-            losses[agent.ixs] += loss.detach().numpy()
+        if epoch > 10:
+            for agent in agents:
+                loss = agent.model.train_model()
+                losses[agent.ixs] += loss.detach().numpy()
 
-            # Add the game variables to the game object
-            game_vars.record_turn(epoch, turn, losses, game_points)
+        # Add the game variables to the game object
+        game_vars.record_turn(epoch, turn, losses, game_points)
 
         # Print the variables to the console
         game_vars.pretty_print()
@@ -170,6 +172,11 @@ def run(cfg, **kwargs):
                 writer.add_scalar(
                     f'Agent_{i}/sum_freq_action', np.sum(action_record[agent.ixs]), epoch
                 )
+                # total encounters except walls
+                writer.add_scalar(
+                    f'Agent_{i}/total_encounters_except_walls', np.sum(list(agent.encounters.values())) - agent.encounters["Wall"], epoch
+                )
+             
 
         # Special action: update epsilon
         for agent in agents:
@@ -182,8 +189,7 @@ def run(cfg, **kwargs):
             if "save_weights" in kwargs:
                 for a_ixs, agent in enumerate(agents):
                     agent.model.save(file_path=
-                                    f'{cfg.root}/examples/puppet_training/models/checkpoints/\
-                                        {cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
+                                    f'{cfg.root}/examples/puppet_training/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
                                     )
         for agent in agents:
             agent.reset_record()
@@ -207,8 +213,7 @@ def main():
     init_log(cfg)
     run(
         cfg,
-        save_weights=f'{cfg.root}/examples/puppet_training/models/checkpoints/\
-            {cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%S")}.pkl',
+        save_weights=f'{cfg.root}/examples/puppet_training/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%S")}.pkl',
     )
 
 
