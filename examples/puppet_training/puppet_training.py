@@ -191,8 +191,7 @@ def run(cfg, **kwargs):
                     agent.model.save(file_path=
                                     f'{cfg.root}/examples/puppet_training/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
                                     )
-        for agent in agents:
-            agent.reset_record()
+
 
     # Close the tensorboard log
     if cfg.log:
