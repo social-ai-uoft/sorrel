@@ -55,8 +55,7 @@ def run(cfg, **kwargs):
     # load weights
     if cfg.load_weights:
         for count, agent in enumerate(agents):
-            agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/\
-                            test_voting_single_view_composite_actions_3agents_v0_agent{agent.ixs}_iRainbowModel.pkl')
+            agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/puppet_training_reset_val_per_1epoch_agent{agent.ixs}_iRainbowModel.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
@@ -70,7 +69,8 @@ def run(cfg, **kwargs):
                                           cfg.resource_val.max_val + 1)], 
                                           repeat=len(cfg.env.prob.item_choice))
     for reward_set in all_possible_rewards:
-        
+        reward_set = list(reward_set)
+      
         if sum(reward_set) == 0:
             # Skip the case where all rewards are zero
             continue
@@ -84,18 +84,20 @@ def run(cfg, **kwargs):
                     reward_dict[item] = reward_set[i]
             collection_reward_functions.append(reward_dict)
 
+    
+ 
     # main testing loop
 
     performance = {}
 
     # Loop through the different reward functions
-    for reward_set in collection_reward_functions:
+    for reward_dict in collection_reward_functions:
 
         for epoch in range(cfg.experiment.epochs):
 
             # Set the entity values
             for e in env.entities:
-                e.value = reward_set[str(e)]
+                e.value = reward_dict[str(e)]
        
             # Reset the environment at the start of each epoch
             env.reset()
@@ -140,7 +142,7 @@ def run(cfg, **kwargs):
                     if turn >= cfg.experiment.max_turns or done_:
                         done = 1
 
-                    agent.add_memory(state, action, reward, done)
+                    # agent.add_memory(state, action, reward, done)
 
                     game_points[agent.ixs] += int(reward)
 
@@ -150,7 +152,7 @@ def run(cfg, **kwargs):
             game_vars.record_turn(epoch, turn, losses, game_points)
 
             # Print the variables to the console
-            game_vars.pretty_print()
+            # game_vars.pretty_print()
         
             # record the performance
             total_encounters = {entity:0 for entity in vars(cfg.entity)}
@@ -158,7 +160,9 @@ def run(cfg, **kwargs):
                 for entity in vars(cfg.entity):
                     total_encounters[entity] += agent.encounters[entity]
 
-            performance[reward_set] = total_encounters
+            performance[(tuple(reward_dict.items()))] = total_encounters
+            # print(reward_dict)
+            # ll
 
             # # Add scalars to Tensorboard (multiple agents)
             # if cfg.log:
@@ -200,6 +204,7 @@ def run(cfg, **kwargs):
         writer.close()
 
     # print the performance
+    print()
     for reward_set, encounters in performance.items():
         print('==========================')
         print(f"Reward set: {reward_set}")

@@ -56,7 +56,7 @@ def run(cfg, **kwargs):
     if cfg.load_weights:
         for count, agent in enumerate(agents):
             agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/\
-                            test_voting_single_view_composite_actions_3agents_v0_agent{agent.ixs}_iRainbowModel.pkl')
+                            puppet_training_reset_val_per_1epoch_agent0{agent.ixs}_iRainbowModel.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
@@ -76,6 +76,7 @@ def run(cfg, **kwargs):
                 new_entity_vals = define_resource_values(cfg, 
                                                         cfg.resource_val.min_val, 
                                                         cfg.resource_val.max_val)
+                print(new_entity_vals)
                 for e in env.entities:
                     e.value = new_entity_vals[str(e)]
         # print(env.entities)

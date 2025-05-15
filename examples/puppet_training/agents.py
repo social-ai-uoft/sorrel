@@ -165,7 +165,7 @@ class Agent:
 
         # Get the next state   
         next_state = self.pov(env)
-        
+                    
         return state, action, reward, next_state, False
 
 
