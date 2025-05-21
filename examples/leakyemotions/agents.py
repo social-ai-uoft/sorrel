@@ -15,6 +15,8 @@ class LeakyEmotionAgent(Agent):
 
     def __init__(self, observation_spec, action_spec, model: base_model.SorrelModel, location: tuple | None):
         super().__init__(observation_spec, action_spec, model, location)
+        self.kind = "Agent"
+        self.encounters = {}
         self.sprite = Path(__file__).parent / "./assets/leakyemotionagent.png"
     
     def reset(self) -> None:
@@ -59,9 +61,22 @@ class LeakyEmotionAgent(Agent):
         if action == "right":
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
 
-        # get reward obtained from object at new_location
-        target_object = env.observe(new_location)
-        reward = target_object.value
+        target_objects = env.observe_all_layers(new_location)
+
+        reward = 0
+        
+        for target_object in target_objects:
+            reward += target_object.value
+            
+            if target_object.kind not in self.encounters.keys():
+                self.encounters[target_object.kind] = 0
+            
+            self.encounters[target_object.kind] += 1
+
+            if target_object.kind == "Bush":
+                env.num_bushes_eaten = self.encounters[target_object.kind]
+                env.bush_ripeness_total += target_object.ripeness
+
         env.game_score += reward
 
         # try moving to new_location
@@ -72,8 +87,6 @@ class LeakyEmotionAgent(Agent):
     def is_done(self, env: GridworldEnv) -> bool:
         """Returns whether this Agent is done."""
         return env.turn >= env.max_turns
-    
-
     
 
 class Wolf(Agent):

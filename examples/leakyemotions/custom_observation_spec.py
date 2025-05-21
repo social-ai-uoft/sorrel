@@ -5,10 +5,11 @@ import numpy as np
 
 from sorrel.environments import GridworldEnv
 from sorrel.observation.visual_field import visual_field, visual_field_ascii
+from sorrel.observation.observation_spec import OneHotObservationSpec
 from sorrel.utils.helpers import one_hot_encode
 
 
-class LeakyEmotionsObservationSpec:
+class LeakyEmotionsObservationSpec(OneHotObservationSpec):
     r"""
     An abstract class of an object that contains the observation specifications for leaky emotion agents.
 
@@ -47,7 +48,7 @@ class LeakyEmotionsObservationSpec:
         else:
             self.vision_radius = vision_radius
             self.full_view = False
-        self.entity_map = self.generate_map(entity_list, 0.5)
+        self.entity_map = self.generate_map(entity_list)
 
     @abstractmethod
     def generate_map(self, entity_list: list[str]) -> dict[str,]:
@@ -84,7 +85,17 @@ class LeakyEmotionsObservationSpec:
             If :attr:`vision_radius` is also `None`,
             this function will also return the full environment.
         """
-        pass
+        appearance = super().observe(env, location)
+        bush_ripeness_layer = np.zeros((1, *appearance.shape[1:]))
+        agent_qvalues_layer = np.zeros((1, *appearance.shape[1:]))
+    
+        for index, entity in np.ndenumerate(env.world):
+            if entity.kind == "Bush":
+                bush_ripeness_layer[index] = entity.ripeness
+            elif entity.kind == "Agent":
+                agent_qvalues_layer[index] = entity.emotion
+
+        return np.concatenate((appearance, bush_ripeness_layer, agent_qvalues_layer), axis = 0)
 
     def override_entity_map(self, entity_map: dict[str,]) -> None:
         """Override the automatically generated entity map from generate_map() with a provided custom one.
@@ -114,7 +125,7 @@ class OneHotObservationSpec(LeakyEmotionsObservationSpec):
     Attributes:
         entity_map: A mapping of the kinds of entities in the environment to their appearances.
         vision_radius: The radius of the agent's vision. If None, the agent can see the entire environment.
-    """
+    """  
 
     entity_map: dict[str, list[float]]
     vision_radius: int | None
@@ -136,7 +147,7 @@ class OneHotObservationSpec(LeakyEmotionsObservationSpec):
                 (2 * vision_radius + 1),
             )
 
-    def generate_map(self, entity_list: list[str], default_ripeness: int) -> dict[str, list[float]]:
+    def generate_map(self, entity_list: list[str]) -> dict[str, list[float]]:
         """Generate a default entity map by automatically creating one-hot encodings for the entitity kinds in :code:`entity_list`.
 
         The :py:class:`.EmptyEntity` kind will receive an all-zero appearance.
@@ -156,22 +167,9 @@ class OneHotObservationSpec(LeakyEmotionsObservationSpec):
         for i, x in enumerate(entity_list):
             if x == "EmptyEntity":
                 entity_map[x] = np.zeros(num_classes)
-            elif x == "Bush":
-                entity_map[x] = self.ripeness_one_hot_encode(value=i, num_classes=num_classes, ripeness=default_ripeness)
             else:
                 entity_map[x] = one_hot_encode(value=i, num_classes=num_classes)
         return entity_map
-
-    @staticmethod
-    def ripeness_one_hot_encode(value, num_classes, ripeness):
-        """Helper function to calculate custom one-hot encoded value for bush according to given ripeness."""
-        # Create a zero array of length num_classes
-        one_hot = np.zeros(num_classes)
-
-        # Set the index corresponding to 'value' to default ripeness 
-        one_hot[value] = ripeness
-
-        return one_hot
 
     def observe(
         self,
@@ -191,6 +189,7 @@ class OneHotObservationSpec(LeakyEmotionsObservationSpec):
             If :attr:`vision_radius` is `None` or the :code:`location` parameter is None,
             the shape will be `(number of channels, env.width, env.layers)`.
         """
+
         return visual_field(
             env=env,
             entity_map=self.entity_map,

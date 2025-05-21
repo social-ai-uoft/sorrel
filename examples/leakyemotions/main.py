@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 # leakyemotion project imports
 from examples.leakyemotions.agents import LeakyEmotionAgent, Wolf
@@ -22,7 +23,7 @@ from sorrel.utils.visualization import (animate, image_from_array,
 EPOCHS = 500
 MAX_TURNS = 100
 EPSILON_DECAY = 0.0001
-ENTITY_LIST = ["EmptyEntity", "Wall", "Grass", "Bush", "LeakyEmotionAgent", "Wolf"]
+ENTITY_LIST = ["EmptyEntity", "Wall", "Grass", "Bush", "Agent", "Wolf"]
 RECORD_PERIOD = 50  # how many epochs in each data recording period
 # end parameters
 
@@ -32,11 +33,10 @@ def setup() -> LeakyemotionsEnv:
     # object configurations
     world_height = 10
     world_width = 10
-    bush_value = 10
     spawn_prob = 0.002
     agent_vision_radius = 2
 
-    # make the agents (assume number of wolves = number of bushes)
+    # make the agents 
     agent_num = 2
     agents = []
     for _ in range(agent_num):
@@ -73,30 +73,30 @@ def setup() -> LeakyemotionsEnv:
                 observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
             )
         )
-        agents.append(
-            Wolf(
-                observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
-            )
-        )
+        # agents.append(
+        #     Wolf(
+        #         observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
+        #     )
+        # )
     
-    # make the bushes
-    bush_num = 4
-    bushes = []
-    for _ in range(bush_num):
-        bushes.append(Bush())
-
     # make the environment
     env = LeakyemotionsEnv(
-        world_height, world_width, bush_value, spawn_prob, MAX_TURNS, agents, bushes
+        world_height, world_width, spawn_prob, MAX_TURNS, agents, 
     )
     return env
 
 
 def run(env: LeakyemotionsEnv):
     """Run the experiment."""
+    writer = SummaryWriter()
+    
     imgs = []
     total_score = 0
     total_loss = 0
+
+    total_ripeness = 0
+    num_bushes_eaten = 0
+
     for epoch in range(EPOCHS + 1):
         # Reset the environment at the start of each epoch
         env.reset()
@@ -117,6 +117,14 @@ def run(env: LeakyemotionsEnv):
                 total_loss += loss
 
         total_score += env.game_score
+        total_ripeness += env.bush_ripeness_total
+        num_bushes_eaten += env.num_bushes_eaten
+        
+        if num_bushes_eaten > 0:
+            average_ripeness = total_ripeness / num_bushes_eaten
+        else:
+            average_ripeness = 0
+        writer.add_scalar("Average ripeness", average_ripeness, epoch)
 
         if epoch % RECORD_PERIOD == 0:
             avg_score = total_score / RECORD_PERIOD
@@ -125,13 +133,18 @@ def run(env: LeakyemotionsEnv):
             )
             # reset the data
             imgs = []
-            total_score = 0
-            total_loss = 0
 
         # update epsilon
         for agent in env.agents:
             new_epsilon = agent.model.epsilon - EPSILON_DECAY
             agent.model.epsilon = max(new_epsilon, 0.01)
+
+        writer.add_scalar("Total reward", total_score, epoch)
+        total_score = 0
+        total_loss = 0
+    
+    writer.flush()
+    writer.close()
 
 
 # begin main
