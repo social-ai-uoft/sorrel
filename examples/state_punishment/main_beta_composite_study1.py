@@ -112,7 +112,7 @@ def run(cfg, **kwargs):
         assert '_experiment_cond' in cfg.exp_name, ValueError('The exp name should contain [_experiment_cond]')
     else:
         if cfg.state_sys.only_punish_taboo:
-            assert "only_taboo" in cfg.exp_name, ValueError("The exp name should contain 'only taboo'")
+            assert "only_taboo" in cfg.exp_name, ValueError("The exp name should contain 'control_only_taboo'")
         else:
             assert 'fixed_punishment' in cfg.exp_name, ValueError("The exp name should contain 'fixed punishment'")
 

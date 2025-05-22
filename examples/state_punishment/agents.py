@@ -248,6 +248,7 @@ class Agent:
                             reward -= val_of_state_punishment
                         else:
                             val_of_state_punishment = 0
+                    # use a fixed list of probabilities to determine punishment
                     else:
                         val_of_state_punishment = state_sys.magnitude * (random.random() 
                                                         < state_sys.prob_list[str(target_object)]*state_sys.prob) # instant punishment
