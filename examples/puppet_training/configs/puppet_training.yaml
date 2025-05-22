@@ -86,7 +86,7 @@ entity:
 
 resource_val:
   min_val: 0
-  max_val: 1
+  max_val: 10
   reset_interval: 1
 
 
@@ -100,5 +100,5 @@ action_mode: 'simple'
 load_weights: False
 has_value_map: True
 
-exp_name: 'puppet_training_reset_val_per_1epoch_x028x' 
+exp_name: 'puppet_training_reset_val_per_1epoch_x0to10x_v2' 
 

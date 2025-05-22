@@ -26,6 +26,7 @@ from examples.puppet_training.utils import (create_agents, create_entities, crea
                                 init_log, load_config, save_config_backup, define_resource_values)
 
 import numpy as np
+from collections import defaultdict
 
 # endregion                #
 # ------------------------ #
@@ -55,7 +56,7 @@ def run(cfg, **kwargs):
     # load weights
     if cfg.load_weights:
         for count, agent in enumerate(agents):
-            agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/puppet_training_reset_val_per_1epoch_agent{agent.ixs}_iRainbowModel.pkl')
+            agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/puppet_training_reset_val_per_1epoch_x0to10x_agent{agent.ixs}_iRainbowModel.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
@@ -68,6 +69,8 @@ def run(cfg, **kwargs):
                                     range(cfg.resource_val.min_val, 
                                           cfg.resource_val.max_val + 1)], 
                                           repeat=len(cfg.env.prob.item_choice))
+    all_possible_rewards = [(0,0,10), (0,10,0), (10,0,0)]
+    # all_possible_rewards = product([0, 2, 8], repeat=len(cfg.env.prob.item_choice))
     for reward_set in all_possible_rewards:
         reward_set = list(reward_set)
       
@@ -75,8 +78,8 @@ def run(cfg, **kwargs):
             # Skip the case where all rewards are zero
             continue
         else:
-            reward_dict = {}
-            reward_dict['Wall'] = 0
+            reward_dict = defaultdict()
+            reward_dict['Wall'] = -1
             reward_dict['EmptyObject'] = 0
 
             for i, item in enumerate(vars(cfg.entity)):

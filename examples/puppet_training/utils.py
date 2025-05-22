@@ -370,13 +370,15 @@ def define_resource_values(cfg, min_val, max_val):
     resource_values = {}
 
     # create a dictionary of resource values
-    new_vals = {entity:random.choice([0, 2, 8]) for entity in vars(cfg.entity)}
+    new_vals = {entity:random.randint(min_val, max_val) for entity in vars(cfg.entity)}
     while sum(new_vals.values()) == 0:
         new_vals = {entity: random.randint(min_val, max_val) for entity in vars(cfg.entity)}
     # assign resource values
     for entity in vars(cfg.entity):
-        if entity in ['Wall', 'EmptyObject']:
+        if entity in ['EmptyObject']:
             resource_values[entity] = 0
+        elif entity in ['Wall']:
+            resource_values[entity] = -1
         else:
             # Randomly assign values between min_val and max_val
             resource_values[entity] = new_vals[entity]

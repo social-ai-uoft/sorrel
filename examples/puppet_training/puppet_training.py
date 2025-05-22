@@ -76,7 +76,6 @@ def run(cfg, **kwargs):
                 new_entity_vals = define_resource_values(cfg, 
                                                         cfg.resource_val.min_val, 
                                                         cfg.resource_val.max_val)
-                print(new_entity_vals)
                 for e in env.entities:
                     e.value = new_entity_vals[str(e)]
         # print(env.entities)
