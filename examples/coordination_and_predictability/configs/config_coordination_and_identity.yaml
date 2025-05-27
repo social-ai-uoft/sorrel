@@ -4,11 +4,11 @@ experiment:
   epochs: 1000000
   max_turns: 30
   epsilon_decay: 0.0001
-  num_blocks: 10
+  num_blocks: 200
   num_stages: 2
   dict_steps_of_stages:
     "0": 1
-    "1": 20
+    "1": 1
     
 
 model:
@@ -82,7 +82,8 @@ random_selection: False
 random_identity: False
 adaptive_decider: True
 random_decider: False
-decider_blind_to_presented_identity: True
+decider_blind_to_presented_identity: False
+allow_identity_change: False
 # dict_interaction_rms:
 #   agent: {
 #       'identity_selection': [[[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]]],
@@ -94,4 +95,6 @@ decider_blind_to_presented_identity: True
 #       }
 
 exp_name: 'learned_diff_id_slow2_decider_6agents_chosen_identity_continuous_identity'
-exp_name: 'learned_nonvisible_identity_to_decider_sanity_check_allow_identity_selection_punish_nonsense_acts'
+exp_name: 'learned_inequity_visible_1to1_similar_pref_identity_to_decider_allow_identity_selection_punish_nonsense_acts'
+# exp_name: 'test_learned'
+# similar pref mean in the reward matrix the preference intensity are similar, not verly different

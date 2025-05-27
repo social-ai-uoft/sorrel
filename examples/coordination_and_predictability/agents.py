@@ -278,8 +278,14 @@ class Agent:
         Generate the icon of the agent based on the appearance and the presented identity.
         '''        
         # print(self.appearance, self.presented_identity)
+        identity_options_lst = (F.one_hot(
+            torch.arange(0, self.cfg.agent.agent.num_identities), 
+            num_classes=self.cfg.agent.agent.num_identities
+        )).tolist()
         if hide_presented_identity:
-            self.icon = np.concatenate([self.appearance, [0 for _ in range(len(self.presented_identity))]])
+            # self.icon = np.concatenate([self.appearance, [0 for _ in range(len(self.presented_identity))]])
+            # self.icon = np.concatenate([self.appearance, random.choice(identity_options_lst)])
+            self.icon = np.concatenate([self.appearance,identity_options_lst[0]])
         else:
             self.icon = np.concatenate([self.appearance, self.presented_identity])
         return self.icon
@@ -446,7 +452,8 @@ class Agent:
             selected_partner, selected_partner_ixs = None, None
         # save the action in the identity
         if self.save_action_as_identity[env.stage]:
-            self.picking_identity(action, cfg)
+            if cfg.allow_identity_change:
+                self.picking_identity(action, cfg)
             
         # return the results based on the model type
         if self.model_type == 'PPO':

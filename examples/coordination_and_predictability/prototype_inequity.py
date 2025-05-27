@@ -248,7 +248,6 @@ def run(cfg, **kwargs):
             raise ValueError('agent appearance should not be none')
         a.save_action_as_identity = cfg.save_action_as_identity
         print(a.appearance)
-    ll
         # print(a.variability)
 
     partner_pool_env = partner_pool([a for a in agents if a.ixs !=3])
@@ -273,12 +272,13 @@ def run(cfg, **kwargs):
     dict_interaction_rms ={
         'agent': {
             'identity_selection': [[[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]], [[0, 0], [0, 0]]],
-            'SB_task': [[[1, 0], [0, 10]], [[10, 0], [0, 1]], [[5.5, 0], [0, 5.5]], [[1, 0], [0, 10]], [[10, 0], [0, 1]],[[5.5, 0], [0, 5.5]]]
+            'SB_task': [[[1, 0], [0, 2]], [[1, 0], [0, 2]], [[1, 0], [0, 2]], [[1, 0], [0, 2]], [[2, 0], [0, 1]],[[2, 0], [0, 1]]]
             },
         'decider': {
             'identity_selection': [[[0, 0], [0, 0]]],
             'SB_task': [[[1, 0], [0, 1]]],
             }}
+    majority_pref = 1
     for agent in agents:
         agent.dict_interaction_rms['identity_selection'] = dict_interaction_rms['agent']['identity_selection'][agent.ixs]
         agent.dict_interaction_rms['SB_task'] = dict_interaction_rms['agent']['SB_task'][agent.ixs]
@@ -578,12 +578,14 @@ def run(cfg, **kwargs):
             writer.add_scalar(f'Decider/Loss', decider_losses, epoch)
             writer.add_scalar(f'num_same_identity', np.mean(num_same_identity), epoch) 
             writer.add_scalar(f'total_identity_switch', np.mean(identity_switch), epoch)
-            
+            writer.add_scalar(f'total_stereotypic_expectations', 
+                              np.mean([partner_expectations[i][str(majority_pref)] for i in range(len(agents))]), 
+                              epoch)
             writer.add_scalar(f'stage0_count_check', count_check, epoch)
 
-        # check num_same_identity
-        if epoch == 0:
-            print(f'num_same_identity: {num_same_identity}')
+        # # check num_same_identity
+        # if epoch == 0:
+        #     print(f'num_same_identity: {num_same_identity}')
 
         # Save the weights
         if (epoch % 1000 == 0) or (epoch == cfg.experiment.epochs - 1):
