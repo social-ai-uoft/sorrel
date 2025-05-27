@@ -56,6 +56,7 @@ def visual_field(
             # print(world[H, W, 0], world[H, W, 0].appearance)
             if has_value_map:
                 new[:, H, W] = [world[H, W, 0].value * 255] + world[H, W, 0].appearance
+                # print(new[:, H, W])
             else:
                 new[:, H, W] = world[H, W, 0].appearance
         

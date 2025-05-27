@@ -102,7 +102,7 @@ def create_agents(cfg, models):
 
     return agents
 
-def create_entities(cfg):
+def create_entities(cfg, only_display_value=False):
     entities = []
     for entity_type in vars(cfg.entity):
         ENTITY_TYPE = ENTITIES[entity_type]
@@ -112,10 +112,15 @@ def create_entities(cfg):
         # NOTE: Assumes only entities with num and num > 1 need to be initialized at the start
         if 'start_num' in vars(vars(cfg.entity)[entity_type]):
             for _ in range(vars(vars(cfg.entity)[entity_type])['start_num']):
-                entities.append(ENTITY_TYPE(
-                    color_map(cfg.env.channels)[entity_type], cfg
-                    # cfg.entity_type.apperance, cfg
-                ))
+                if only_display_value:
+                    entities.append(ENTITY_TYPE(
+                        color_map(cfg.env.channels)['EmptyObject'], cfg
+                    ))
+                else:
+                    entities.append(ENTITY_TYPE(
+                        color_map(cfg.env.channels)[entity_type], cfg
+                        # cfg.entity_type.apperance, cfg
+                    ))
 
     return entities
 

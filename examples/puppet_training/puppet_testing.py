@@ -3,6 +3,8 @@
 import os
 import sys
 from datetime import datetime
+import pandas as pd
+from tqdm import tqdm
 
 # ------------------------ #
 # region: path nonsense    #
@@ -38,8 +40,8 @@ def run(cfg, **kwargs):
     agents: list[Agent] = create_agents(cfg, models)
     for a in agents:
         print(a.appearance)
-    entities: list[Entity] = create_entities(cfg)
-    env = puppet_training(cfg, agents, entities)
+    entities: list[Entity] = create_entities(cfg, only_display_value=cfg.only_display_value)
+    env = puppet_training(cfg, agents, entities, only_display_value=cfg.only_display_value)
 
     # Set up tensorboard logging
     if cfg.log:
@@ -56,7 +58,9 @@ def run(cfg, **kwargs):
     # load weights
     if cfg.load_weights:
         for count, agent in enumerate(agents):
-            agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/puppet_training_reset_val_per_1epoch_x0to10x_agent{agent.ixs}_iRainbowModel.pkl')
+            model_name = f'puppet_training_reset_val_per_1epoch_x0to10x_v2_curriculum_agent{count}_iRainbowModel'
+            agent.model.load(
+                f'{root}/examples/puppet_training/models/checkpoints/{model_name}.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
@@ -69,7 +73,7 @@ def run(cfg, **kwargs):
                                     range(cfg.resource_val.min_val, 
                                           cfg.resource_val.max_val + 1)], 
                                           repeat=len(cfg.env.prob.item_choice))
-    all_possible_rewards = [(0,0,10), (0,10,0), (10,0,0)]
+    # all_possible_rewards = [(0,0,10), (0,10,0), (10,0,0)]
     # all_possible_rewards = product([0, 2, 8], repeat=len(cfg.env.prob.item_choice))
     for reward_set in all_possible_rewards:
         reward_set = list(reward_set)
@@ -93,8 +97,14 @@ def run(cfg, **kwargs):
 
     performance = {}
 
+    performance_df = {'gem_value': [], 'coin_value': [], 'bone_value': [],
+                      'gem_count': [], 'coin_count': [], 'bone_count': []}
+
     # Loop through the different reward functions
-    for reward_dict in collection_reward_functions:
+    # tqdm
+    for reward_dict in tqdm(collection_reward_functions):
+        
+        total_encounters = {entity:[] for entity in vars(cfg.entity)}
 
         for epoch in range(cfg.experiment.epochs):
 
@@ -158,14 +168,10 @@ def run(cfg, **kwargs):
             # game_vars.pretty_print()
         
             # record the performance
-            total_encounters = {entity:0 for entity in vars(cfg.entity)}
             for agent in agents:
                 for entity in vars(cfg.entity):
-                    total_encounters[entity] += agent.encounters[entity]
-
-            performance[(tuple(reward_dict.items()))] = total_encounters
-            # print(reward_dict)
-            # ll
+                    total_encounters[entity].append(agent.encounters[entity])
+        
 
             # # Add scalars to Tensorboard (multiple agents)
             # if cfg.log:
@@ -200,6 +206,19 @@ def run(cfg, **kwargs):
             #         writer.add_scalar(
             #             f'Agent_{i}/total_encounters_except_walls', np.sum(list(agent.encounters.values())) - agent.encounters["Wall"], epoch
             #         )
+        
+        # record the performance
+        performance[str(reward_dict)] = {
+            entity: np.mean(total_encounters[entity])
+            for entity in vars(cfg.entity)
+        }
+
+        performance_df['gem_value'].append(reward_dict['Gem'])
+        performance_df['coin_value'].append(reward_dict['Coin'])
+        performance_df['bone_value'].append(reward_dict['Bone'])
+        performance_df['gem_count'].append(np.mean(total_encounters['Gem']))
+        performance_df['coin_count'].append(np.mean(total_encounters['Coin']))
+        performance_df['bone_count'].append(np.mean(total_encounters['Bone']))
 
 
     # Close the tensorboard log
@@ -214,6 +233,11 @@ def run(cfg, **kwargs):
         for entity, count in encounters.items():
             print(f"{entity}: {count}")
         print("\n")
+
+    # save performance df as pandas df
+    performance_df = pd.DataFrame(performance_df)
+    testing_trial_name = model_name[:model_name.find('agent')]
+    performance_df.to_csv(f'{cfg.root}/examples/puppet_training/testing_data/v2_{testing_trial_name}.csv')
 
 def main():
     import argparse

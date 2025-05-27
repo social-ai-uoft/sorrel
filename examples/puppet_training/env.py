@@ -17,9 +17,10 @@ import random
 
 
 class puppet_training(GridworldEnv):
-    def __init__(self, cfg, agents, entities):
+    def __init__(self, cfg, agents, entities, value_map=None, only_display_value=False):
         self.cfg = cfg
         self.channels = cfg.env.channels
+        self.only_display_value = only_display_value
         self.colors = color_map(self.channels)
         self.full_mdp = cfg.env.full_mdp
         self.agents: list[Agent] = agents
@@ -28,6 +29,7 @@ class puppet_training(GridworldEnv):
         self.item_choice_prob = np.divide(cfg.env.prob.item_choice,sum(cfg.env.prob.item_choice))
         self.tile_size = cfg.env.tile_size
         self.cache = {'delayed_r':{}}
+        self.value_map = value_map
         super().__init__(cfg.env.height, cfg.env.width, cfg.env.layers, eval(cfg.env.default_object)(self.colors['EmptyObject'], self.cfg))
         self.create_world()        
         self.populate()
@@ -65,7 +67,10 @@ class puppet_training(GridworldEnv):
             H, W, L = index
             # If the index is the first or last, replace the location with a wall
             if H in [0, self.height - 1] or W in [0, self.width - 1]:
-                self.world[index] = Wall(self.colors['Wall'], self.cfg)
+                if self.only_display_value:
+                    self.world[index] = Wall(self.colors['EmptyObject'], self.cfg)
+                else:
+                    self.world[index] = Wall(self.colors['Wall'], self.cfg)
 
         # Place agents in the environment
         candidate_agent_locs = [index for index in np.ndindex(self.world.shape) 
