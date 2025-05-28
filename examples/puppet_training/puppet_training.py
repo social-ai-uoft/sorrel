@@ -37,8 +37,8 @@ def run(cfg, **kwargs):
     agents: list[Agent] = create_agents(cfg, models)
     for a in agents:
         print(a.appearance)
-    entities: list[Entity] = create_entities(cfg)
-    env = puppet_training(cfg, agents, entities)
+    entities: list[Entity] = create_entities(cfg, only_display_value=cfg.only_display_value)
+    env = puppet_training(cfg, agents, entities, only_display_value=cfg.only_display_value)
 
     # Set up tensorboard logging
     if cfg.log:
@@ -63,23 +63,44 @@ def run(cfg, **kwargs):
         for agent in agents:
             agent.model.load(file_path=kwargs.get("load_weights"))
 
+    # randomly initialize the reward values of the entities
+    new_entity_vals = define_resource_values(cfg, 
+                                            cfg.resource_val.min_val, 
+                                            cfg.resource_val.max_val)
+    for e in env.entities:
+        e.value = new_entity_vals[str(e)]
+    for e in env.entities:
+        print(e.kind, e.value)
+
     for epoch in range(cfg.experiment.epochs):
 
-        # randomly reset the reward values of the entities
-        new_entity_vals = define_resource_values(cfg, 
-                                                cfg.resource_val.min_val, 
-                                                cfg.resource_val.max_val)
-        for e in env.entities:
-            e.value = new_entity_vals[str(e)]
+        # # randomly reset the reward values of the entities
+        # new_entity_vals = define_resource_values(cfg, 
+        #                                         cfg.resource_val.min_val, 
+        #                                         cfg.resource_val.max_val)
+        # for e in env.entities:
+            # e.value = new_entity_vals[str(e)]
+
+        # reset interval coef
+        coef = 1 
+        if cfg.curriculum:
+            if epoch < 100 * 500:
+                coef = 1000
+            elif epoch < 100 * 1000:
+                coef = 100
+            elif epoch < 100 * 1500:
+                coef = 10
+            else:
+                coef = 1
+        
+        # replace the entity values
         if cfg.resource_val.reset_interval > 0:
-            if epoch % cfg.resource_val.reset_interval == 0:
+            if epoch % (cfg.resource_val.reset_interval * coef) == 0:
                 new_entity_vals = define_resource_values(cfg, 
                                                         cfg.resource_val.min_val, 
                                                         cfg.resource_val.max_val)
-                print(new_entity_vals)
                 for e in env.entities:
                     e.value = new_entity_vals[str(e)]
-        # print(env.entities)
 
         # Reset the environment at the start of each epoch
         env.reset()

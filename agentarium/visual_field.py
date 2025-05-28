@@ -55,7 +55,8 @@ def visual_field(
         else:
             # print(world[H, W, 0], world[H, W, 0].appearance)
             if has_value_map:
-                new[:, H, W] = [world[H, W, 0].value] + world[H, W, 0].appearance
+                new[:, H, W] = [world[H, W, 0].value * 255] + world[H, W, 0].appearance
+                # print(new[:, H, W])
             else:
                 new[:, H, W] = world[H, W, 0].appearance
         
@@ -95,7 +96,7 @@ def visual_field(
 
         # append value to wall_appearance
         if has_value_map:
-            wall_appearance = np.append(wall_appearance, 0)
+            wall_appearance = np.insert(wall_appearance, 0, 0)
 
         for index, x in np.ndenumerate(new):
             C, H, W = index  # Get the coordinates

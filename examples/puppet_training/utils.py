@@ -102,7 +102,7 @@ def create_agents(cfg, models):
 
     return agents
 
-def create_entities(cfg):
+def create_entities(cfg, only_display_value=False):
     entities = []
     for entity_type in vars(cfg.entity):
         ENTITY_TYPE = ENTITIES[entity_type]
@@ -112,10 +112,15 @@ def create_entities(cfg):
         # NOTE: Assumes only entities with num and num > 1 need to be initialized at the start
         if 'start_num' in vars(vars(cfg.entity)[entity_type]):
             for _ in range(vars(vars(cfg.entity)[entity_type])['start_num']):
-                entities.append(ENTITY_TYPE(
-                    color_map(cfg.env.channels)[entity_type], cfg
-                    # cfg.entity_type.apperance, cfg
-                ))
+                if only_display_value:
+                    entities.append(ENTITY_TYPE(
+                        color_map(cfg.env.channels)['EmptyObject'], cfg
+                    ))
+                else:
+                    entities.append(ENTITY_TYPE(
+                        color_map(cfg.env.channels)[entity_type], cfg
+                        # cfg.entity_type.apperance, cfg
+                    ))
 
     return entities
 
@@ -370,13 +375,15 @@ def define_resource_values(cfg, min_val, max_val):
     resource_values = {}
 
     # create a dictionary of resource values
-    new_vals = {entity:random.choice([0, 2, 8]) for entity in vars(cfg.entity)}
+    new_vals = {entity:random.randint(min_val, max_val) for entity in vars(cfg.entity)}
     while sum(new_vals.values()) == 0:
         new_vals = {entity: random.randint(min_val, max_val) for entity in vars(cfg.entity)}
     # assign resource values
     for entity in vars(cfg.entity):
-        if entity in ['Wall', 'EmptyObject']:
+        if entity in ['EmptyObject']:
             resource_values[entity] = 0
+        elif entity in ['Wall']:
+            resource_values[entity] = -1
         else:
             # Randomly assign values between min_val and max_val
             resource_values[entity] = new_vals[entity]

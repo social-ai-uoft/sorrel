@@ -2,7 +2,7 @@
 experiment:
   name: state_punishment_beta
   epochs: 100
-  max_turns: 40
+  max_turns: 20
   epsilon_decay: 0.0001
 
 env:
@@ -86,19 +86,20 @@ entity:
 
 resource_val:
   min_val: 0
-  max_val: 1
+  max_val: 10
   reset_interval: 1
 
 
 # Root folder for accessing file structure and modules
 root: '/Users/yikaitang/Documents/GitHub/puppet_training'
 seed: 3
-log: True
+log: False
 random: False
 state_mode: 'composite'
 action_mode: 'simple'
 load_weights: True
 has_value_map: True
+only_display_value: True
 
 exp_name: 'puppet_testing_reset_val_per_1epoch' 
 

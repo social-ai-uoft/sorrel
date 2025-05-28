@@ -102,6 +102,10 @@ class Agent:
 
         current_state = image.flatten()
 
+        # append current value map
+        # if self.cfg.has_value_map:
+        #     current_state = np.append(current_state, env.value_map.flatten())
+    
         return current_state
         
 
