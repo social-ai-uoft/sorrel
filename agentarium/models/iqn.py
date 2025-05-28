@@ -278,7 +278,12 @@ class iRainbowModel(DoubleANN):
 
         """
         # Epsilon-greedy action selection
-        if random.random() > self.epsilon:
+        if not eval:
+            epsilon = self.epsilon
+        else:
+            epsilon = 0.0
+
+        if random.random() > epsilon:
             state = np.array(state)
             state = torch.from_numpy(state).float().to(self.device)
 
@@ -287,9 +292,11 @@ class iRainbowModel(DoubleANN):
                 action_values = self.qnetwork_local.get_qvalues(state)  # .mean(0)
             self.qnetwork_local.train()
             action = np.argmax(action_values.cpu().data.numpy(), axis=1)
-            return action[0]
+            if not eval:
+                return action[0]
+            else:
+                return action[0], action_values
         else:
-
             action = random.choices(np.arange(self.action_size), k=1)
             return action[0]
         

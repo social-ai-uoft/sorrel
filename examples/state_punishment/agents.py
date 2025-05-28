@@ -162,6 +162,37 @@ class Agent:
 
         return new_location
 
+    def get_model_input(self,
+                   env,
+                   state_sys,
+                   state_is_composite=False,
+                   envs=None) -> tuple:
+        '''
+        Changes the world based on the action taken.
+
+        when transgression is not apparent. 
+
+        currently, all transgression records will be equally punished.
+        '''
+
+        # Get current state
+        if state_is_composite:
+            state = self.generate_composite_state(envs)
+        else:
+            state = self.pov(env)
+
+        to_be_punished = sum(self.to_be_punished.values())
+       
+        state = np.concatenate([state, np.array([state_sys.prob*255])])
+        state = np.concatenate([state, np.array([to_be_punished*255])])
+        model_input = torch.from_numpy(self.current_state(
+            state_sys=state_sys, 
+            env=env, 
+            envs=envs, 
+            state_mode=state_is_composite
+            )).view(1, -1)
+        
+        return model_input
     
     def transition(self,
                    env,

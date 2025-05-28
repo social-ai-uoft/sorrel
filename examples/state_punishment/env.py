@@ -54,6 +54,16 @@ class state_punishment(GridworldEnv):
         for index, x in np.ndenumerate(self.world):
             self.world[index] = EmptyObject(self.colors['EmptyObject'], self.cfg)
             self.world[index].location = index
+    
+    def clear_world(self):
+        '''
+        Clear the world of all objects except walls.
+        '''
+        for index, x in np.ndenumerate(self.world):
+            if not isinstance(x, Wall):
+                self.world[index] = EmptyObject(self.colors['EmptyObject'], self.cfg)
+                self.world[index].location = index
+                
 
     def populate(self):
         '''
