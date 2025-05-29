@@ -17,7 +17,15 @@ import random
 
 
 class puppet_training(GridworldEnv):
-    def __init__(self, cfg, agents, entities, value_map=None, only_display_value=False):
+    def __init__(
+            self, 
+            cfg, 
+            agents, 
+            entities, 
+            value_map=None, 
+            only_display_value=False, 
+            is_partner_selection_env=False
+            ):
         self.cfg = cfg
         self.channels = cfg.env.channels
         self.only_display_value = only_display_value
@@ -30,16 +38,25 @@ class puppet_training(GridworldEnv):
         self.tile_size = cfg.env.tile_size
         self.cache = {'delayed_r':{}}
         self.value_map = value_map
+        self.is_partner_selection_env = is_partner_selection_env
         super().__init__(cfg.env.height, cfg.env.width, cfg.env.layers, eval(cfg.env.default_object)(self.colors['EmptyObject'], self.cfg))
-        self.create_world()        
-        self.populate()
-
+        if is_partner_selection_env:
+            self.create_world_partner_selection()
+            self.populate_partner_selection()
+        else:
+            self.create_world()
+            self.populate()
+     
     def reset(self, state_mode='simple'):
         '''
         Reset the environment.
         '''
-        self.create_world()
-        self.populate()
+        if self.is_partner_selection_env:
+            self.create_world_partner_selection()
+            self.populate_partner_selection()
+        else:
+            self.create_world()
+            self.populate()
         for agent in self.agents:
             agent.reset(self, state_mode)
 
@@ -56,6 +73,63 @@ class puppet_training(GridworldEnv):
         for index, x in np.ndenumerate(self.world):
             self.world[index] = EmptyObject(self.colors['EmptyObject'], self.cfg)
             self.world[index].location = index
+    
+    def create_world_partner_selection(self):
+        '''
+        Create a gridworld of dimensions H x W x L for partner selection.
+
+        square|wall|square
+        '''
+        assert self.width == 2*self.height + 1, "Width must be 2*height + 1 for partner selection."
+        self.world = np.full(
+            (self.height, 2*self.height+1, self.layers),
+            EmptyObject
+        )
+
+        # Define the location of each object
+        for index, x in np.ndenumerate(self.world):
+            if self.only_display_value:
+                self.world[index] = EmptyObject(self.colors['EmptyObject'], self.cfg)
+            else:
+                self.world[index] = EmptyObject(self.colors['EmptyObject'], self.cfg)
+            self.world[index].location = index
+    
+    def populate_partner_selection(self):
+        '''
+        Populate the world with objects for partner selection.
+        Walls are placed at the edges & in the midline of the environment.
+        '''
+        # First, create the walls
+        for index in np.ndindex(self.world.shape):
+            H, W, L = index
+            # If the index is the first or last, replace the location with a wall
+            if (H in [0, self.height - 1]) or \
+            (W in [0, self.width - 1]) or \
+            (W == self.height):
+                if self.only_display_value:
+                    self.world[index] = Wall(self.colors['EmptyObject'], self.cfg)
+                else:
+                    self.world[index] = Wall(self.colors['Wall'], self.cfg)
+        
+        # Place agents in the environment
+        candidate_agent_locs = [index for index in np.ndindex(self.world.shape) 
+                                if not self.world[index].kind == 'Wall']
+        agent_loc_index = np.random.choice(len(candidate_agent_locs), 
+                                           size = len(self.agents), replace = False)
+        locs = [candidate_agent_locs[i] for i in agent_loc_index]
+        for loc, agent in zip(locs, self.agents):
+            self.add(loc, agent)
+        
+        # Place initially spawned entities in the environment
+        candidate_locs = [index for index in np.ndindex(self.world.shape) 
+                          if not self.world[index].kind == 'Wall' 
+                          and not self.world[index].kind == 'Agent']
+        will_spawn = [True if random.random() < self.item_spawn_prob else False for _ in candidate_locs]
+
+        for loc, spawn in zip(candidate_locs, will_spawn):
+            if spawn:
+                self.spawn(loc)
+
 
     def populate(self):
         '''
@@ -91,6 +165,8 @@ class puppet_training(GridworldEnv):
         for loc, spawn in zip(candidate_locs, will_spawn):
             if spawn:
                 self.spawn(loc)
+        
+    
 
     def spawn(self, location):
         """
