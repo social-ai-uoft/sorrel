@@ -60,6 +60,19 @@ class puppet_training(GridworldEnv):
         for agent in self.agents:
             agent.reset(self, state_mode)
 
+    def check_and_close_gate(self):
+        '''
+        Check if there is any agent at the gate and close it if not.
+        '''
+        agent_spawn_loc = (self.height, int((self.height-1)/2), 0)
+        if not self.has_instance(Agent, agent_spawn_loc):
+            # place wall at the agent spawn location
+            if self.only_display_value:
+                self.world[agent_spawn_loc] = Wall(self.colors['EmptyObject'], self.cfg)
+            else:
+                self.world[agent_spawn_loc] = Wall(self.colors['Wall'], self.cfg)
+
+
     def create_world(self):
         '''
         Create a gridworld of dimensions H x W x L.
@@ -105,7 +118,7 @@ class puppet_training(GridworldEnv):
             # If the index is the first or last, replace the location with a wall
             if (H in [0, self.height - 1]) or \
             (W in [0, self.width - 1]) or \
-            (W == self.height):
+            (H == self.height and W != int((self.height-1)/2)):
                 if self.only_display_value:
                     self.world[index] = Wall(self.colors['EmptyObject'], self.cfg)
                 else:
