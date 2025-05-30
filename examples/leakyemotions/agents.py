@@ -3,6 +3,8 @@
 ### Imports
 from pathlib import Path
 import numpy as np
+import random
+from math import tanh
 
 from sorrel.agents import Agent
 from sorrel.models import base_model
@@ -93,6 +95,8 @@ class Wolf(Agent):
     def __init__(self, observation_spec, action_spec, model: base_model.SorrelModel, location: tuple | None):
         super().__init__(observation_spec, action_spec, model, location)
         self.value = 0
+        self.asleep = False 
+        self.time_counter = 0
         self.sprite = Path(__file__).parent / "./assets/wolfagent.png"
         self.kind = "Wolf"
 
@@ -127,7 +131,7 @@ class Wolf(Agent):
         chosen_agent = targets[np.random.choice(min_locs)]
 
         # Compute possible paths
-        ACTIONS = [0, 1, 2, 3, 4]
+        ACTIONS = [0, 1, 2, 3]
         TOO_FAR = 999999999
         attempted_paths = [self.movement(action) for action in ACTIONS]
         paths = self.compute_taxicab_distance(chosen_agent.location, attempted_paths)
@@ -184,8 +188,6 @@ class Wolf(Agent):
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
         elif action == 3:
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
-        elif action == 4:
-            new_location = self.location
         
         return new_location
     
@@ -204,18 +206,57 @@ class Wolf(Agent):
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
         elif action == 3:
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
-        elif action == 4:
-            new_location = self.location
 
         # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
         target_object = env.observe(new_location)
         
         if target_object.kind == "LeakyEmotionAgent":
-            target_object.value -= 1
+            target_object.value = 0
+            env.remove(new_location)
 
         # try moving to new_location
         if env.move(self, new_location) == True:
             self.location = new_location  
+
+    def sleep(self):
+        '''
+        This function serves as the agent's probablistic sleep-wake cycle.
+        
+            - wolf.asleep = whether the wolf is asleep
+            - wolf.sleep_counter = how far the agent is in its cycle
+        
+        '''
+        tmp = random.random()   # random float from 0 to 1, indicates random probability
+        
+        # Check if agent is asleep
+        if self.asleep:
+        
+            # Wake up if the random value (tmp) is less than the calculated probability of waking up
+            # The longer the wolf has slept, the more likely it is to wake up
+    
+            if tmp < 0.5*(tanh(self.time_counter - 5) + 1):
+                # Agent wakes up, reset the time counter
+                self.asleep = False
+                self.time_counter = 0
+            
+            else:
+                # Otherwise, stay asleep and increment the time counter
+                self.time_counter += 1
+        
+        # Agent is awake
+        else:
+
+            # Fall asleep if the random value (tmp) is greater than the calculated probability of sleeping
+            # The longer the wolf is awake, the more likely it is to fall asleep
+            
+            if tmp > 0.5*(tanh(-0.5*self.time_counter + 4) + 1):
+                # Agent falls asleep, reset the time counter
+                self.asleep = True
+                self.time_counter = 0
+            
+            else:
+                # Otherwise, stay awake and increment the time counter
+                self.time_counter += 1
 
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""

@@ -46,7 +46,7 @@ def setup() -> LeakyemotionsEnv:
         observation_spec.override_input_size(
             np.array(observation_spec.input_size).reshape(1, -1)
         )
-        action_spec = ActionSpec(["up", "down", "left", "right", "sleep"])
+        action_spec = ActionSpec(["up", "down", "left", "right"])
 
         model = PyTorchIQN(
             # the agent can see r blocks on each side, so the size of the observation is (2r+1) * (2r+1)
@@ -102,6 +102,8 @@ def run(env: LeakyemotionsEnv):
         env.reset()
         for agent in env.agents:
             agent.model.start_epoch_action(**locals())
+            if agent.kind == "Wolf":
+                agent.sleep()
 
         while not env.turn >= env.max_turns:
             if epoch % RECORD_PERIOD == 0:
