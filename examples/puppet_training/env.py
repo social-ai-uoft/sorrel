@@ -40,9 +40,13 @@ class puppet_training(GridworldEnv):
         self.value_map = value_map
         self.is_partner_selection_env = is_partner_selection_env
         super().__init__(cfg.env.height, cfg.env.width, cfg.env.layers, eval(cfg.env.default_object)(self.colors['EmptyObject'], self.cfg))
+        self.partner_agents = [agent for agent in self.agents if agent.role == 'partner']
+        self.decider_agents = [agent for agent in self.agents if agent.role == 'decider']
         if is_partner_selection_env:
             self.create_world_partner_selection()
             self.populate_partner_selection()
+            self.partner_agents = [agent for agent in self.agents if agent.role == 'partner']
+            self.decider_agents = [agent for agent in self.agents if agent.role == 'decider']
         else:
             self.create_world()
             self.populate()
@@ -64,8 +68,9 @@ class puppet_training(GridworldEnv):
         '''
         Check if there is any agent at the gate and close it if not.
         '''
-        agent_spawn_loc = (self.height, int((self.height-1)/2), 0)
-        if not self.has_instance(Agent, agent_spawn_loc):
+        agent_spawn_loc = (int((self.height-1)/2), self.height, 0)
+        # print(self.world.shape)
+        if not isinstance(self.world[agent_spawn_loc], Agent):
             # place wall at the agent spawn location
             if self.only_display_value:
                 self.world[agent_spawn_loc] = Wall(self.colors['EmptyObject'], self.cfg)
@@ -93,6 +98,7 @@ class puppet_training(GridworldEnv):
 
         square|wall|square
         '''
+        # print(self.width, self.height)
         assert self.width == 2*self.height + 1, "Width must be 2*height + 1 for partner selection."
         self.world = np.full(
             (self.height, 2*self.height+1, self.layers),
@@ -118,7 +124,7 @@ class puppet_training(GridworldEnv):
             # If the index is the first or last, replace the location with a wall
             if (H in [0, self.height - 1]) or \
             (W in [0, self.width - 1]) or \
-            (H == self.height and W != int((self.height-1)/2)):
+            (W == self.height and H != int((self.height-1)/2)):
                 if self.only_display_value:
                     self.world[index] = Wall(self.colors['EmptyObject'], self.cfg)
                 else:
@@ -128,10 +134,18 @@ class puppet_training(GridworldEnv):
         candidate_agent_locs = [index for index in np.ndindex(self.world.shape) 
                                 if not self.world[index].kind == 'Wall']
         agent_loc_index = np.random.choice(len(candidate_agent_locs), 
-                                           size = len(self.agents), replace = False)
+                                           size = len(self.agents)-1, replace = False)
+        decider_loc = (int((self.height-1)/2), self.height, 0)
         locs = [candidate_agent_locs[i] for i in agent_loc_index]
-        for loc, agent in zip(locs, self.agents):
+
+        # place partner agents
+        # locs[[k for k in range(len(self.agents)) if self.agents[k].role=='decider'][0]] = decider_loc
+        for loc, agent in zip(locs, self.partner_agents):
             self.add(loc, agent)
+
+        # place decider agents
+        decider_loc = (int((self.height-1)/2), self.height, 0)
+        self.add(decider_loc, self.decider_agents[0])
         
         # Place initially spawned entities in the environment
         candidate_locs = [index for index in np.ndindex(self.world.shape) 

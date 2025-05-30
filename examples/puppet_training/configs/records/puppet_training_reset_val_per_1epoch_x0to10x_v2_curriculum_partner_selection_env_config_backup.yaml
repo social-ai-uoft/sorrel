@@ -7,7 +7,7 @@ experiment:
 
 env:
   height: 15
-  width: 15
+  width: 31
   layers: 1
   channels: 9
   default_object: EmptyObject

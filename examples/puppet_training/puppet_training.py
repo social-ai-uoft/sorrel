@@ -37,6 +37,7 @@ def run(cfg, **kwargs):
     agents: list[Agent] = create_agents(cfg, models)
     for a in agents:
         print(a.appearance)
+    agents = [agent for agent in agents if agent.ixs == 1]
     entities: list[Entity] = create_entities(cfg, only_display_value=cfg.only_display_value)
     env = puppet_training(cfg, agents, entities, only_display_value=cfg.only_display_value)
 

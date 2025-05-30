@@ -7,7 +7,7 @@ experiment:
 
 env:
   height: 15
-  width: 15
+  width: 31
   layers: 1
   channels: 9
   default_object: EmptyObject
@@ -22,7 +22,7 @@ env:
 model:
   iqn:
     type: iRainbowModel
-    num: 1
+    num: 3
     device: cpu
     parameters:
       state_size: [10, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
@@ -43,7 +43,7 @@ model:
 
 agent:
   agent:
-    num: 1
+    num: 3
     model: iqn
     num_memories: 5 # Should match num_frames in the model above
     vision: 3

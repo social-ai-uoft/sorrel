@@ -37,8 +37,14 @@ def run(cfg, **kwargs):
     agents: list[Agent] = create_agents(cfg, models)
     for a in agents:
         print(a.appearance)
+    # assign roles
+    for agent in agents:
+        if agent.ixs == 0:
+            agent.role = 'decider'
+        else:
+            agent.role = 'partner'
     entities: list[Entity] = create_entities(cfg, only_display_value=cfg.only_display_value)
-    env = puppet_training(cfg, agents, entities, only_display_value=cfg.only_display_value)
+    env = puppet_training(cfg, agents, entities, only_display_value=cfg.only_display_value, is_partner_selection_env=True)
 
     # Set up tensorboard logging
     if cfg.log:
@@ -55,9 +61,10 @@ def run(cfg, **kwargs):
     # load weights
     if cfg.load_weights:
         for count, agent in enumerate(agents):
-            agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/\
-                            puppet_training_reset_val_per_1epoch_agent0{agent.ixs}_iRainbowModel.pkl')
-    
+            if agent.role == 'partner':
+                agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/\
+                                puppet_training_reset_val_per_1epoch_x0to10x_v2_curriculum_partner_selection_env_agent{agent.ixs}_iRainbowModel.pkl')
+        
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:
@@ -83,15 +90,15 @@ def run(cfg, **kwargs):
 
         # reset interval coef
         coef = 1 
-        if cfg.curriculum:
-            if epoch < 100 * 500:
-                coef = 1000
-            elif epoch < 100 * 1000:
-                coef = 100
-            elif epoch < 100 * 1500:
-                coef = 10
-            else:
-                coef = 1
+        # if cfg.curriculum:
+        #     if epoch < 100 * 500:
+        #         coef = 1000
+        #     elif epoch < 100 * 1000:
+        #         coef = 100
+        #     elif epoch < 100 * 1500:
+        #         coef = 10
+        #     else:
+        #         coef = 1
         
         # replace the entity values
         if cfg.resource_val.reset_interval > 0:
@@ -101,6 +108,26 @@ def run(cfg, **kwargs):
                                                         cfg.resource_val.max_val)
                 for e in env.entities:
                     e.value = new_entity_vals[str(e)]
+        # change the partner valuing distribution
+        if cfg.partner_shuffle_interval > 0:
+            if epoch % (cfg.partner_shuffle_interval * coef) == 0:
+                for agent in env.partner_agents:
+                    new_entity_vals_median = define_resource_values(cfg, 
+                                                            cfg.resource_val.min_val, 
+                                                            cfg.resource_val.max_val)
+                    new_entity_vals_var = define_resource_values_var(cfg, 
+                                                            cfg.resource_val.min_var, 
+                                                            cfg.resource_val.max_var)
+                    agent.resource_val.median = new_entity_vals_median
+                    agent.resource_val.var = new_entity_vals_var
+        # change the partner entity values
+        if cfg.partner_entity_value_reset_interval > 0:
+            if epoch % (cfg.partner_entity_value_reset_interval * coef) == 0:
+                for agent in env.partner_agents:
+                    agent.resource_val.point_val = define_resource_values(cfg,
+                                                            agent.resource_val.median - agent.resource_val.var,
+                                                            agent.resource_val.median + agent.resource_val.var)
+        # TODO: frequency of switching - decider entity val < partner_distribution < partner_point val
 
         # Reset the environment at the start of each epoch
         env.reset()
