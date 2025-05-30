@@ -33,7 +33,7 @@ class LeakyemotionsEnv(GridworldEnv):
         Populate the leakyemotions world by creating walls, then randomly spawning the agents.
         Note that every space is already filled with EmptyEntity as part of super().__init__().
         """
-        valid_animal_spawn_locations = []
+        valid_agent_spawn_locations = []
 
         for index in np.ndindex(self.world.shape):
             y, x, z = index
@@ -42,20 +42,19 @@ class LeakyemotionsEnv(GridworldEnv):
                 self.add(index, Wall())
             elif z == 0:  # if location is on the bottom (first) layer, put grass there
                 self.add(index, Grass())
-            elif z == 1: # if location is on third layer, agents can appear here (assuming that wolves and leakyemotionagents are on the same layer)
-                # valid rabbit and wolf location 
-                valid_animal_spawn_locations.append(index)
+            elif z == 1: # if location is on third layer, rabbit agents and wolves can appear here 
+                valid_agent_spawn_locations.append(index)
 
-        # spawn the agents
+        # spawn the agents (rabbits)
         # using np.random.choice, we choose indices in valid_agent_spawn_locations
         agent_locations_indices = np.random.choice(
-            len(valid_animal_spawn_locations), size=len(self.agents), replace=False
+            len(valid_agent_spawn_locations), size=len(self.agents), replace=False
         )
-        agent_locations = [valid_animal_spawn_locations[i] for i in agent_locations_indices]
+        agent_locations = [valid_agent_spawn_locations[i] for i in agent_locations_indices]
         for loc, agent in zip(agent_locations, self.agents):
             loc = tuple(loc)
             self.add(loc, agent)
-
+            
     def reset(self):
         """Reset the environment and all its agents."""
         self.create_world()

@@ -37,7 +37,7 @@ def setup() -> LeakyemotionsEnv:
     agent_vision_radius = 2
 
     # make the agents 
-    agent_num = 2
+    agent_num = 3
     agents = []
     for _ in range(agent_num):
         observation_spec = OneHotObservationSpec(
@@ -46,7 +46,7 @@ def setup() -> LeakyemotionsEnv:
         observation_spec.override_input_size(
             np.array(observation_spec.input_size).reshape(1, -1)
         )
-        action_spec = ActionSpec(["up", "down", "left", "right"])
+        action_spec = ActionSpec(["up", "down", "left", "right", "sleep"])
 
         model = PyTorchIQN(
             # the agent can see r blocks on each side, so the size of the observation is (2r+1) * (2r+1)
@@ -73,11 +73,11 @@ def setup() -> LeakyemotionsEnv:
                 observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
             )
         )
-        # agents.append(
-        #     Wolf(
-        #         observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
-        #     )
-        # )
+        agents.append(
+            Wolf(
+                observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
+            )
+        )
     
     # make the environment
     env = LeakyemotionsEnv(

@@ -107,6 +107,20 @@ class GridworldEnv:
             Entity: the entity at the observed location.
         """
         return self.world[target_location]
+    
+    def observe_all_layers(self, target_location: tuple[int, ...]) -> list[Entity]:
+        """Observes entities on all layers at a target location.
+
+        Args:
+            target_location (tuple[int, ...]): the location to observe.
+
+        Returns:
+            Entity: the entity at the observed location.
+        """
+        entities = []
+        for i in range(self.layers):
+            entities.append(self.world[(*target_location[:-1], i)])
+        return entities
 
     def take_turn(self) -> None:
         """Performs a full step in the environment.
