@@ -56,8 +56,11 @@ class puppet_training(GridworldEnv):
         Reset the environment.
         '''
         if self.is_partner_selection_env:
+            self.open_gate()
             self.create_world_partner_selection()
             self.populate_partner_selection()
+            self.partner_agents = [agent for agent in self.agents if agent.role == 'partner']
+            self.decider_agents = [agent for agent in self.agents if agent.role == 'decider']
         else:
             self.create_world()
             self.populate()
@@ -76,6 +79,14 @@ class puppet_training(GridworldEnv):
                 self.world[agent_spawn_loc] = Wall(self.colors['EmptyObject'], self.cfg)
             else:
                 self.world[agent_spawn_loc] = Wall(self.colors['Wall'], self.cfg)
+
+    def open_gate(self):
+        '''
+        Open the gate at the agent spawn location.
+        '''
+        agent_spawn_loc = (int((self.height-1)/2), self.height, 0)
+        if isinstance(self.world[agent_spawn_loc], Wall):
+            self.world[agent_spawn_loc] = EmptyObject(self.colors['EmptyObject'], self.cfg)
 
 
     def create_world(self):

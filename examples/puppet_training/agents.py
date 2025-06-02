@@ -91,21 +91,24 @@ class Agent:
             )
         # Otherwise, use the agent observation function
         else:
+            assert self.kind == "Agent", "Agent must be of kind 'Agent'."
+            if self.role == 'partner':
+                # confirm partners not at the gate
+                assert self.location != (int((env.height-1)/2), env.height, 0), "Partners cannot be at the gate."
             image = visual_field(
-                env.world, 
-                color_map, 
-                self.location, 
-                self.vision, 
-                env.channels, 
-                has_value_map=self.cfg.has_value_map
+                world=env.world, 
+                color_map=color_map, 
+                location=self.location, 
+                vision=self.vision, 
+                channels=env.channels, 
+                has_value_map=self.cfg.has_value_map,
+                env=env
             )
 
         current_state = image.flatten()
 
-        # append current value map
-        # if self.cfg.has_value_map:
-        #     current_state = np.append(current_state, env.value_map.flatten())
-    
+        # append extra percept
+     
         return current_state
         
 
@@ -160,8 +163,8 @@ class Agent:
         target_object = env.observe(attempted_location)
         env.move(self, attempted_location)
 
-        # Get the interaction reward
-        reward += target_object.value
+        # Get the reward
+        reward += self.value_dict[target_object.kind]
             
         # Add to the encounter record
         if str(target_object) in self.encounters.keys():

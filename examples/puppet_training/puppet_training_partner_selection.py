@@ -23,7 +23,8 @@ from agentarium.primitives import Entity
 from examples.puppet_training.agents import Agent
 from examples.puppet_training.env import puppet_training
 from examples.puppet_training.utils import (create_agents, create_entities, create_models,
-                                init_log, load_config, save_config_backup, define_resource_values)
+                                init_log, load_config, save_config_backup, define_resource_values,
+                                define_resource_values_var)
 
 import numpy as np
 
@@ -38,13 +39,28 @@ def run(cfg, **kwargs):
     for a in agents:
         print(a.appearance)
     # assign roles
-    for agent in agents:
-        if agent.ixs == 0:
+    if not cfg.train_partners:
+        for agent in agents:
+            if agent.ixs == 0:
+                agent.role = 'decider'
+                agent.can_see_others_worldview = True
+            else:
+                agent.role = 'partner'
+                agent.can_see_others_worldview = False
+            agent.resource_val = {}
+    else:
+        for agent in agents:
             agent.role = 'decider'
-        else:
-            agent.role = 'partner'
+            agent.can_see_others_worldview = False
+            agent.resource_val = {}
+
+    # create the environment
     entities: list[Entity] = create_entities(cfg, only_display_value=cfg.only_display_value)
     env = puppet_training(cfg, agents, entities, only_display_value=cfg.only_display_value, is_partner_selection_env=True)
+    if cfg.train_partners:
+        env.full_partner_selection = True
+    else:
+        env.full_partner_selection = True
 
     # Set up tensorboard logging
     if cfg.log:
@@ -62,71 +78,78 @@ def run(cfg, **kwargs):
     if cfg.load_weights:
         for count, agent in enumerate(agents):
             if agent.role == 'partner':
-                agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/\
-                                puppet_training_reset_val_per_1epoch_x0to10x_v2_curriculum_partner_selection_env_agent{agent.ixs}_iRainbowModel.pkl')
+                agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/puppet_training_only_partners_env_agent{0}_iRainbowModel.pkl')
         
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:
             agent.model.load(file_path=kwargs.get("load_weights"))
 
-    # randomly initialize the reward values of the entities
-    new_entity_vals = define_resource_values(cfg, 
-                                            cfg.resource_val.min_val, 
-                                            cfg.resource_val.max_val)
-    for e in env.entities:
-        e.value = new_entity_vals[str(e)]
-    for e in env.entities:
-        print(e.kind, e.value)
+    # # randomly initialize the reward values of the entities
+    # new_entity_vals = define_resource_values(cfg, 
+    #                                         cfg.resource_val.min_val, 
+    #                                         cfg.resource_val.max_val)
+    # for e in env.entities:
+    #     e.value = new_entity_vals[str(e)]
+    # for e in env.entities:
+    #     print(e.kind, e.value)
 
     for epoch in range(cfg.experiment.epochs):
 
-        # # randomly reset the reward values of the entities
-        # new_entity_vals = define_resource_values(cfg, 
-        #                                         cfg.resource_val.min_val, 
-        #                                         cfg.resource_val.max_val)
-        # for e in env.entities:
-            # e.value = new_entity_vals[str(e)]
-
         # reset interval coef
         coef = 1 
-        # if cfg.curriculum:
-        #     if epoch < 100 * 500:
-        #         coef = 1000
-        #     elif epoch < 100 * 1000:
-        #         coef = 100
-        #     elif epoch < 100 * 1500:
-        #         coef = 10
-        #     else:
-        #         coef = 1
         
         # replace the entity values
         if cfg.resource_val.reset_interval > 0:
             if epoch % (cfg.resource_val.reset_interval * coef) == 0:
+                min_val_dict = {entity: cfg.resource_val.min_val for entity in vars(cfg.entity)}
+                max_val_dict = {entity: cfg.resource_val.max_val for entity in vars(cfg.entity)}
                 new_entity_vals = define_resource_values(cfg, 
-                                                        cfg.resource_val.min_val, 
-                                                        cfg.resource_val.max_val)
-                for e in env.entities:
-                    e.value = new_entity_vals[str(e)]
+                                                        min_val_dict, 
+                                                        max_val_dict)
+                # for e in env.entities:
+                #     e.value = new_entity_vals[str(e)]
+                for agent in env.decider_agents:
+                    agent.value_dict = new_entity_vals
+                    print(agent.value_dict)
+
         # change the partner valuing distribution
-        if cfg.partner_shuffle_interval > 0:
-            if epoch % (cfg.partner_shuffle_interval * coef) == 0:
-                for agent in env.partner_agents:
-                    new_entity_vals_median = define_resource_values(cfg, 
-                                                            cfg.resource_val.min_val, 
-                                                            cfg.resource_val.max_val)
-                    new_entity_vals_var = define_resource_values_var(cfg, 
-                                                            cfg.resource_val.min_var, 
-                                                            cfg.resource_val.max_var)
-                    agent.resource_val.median = new_entity_vals_median
-                    agent.resource_val.var = new_entity_vals_var
+        if not cfg.train_partners:
+
+            if cfg.partner_shuffle_interval > 0:
+
+                if (epoch % (cfg.partner_shuffle_interval * coef) == 0):
+
+                    for agent in env.partner_agents:
+
+                        min_val_dict = {entity: cfg.resource_val.min_val for entity in vars(cfg.entity)}
+                        max_val_dict = {entity: cfg.resource_val.max_val for entity in vars(cfg.entity)}
+                        new_entity_vals_median = define_resource_values(cfg, 
+                                                                min_val_dict, 
+                                                                max_val_dict)
+                        
+                        min_var_dict = {entity: cfg.resource_val.min_var for entity in vars(cfg.entity)}
+                        max_var_dict = {entity: cfg.resource_val.max_var for entity in vars(cfg.entity)}
+                        new_entity_vals_var = define_resource_values_var(cfg, 
+                                                                min_var_dict, 
+                                                                max_var_dict)
+                        
+                        agent.resource_val['median'] = new_entity_vals_median
+                        agent.resource_val['var'] = new_entity_vals_var
+                        # print(agent.resource_val['median'] - agent.resource_val['var'])
+
         # change the partner entity values
-        if cfg.partner_entity_value_reset_interval > 0:
-            if epoch % (cfg.partner_entity_value_reset_interval * coef) == 0:
-                for agent in env.partner_agents:
-                    agent.resource_val.point_val = define_resource_values(cfg,
-                                                            agent.resource_val.median - agent.resource_val.var,
-                                                            agent.resource_val.median + agent.resource_val.var)
+        if not cfg.train_partners:
+            if cfg.partner_entity_value_reset_interval > 0:
+                if epoch % (cfg.partner_entity_value_reset_interval * coef) == 0:
+                    for agent in env.partner_agents:
+                        min_val = {key: agent.resource_val['median'][key] - agent.resource_val['var'][key] 
+                                   for key in agent.resource_val['median'].keys()}
+                        max_val = {key: agent.resource_val['median'][key] + agent.resource_val['var'][key] 
+                                   for key in agent.resource_val['median'].keys()}
+                        agent.value_dict = define_resource_values(cfg,
+                                                                min_val,
+                                                                max_val)
         # TODO: frequency of switching - decider entity val < partner_distribution < partner_point val
 
         # Reset the environment at the start of each epoch
@@ -163,6 +186,9 @@ def run(cfg, **kwargs):
 
             # Agent transition
             for agent in agents:
+
+                # block the location of the gate 
+                env.world[(int((env.height-1)/2), env.height, 0)].passable = False
                 
 
                 (state, action, reward, next_state, done_) = agent.transition(
@@ -184,8 +210,9 @@ def run(cfg, **kwargs):
         # At the end of each epoch, train as long as the batch size is large enough.
         if epoch > 10:
             for agent in agents:
-                loss = agent.model.train_model()
-                losses[agent.ixs] += loss.detach().numpy()
+                if agent.role == 'decider':
+                    loss = agent.model.train_model()
+                    losses[agent.ixs] += loss.detach().numpy()
 
         # Add the game variables to the game object
         game_vars.record_turn(epoch, turn, losses, game_points)

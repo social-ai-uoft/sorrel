@@ -22,7 +22,7 @@ env:
 model:
   iqn:
     type: iRainbowModel
-    num: 3
+    num: 1
     device: cpu
     parameters:
       state_size: [32, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
@@ -43,7 +43,7 @@ model:
 
 agent:
   agent:
-    num: 3
+    num: 1
     model: iqn
     num_memories: 5 # Should match num_frames in the model above
     vision: 3
@@ -99,11 +99,11 @@ log: True
 random: False
 state_mode: 'composite'
 action_mode: 'simple'
-load_weights: True
+load_weights: False
 has_value_map: True
 curriculum: True
 only_display_value: False
-train_partners: False
+train_partners: True
 
 partner_shuffle_interval: 10
 partner_entity_value_reset_interval: 1
@@ -111,5 +111,5 @@ partner_entity_value_reset_interval: 1
 # exp_name: 'puppet_training_reset_val_per_1epoch_x0to10x_v2_onlyshowValue_curriculum' 
 exp_name: 'puppet_training_reset_val_per_1epoch_x0to10x_v2_curriculum_partner_selection_env' 
 exp_name: 'puppet_training_full_partner_selection_env'
-# exp_name: 'puppet_training_only_partners_env'
+exp_name: 'puppet_training_only_partners_env_v2'
 

@@ -375,17 +375,35 @@ def define_resource_values(cfg, min_val, max_val):
     resource_values = {}
 
     # create a dictionary of resource values
-    new_vals = {entity:random.randint(min_val, max_val) for entity in vars(cfg.entity)}
+    new_vals = {entity:random.randint(max(0, min_val[entity]), max_val[entity]) for entity in vars(cfg.entity)}
     while sum(new_vals.values()) == 0:
-        new_vals = {entity: random.randint(min_val, max_val) for entity in vars(cfg.entity)}
+        new_vals = {entity: random.randint(max(0, min_val[entity]), max_val[entity]) for entity in vars(cfg.entity)}
     # assign resource values
     for entity in vars(cfg.entity):
-        if entity in ['EmptyObject']:
-            resource_values[entity] = 0
-        elif entity in ['Wall']:
-            resource_values[entity] = -1
-        else:
-            # Randomly assign values between min_val and max_val
-            resource_values[entity] = new_vals[entity]
+        # Randomly assign values between min_val and max_val
+        resource_values[entity] = new_vals[entity]
+    resource_values['EmptyObject'] = 0
+    resource_values['Wall'] = -1
+    resource_values['Agent'] = 0
 
     return resource_values
+
+
+def define_resource_values_var(cfg, min_var, max_var):
+    """
+    Define the resource value variances for the environment.
+    """
+    resource_variances = {}
+
+    # create a dictionary of resource variances
+    new_vars = {entity:random.randint(min_var[entity], max_var[entity]) for entity in vars(cfg.entity)}
+   
+    # assign resource variances
+    for entity in vars(cfg.entity):
+        # Randomly assign variances between min_var and max_var
+        resource_variances[entity] = new_vars[entity]
+    resource_variances['EmptyObject'] = 0
+    resource_variances['Wall'] = 0
+    resource_variances['Agent'] = 0
+
+    return resource_variances

@@ -18,6 +18,7 @@ def visual_field(
     channels: int = 5,
     return_rgb=False,
     has_value_map=False,
+    env: Optional[GridworldEnv] = None
 ) -> np.ndarray:
     """
     Visualize the world.
@@ -40,6 +41,9 @@ def visual_field(
     if has_value_map:
         if not return_rgb:
             C += 1
+    if env.full_partner_selection:
+        C += 22
+
     new = np.stack([np.zeros_like(world, dtype=np.float64) for _ in range(C)], axis=0)[
         :, :, :, 0
     ]
@@ -55,8 +59,26 @@ def visual_field(
         else:
             # print(world[H, W, 0], world[H, W, 0].appearance)
             if has_value_map:
-                new[:, H, W] = [world[H, W, 0].value * 255] + world[H, W, 0].appearance
-                # print(new[:, H, W])
+                if world[location].can_see_others_worldview:
+                    placeholder = np.append(world[location].value_dict[world[H, W, 0].kind] * 255, world[H, W, 0].appearance)
+                    # new[:, H, W] = [world[location].value_dict[world[H, W, 0].kind] * 255] + world[H, W, 0].appearance
+                    for agent in env.partner_agents:
+                        placeholder = np.append(placeholder, agent.appearance)
+                        placeholder = np.append(placeholder, agent.resource_val['median'][world[H, W, 0].kind] * 255)
+                        placeholder = np.append(placeholder, agent.resource_val['var'][world[H, W, 0].kind] * 255)
+                    new[:, H, W] = placeholder
+                else:
+                    placeholder = [world[location].value_dict[world[H, W, 0].kind] * 255] + world[H, W, 0].appearance
+                    for j in range(2):
+                        placeholder = np.append(placeholder, [0 for _ in range(len(world[H, W, 0].appearance))])
+                        placeholder = np.append(placeholder, [0])
+                        placeholder = np.append(placeholder, [0])
+                    new[:, H, W] = placeholder
+                    # for j in range(2):
+                    #     new[:, H, W] += [0 for _ in range(len(world[H, W, 0].appearance))]
+                    #     new[:, H, W] += [0]
+                    #     new[:, H, W] += [0]
+                    #     new[:, H, W] += [0]
             else:
                 new[:, H, W] = world[H, W, 0].appearance
         
@@ -96,7 +118,20 @@ def visual_field(
 
         # append value to wall_appearance
         if has_value_map:
-            wall_appearance = np.insert(wall_appearance, 0, 0)
+            wall_appearance = np.insert(wall_appearance, 0, -1)
+            if env.full_partner_selection:
+                placeholder = wall_appearance
+                if world[location].can_see_others_worldview:
+                    for agent in env.partner_agents:
+                        placeholder = np.append(placeholder, agent.appearance)
+                        placeholder = np.append(placeholder, agent.resource_val['median']['Wall'] * 255)
+                        placeholder = np.append(placeholder, agent.resource_val['var']['Wall'] * 255)
+                else:
+                    for j in range(2):
+                        placeholder = np.append(placeholder, [0 for _ in range(len(world[location].appearance))])
+                        placeholder = np.append(placeholder, 0)
+                        placeholder = np.append(placeholder, 0)
+                wall_appearance = placeholder
 
         for index, x in np.ndenumerate(new):
             C, H, W = index  # Get the coordinates
