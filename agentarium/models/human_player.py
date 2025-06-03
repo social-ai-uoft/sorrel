@@ -29,7 +29,6 @@ class ModelHumanPlayer:
                 plt.subplot(1, self.memory_size, i+1)
                 plt.imshow(frame)
             plt.show()
-        
         done = 0
         while done == 0:
             action_ = input(f"player {self.name}, Select Action: ")
