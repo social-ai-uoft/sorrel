@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Sequence
 
-from sorrel.models.base_model import SorrelModel
+from sorrel.models.base_model import BaseModel
 from sorrel.buffers import Buffer
 
 
@@ -17,7 +17,7 @@ class WolfBuffer(Buffer):
     def add(self, obs, action, reward, done):
         pass
 
-class WolfModel(SorrelModel):
+class WolfModel(BaseModel):
     def __init__(
             self,
             input_size: int | Sequence[int],
@@ -34,5 +34,5 @@ class WolfModel(SorrelModel):
         self.epsilon = epsilon
         self.num_frames = 1
 
-    def take_action(state: np.ndarray) -> int:
+    def take_action(self, state: np.ndarray) -> int:
         ...

@@ -8,14 +8,14 @@ from math import tanh
 
 from sorrel.agents import Agent
 from sorrel.models import base_model
-from sorrel.environments.gridworld import GridworldEnv
-from sorrel.observation import visual_field
+from sorrel.worlds.gridworld import Gridworld
+from sorrel.examples.leakyemotions.world import LeakyEmotionsWorld
 ###
 
-class LeakyEmotionAgent(Agent):
+class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
     """An agent that perceives wolves, bushes, and other agents in the environment."""
 
-    def __init__(self, observation_spec, action_spec, model: base_model.SorrelModel, location: tuple | None):
+    def __init__(self, observation_spec, action_spec, model: base_model.BaseModel, location: tuple | None = None):
         super().__init__(observation_spec, action_spec, model, location)
         self.encounters = {}
         self.passable = False
@@ -24,25 +24,18 @@ class LeakyEmotionAgent(Agent):
     
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
-        state = np.zeros_like(np.prod(self.model.input_size))
-        action = 0
-        reward = 0.0
-        done = False
-        for i in range(self.model.num_frames):
-            self.add_memory(state, action, reward, done)
+        return self.model.reset()
     
-    def pov(self, env: GridworldEnv) -> np.ndarray:
+    def pov(self, world: Gridworld) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
-        image = self.observation_spec.observe(env, self.location)
+        image = self.observation_spec.observe(world, self.location)
         # Flatten the image to get the state
         return image.reshape(1, -1)
 
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
         if not hasattr(self.model, "name"):
-            prev_states = self.model.memory.current_state(
-                stacked_frames=self.model.num_frames - 1
-            )
+            prev_states = self.model.memory.current_state()
             stacked_states = np.vstack((prev_states, state))
 
             model_input = stacked_states.reshape(1, -1)
@@ -53,23 +46,23 @@ class LeakyEmotionAgent(Agent):
         
         return action
 
-    def act(self, env: GridworldEnv, action: int) -> float:
+    def act(self, world: LeakyEmotionsWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
 
         # Translate the model output to an action string
-        action = self.action_spec.get_readable_action(action)
+        action_name = self.action_spec.get_readable_action(action)
 
         new_location = self.location
-        if action == "up":
+        if action_name == "up":
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
-        if action == "down":
+        if action_name == "down":
             new_location = (self.location[0] + 1, self.location[1], self.location[2])
-        if action == "left":
+        if action_name == "left":
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
-        if action == "right":
+        if action_name == "right":
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
 
-        target_objects = env.observe_all_layers(new_location)
+        target_objects = world.observe_all_layers(new_location)
 
         reward = 0
         
@@ -82,23 +75,23 @@ class LeakyEmotionAgent(Agent):
             self.encounters[target_object.kind] += 1
 
             if target_object.kind == "Bush":
-                env.num_bushes_eaten = self.encounters[target_object.kind]
-                env.bush_ripeness_total += target_object.ripeness
+                world.num_bushes_eaten = self.encounters[target_object.kind]
+                world.bush_ripeness_total += target_object.ripeness #type: ignore
 
-        env.game_score += reward
+        # world.total_reward += reward
 
         # try moving to new_location
-        env.move(self, new_location)
+        world.move(self, new_location)
 
         return reward
     
-    def is_done(self, env: GridworldEnv) -> bool:
+    def is_done(self, world: LeakyEmotionsWorld) -> bool:
         """Returns whether this Agent is done."""
-        return env.turn >= env.max_turns
+        return world.is_done
 
 class Wolf(Agent):
     """An entity that represents a wolf in the leakyemotions environment."""
-    def __init__(self, observation_spec, action_spec, model: base_model.SorrelModel, location: tuple | None):
+    def __init__(self, observation_spec, action_spec, model: base_model.BaseModel, location: tuple | None = None):
         super().__init__(observation_spec, action_spec, model, location)
         self.value = 0
         self.asleep = False 
@@ -154,13 +147,13 @@ class Wolf(Agent):
 
         return chosen_action
     
-    def pov(self, env: GridworldEnv) -> np.ndarray:
+    def pov(self, world: Gridworld) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
         # Flatten the image to get the state
-        return env.world.flatten()
+        return world.map.flatten()
     
     @staticmethod
-    def compute_taxicab_distance(location, targets: list[tuple]) -> np.array:
+    def compute_taxicab_distance(location, targets: list[tuple]) -> np.ndarray:
         """
         Computes taxicab distance between one location and a list of other locations.
 
@@ -189,7 +182,9 @@ class Wolf(Agent):
         Returns:
             tuple: New location after the action in the form (x, y, z).
         """
-           
+        
+        new_location = self.location
+
         if action == 0:
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
         elif action == 1:
@@ -201,33 +196,28 @@ class Wolf(Agent):
         
         return new_location
     
-    def act(self, env: GridworldEnv, action: int):
+    def act(self, world: LeakyEmotionsWorld, action: int):
         """Move to the location computed by the chase() function, and decrease LeakyEmotionAgent's score if the wolf overlaps with it.
         
         Previously called the hunt() function.
         """
 
-        if action == 0:
-            new_location = (self.location[0] - 1, self.location[1], self.location[2])
-        elif action == 1:
-            new_location = (self.location[0] + 1, self.location[1], self.location[2])
-        elif action == 2:
-            new_location = (self.location[0], self.location[1] - 1, self.location[2])
-        elif action == 3:
-            new_location = (self.location[0], self.location[1] + 1, self.location[2])
+        new_location = self.movement(action)
 
         # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
-        target_object = env.observe(new_location)
+        target_object = world.observe(new_location)
         
         if target_object.kind == "LeakyEmotionAgent":
             target_object.value -= 1
-            # env.num_agents -= 1
-            print(f"{target_object.kind} {target_object.id} removed.")
-            if env.num_agents == 0:
-                env.game_over()
+            # world.num_agents -= 1
+            # print(f"{target_object.kind} {target_object.id} removed.") # type: ignore
+            if world.num_agents == 0:
+                world.game_over()
 
         # try moving to new_location
-        env.move(self, new_location)
+        world.move(self, new_location)
+
+        return 0.
 
     def sleep(self):
         '''
@@ -269,15 +259,6 @@ class Wolf(Agent):
                 # Otherwise, stay awake and increment the time counter
                 self.time_counter += 1
 
-    def reset(self) -> None:
-        """Resets the agent by fill in blank images for the memory buffer."""
-        state = np.zeros_like(np.prod(self.model.input_size))
-        action = 0
-        reward = 0.0
-        done = False
-        for i in range(self.model.num_frames):
-            self.add_memory(state, action, reward, done)
-
-    def is_done(self, env: GridworldEnv) -> bool:
+    def is_done(self, world: LeakyEmotionsWorld) -> bool:
         """Returns whether this Agent is done."""
-        return env.turn >= env.max_turns
+        return world.is_done

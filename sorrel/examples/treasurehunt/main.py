@@ -1,3 +1,5 @@
+from omegaconf import OmegaConf
+
 from sorrel.examples.treasurehunt.entities import EmptyEntity
 from sorrel.examples.treasurehunt.env import TreasurehuntEnv
 from sorrel.examples.treasurehunt.world import TreasurehuntWorld
@@ -23,6 +25,8 @@ if __name__ == "__main__":
             "spawn_prob": 0.02,
         },
     }
+
+    config = OmegaConf.create(config)
 
     # construct the world
     env = TreasurehuntWorld(config=config, default_entity=EmptyEntity())

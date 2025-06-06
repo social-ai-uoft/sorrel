@@ -2,6 +2,7 @@
 # general imports
 import numpy as np
 import torch
+import omegaconf
 
 from sorrel.action.action_spec import ActionSpec
 from sorrel.environment import Environment
@@ -22,7 +23,7 @@ from sorrel.observation.observation_spec import OneHotObservationSpec
 class TreasurehuntEnv(Environment[TreasurehuntWorld]):
     """The experiment for treasurehunt."""
 
-    def __init__(self, world: TreasurehuntWorld, config: dict) -> None:
+    def __init__(self, world: TreasurehuntWorld, config: dict | omegaconf.DictConfig) -> None:
         super().__init__(world, config)
 
     # end constructor

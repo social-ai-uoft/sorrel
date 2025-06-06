@@ -1,5 +1,5 @@
 experiment:
-  name: cleanup
+  name: leakyemotions
   epochs: 7000
   max_turns: 100
   epsilon_decay: 0.0001
