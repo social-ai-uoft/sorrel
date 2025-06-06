@@ -1,1 +1,1 @@
-from sorrel.models.base_model import SorrelModel
+from sorrel.models.base_model import BaseModel

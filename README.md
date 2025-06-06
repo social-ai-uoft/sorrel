@@ -1,6 +1,9 @@
 <img style="width: 100px" src="https://github.com/social-ai-uoft/sorrel/blob/main/media/sorrel-icon.png" />
 
-[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/social-ai-uoft/sorrel/main.svg)](https://results.pre-commit.ci/latest/github/social-ai-uoft/sorrel/main) ![pytest status](https://github.com/social-ai-uoft/sorrel/workflows/PyTest/badge.svg)
+![pytest status](https://github.com/social-ai-uoft/sorrel/workflows/PyTest/badge.svg) 
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
+[![License](https://img.shields.io/github/license/social-ai-uoft/sorrel)](https://github.com/social-ai-uoft/sorrel/blob/main/LICENSE)
+[![code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 # Sorrel
 
@@ -22,7 +25,7 @@ with our own solutions to both novel and long-standing RL problems.
 
 > [!IMPORTANT]
 > We recommend you follow these instructions in a fresh conda/virtual environment to keep packages isolated
-> from other environments and/or Python versions. Python 3.11+ is required.
+> from other environments and/or Python versions. Python 3.12+ is required.
 
 To create a [virtual environment](https://docs.python.org/3/library/venv.html),
 navigate to your project directory in the terminal and run:
@@ -82,10 +85,6 @@ automatically format your code wherever possible, along with testing frameworks 
 We have included a [pre-commit](https://pre-commit.com/) configuration to automatically run all CI tasks whenever you 
 attempt to commit to the Sorrel repository. 
 
-> [!WARNING]
-> We highly recommend you use pre-commit as pull requests will NOT be
-> merged unless you pass ALL CI checks (including the pre-commit CI check).
-
 To set up pre-commit, start by confirming that it's installed by running:
 ```
 pre-commit --version
@@ -133,18 +132,13 @@ Then, view the updated documentations by opening ``.\docs\build\html\index.html`
 
 ## Citing the project
 
-TODO: Insert paper citation here
+Gelpí, R. A., Ju, Y., Jackson, E. C., Tang, Y., Verch, S., Voelcker, C., & Cunningham, W. A. (2025). Sorrel: A simple and flexible framework for multi-agent reinforcement learning. [arXiv:2506.00228 [cs.MA]](https://doi.org/10.48550/arXiv.2506.00228)
 
 ## Maintainers
-Sorrel is currently maintained by Yibing Ju (aka [@bing-j](https://github.com/galacticglum)) and [Rebekah Gelpi](https://rgelpi.github.io) (aka [@rgelpi](https://github.com/galacticglum)).
+Sorrel is currently maintained by Yibing Ju (aka [@bing-j](https://github.com/bing-j)) and [Rebekah Gelpi](https://rgelpi.github.io) (aka [@rgelpi](https://github.com/galacticglum)).
 
 > [!NOTE]
 > **We do not do technical support, nor consulting** and don't answer personal questions per email. If you have any questions, concerns, or suggestions, please post them on the [GitHub issues page](https://github.com/social-ai-uoft/sorrel/issues) or the [GitHub discussion page](https://github.com/social-ai-uoft/sorrel/discussions).
 
-## Contributing
-
-Sorrel is open source and is developed by a community of researchers, developers, and students. We welcome contributions from all levels of the community. To get started, please read the [contributing guide](CONTRIBUTING.md).
-
 ## Acknowledgments
-
-TODO: Insert acknowledgements here
+We would like to thank the other authors: Ethan Jackson, Yikai Tang, Shon Verch, Claas Voecker, and Wiliam Cunningham.

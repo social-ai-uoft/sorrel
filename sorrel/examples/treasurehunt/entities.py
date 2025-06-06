@@ -6,12 +6,12 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.entities import Entity
-from sorrel.environments import GridworldEnv
+from sorrel.examples.treasurehunt.world import TreasurehuntWorld
 
 # end imports
 
 
-class Wall(Entity):
+class Wall(Entity[TreasurehuntWorld]):
     """An entity that represents a wall in the treasurehunt environment."""
 
     def __init__(self):
@@ -20,7 +20,7 @@ class Wall(Entity):
         self.sprite = Path(__file__).parent / "./assets/wall.png"
 
 
-class Sand(Entity):
+class Sand(Entity[TreasurehuntWorld]):
     """An entity that represents a block of sand in the treasurehunt environment."""
 
     def __init__(self):
@@ -30,7 +30,7 @@ class Sand(Entity):
         self.sprite = Path(__file__).parent / "./assets/sand.png"
 
 
-class Gem(Entity):
+class Gem(Entity[TreasurehuntWorld]):
     """An entity that represents a gem in the treasurehunt environment."""
 
     def __init__(self, gem_value):
@@ -40,7 +40,7 @@ class Gem(Entity):
         self.sprite = Path(__file__).parent / "./assets/gem.png"
 
 
-class EmptyEntity(Entity):
+class EmptyEntity(Entity[TreasurehuntWorld]):
     """An entity that represents an empty space in the treasurehunt environment."""
 
     def __init__(self):
@@ -49,11 +49,10 @@ class EmptyEntity(Entity):
         self.has_transitions = True  # EmptyEntity can transition into Gems
         self.sprite = Path(__file__).parent / "./assets/empty.png"
 
-    def transition(self, env: GridworldEnv):
-        """
-        EmptySpaces can randomly spawn into Gems based on the item spawn probabilities dictated in the environmnet.
-        """
+    def transition(self, world: TreasurehuntWorld):
+        """EmptySpaces can randomly spawn into Gems based on the item spawn
+        probabilities dictated in the environment."""
         if (  # NOTE: If the spawn prob is too high, the environment gets overrun
-            np.random.random() < env.spawn_prob
+            np.random.random() < world.spawn_prob
         ):
-            env.add(self.location, Gem(env.gem_value))
+            world.add(self.location, Gem(world.gem_value))

@@ -1,3 +1,6 @@
+.secrets
+.secret
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -137,23 +140,14 @@ dmypy.json
 
 # Output files
 output/
+outputs/
 logs/
-gem/.DS_Store
-examples/RTP/data/
-examples/trucks/runs/
-examples/trucks/notebooks/runs/
-examples/trucks/models/checkpoints/
-examples/trucks/data/
-examples/RPG/runs/
-examples/RPG/notebooks/runs/
-examples/RPG/models/checkpoints/
-examples/RPG/data
-gem/.DS_Store
-examples/cleanup/data/
-examples/cleanup/runs/
-examples/cleanup/checkpoints/
-examples/treasurehunt/data/
+data/
+sorrel/examples/cleanup/data/
+sorrel/examples/cleanup/runs/
+sorrel/examples/cleanup/checkpoints/
+sorrel/examples/treasurehunt/data/
 pyvenv.cfg
 /bin
 /share
-examples/ai_econ/data
+sorrel/examples/ai_econ/data

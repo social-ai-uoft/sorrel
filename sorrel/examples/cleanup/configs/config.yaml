@@ -1,8 +1,9 @@
 experiment:
   name: cleanup
   epochs: 7000
-  max_turns: 100
+  max_turns: 50
   epsilon_decay: 0.0001
+  record_period: 50
 
 env:
   height: 21
@@ -22,16 +23,17 @@ model:
     parameters:
       layer_size: 250
       n_step: 3
-      BATCH_SIZE: 64
+      batch_size: 64
       memory_size: 1024
       LR: 0.00025
       TAU: .001
       GAMMA: 0.99
-      N: 12
+      n_quantiles: 12
       sync_freq: 200
       model_update_freq: 4
       epsilon: 0.8
       device: cpu
+  epsilon_decay: 0.0001
 
 agent:
   agent:
@@ -42,7 +44,7 @@ agent:
     obs:
       channels: 8
       vision: 5
-      num_frames: 5
+      n_frames: 5
       embeddings: 3
 
 root: '~/Documents/GitHub/sorrel'

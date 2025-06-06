@@ -4,12 +4,12 @@ import numpy as np
 
 from sorrel.action.action_spec import ActionSpec
 from sorrel.entities import Entity
-from sorrel.environments import GridworldEnv
-from sorrel.models import SorrelModel
+from sorrel.models import BaseModel
 from sorrel.observation.observation_spec import ObservationSpec
+from sorrel.worlds import Gridworld
 
 
-class Agent(Entity):
+class Agent[W: Gridworld](Entity[W]):
     """An abstract class for agents, a special type of entities.
 
     Note that this is a subclass of :py:class:`agentarium.entities.Entity`.
@@ -31,20 +31,20 @@ class Agent(Entity):
 
     observation_spec: ObservationSpec
     action_spec: ActionSpec
-    model: SorrelModel
+    model: BaseModel
 
     def __init__(
         self,
         observation_spec: ObservationSpec,
         action_spec: ActionSpec,
-        model: SorrelModel,
+        model: BaseModel,
         location=None,
     ):
         # initializations based on parameters
         self.observation_spec = observation_spec
         self.action_spec = action_spec
         self.model = model
-        self.location = location
+        self._location = location
 
         super().__init__()
 
@@ -57,11 +57,11 @@ class Agent(Entity):
         pass
 
     @abstractmethod
-    def pov(self, env: GridworldEnv) -> np.ndarray:
+    def pov(self, world: W) -> np.ndarray:
         """Defines the agent's observation function.
 
         Args:
-            env (GridworldEnv): the environment that this agent is observing.
+            env (Gridworld): the environment that this agent is observing.
 
         Returns:
             torch.Tensor: the observed state.
@@ -81,10 +81,11 @@ class Agent(Entity):
         pass
 
     @abstractmethod
-    def act(self, env: GridworldEnv, action: int) -> float:
+    def act(self, world: W, action: int) -> float:
         """Act on the environment.
 
         Args:
+            env (Gridworld): The environment in which the agent is acting.
             action: an element from this agent's action space indicating the action to take.
 
         Returns:
@@ -93,13 +94,13 @@ class Agent(Entity):
         pass
 
     @abstractmethod
-    def is_done(self, env: GridworldEnv) -> bool:
+    def is_done(self, world: W) -> bool:
         """Determines if the agent is done acting given the environment.
 
         This might be based on the experiment's maximum number of turns from the agent's cfg file.
 
         Args:
-            env (GridworldEnv): the environment that the agent is in.
+            env (Gridworld): the environment that the agent is in.
 
         Returns:
             bool: whether the agent is done acting. False by default.
@@ -119,7 +120,7 @@ class Agent(Entity):
         """
         self.model.memory.add(state, action, reward, done)
 
-    def transition(self, env: GridworldEnv) -> None:
+    def transition(self, world: W) -> None:
         """Processes a full transition step for the agent.
 
         This function does the following:
@@ -129,10 +130,12 @@ class Agent(Entity):
         - Determines if the agent is done through :meth:`is_done()`
 
         Args:
-            env (GridworldEnv): the environment that this agent is acting in.
+            env (Gridworld): the environment that this agent is acting in.
         """
-        state = self.pov(env)
+        state = self.pov(world)
         action = self.get_action(state)
-        reward = self.act(env, action)
-        done = self.is_done(env)
+        reward = self.act(world, action)
+        done = self.is_done(world)
+
+        world.total_reward += reward
         self.add_memory(state, action, reward, done)

@@ -2,19 +2,19 @@ from pathlib import Path
 
 import numpy as np
 
-from examples.cleanup.entities import EmptyEntity
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.entities import Entity
-from sorrel.environments import GridworldEnv
+from sorrel.examples.cleanup.entities import Apple, AppleTree, EmptyEntity
+from sorrel.examples.cleanup.world import CleanupWorld
 from sorrel.location import Location, Vector
-from sorrel.models import SorrelModel
+from sorrel.models import BaseModel
 from sorrel.observation import embedding, observation_spec
+from sorrel.worlds import Gridworld
 
 # --------------------------- #
 # region: Cleanup agent class #
 # --------------------------- #
-
 """The agent and observation class for Cleanup."""
 
 
@@ -24,11 +24,12 @@ class CleanupObservation(observation_spec.OneHotObservationSpec):
     def __init__(
         self,
         entity_list: list[str],
+        full_view: bool = False,
         vision_radius: int | None = None,
         embedding_size: int = 3,
     ):
 
-        super().__init__(entity_list, vision_radius)
+        super().__init__(entity_list, full_view, vision_radius)
         self.embedding_size = embedding_size
         if self.full_view:
             self.input_size = (
@@ -48,64 +49,58 @@ class CleanupObservation(observation_spec.OneHotObservationSpec):
                 + (4 * self.embedding_size),  # Embedding size
             )
 
-    def observe(self, env: GridworldEnv, location: tuple | Location | None = None):
-
-        visual_field = super().observe(env, location).flatten()
+    def observe(self, world: Gridworld, location: tuple | Location | None = None):
+        """Location must be provided for this observation."""
+        if location is None:
+            raise ValueError("Location must not be None for CleanupObservation.")
+        visual_field = super().observe(world, location).flatten()
         pos_code = embedding.positional_embedding(
-            location, env, self.embedding_size, self.embedding_size
+            location, world, (self.embedding_size, self.embedding_size)
         )
 
         return np.concatenate((visual_field, pos_code))
 
 
-class CleanupAgent(Agent):
-    """
-    A treasurehunt agent that uses the iqn model.
-    """
+class CleanupAgent(Agent[CleanupWorld]):
+    """A Cleanup agent that uses the IQN model."""
 
     def __init__(
         self,
         observation_spec: CleanupObservation,
         action_spec: ActionSpec,
-        model: SorrelModel,
+        model: BaseModel,
     ):
         super().__init__(observation_spec, action_spec=action_spec, model=model)
 
         self.direction = 2  # 90 degree rotation: default at 180 degrees (facing down)
         self.sprite = Path(__file__).parent / "./assets/hero.png"
 
-    def reset(self) -> None:
-        """Resets the agent by fill in blank images for the memory buffer."""
-        state = np.zeros_like(np.prod(self.model.input_size))
-        action = 0
-        reward = 0.0
-        done = False
-        for i in range(self.model.num_frames):
-            self.add_memory(state, action, reward, done)
+        self.encounters = {}
 
-    def pov(self, env: GridworldEnv) -> np.ndarray:
-        """Returns the state observed by the agent, from the flattened visual field + positional code."""
-        image = self.observation_spec.observe(env, self.location)
+    def pov(self, world: CleanupWorld) -> np.ndarray:
+        image = self.observation_spec.observe(world, self.location)
         # flatten the image to get the state
         return image.reshape(1, -1)
 
     def get_action(self, state: np.ndarray) -> int:
-        """Gets the action from the model, using the stacked states."""
-        prev_states = self.model.memory.current_state(
-            stacked_frames=self.model.num_frames - 1
-        )
+        prev_states = self.model.memory.current_state()
         stacked_states = np.vstack((prev_states, state))
 
         # Flatten the model input
         model_input = stacked_states.reshape(1, -1)
-        # Get the model output
+        # Get model output
         model_output = self.model.take_action(model_input)
 
         return model_output
 
-    def spawn_beam(self, env: GridworldEnv, action: str):
-        """Generate a beam extending cfg.agent.agent.beam_radius pixels
-        out in front of the agent."""
+    def spawn_beam(self, world: CleanupWorld, action: str) -> None:
+        """Generate a beam extending config.agent.agent.beam_radius pixels out in front
+        of the agent.
+
+        Args:
+            world: The world tospawn the beam in.
+            action: The action to take.
+        """
 
         # Get the tiles above and adjacent to the agent.
         up_vector = Vector(0, 0, layer=1, direction=self.direction)
@@ -121,76 +116,85 @@ class CleanupAgent(Agent):
         beam_locs = (
             [
                 (tile_above + (forward_vector * i))
-                for i in range(1, env.cfg.agent.agent.beam_radius + 1)
+                for i in range(1, world.config.agent.agent.beam_radius + 1)
             ]
             + [
                 (tile_above + (right_vector) + (forward_vector * i))
-                for i in range(env.cfg.agent.agent.beam_radius)
+                for i in range(world.config.agent.agent.beam_radius)
             ]
             + [
                 (tile_above + (left_vector) + (forward_vector * i))
-                for i in range(env.cfg.agent.agent.beam_radius)
+                for i in range(world.config.agent.agent.beam_radius)
             ]
         )
 
         # Check beam layer to determine which locations are valid...
-        valid_locs = [loc for loc in beam_locs if env.valid_location(loc)]
+        valid_locs = [loc for loc in beam_locs if world.valid_location(loc)]
 
         # Exclude any locations that have walls...
         placeable_locs = [
-            loc for loc in valid_locs if not str(env.observe(loc.to_tuple())) == "Wall"
+            loc
+            for loc in valid_locs
+            if not str(world.observe(loc.to_tuple())) == "Wall"
         ]
 
         # Then, place beams in all of the remaining valid locations.
         for loc in placeable_locs:
             if action == "clean":
-                env.remove(loc.to_tuple())
-                env.add(loc.to_tuple(), CleanBeam())
+                world.remove(loc.to_tuple())
+                world.add(loc.to_tuple(), CleanBeam())
             elif action == "zap":
-                env.remove(loc.to_tuple())
-                env.add(loc.to_tuple(), ZapBeam())
+                world.remove(loc.to_tuple())
+                world.add(loc.to_tuple(), ZapBeam())
 
-    def act(self, env: GridworldEnv, action: int) -> float:
-        """Act on the environment, returning the reward."""
+    def act(self, world: CleanupWorld, action: int) -> float:
 
         # Translate the model output to an action string
-        action = self.action_spec.get_readable_action(action)
+        action_name = self.action_spec.get_readable_action(action)
 
         # Attempt to move
         new_location = self.location
-        if action == "up":
+        if action_name == "up":
             self.direction = 0
             self.sprite = Path(__file__).parent / "./assets/hero-back.png"
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
-        if action == "down":
+        if action_name == "down":
             self.direction = 2
             self.sprite = Path(__file__).parent / "./assets/hero.png"
             new_location = (self.location[0] + 1, self.location[1], self.location[2])
-        if action == "left":
+        if action_name == "left":
             self.direction = 3
             self.sprite = Path(__file__).parent / "./assets/hero-left.png"
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
-        if action == "right":
+        if action_name == "right":
             self.direction = 1
             self.sprite = Path(__file__).parent / "./assets/hero-right.png"
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
 
         # Attempt to spawn beam
-        self.spawn_beam(env, action)
+        self.spawn_beam(world, action_name)
 
         # get reward obtained from object at new_location
-        target_object = env.observe(new_location)
-        reward = target_object.value
-        env.game_score += reward
+        target_objects = world.observe_all_layers(new_location)
+        target_locations = [
+            (*new_location[:-1], i) for i, _ in enumerate(target_objects)
+        ]
+        reward = 0
+        for target_location, target_object in zip(target_locations, target_objects):
+            reward += target_object.value
+            if target_object.kind not in self.encounters.keys():
+                self.encounters[target_object.kind] = 0
+            self.encounters[target_object.kind] += 1
+
+        world.total_reward += reward
 
         # try moving to new_location
-        env.move(self, new_location)
+        world.move(self, new_location)
 
         return reward
 
-    def is_done(self, env: GridworldEnv) -> bool:
-        """Returns whether this Agent is done."""
-        return env.turn >= env.max_turns
+    def is_done(self, world: CleanupWorld) -> bool:
+        return world.turn >= world.max_turns
 
 
 # --------------------------- #
@@ -209,11 +213,12 @@ class Beam(Entity):
         super().__init__()
         self.sprite = Path(__file__).parent / "./assets/beam.png"
         self.turn_counter = 0
+        self.has_transitions = True
 
-    def transition(self, env: GridworldEnv):
+    def transition(self, world: Gridworld):
         # Beams persist for one full turn, then disappear.
         if self.turn_counter >= 1:
-            env.add(self.location, EmptyEntity())
+            world.add(self.location, EmptyEntity())
         else:
             self.turn_counter += 1
 

@@ -9,11 +9,16 @@ version: 2
 build:
   os: ubuntu-22.04
   tools:
-    python: "3.11"
-    # You can also specify other tool versions:
-    # nodejs: "19"
-    # rust: "1.64"
-    # golang: "1.19"
+    python: "3.12"
+  jobs:
+    post_create_environment:
+      # Install poetry
+      # https://python-poetry.org/docs/#installing-manually
+      - python -m pip install --no-cache-dir poetry
+    post_install:
+      # Install only dependencies including dev
+      # https://python-poetry.org/docs/managing-dependencies/#dependency-groups
+      - VIRTUAL_ENV=$READTHEDOCS_VIRTUALENV_PATH poetry install --with dev
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
@@ -27,6 +32,6 @@ sphinx:
 # Optional but recommended, declare the Python requirements required
 # to build your documentation
 # See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
-python:
-   install:
-   - requirements: docs/requirements.txt
+# python:
+#    install:
+#    - requirements: docs/requirements.txt

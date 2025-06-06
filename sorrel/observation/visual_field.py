@@ -1,14 +1,14 @@
 # Import base packages
 import numpy as np
 
-# Import gem packages
-from sorrel.environments import GridworldEnv
+# sorrel imports
 from sorrel.utils.helpers import shift
+from sorrel.worlds import Gridworld
 
 
 def visual_field(
-    env: GridworldEnv,
-    entity_map: dict[str, list[float]],
+    world: Gridworld,
+    entity_map: dict[str, np.ndarray],
     vision: int | None = None,
     location: tuple | None = None,
     fill_entity_kind: str = "Wall",
@@ -18,7 +18,7 @@ def visual_field(
     See :py:meth:`.OneHotObservationSpec.observe()` for an example of how this function is used.
 
     Args:
-        env: The environment to visualize.
+        world: The world tovisualize.
         entity_map: The mapping between objects and visual appearance.
         vision: The agent's visual field radius.
             If None, the entire environment. Defaults to None.
@@ -30,8 +30,8 @@ def visual_field(
     Returns:
         An array with dtype float64 of shape
         `(number of channels, 2 * vision + 1, 2 * vision + 1)`.
-        Or if vision is None:
-        `(number of channels, env.width, env.layers)`.
+        Or if vision or location is None:
+        `(number of channels, world.width, world.layers)`.
         Here, the number channels is determined based on the one-hot entity map provided.
     """
     # Get the number of channels used by the model.
@@ -39,19 +39,19 @@ def visual_field(
 
     # Create an array of equivalent shape to the world map, with C appearance channels
     new = np.stack(
-        [np.zeros_like(env.world, dtype=np.float64) for _ in range(num_channels)],
+        [np.zeros_like(world.map, dtype=np.float64) for _ in range(num_channels)],
         axis=0,
     )
 
     # Iterate through the world and assign the appearance of the object at that location
-    for index, x in np.ndenumerate(env.world):
+    for index, x in np.ndenumerate(world.map):
         # Return visualization image
         new[:, *index] = entity_map[x.kind]
     # sum the one-hot code over the layers
     new = np.sum(new, axis=-1)
 
     # If no location, return the full visual field
-    if location is None:
+    if location is None or vision is None:
         return new.astype(np.float64)
 
     # Otherwise...
@@ -65,7 +65,7 @@ def visual_field(
                     0
                 ],  # The first dimension is zero, because the channels are not shifted
                 np.subtract(
-                    [env.world.shape[0] // 2, env.world.shape[1] // 2], location[0:2]
+                    [world.map.shape[0] // 2, world.map.shape[1] // 2], location[0:2]
                 ),
             )
         )
@@ -76,12 +76,12 @@ def visual_field(
 
         # Set up the dimensions of the array to crop
         crop_h = (
-            env.world.shape[0] // 2 - vision,
-            env.world.shape[0] // 2 + vision + 1,
+            world.map.shape[0] // 2 - vision,
+            world.map.shape[0] // 2 + vision + 1,
         )
         crop_w = (
-            env.world.shape[1] // 2 - vision,
-            env.world.shape[1] // 2 + vision + 1,
+            world.map.shape[1] // 2 - vision,
+            world.map.shape[1] // 2 + vision + 1,
         )
         # Crop the array to the selected dimensions
         new = new[:, slice(*crop_h), slice(*crop_w)]
@@ -95,14 +95,14 @@ def visual_field(
         # Return the agent's sliced observation space
         new = new.astype(np.float64)
         # ==rotate==#
-        # if hasattr(env.world[location], "direction"):
-        #     new = np.rot90(new, k=env.world[location].direction % 4, axes=(1, 2)).copy()
+        # if hasattr(world.map[location], "direction"):
+        #     new = np.rot90(new, k=world.map[location].direction % 4, axes=(1, 2)).copy()
         # ==========#
         return new
 
 
 def visual_field_ascii(
-    env: GridworldEnv,
+    world: Gridworld,
     entity_map: dict[str, str],
     vision: int | None = None,
     location: tuple | None = None,
@@ -117,7 +117,7 @@ def visual_field_ascii(
     See :py:meth:`.AsciiObservationSpec.observe()` for an example of how this function is used.
 
     Args:
-        env: The environment to visualize.
+        world: The world tovisualize.
         entity_map: The mapping
         between objects and visual appearance, where the visual appearance must be a character.
         vision: The agent's visual field radius.
@@ -130,28 +130,28 @@ def visual_field_ascii(
     Returns:
         An array of strings of shape
         `(2 * vision + 1, 2 * vision + 1)`.
-        Or if vision is None:
-        `(env.height, env.width)`.
+        Or if vision or location is None:
+        `(world.height, world.width)`.
     """
 
     # Create an array of equivalent shape to the world map
-    new = np.empty_like(env.world, dtype=np.str_)
+    new = np.empty_like(world.map, dtype=np.str_)
 
     # Iterate through the world and assign the appearance of the object at that location
-    for index, _ in np.ndenumerate(env.world[:, :, 0]):
+    for index, _ in np.ndenumerate(world.map[:, :, 0]):
         H, W = index
         # iterate from top to bottom
-        for L in reversed(range(env.world.shape[2])):
+        for L in reversed(range(world.map.shape[2])):
             # if the entity is not empty, get its appearance, and we don't need to check the lower layers.
-            if env.world[H, W, L].kind != "EmptyEntity":
-                new[H, W] = entity_map[env.world[H, W, L].kind]
+            if world.map[H, W, L].kind != "EmptyEntity":
+                new[H, W] = entity_map[world.map[H, W, L].kind]
                 break
             # continue to check the lower layers if the entity is not empty.
             else:
-                new[H, W] = entity_map[env.world[H, W, L].kind]
+                new[H, W] = entity_map[world.map[H, W, L].kind]
 
     # If no location, return the full visual field
-    if location is None:
+    if location is None or vision is None:
         return new.astype(np.str_)
 
     # Otherwise...
@@ -160,7 +160,7 @@ def visual_field_ascii(
         # E.g. the centrepoint for a 9x9 array is (4, 4). So, the shift array for the location
         # (1, 6) is (3, -2): left three, up two.
         shift_dims = np.subtract(
-            [env.world.shape[0] // 2, env.world.shape[1] // 2], location[0:2]
+            [world.map.shape[0] // 2, world.map.shape[1] // 2], location[0:2]
         )
 
         # Shift the array, and fill the appearances of coordinates outside the map with the fill entity's appearance.
@@ -168,12 +168,12 @@ def visual_field_ascii(
 
         # Set up the dimensions of the array to crop
         crop_h = (
-            env.world.shape[0] // 2 - vision,
-            env.world.shape[0] // 2 + vision + 1,
+            world.map.shape[0] // 2 - vision,
+            world.map.shape[0] // 2 + vision + 1,
         )
         crop_w = (
-            env.world.shape[1] // 2 - vision,
-            env.world.shape[1] // 2 + vision + 1,
+            world.map.shape[1] // 2 - vision,
+            world.map.shape[1] // 2 + vision + 1,
         )
         # Crop the array to the selected dimensions
         new = new[slice(*crop_h), slice(*crop_w)]
