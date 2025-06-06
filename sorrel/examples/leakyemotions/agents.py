@@ -207,7 +207,7 @@ class Wolf(Agent):
         # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
         target_object = world.observe(new_location)
         
-        if target_object.kind == "LeakyEmotionAgent":
+        if target_object.kind == "LeakyEmotionsAgent":
             target_object.value -= 1
             # world.num_agents -= 1
             # print(f"{target_object.kind} {target_object.id} removed.") # type: ignore
