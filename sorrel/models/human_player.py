@@ -47,6 +47,7 @@ class HumanPlayer(BaseModel):
         self.show = show
         self.tile_size = 16
         self.num_channels = 4
+        self.epsilon = 0
         # Shape the input for use with the dummy memory function and the observation function.
         self.input_size = input_size
         _input_size = (

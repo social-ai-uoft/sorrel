@@ -186,6 +186,7 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                 if animate_this_turn and renderer is not None:
                     renderer.add_image(self.world)
                 self.take_turn()
+                bunnies_left = sum([isinstance(agent, LeakyEmotionsAgent) for agent in self.agents]) - len(self.world.dead_agents)
 
             self.world.is_done = True
 
