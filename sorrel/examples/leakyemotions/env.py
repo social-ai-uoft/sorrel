@@ -5,6 +5,7 @@ import numpy as np
 import torch
 
 from sorrel.action.action_spec import ActionSpec
+from sorrel.agents import Agent
 from sorrel.environment import Environment
 
 # imports from our example
@@ -20,7 +21,7 @@ from sorrel.models.pytorch import PyTorchIQN
 from sorrel.observation.observation_spec import OneHotObservationSpec
 
 # end imports
-
+ENTITY_LIST = ["EmptyEntity", "Bush", "Wall", "Grass", "LeakyEmotionsAgent", "Wolf"]
 
 # begin leakyemotions environment
 class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
@@ -40,7 +41,7 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
         agents = []
         for _ in range(agent_num):
             # create the observation spec
-            entity_list = ["EmptyEntity", "Bush", "Wall", "Grass", "LeakyEmotionsAgent", "Wolf"]
+            entity_list = ENTITY_LIST
             observation_spec = LeakyEmotionsObservationSpec(
                 entity_list,
                 full_view=False,
@@ -90,6 +91,15 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
             )
         )
 
+        self.agents = agents
+
+    def override_agents(self, agents: list[Agent]) -> None:
+        """Override the current agent configuration with a list of new agents and resets
+        the environment.
+
+        Args:
+            agents: A list of new agents
+        """
         self.agents = agents
 
     def populate_environment(self):
