@@ -1,0 +1,115 @@
+
+experiment:
+  name: state_punishment_beta
+  epochs: 10
+  max_turns: 20
+  epsilon_decay: 0.0001
+
+env:
+  height: 15
+  width: 31
+  layers: 1
+  channels: 9
+  default_object: EmptyObject
+  full_mdp: False # Whether to return the full agent # the result is not normal when True
+  tile_size: [16, 16] # Default sprite size for visualization (not used as model input yet) [16, 16]
+  prob:
+    item_spawn: 0.2 # 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
+    # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
+    item_choice: [1, 1, 1] # [0.3, 0.7] [0.8, 0.2]
+    respawn_rate: 0.04
+
+model:
+  iqn:
+    type: iRainbowModel
+    num: 3
+    device: cpu
+    parameters:
+      state_size: [32, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      extra_percept_size: 0 # added for extra percept
+      action_size: 4
+      layer_size: 250 # 250
+      num_frames: 5
+      n_step: 3
+      BATCH_SIZE: 64
+      BUFFER_SIZE: 1024
+      LR: 0.00025
+      TAU: .001
+      GAMMA: 0.99
+      N: 12
+      sync_freq: 200
+      model_update_freq: 4
+      epsilon: 0.01
+
+agent:
+  agent:
+    num: 3
+    model: iqn
+    num_memories: 5 # Should match num_frames in the model above
+    vision: 3
+    # appearance: (0.0, 0.0, 255.0)
+    appearance: 
+      - [0.0, 0.0, 255.0, 255.0, 0., 0.0, 0.0, 0.0, 0.0, ]
+      - [0.0, 0.0, 255.0, 0., 255., 0.0, 0.0, 0.0, 0.0, ]
+      - [0.0, 0.0, 255.0, 0.0, 0.0, 255., 0., 0.0, 0.0,]
+      - [0.0, 0.0, 255.0, 0.0, 0.0, 0., 255., 0.0, 0.0, ]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 255., 0.0, ]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 0., 255.0, ]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 0., 0.0, 255.]
+    memory_size: 100 # If this is larger than max_turns above, could cause issues
+    # Not used right now
+    tile_size: (1, 1)
+    pov_size: 9
+    health: 10
+    extra_percept_size: 0 # added for extra percept
+
+entity:
+  Gem:
+    start_num: 1
+    value: 1 # 5
+    appearance: (0.0, 255.0, 0.0) # Green
+    social_harm: 0
+  Coin:
+    start_num: 1
+    value: 5 # 2 #10
+    appearance: (255.0, 0.0, 0.0) # Yellow
+    social_harm: 0 # 5
+  # Food:
+  #   start_num: 0
+  #   value: 1
+  #   appearance: (255.0, 0.0, 0.0) # Red
+  Bone:
+    start_num: 1
+    value: 10
+    appearance: (0, 0, 0) # Black
+    social_harm: 40 # 5
+
+resource_val:
+  min_val: 0
+  max_val: 10
+  reset_interval: 100
+  min_var: 0
+  max_var: 3
+
+
+# Root folder for accessing file structure and modules
+root: '/Users/yikaitang/Documents/GitHub/puppet_training'
+seed: 3
+log: False
+random: False
+state_mode: 'composite'
+action_mode: 'simple'
+load_weights: True
+has_value_map: True
+curriculum: True
+only_display_value: False
+train_partners: False
+
+partner_shuffle_interval: 10
+partner_entity_value_reset_interval: 1
+
+# exp_name: 'puppet_training_reset_val_per_1epoch_x0to10x_v2_onlyshowValue_curriculum' 
+exp_name: 'puppet_training_reset_val_per_1epoch_x0to10x_v2_curriculum_partner_selection_env' 
+exp_name: 'puppet_testing_full_partner_selection_env'
+# exp_name: 'puppet_training_only_partners_env'
+

@@ -187,8 +187,11 @@ def run(cfg, **kwargs):
             # Agent transition
             for agent in agents:
 
-                # block the location of the gate 
-                env.world[(int((env.height-1)/2), env.height, 0)].passable = False
+                # # block the location of the gate 
+                # if turn >= 2:
+                #     assert env.world[(int((env.height-1)/2), env.height, 0)].passable == False, 'passable'
+                # # print('passable', env.world[(int((env.height-1)/2), env.height, 0)].passable)
+                # env.world[(int((env.height-1)/2), env.height, 0)].passable = False
                 
 
                 (state, action, reward, next_state, done_) = agent.transition(

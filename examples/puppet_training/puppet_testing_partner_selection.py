@@ -28,6 +28,7 @@ from examples.puppet_training.utils import (create_agents, create_entities, crea
 from itertools import product
 from collections import defaultdict
 import numpy as np
+import pandas as pd
 
 # endregion                #
 # ------------------------ #
@@ -79,7 +80,8 @@ def run(cfg, **kwargs):
     if cfg.load_weights:
         for count, agent in enumerate(agents):
             if agent.role == 'partner':
-                agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/puppet_training_only_partners_env_agent{0}_iRainbowModel.pkl')
+                model_name = f'puppet_training_full_partner_selection_env_agent{count}_iRainbowModel'
+                agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/{model_name}.pkl')
         
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
@@ -104,11 +106,13 @@ def run(cfg, **kwargs):
             reward_dict = defaultdict()
             reward_dict['Wall'] = -1
             reward_dict['EmptyObject'] = 0
+            reward_dict['Agent'] = 0
 
             for i, item in enumerate(vars(cfg.entity)):
                 if item not in ['Wall', 'EmptyObject']:
                     reward_dict[item] = reward_set[i]
-            collection_reward_functions.append(reward_dict)
+            if reward_dict['Gem'] == reward_dict['Coin'] == reward_dict['Bone']:
+                collection_reward_functions.append(reward_dict)
     
     # define all partner value distributions
     collection_partner_medians = []
@@ -122,24 +126,40 @@ def run(cfg, **kwargs):
                                     range(cfg.resource_val.min_var, 
                                           cfg.resource_val.max_var + 1)], 
                                           repeat=len(cfg.env.prob.item_choice))
+    all_possible_vars = product([i for i in 
+                                    range(0, 
+                                          3)], 
+                                          repeat=len(cfg.env.prob.item_choice))
 
-    for median_set, var_set in zip(all_possible_medians, all_possible_vars):
+    for median_set in all_possible_medians:
+
         median_set = list(median_set)
-        var_set = list(var_set)
 
         median_dict = defaultdict()
-        var_dict = defaultdict()
 
         for i, item in enumerate(vars(cfg.entity)):
             median_dict[item] = median_set[i]
-            var_dict[item] = var_set[i]
             # wall and emptyobject
             median_dict['Wall'] = -1
-            var_dict['Wall'] = 0
+            median_dict['Agent'] = 0
             median_dict['EmptyObject'] = 0
+
+        if median_dict['Gem'] == median_dict['Coin'] == median_dict['Bone']:
+            collection_partner_medians.append(median_dict)
+
+    
+    for var_set in all_possible_vars:
+        var_set = list(var_set)
+
+        var_dict = defaultdict()
+
+        for i, item in enumerate(vars(cfg.entity)):
+            var_dict[item] = var_set[i]
+            # wall and emptyobject
+            var_dict['Wall'] = 0
+            var_dict['Agent'] = 0
             var_dict['EmptyObject'] = 0
     
-        collection_partner_medians.append(median_dict)
         collection_partner_vars.append(var_dict)
 
 
@@ -164,144 +184,162 @@ def run(cfg, **kwargs):
                     }
 
     # loop through all possible reward functions and partner value distributions
-    for reward_dict in collection_reward_functions:
-        for agent in env.decider_agents:
+    for count,reward_dict in enumerate(collection_reward_functions):
+        print(count, len(collection_reward_functions))
+        for agent in agents:
             if agent.role == 'decider':
                 agent.value_dict = reward_dict
+            else:
+                agent.value_dict = {'Gem': 0, 'Coin': 0, 'Bone': 0, 'Wall': -1, 'Agent': 0, 'EmptyObject': 0}
 
-        for A_median_dict in collection_partner_medians:
-            for A_var_dict in collection_partner_vars:
+        for count1, A_median_dict in enumerate(collection_partner_medians):
+            print(count1, len(collection_partner_medians))
+            for count2, A_var_dict in enumerate(collection_partner_vars):
+                print(count2, len(collection_partner_vars))
                 for agent in agents:
-                    if agent.role == 'partner' and agent.id == 1:
+                    if agent.role == 'partner' and agent.ixs == 1:
                         agent.resource_val['median'] = A_median_dict
                         agent.resource_val['var'] = A_var_dict
                         
-                for B_median_dict in collection_partner_medians:
-                    for B_var_dict in collection_partner_vars:
+                # for B_median_dict in collection_partner_medians:
+                # for B_var_dict in collection_partner_vars:
+                B_var_dict = {key: A_var_dict[key] + 5 for key in A_var_dict}
+                for agent in agents:
+                    if agent.role == 'partner' and agent.ixs == 2:
+                        agent.resource_val['median'] = A_median_dict
+                        agent.resource_val['var'] = B_var_dict
+
+                # epoch wise metrics
+                partner_selection_per_cond = []
+
+                for epoch in range(cfg.experiment.epochs):
+
+                    # Reset the environment at the start of each epoch
+                    env.reset()
+
+                    random.shuffle(agents)
+
+                    done = 0
+                    turn = 0
+                    losses = [0 for _ in range(len(agents))]
+                    game_points = [0 for _ in range(len(agents))]
+
+                    # Container for data within epoch
+                    action_record = [[0 for _ in range(cfg.model.iqn.parameters.action_size)] 
+                                    for _ in range(len(agents))]
+                    
+                    total_encounters = [{entity:[] for entity in vars(cfg.entity)} for _ in range(len(agents))]
+
+                    while not done:
+
+                        # if there is no agent in the gate, close it
+                        env.check_and_close_gate()
+
+                        turn = turn + 1
+
                         for agent in agents:
-                            if agent.role == 'partner' and agent.id == 2:
-                                agent.resource_val['median'] = B_median_dict
-                                agent.resource_val['var'] = B_var_dict
+                            agent.model.start_epoch_action(**locals())
 
-                        for epoch in range(cfg.experiment.epochs):
+                        for agent in agents:
+                            agent.reward = 0
 
-                            # Reset the environment at the start of each epoch
-                            env.reset()
+                        entities = env.get_entities_for_transition()
+                        # Entity transition
+                        for entity in entities:
+                            entity.transition(env)
 
-                            random.shuffle(agents)
-
-                            done = 0
-                            turn = 0
-                            losses = [0 for _ in range(len(agents))]
-                            game_points = [0 for _ in range(len(agents))]
-
-                            # Container for data within epoch
-                            action_record = [[0 for _ in range(cfg.model.iqn.parameters.action_size)] 
-                                            for _ in range(len(agents))]
+                        # Agent transition
+                        for agent in agents:
                             
-                            total_encounters = [{entity:[] for entity in vars(cfg.entity)} for _ in range(len(agents))]
+                            if agent.role == 'decider':
 
-                            while not done:
+                                location = agent.location
 
-                                # if there is no agent in the gate, close it
-                                env.check_and_close_gate()
+                                # block the location of the gate 
+                                env.world[(int((env.height-1)/2), env.height, 0)].passable = False
 
-                                turn = turn + 1
+                                (state, action, reward, next_state, done_) = agent.transition(
+                                    env, 
+                                    )
+                                
+                                new_location = agent.location
+                              
+                                
+                                # record actions
+                                action_record[agent.ixs][action] += 1
 
-                                for agent in agents:
-                                    agent.model.start_epoch_action(**locals())
+                                if turn >= cfg.experiment.max_turns \
+                                    or new_location != location:
 
-                                for agent in agents:
-                                    agent.reward = 0
+                                    done = 1
 
-                                entities = env.get_entities_for_transition()
-                                # Entity transition
-                                for entity in entities:
-                                    entity.transition(env)
-
-                                # Agent transition
-                                for agent in agents:
+                                    # record partner selection
+                                    if new_location == (int((env.height-1)/2), env.height, 0):
+                                        partner_selection_per_cond.append(np.nan)
+                                    else:             
+                                        length = len(partner_selection_per_cond)
+                                        for agent_eval in agents:
+                                            if agent_eval.role == 'partner':
+                                                same_side = (agent_eval.location[1] > (env.height)) ==(new_location[1] > (env.height))
+                                                # print(agent_eval.location, new_location, same_side)
+                                                if same_side:
+                                                    partner_selection_per_cond.append(agent_eval.ixs-1)
+                                        new_length = len(partner_selection_per_cond)
+                                        # if length == new_length:
+                                        #     # print all agent locations
+                                        #     print('partner selection', action, [agent.location for agent in agents], new_location)
+                                            
                                     
-                                    if agent.role == 'decider':
 
-                                        location = agent.location
+                                agent.add_memory(state, action, reward, done)
 
-                                        # block the location of the gate 
-                                        env.world[(int((env.height-1)/2), env.height, 0)].passable = False
+                                game_points[agent.ixs] += int(reward)
 
-                                        (state, action, reward, next_state, done_) = agent.transition(
-                                            env, 
-                                            )
-                                        
-                                        new_location = agent.location
-                                        
-                                        # record actions
-                                        action_record[agent.ixs][action] += 1
+                                agent.model.end_epoch_action(**locals())
 
-                                        if turn >= cfg.experiment.max_turns \
-                                            or done_ \
-                                            or new_location != location:
-                                            done = 1
+                    # Add the game variables to the game object
+                    game_vars.record_turn(epoch, turn, losses, game_points)
 
-                                            # record partner selection 
-                                            for agent_eval in agents:
-                                                if agent_eval.role == 'partner':
-                                                    same_side = (agent_eval.location[1] >= (env.height)) \
-                                                        * (new_location[1] >= (env.height))
-                                                    if same_side:
-                                                        
-                                                    if agent_eval.location[1] >= env.height:
-                                                    agent_eval.encounters['partner_selection'].append(1)
-                                                else:
-                                                    agent_eval.encounters['partner_selection'].append(0)
+                    # record the performance
+                    for agent in agents:
+                        for entity in vars(cfg.entity):
+                            total_encounters[agent.ixs][entity].append(agent.encounters[entity])
 
-                                        agent.add_memory(state, action, reward, done)
+                    # Print the variables to the console
+                    game_vars.pretty_print()
 
-                                        game_points[agent.ixs] += int(reward)
+                # record the performance
+                performance_df['gem_value'].append(reward_dict['Gem'])
+                performance_df['coin_value'].append(reward_dict['Coin'])
+                performance_df['bone_value'].append(reward_dict['Bone'])
+                performance_df['gem_count'].append(np.mean(total_encounters[0]['Gem']))
+                performance_df['coin_count'].append(np.mean(total_encounters[0]['Coin']))
+                performance_df['bone_count'].append(np.mean(total_encounters[0]['Bone']))
+                
+                print(len(partner_selection_per_cond), 'partner selection per cond')
+                performance_df['partner_selection'].append(np.nanmean(partner_selection_per_cond))
 
-                                        agent.model.end_epoch_action(**locals())
+                performance_df['total_count'].append(total_encounters[0]['Gem'] + total_encounters[0]['Coin'] + total_encounters[0]['Bone'])
 
-                            # Add the game variables to the game object
-                            game_vars.record_turn(epoch, turn, losses, game_points)
+                performance_df['partner_A_gem_median'].append(A_median_dict['Gem'])
+                performance_df['partner_A_gem_var'].append(A_var_dict['Gem'])
+                performance_df['partner_A_coin_median'].append(A_median_dict['Coin'])
+                performance_df['partner_A_coin_var'].append(A_var_dict['Coin'])
+                performance_df['partner_A_bone_median'].append(A_median_dict['Bone'])
+                performance_df['partner_A_bone_var'].append(A_var_dict['Bone'])
+                # performance_df['partner_A_gem_value'].append(A_median_dict['Gem_value'])
+                # performance_df['partner_A_coin_value'].append(A_median_dict['Coin_value'])
+                # performance_df['partner_A_bone_value'].append(A_median_dict['Bone_value'])
+                # performance_df['partner_A_gem_count'].append(A_median_dict['Gem_count'])
+                # performance_df['partner_A_coin_count'].append(A_median_dict['Coin_count'])
+                # performance_df['partner_A_bone_count'].append(A_median_dict['Bone_count'])
 
-                            # record the performance
-                            for agent in agents:
-                                for entity in vars(cfg.entity):
-                                    total_encounters[agent.ixs][entity].append(agent.encounters[entity])
-
-                            # Print the variables to the console
-                            game_vars.pretty_print()
-
-                        # record the performance
-                        performance_df['gem_value'].append(reward_dict['Gem'])
-                        performance_df['coin_value'].append(reward_dict['Coin'])
-                        performance_df['bone_value'].append(reward_dict['Bone'])
-                        performance_df['gem_count'].append(np.mean(total_encounters[0]['Gem']))
-                        performance_df['coin_count'].append(np.mean(total_encounters[0]['Coin']))
-                        performance_df['bone_count'].append(np.mean(total_encounters[0]['Bone']))
-
-                        performance_df['partner_selection'].append(A_median_dict['partner_selection'])
-                        performance_df['total_count'].append(total_encounters[0]['Gem_count'] + total_encounters[0]['Coin_count'] + total_encounters[0]['Bone_count'])
-
-                        performance_df['partner_A_gem_median'].append(A_median_dict['Gem'])
-                        performance_df['partner_A_gem_var'].append(A_var_dict['Gem'])
-                        performance_df['partner_A_coin_median'].append(A_median_dict['Coin'])
-                        performance_df['partner_A_coin_var'].append(A_var_dict['Coin'])
-                        performance_df['partner_A_bone_median'].append(A_median_dict['Bone'])
-                        performance_df['partner_A_bone_var'].append(A_var_dict['Bone'])
-                        # performance_df['partner_A_gem_value'].append(A_median_dict['Gem_value'])
-                        # performance_df['partner_A_coin_value'].append(A_median_dict['Coin_value'])
-                        # performance_df['partner_A_bone_value'].append(A_median_dict['Bone_value'])
-                        # performance_df['partner_A_gem_count'].append(A_median_dict['Gem_count'])
-                        # performance_df['partner_A_coin_count'].append(A_median_dict['Coin_count'])
-                        # performance_df['partner_A_bone_count'].append(A_median_dict['Bone_count'])
-
-                        performance_df['partner_B_gem_median'].append(B_median_dict['Gem'])
-                        performance_df['partner_B_gem_var'].append(B_var_dict['Gem'])
-                        performance_df['partner_B_coin_median'].append(B_median_dict['Coin'])
-                        performance_df['partner_B_coin_var'].append(B_var_dict['Coin'])
-                        performance_df['partner_B_bone_median'].append(B_median_dict['Bone'])
-                        performance_df['partner_B_bone_var'].append(B_var_dict['Bone'])
+                performance_df['partner_B_gem_median'].append(A_median_dict['Gem'])
+                performance_df['partner_B_gem_var'].append(B_var_dict['Gem'])
+                performance_df['partner_B_coin_median'].append(A_median_dict['Coin'])
+                performance_df['partner_B_coin_var'].append(B_var_dict['Coin'])
+                performance_df['partner_B_bone_median'].append(A_median_dict['Bone'])
+                performance_df['partner_B_bone_var'].append(B_var_dict['Bone'])
              
 
 
@@ -312,7 +350,7 @@ def run(cfg, **kwargs):
     # save performance df as pandas df
     performance_df = pd.DataFrame(performance_df)
     testing_trial_name = model_name[:model_name.find('agent')]
-    performance_df.to_csv(f'{cfg.root}/examples/puppet_training/testing_data/v2_{testing_trial_name}.csv')
+    performance_df.to_csv(f'{cfg.root}/examples/puppet_training/testing_data/testing_{testing_trial_name}.csv')
 
 def main():
     import argparse

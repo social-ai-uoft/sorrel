@@ -94,7 +94,7 @@ class Agent:
             assert self.kind == "Agent", "Agent must be of kind 'Agent'."
             if self.role == 'partner':
                 # confirm partners not at the gate
-                assert self.location != (int((env.height-1)/2), env.height, 0), "Partners cannot be at the gate."
+                assert self.location != (int((env.height-1)/2), env.height, 0), f"{env.world[self.location]} is a {env.world[self.location].kind}. Partners cannot be at the gate."
             image = visual_field(
                 world=env.world, 
                 color_map=color_map, 
@@ -160,15 +160,26 @@ class Agent:
         action = self.model.take_action(model_input)
         # Attempt the transition 
         attempted_location = self.movement(action)
+        previous_location = self.location
         target_object = env.observe(attempted_location)
-        env.move(self, attempted_location)
+        if attempted_location != (int(env.height/2), env.height, 0):
+            env.move(self, attempted_location)
+        current_location = self.location
+
+        if env.is_partner_selection_env:
+            if previous_location != current_location:
+                if previous_location == (int(env.height/2), env.height, 0):
+                    env.world[previous_location] = Wall(env.colors['Wall'], env.cfg)
+        
 
         # Get the reward
         reward += self.value_dict[target_object.kind]
             
         # Add to the encounter record
         if str(target_object) in self.encounters.keys():
-            self.encounters[str(target_object)] += 1 
+            self.encounters[str(target_object)] += 1
+
+     
 
         # Get the next state   
         next_state = self.pov(env)

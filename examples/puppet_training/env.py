@@ -144,15 +144,27 @@ class puppet_training(GridworldEnv):
         # Place agents in the environment
         candidate_agent_locs = [index for index in np.ndindex(self.world.shape) 
                                 if not self.world[index].kind == 'Wall']
+        candidate_agent_locs_left = [index for index in candidate_agent_locs if index[1] < self.height]
+        candidate_agent_locs_right = [index for index in candidate_agent_locs if index[1] > self.height]
+        candidate_agent_locs.remove((int((self.height-1)/2), self.height, 0))
         agent_loc_index = np.random.choice(len(candidate_agent_locs), 
                                            size = len(self.agents)-1, replace = False)
         decider_loc = (int((self.height-1)/2), self.height, 0)
         locs = [candidate_agent_locs[i] for i in agent_loc_index]
+        left_locs = np.random.choice(candidate_agent_locs_left, 1)[0]
+        right_locs = np.random.choice(candidate_agent_locs_right, 1)[0]
 
         # place partner agents
         # locs[[k for k in range(len(self.agents)) if self.agents[k].role=='decider'][0]] = decider_loc
-        for loc, agent in zip(locs, self.partner_agents):
-            self.add(loc, agent)
+        k = random.randint(0,1)
+        # for loc, agent in zip(locs, self.partner_agents):
+        #     self.add(loc, agent)
+        for m, agent in enumerate(self.partner_agents):
+            if k == 0:
+                self.add(left_locs, agent)
+            else:
+                self.add(right_locs, agent)
+            k = 1 - k
 
         # place decider agents
         decider_loc = (int((self.height-1)/2), self.height, 0)
