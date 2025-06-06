@@ -114,7 +114,7 @@ class Wolf(Agent):
         targets = []
         
         for _, x in np.ndenumerate(state):
-            if x.kind == "LeakyEmotionAgent":
+            if x.kind == "LeakyEmotionsAgent":
                 targets.append(x)
 
         # Get locations of all agents

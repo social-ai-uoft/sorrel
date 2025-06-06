@@ -37,7 +37,7 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
 
         Requires self.config.model.agent_vision_radius to be defined.
         """
-        agent_num = 2
+        agent_num = self.config.world.agents
         agents = []
         for _ in range(agent_num):
             # create the observation spec
