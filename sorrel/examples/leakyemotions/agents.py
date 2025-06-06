@@ -214,6 +214,10 @@ class Wolf(Agent):
             if world.num_agents == 0:
                 world.game_over()
 
+            dead_agent = world.remove(new_location)
+            world.dead_agents.append(dead_agent)
+            
+
         # try moving to new_location
         world.move(self, new_location)
 

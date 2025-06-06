@@ -15,7 +15,7 @@ class LeakyEmotionsWorld(Gridworld):
 
         self.game_ended = False
         self.spawn_prob = config.world.spawn_prob
-        self.num_agents = 1
+        self.num_agents = config.world.agents
         self.agents = config.world.agents
         self.max_turns = config.experiment.max_turns
 
@@ -23,6 +23,7 @@ class LeakyEmotionsWorld(Gridworld):
         
         self.bush_ripeness_total = 0
         self.num_bushes_eaten = 0
+        self.dead_agents = []
 
     def game_over(self):
         if self.num_agents <= 0:

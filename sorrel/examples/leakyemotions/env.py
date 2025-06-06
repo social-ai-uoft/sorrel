@@ -1,12 +1,18 @@
 # begin imports
 # general imports
-import omegaconf
 import numpy as np
+import omegaconf
+import os
 import torch
+from pathlib import Path
 
+# sorrel imports
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
+from sorrel.models.pytorch import PyTorchIQN
+from sorrel.utils.logging import Logger, ConsoleLogger
+from sorrel.utils.visualization import ImageRenderer
 
 # imports from our example
 from sorrel.examples.leakyemotions.agents import LeakyEmotionsAgent, Wolf
@@ -16,9 +22,7 @@ from sorrel.examples.leakyemotions.wolf_model import WolfModel
 from sorrel.examples.leakyemotions.world import LeakyEmotionsWorld
 
 
-# sorrel imports
-from sorrel.models.pytorch import PyTorchIQN
-from sorrel.observation.observation_spec import OneHotObservationSpec
+
 
 # end imports
 ENTITY_LIST = ["EmptyEntity", "Bush", "Wall", "Grass", "LeakyEmotionsAgent", "Wolf"]
@@ -128,3 +132,87 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
         for loc, agent in zip(agent_locations, self.agents):
             loc = tuple(loc)
             self.world.add(loc, agent)
+
+    def run_experiment(
+        self,
+        animate: bool = True,
+        logging: bool = True,
+        logger: Logger | None = None,
+        output_dir: Path | None = None,
+    ) -> None:
+        """Run the experiment.
+
+        Required config parameters:
+            - experiment.epochs: The number of epochs to run the experiment for.
+            - experiment.max_turns: The maximum number of turns each epoch.
+            - (Only if `animate` is true) experiment.record_period: The time interval at which to record the experiment.
+
+        If `animate` is true,
+        animates the experiment every `self.config.experiment.record_period` epochs.
+
+        If `logging` is true, logs the total loss and total rewards each epoch.
+
+        Args:
+            animate: Whether to animate the experiment. Defaults to True.
+            logging: Whether to log the experiment. Defaults to True.
+            logger: The logger to use. Defaults to a ConsoleLogger.
+            output_dir: The directory to save the animations to. Defaults to "./data/" (relative to current working directory).
+        """
+        renderer = None
+        if animate:
+            renderer = ImageRenderer(
+                experiment_name=self.world.__class__.__name__,
+                record_period=self.config.experiment.record_period,
+                num_turns=self.config.experiment.max_turns,
+            )
+        for epoch in range(self.config.experiment.epochs + 1):
+            # Reset the environment at the start of each epoch
+            self.reset()
+
+            # Determine whether to animate this turn.
+            animate_this_turn = animate and (
+                epoch % self.config.experiment.record_period == 0
+            )
+
+            # start epoch action for each agent model
+            for agent in self.agents:
+                agent.model.start_epoch_action(epoch=epoch)
+
+            bunnies_left = sum([isinstance(agent, LeakyEmotionsAgent) for agent in self.agents]) - len(self.world.dead_agents)
+
+            # run the environment for the specified number of turns
+            while not (self.turn >= self.config.experiment.max_turns) and (bunnies_left > 0):
+                # renderer should never be None if animate is true; this is just written for pyright to not complain
+                if animate_this_turn and renderer is not None:
+                    renderer.add_image(self.world)
+                self.take_turn()
+
+            self.world.is_done = True
+
+            # generate the gif if animation was done
+            if animate_this_turn and renderer is not None:
+                if output_dir is None:
+                    output_dir = Path(os.getcwd()) / "./data/"
+                renderer.save_gif(epoch, output_dir)
+
+            # At the end of each epoch, train the agents.
+            total_loss = 0
+            for agent in self.agents:
+                loss = agent.model.train_step()
+                total_loss += loss
+
+            # Log the information
+            if logging:
+                if not logger:
+                    logger = ConsoleLogger(self.config.experiment.epochs)
+                logger.record_turn(
+                    epoch,
+                    total_loss,
+                    self.world.total_reward,
+                    self.agents[0].model.epsilon,
+                )
+
+            # update epsilon
+            for agent in self.agents:
+                agent.model.epsilon_decay(self.config.model.epsilon_decay)
+
