@@ -12,6 +12,7 @@ from examples.leakyemotions.env import LeakyemotionsEnv
 from sorrel.action.action_spec import ActionSpec
 from examples.leakyemotions.custom_observation_spec import OneHotObservationSpec
 from examples.leakyemotions.entities import Bush
+from examples.leakyemotions.wolf_model import WolfModel
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.utils.visualization import (animate, image_from_array,
@@ -23,7 +24,7 @@ from sorrel.utils.visualization import (animate, image_from_array,
 EPOCHS = 500
 MAX_TURNS = 100
 EPSILON_DECAY = 0.0001
-ENTITY_LIST = ["EmptyEntity", "Wall", "Grass", "Bush", "Agent", "Wolf"]
+ENTITY_LIST = ["EmptyEntity", "Wall", "Grass", "Bush", "LeakyEmotionAgent", "Wolf"]
 RECORD_PERIOD = 50  # how many epochs in each data recording period
 # end parameters
 
@@ -37,7 +38,7 @@ def setup() -> LeakyemotionsEnv:
     agent_vision_radius = 2
 
     # make the agents 
-    agent_num = 3
+    agent_num = 2
     agents = []
     for _ in range(agent_num):
         observation_spec = OneHotObservationSpec(
@@ -75,7 +76,7 @@ def setup() -> LeakyemotionsEnv:
         )
         agents.append(
             Wolf(
-                observation_spec=observation_spec, action_spec=action_spec, model=model, location=None
+                observation_spec=observation_spec, action_spec=action_spec, model=WolfModel(1, 4, 1), location=None
             )
         )
     
@@ -83,6 +84,8 @@ def setup() -> LeakyemotionsEnv:
     env = LeakyemotionsEnv(
         world_height, world_width, spawn_prob, MAX_TURNS, agents, 
     )
+    env.num_agents = agent_num
+    
     return env
 
 
@@ -97,26 +100,52 @@ def run(env: LeakyemotionsEnv):
     total_ripeness = 0
     num_bushes_eaten = 0
 
+    i = 0
+    for agent in env.agents:
+        if agent.kind == "LeakyEmotionAgent":
+            agent.id = i
+            i += 1
+
+
     for epoch in range(EPOCHS + 1):
         # Reset the environment at the start of each epoch
+        # print(epoch)
+        
         env.reset()
+
         for agent in env.agents:
             agent.model.start_epoch_action(**locals())
-            if agent.kind == "Wolf":
-                agent.sleep()
+            # if agent.kind == "Wolf":
+                # agent.sleep()
 
-        while not env.turn >= env.max_turns:
+        while env.turn < env.max_turns and not env.game_ended:
+            # print(f" {env.turn}, {env.max_turns}")
+            # print(epoch)
             if epoch % RECORD_PERIOD == 0:
                 full_sprite = visual_field_sprite(env)
                 imgs.append(image_from_array(full_sprite))
 
             env.take_turn()
+            wolves = 0
+            for agent in env.agents:
+                if agent.kind == "Wolf":
+                    wolves += 1
+            assert wolves==2, f'number of wolves in env.agents {wolves}'
+
+            wolves = 0
+            bunnies = 0
+            for index, x in np.ndenumerate(env.world):
+                if x.kind == "Wolf":
+                    wolves += 1
+                if x.kind == "LeakyEmotionAgent":
+                    bunnies += 1
+            assert wolves==2, f'number of wolves in world {wolves}, and bunnies = {bunnies}'
 
         # At the end of each epoch, train as long as the batch size is large enough.
-        if epoch > 10:
-            for agent in env.agents:
-                loss = agent.model.train_step()
-                total_loss += loss
+        # if epoch > 10:
+        #     for agent in env.agents:
+        #         loss = agent.model.train_step()
+        #         total_loss += loss
 
         total_score += env.game_score
         total_ripeness += env.bush_ripeness_total

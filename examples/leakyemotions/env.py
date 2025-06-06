@@ -18,7 +18,9 @@ class LeakyemotionsEnv(GridworldEnv):
         default_entity = EmptyEntity()
         super().__init__(height, width, layers, default_entity)
 
+        self.game_ended = False
         self.spawn_prob = spawn_prob
+        self.num_agents = 1
         self.agents = agents
         self.max_turns = max_turns
 
@@ -60,6 +62,13 @@ class LeakyemotionsEnv(GridworldEnv):
         self.create_world()
         self.game_score = 0
         self.populate()
+        self.game_ended = False
         for agent in self.agents:
             agent.reset() 
+
+    def game_over(self):
+        if self.num_agents <= 0:
+            print("Game Over.")
+            self.game_ended = True
+            # quit()
         

@@ -1,0 +1,49 @@
+experiment:
+  name: cleanup
+  epochs: 7000
+  max_turns: 100
+  epsilon_decay: 0.0001
+
+env:
+  height: 21
+  width: 31
+  layers: 3
+  default_object: EmptyEntity
+  full_mdp: False
+  pollution_threshold: 0.5
+  initial_apples: 20
+  apple_spawn_chance: 0.002
+  pollution_spawn_chance: 0.009
+  mode: DEFAULT
+
+model:
+  iqn:
+    type: iRainbowModel
+    parameters:
+      layer_size: 250
+      n_step: 3
+      BATCH_SIZE: 64
+      memory_size: 1024
+      LR: 0.00025
+      TAU: .001
+      GAMMA: 0.99
+      N: 12
+      sync_freq: 200
+      model_update_freq: 4
+      epsilon: 0.8
+      device: cpu
+
+agent:
+  agent:
+    num: 10
+    model: iqn
+    beam_radius: 3
+    rotation: False
+    obs:
+      channels: 8
+      vision: 5
+      num_frames: 5
+      embeddings: 3
+
+root: '~/Documents/GitHub/sorrel'
+log: False
