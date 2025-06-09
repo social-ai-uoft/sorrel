@@ -27,12 +27,20 @@ from examples.puppet_training.utils import (create_agents, create_entities, crea
                                 define_resource_values_var)
 
 import numpy as np
-
+import torch 
 # endregion                #
 # ------------------------ #
 
 
 def run(cfg, **kwargs):
+
+    # set seed 
+    random.seed(cfg.seed)
+    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
+    torch.cuda.manual_seed_all(cfg.seed)
+    cfg.exp_name = cfg.exp_name + f'_seed{cfg.seed}'
+    
     # Initialize the environment and get the agents
     models = create_models(cfg)
     agents: list[Agent] = create_agents(cfg, models)

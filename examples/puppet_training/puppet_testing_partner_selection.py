@@ -38,8 +38,23 @@ def run(cfg, **kwargs):
     # Initialize the environment and get the agents
     models = create_models(cfg)
     agents: list[Agent] = create_agents(cfg, models)
+
     for a in agents:
-        print(a.appearance)
+        if a.ixs == 1:
+            partner_A_appearance = a.appearance
+        elif a.ixs == 2:
+            partner_B_appearance = a.appearance
+    
+    # # switch the appearance of the partners
+    for a in agents:
+        if a.ixs == 1:
+            a.appearance = partner_B_appearance
+        elif a.ixs == 2:
+            a.appearance = partner_A_appearance
+    # print agent appearances
+    for a in agents:
+        print(a.appearance, a.ixs)
+
     # assign roles
     if not cfg.train_partners:
         for agent in agents:
@@ -80,7 +95,7 @@ def run(cfg, **kwargs):
     if cfg.load_weights:
         for count, agent in enumerate(agents):
             if agent.role == 'partner':
-                model_name = f'puppet_training_full_partner_selection_env_agent{count}_iRainbowModel'
+                model_name = f'puppet_training_full_partner_selection_env_fixed_agent{count}_iRainbowModel'
                 agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/{model_name}.pkl')
         
     # If a path to a model is specified in the run, load those weights
@@ -179,6 +194,7 @@ def run(cfg, **kwargs):
                       'partner_B_gem_median': [], 'partner_B_gem_var': [],
                       'partner_B_coin_median': [], 'partner_B_coin_var': [],
                       'partner_B_bone_median': [], 'partner_B_bone_var': [],
+                      'partner_A_location': [], 'partner_B_location': [],
                     #   'partner_B_gem_value': [], 'partner_B_coin_value': [], 'partner_B_bone_value': [],
                     #   'partner_B_gem_count': [], 'partner_B_coin_count': [], 'partner_B_bone_count': [],
                     }
@@ -211,6 +227,8 @@ def run(cfg, **kwargs):
 
                 # epoch wise metrics
                 partner_selection_per_cond = []
+                partner_A_locs = []
+                partner_B_locs = []
 
                 for epoch in range(cfg.experiment.epochs):
 
@@ -242,6 +260,12 @@ def run(cfg, **kwargs):
 
                         for agent in agents:
                             agent.reward = 0
+                            agent_loc = int(agent.location[1] < env.height)
+                            if agent.ixs == 1:
+                                partner_A_locs.append(agent_loc)
+                            elif agent.ixs == 2:
+                                partner_B_locs.append(agent_loc)
+                            
 
                         entities = env.get_entities_for_transition()
                         # Entity transition
@@ -291,7 +315,7 @@ def run(cfg, **kwargs):
                                             
                                     
 
-                                agent.add_memory(state, action, reward, done)
+                                # agent.add_memory(state, action, reward, done)
 
                                 game_points[agent.ixs] += int(reward)
 
@@ -340,6 +364,10 @@ def run(cfg, **kwargs):
                 performance_df['partner_B_coin_var'].append(B_var_dict['Coin'])
                 performance_df['partner_B_bone_median'].append(A_median_dict['Bone'])
                 performance_df['partner_B_bone_var'].append(B_var_dict['Bone'])
+
+                performance_df['partner_A_location'].append(partner_A_locs)
+                performance_df['partner_B_location'].append(partner_B_locs)
+             
              
 
 
@@ -350,6 +378,7 @@ def run(cfg, **kwargs):
     # save performance df as pandas df
     performance_df = pd.DataFrame(performance_df)
     testing_trial_name = model_name[:model_name.find('agent')]
+    testing_trial_name = cfg.exp_name
     performance_df.to_csv(f'{cfg.root}/examples/puppet_training/testing_data/testing_{testing_trial_name}.csv')
 
 def main():

@@ -151,8 +151,8 @@ class puppet_training(GridworldEnv):
                                            size = len(self.agents)-1, replace = False)
         decider_loc = (int((self.height-1)/2), self.height, 0)
         locs = [candidate_agent_locs[i] for i in agent_loc_index]
-        left_locs = np.random.choice(candidate_agent_locs_left, 1)[0]
-        right_locs = np.random.choice(candidate_agent_locs_right, 1)[0]
+        left_locs = random.choice(candidate_agent_locs_left)
+        right_locs = random.choice(candidate_agent_locs_right)
 
         # place partner agents
         # locs[[k for k in range(len(self.agents)) if self.agents[k].role=='decider'][0]] = decider_loc
