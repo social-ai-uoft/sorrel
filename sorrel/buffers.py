@@ -97,6 +97,14 @@ class Buffer:
             int: The current index
         """
         return self.idx
+    
+    def __getitem__(self, key):
+        return (
+            self.states[key],
+            self.actions[key],
+            self.rewards[key],
+            self.dones[key]
+        )
 
     def current_state(self) -> np.ndarray:
         """Get the current state.

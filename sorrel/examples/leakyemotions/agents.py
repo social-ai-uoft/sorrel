@@ -21,6 +21,7 @@ class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
         self.passable = False
         self.sprite = Path(__file__).parent / "./assets/leakyemotionagent.png"
         self.id = 0
+        self.alive = True
     
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
@@ -78,8 +79,6 @@ class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
                 world.num_bushes_eaten = self.encounters[target_object.kind]
                 world.bush_ripeness_total += target_object.ripeness #type: ignore
 
-        # world.total_reward += reward
-
         # try moving to new_location
         world.move(self, new_location)
 
@@ -87,7 +86,7 @@ class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
     
     def is_done(self, world: LeakyEmotionsWorld) -> bool:
         """Returns whether this Agent is done."""
-        return world.is_done
+        return world.is_done if self.alive else True
 
 class Wolf(Agent):
     """An entity that represents a wolf in the leakyemotions environment."""
@@ -207,12 +206,20 @@ class Wolf(Agent):
         # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
         target_object = world.observe(new_location)
         
-        if target_object.kind == "LeakyEmotionsAgent":
-            target_object.value -= 1
-            # world.num_agents -= 1
-            # print(f"{target_object.kind} {target_object.id} removed.") # type: ignore
+        if isinstance(target_object, LeakyEmotionsAgent):
+            target_object.alive = False
             if world.num_agents == 0:
                 world.game_over()
+
+            # Final memory for the dead agent, RIP
+            target_object.add_memory(
+                state=target_object.pov(world), 
+                action=0,
+                reward=-100,
+                done=True
+            )
+
+            world.total_reward -= 100
 
             dead_agent = world.remove(new_location)
             world.dead_agents.append(dead_agent)

@@ -82,7 +82,8 @@ class Environment[W: Gridworld]:
             if x.has_transitions and not isinstance(x, Agent):
                 x.transition(self.world)
         for agent in self.agents:
-            agent.transition(self.world)
+            if not agent.is_done(self.world):
+                agent.transition(self.world)
 
     # TODO: ability to save/load?
     def run_experiment(
