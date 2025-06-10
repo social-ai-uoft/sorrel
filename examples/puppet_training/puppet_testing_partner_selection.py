@@ -107,7 +107,7 @@ def run(cfg, **kwargs):
     # define the all testing reward functions
     collection_reward_functions = []
     all_possible_rewards = product([i for i in 
-                                    range(cfg.resource_val.min_val, 
+                                    range(cfg.resource_val.max_val - 3, 
                                           cfg.resource_val.max_val + 1)], 
                                           repeat=len(cfg.env.prob.item_choice))
 
@@ -143,7 +143,7 @@ def run(cfg, **kwargs):
                                           repeat=len(cfg.env.prob.item_choice))
     all_possible_vars = product([i for i in 
                                     range(0, 
-                                          3)], 
+                                          4)], 
                                           repeat=len(cfg.env.prob.item_choice))
 
     for median_set in all_possible_medians:
@@ -219,7 +219,7 @@ def run(cfg, **kwargs):
                         
                 # for B_median_dict in collection_partner_medians:
                 # for B_var_dict in collection_partner_vars:
-                B_var_dict = {key: A_var_dict[key] + 5 for key in A_var_dict}
+                B_var_dict = {key: A_var_dict[key] + 20 for key in A_var_dict}
                 for agent in agents:
                     if agent.role == 'partner' and agent.ixs == 2:
                         agent.resource_val['median'] = A_median_dict
@@ -231,6 +231,19 @@ def run(cfg, **kwargs):
                 partner_B_locs = []
 
                 for epoch in range(cfg.experiment.epochs):
+
+                    # switch the appearance of the partners
+                    for a in agents:
+                        if a.ixs == 1:
+                            partner_A_appearance = a.appearance
+                        elif a.ixs == 2:
+                            partner_B_appearance = a.appearance
+                    
+                    for a in agents:
+                        if a.ixs == 1:
+                            a.appearance = partner_B_appearance
+                        elif a.ixs == 2:
+                            a.appearance = partner_A_appearance
 
                     # Reset the environment at the start of each epoch
                     env.reset()

@@ -110,6 +110,6 @@ partner_entity_value_reset_interval: 1
 
 # exp_name: 'puppet_training_reset_val_per_1epoch_x0to10x_v2_onlyshowValue_curriculum' 
 exp_name: 'puppet_training_reset_val_per_1epoch_x0to10x_v2_curriculum_partner_selection_env' 
-exp_name: 'puppet_testing_full_partner_selection_env_bug_fixed_r2_switch_appearance'
+exp_name: 'puppet_testing_full_partner_selection_env_bug_fixed_switch_appearance_VarDiff_20_range0to4_baseval7to10'
 # exp_name: 'puppet_training_only_partners_env'
 

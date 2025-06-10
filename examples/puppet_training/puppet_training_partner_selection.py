@@ -40,7 +40,7 @@ def run(cfg, **kwargs):
     torch.manual_seed(cfg.seed)
     torch.cuda.manual_seed_all(cfg.seed)
     cfg.exp_name = cfg.exp_name + f'_seed{cfg.seed}'
-    
+
     # Initialize the environment and get the agents
     models = create_models(cfg)
     agents: list[Agent] = create_agents(cfg, models)
@@ -104,6 +104,8 @@ def run(cfg, **kwargs):
 
     for epoch in range(cfg.experiment.epochs):
 
+
+
         # reset interval coef
         coef = 1 
         
@@ -161,6 +163,7 @@ def run(cfg, **kwargs):
         # TODO: frequency of switching - decider entity val < partner_distribution < partner_point val
 
         # Reset the environment at the start of each epoch
+        env.item_spawn_prob = cfg.env.prob.item_spawn * (1-random.random()*0.5)
         env.reset()
 
         random.shuffle(agents)

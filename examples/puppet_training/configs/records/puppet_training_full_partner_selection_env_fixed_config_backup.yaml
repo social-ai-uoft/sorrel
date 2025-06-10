@@ -94,7 +94,7 @@ resource_val:
 
 # Root folder for accessing file structure and modules
 root: '/Users/yikaitang/Documents/GitHub/puppet_training'
-seed: 3
+seed: 2
 log: True
 random: False
 state_mode: 'composite'

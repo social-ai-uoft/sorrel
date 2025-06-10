@@ -62,6 +62,7 @@ class Agent:
 
     def add_memory(self, state: np.ndarray, action: int, reward: float, done: bool) -> None:
         """Add an experience to the memory."""
+        print(self.model.memory.obs_shape, state.shape)
         self.model.memory.add(state, action, reward, float(done))
     
 
