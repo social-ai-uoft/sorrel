@@ -140,7 +140,7 @@ class A(Entity):
         self.value = cfg.entity.A.value
         self.passable = True
         self.social_harm = cfg.entity.A.social_harm
-        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/pink.png'
         self.type = 'A'
 
 class B(Entity):
@@ -157,7 +157,7 @@ class B(Entity):
         self.value = cfg.entity.B.value
         self.passable = True
         self.social_harm = cfg.entity.B.social_harm
-        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/gem.png'
         self.type = 'B'
 
 class C(Entity):
@@ -191,7 +191,7 @@ class D(Entity):
         self.value = cfg.entity.D.value
         self.passable = True
         self.social_harm = cfg.entity.D.social_harm
-        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/bone.png'
         self.type = 'D'
 
 class E(Entity):
@@ -208,7 +208,7 @@ class E(Entity):
         self.value = cfg.entity.E.value
         self.passable = True
         self.social_harm = cfg.entity.E.social_harm
-        self.sprite = f'{cfg.root}/examples/state_punishment/assets/coin.png'
+        self.sprite = f'{cfg.root}/examples/state_punishment/assets/food.png'
         self.type = 'E'
 
 # ----------------------------------------------------- #

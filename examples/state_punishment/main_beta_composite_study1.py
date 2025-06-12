@@ -86,10 +86,11 @@ def run(cfg, **kwargs):
 
     # load weights
     if cfg.load_weights:
-        assert 's1' not in cfg.exp_name, ValueError('incorrect configurations')
+        if 'transfer' not in cfg.exp_name:
+            assert 's1' not in cfg.exp_name, ValueError('incorrect configurations')
         for count, agent in enumerate(agents):
             agent.model.load(
-                f'{root}/examples/state_punishment/models/checkpoints/test_study1__fixed_only_taboo_stacked_view_simple_actions_3agents_respawn_0.04_v0_s3_seed1_agent{agent.ixs}_iRainbowModel.pkl')
+                f'{root}/examples/state_punishment/models/checkpoints/Study1_experiment_cond_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1_seed3_agent{agent.ixs}_iRainbowModel_copy.pkl')
     
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
@@ -173,6 +174,7 @@ def run(cfg, **kwargs):
                     entity.transition(env)
 
             # Agent transition
+            vote_acts = []
             for ixs, agent in enumerate(agents):
                 (state, action, reward, next_state, done_) = agent.transition(
                     envs[agent.ixs], 
@@ -203,15 +205,30 @@ def run(cfg, **kwargs):
                     reward -= cfg.with_direct_cost
                 # agent.add_memory(state, action, reward, done)
 
+                # record the voting behavior
+                if action == 4:
+                    vote_acts.append(1)
+                elif action == 5:
+                    vote_acts.append(-1)
+               
+
                 if turn >= cfg.experiment.max_turns or done_:
                     done = 1
                     # agent.add_final_memory(next_state)
 
+                agent.last_memory_idx = agent.model.memory.idx
                 agent.add_memory(state, action, reward, done)
+                
 
                 game_points[agent.ixs] += float(reward)
 
                 agent.model.end_epoch_action(**locals())
+            
+            # reward consensus in voting
+            consensus = abs(sum(vote_acts)) == len(vote_acts)
+            consensus_reward = cfg.consensus_reward * consensus
+            for agent in agents:
+                agent.model.memory.rewards[agent.last_memory_idx] += consensus_reward
 
         # At the end of each epoch, train as long as the batch size is large enough.
         for agent in agents:
@@ -224,6 +241,8 @@ def run(cfg, **kwargs):
 
         # Print the variables to the console
         game_vars.pretty_print()
+        if epoch % 50 == 0:
+            print(cfg.exp_name)
 
         # # calculate signal detection theory related statistics
         # combined_transgression_marker_lst = np.array([val for agent in agents for val in agent.transgression_record]).flatten()

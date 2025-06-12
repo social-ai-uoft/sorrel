@@ -21,15 +21,15 @@ env:
   entity_names: ['A', 'B', 'C', 'D', 'E', 'Wall']
 
 state_sys:
-  resource_punishment_is_ambiguous: False
-  only_punish_taboo: True
+  resource_punishment_is_ambiguous: True
+  only_punish_taboo: False
   prob_list: 
     Gem: 0.0
     Coin: 0.0
     Bone: 1.
   init_prob: 0.
-  magnitude: 30  # 20 # positive - punishment, negative - reward 
-  taboo: ['E'] # ['A', 'B', 'C', 'D', 'E']
+  magnitude: 30  # 30 # positive - punishment, negative - reward 
+  taboo: ['A', 'B', 'C', 'D', 'E'] # ['A', 'B', 'C', 'D', 'E']
   potential_taboo: ['A', 'B', 'C', 'D', 'E']
   num_resources: 5
   num_steps: 10
@@ -37,7 +37,9 @@ state_sys:
   intercept_increase_speed: 2
   max_level: 9
   rewards: [2.9, 3.316, 4.59728, 8.5436224, 20.69835699]
-  collective_harms: [2.17, 2.86, 4.99, 11.57, 31.83]
+  collective_harms: [0.05, 0.55, 4.99, 11.57, 31.83] 
+  # [0.05, 0.55, 4.99, 11.57, 31.83] 
+  # [2.17, 2.86, 4.99, 11.57, 31.83]
   resources: ['A', 'B', 'C', 'D', 'E']
 
 
@@ -137,6 +139,9 @@ state_mode: 'composite'
 action_mode: 'simple'
 load_weights: False
 with_direct_cost: 0.0
+consensus_reward: 0
 
-exp_name: 'Study1_control_only_taboo_cond_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
+exp_name: 'Study1_control_only_taboo_only_taboo_harmful_cond_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
+exp_name: 'Study1_experiment_cond_v3_improved_punishment_scheme_stacked_view_simple_actions_memory_issue_solved_3agents_respawn_0.04_s1_r1'
+# exp_name: 'Study1_experiment_cond_v2_improved_punishment_scheme_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
 # stacked_views,single_view

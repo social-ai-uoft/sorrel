@@ -47,6 +47,7 @@ def compile_punishment_vals(num_resources=5, num_steps=10, exponentialness=0.12,
 
     # Normalized values
     punishment_probs = vals/max
+    punishment_probs = punishment_probs * [1, 1.1, 1.25, 1.45, 1.95]
     punishment_probs = np.clip(punishment_probs, 0.0, 1.0)
 
     return punishment_probs.T
@@ -61,8 +62,9 @@ class state_sys():
         self.init_prob = init_prob 
         self.magnitude = magnitude
         self.taboo = taboo
-        self.change_per_vote = round(1/cfg.state_sys.num_steps, 1)
-        self.levels_lst = [round(i*self.change_per_vote,1) for i in range(cfg.state_sys.num_steps+1)]
+        self.change_per_vote = round(1/(cfg.state_sys.num_steps-1), 1)
+        # should be round(1/cfg.state_sys.num_steps-1, 1)
+        self.levels_lst = [round(i*self.change_per_vote,1) for i in range(cfg.state_sys.num_steps+1)] 
         self.resource_punishment_is_ambiguous = is_ambiguous
         self.potential_taboo = potential_taboo
         self.only_punish_taboo = only_taboo

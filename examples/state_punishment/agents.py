@@ -169,7 +169,8 @@ class Agent:
                    mode, 
                    action_mode='simple',
                    state_is_composite=False,
-                   envs=None) -> tuple:
+                   envs=None,
+                   is_eval=False) -> tuple:
         '''
         Changes the world based on the action taken.
 
@@ -199,7 +200,10 @@ class Agent:
         reward = 0
 
         # Take action based on current state
-        action = self.model.take_action(model_input)
+        if is_eval:
+            action, action_values = self.model.take_action(model_input, eval=True)
+        else:
+            action = self.model.take_action(model_input)
         # action = random.randint(0,3)
         # Attempt the transition 
         attempted_location = self.movement(action, state_sys, action_mode)
@@ -284,8 +288,10 @@ class Agent:
         # reset to_be_punished 
         if mode == 'ambiguous':
             self.to_be_punished = {'gem':0, 'bone':0, 'coin':0}
-
-        return state, action, reward, next_state, False
+        if not is_eval:
+            return state, action, reward, next_state, False
+        else:
+            return state, action, reward, next_state, False, action_values
 
 
     def generate_composite_state(self, envs):

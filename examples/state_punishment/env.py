@@ -40,6 +40,18 @@ class state_punishment(GridworldEnv):
         self.populate()
         for agent in self.agents:
             agent.reset(self, state_mode)
+    
+    def clear_world(self, keep_agents=False):
+        '''
+        Clear the world of all objects except walls.
+        '''
+        for index, x in np.ndenumerate(self.world):
+            if not isinstance(x, Wall):
+                if keep_agents and isinstance(x, Agent):
+                    continue
+                else:
+                    self.world[index] = EmptyObject(self.colors['EmptyObject'], self.cfg)
+                    self.world[index].location = index
 
     def create_world(self):
         '''
