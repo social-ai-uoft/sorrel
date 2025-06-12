@@ -5,6 +5,7 @@ import omegaconf
 import os
 import torch
 from pathlib import Path
+from torch.utils.tensorboard import SummaryWriter
 
 # sorrel imports
 from sorrel.action.action_spec import ActionSpec
@@ -20,7 +21,6 @@ from sorrel.examples.leakyemotions.custom_observation_spec import LeakyEmotionsO
 from sorrel.examples.leakyemotions.entities import EmptyEntity, Bush, Wall, Grass
 from sorrel.examples.leakyemotions.wolf_model import WolfModel
 from sorrel.examples.leakyemotions.world import LeakyEmotionsWorld
-
 
 
 
@@ -133,6 +133,16 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
             loc = tuple(loc)
             self.world.add(loc, agent)
 
+    def reset(self) -> None:
+        """Reset the experiment, including the environment and the agents."""
+        self.turn = 0
+        self.world.is_done = False
+        self.world.dead_agents = []
+        self.world.create_world()
+        self.populate_environment()
+        for agent in self.agents:
+            agent.reset()
+
     def run_experiment(
         self,
         animate: bool = True,
@@ -158,6 +168,8 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
             logger: The logger to use. Defaults to a ConsoleLogger.
             output_dir: The directory to save the animations to. Defaults to "./data/" (relative to current working directory).
         """
+        writer = SummaryWriter()
+        
         renderer = None
         if animate:
             renderer = ImageRenderer(
@@ -165,6 +177,8 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
             )
+            print("animate true!")
+
         for epoch in range(self.config.experiment.epochs + 1):
             # Reset the environment at the start of each epoch
             self.reset()
@@ -195,6 +209,7 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                 if output_dir is None:
                     output_dir = Path(os.getcwd()) / "./data/"
                 renderer.save_gif(epoch, output_dir)
+                print("gif yeah")
 
             # At the end of each epoch, train the agents.
             total_loss = 0
@@ -213,7 +228,10 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                     self.agents[0].model.epsilon,
                 )
 
+            writer.add_scalar("Reward", self.world.total_reward)
+
             # update epsilon
             for agent in self.agents:
                 agent.model.epsilon_decay(self.config.model.epsilon_decay)
 
+        writer.close()

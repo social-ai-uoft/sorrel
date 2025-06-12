@@ -25,6 +25,7 @@ class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
     
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
+        self.alive = True
         return self.model.reset()
     
     def pov(self, world: Gridworld) -> np.ndarray:
