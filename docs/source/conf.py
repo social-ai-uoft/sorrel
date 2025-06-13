@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join("..", "..")))
 project = "sorrel"
 copyright = "2025, Yibing Ju, Rebekah Gelpi, Ethan Jackson, Shon Verch, Yikai Tang, Claas Voelcker, Wil Cunningham"
 author = "Yibing Ju, Rebekah Gelpi, Ethan Jackson, Shon Verch, Yikai Tang, Claas Voelcker, Wil Cunningham"
-release = "1.0.0"
+release = "1.3.0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

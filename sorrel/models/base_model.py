@@ -1,16 +1,15 @@
+import os
 from abc import abstractmethod
 from typing import Sequence
 
-import jax
 import numpy as np
-import torch
 
 from sorrel.buffers import Buffer
 
 
-class SorrelModel:
-    """
-    Generic model class for Sorrel. All models should wrap around this implementation.
+class BaseModel:
+    """Generic model class for Sorrel. All models should wrap around this
+    implementation.
 
     Attributes:
         input_size: The size of the input.
@@ -41,31 +40,41 @@ class SorrelModel:
         self.epsilon = epsilon
 
     @abstractmethod
-    def take_action(self, state: np.ndarray) -> int:
-        """Take an action based on the observed input.
-        Must be implemented by all subclasses of the model.
+    def take_action(self, state) -> int:
+        """Take an action based on the observed input. Must be implemented by all
+        subclasses of the model.
 
         Args:
             state: The observed input.
 
-        Return:
+        Returns:
             The action chosen.
         """
         pass
 
-    def train_step(self) -> float | Sequence[float] | torch.Tensor | jax.Array:
+    def train_step(self) -> np.ndarray:
         """Train the model.
 
-        Return:
+        Returns:
             The loss value.
         """
-        return 0.0
+        return np.array(0.0)
+
+    def reset(self):
+        """Reset any relevant model parameters or properties that will be reset at the
+        beginning of a new epoch.
+
+        By default, nothing is reset.
+        """
+        pass
 
     def set_epsilon(self, new_epsilon: float) -> None:
-        """
-        Replaces the current model epsilon with the provided value.
-        """
+        """Replaces the current model epsilon with the provided value."""
         self.epsilon = new_epsilon
+
+    def epsilon_decay(self, decay_rate: float) -> None:
+        """Uses the decay rate to determine the new epsilon value."""
+        self.epsilon *= 1 - decay_rate
 
     def start_epoch_action(self, **kwargs):
         """Actions to perform before each epoch."""
@@ -73,6 +82,18 @@ class SorrelModel:
 
     def end_epoch_action(self, **kwargs):
         """Actions to perform after each epoch."""
+        pass
+
+    def save(self, file_path: str | os.PathLike) -> None:
+        """Save the model weights and parameters in the specified location.
+
+        If the model has an optimizer attribute, it will be saved as well.
+
+        .. note:: This is an abstract function. It must be implemented by a subclass in order to save a model.
+
+        Parameters:
+            file_path: The full path to the model, including file extension.
+        """
         pass
 
     @property

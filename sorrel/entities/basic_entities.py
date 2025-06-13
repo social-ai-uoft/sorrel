@@ -1,6 +1,8 @@
-"""Here is a list of provided basic entities that will likely be needed in most gridworld environments.
+"""Here is a list of provided basic entities that will likely be needed in most
+gridworld environments.
 
-Note that all of these entities do not override the default :meth:`.Entity.transition()`, which does nothing.
+Note that all of these entities do not override the default
+:meth:`.Entity.transition()`, which does nothing.
 """
 
 from sorrel.entities.entity import Entity
@@ -9,7 +11,8 @@ from sorrel.entities.entity import Entity
 class Wall(Entity):
     """A basic entity that represents a wall.
 
-    By default, walls penalize contact (with a reward value of -1)."""
+    By default, walls penalize contact (with a reward value of -1).
+    """
 
     def __init__(self):
         super().__init__()
@@ -19,7 +22,8 @@ class Wall(Entity):
 class EmptyEntity(Entity):
     """A basic entity that represents a passable empty space.
 
-    By default. EmptyEntities are passable."""
+    By default. EmptyEntities are passable.
+    """
 
     def __init__(self):
         super().__init__()
@@ -29,7 +33,8 @@ class EmptyEntity(Entity):
 class Gem(Entity):
     """An entity that represents a rewarding object in an environment.
 
-    By default, Gems are passable."""
+    By default, Gems are passable.
+    """
 
     def __init__(self, gem_value: float | int):
         super().__init__()
