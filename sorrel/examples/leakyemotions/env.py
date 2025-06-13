@@ -10,7 +10,7 @@ from pathlib import Path
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
-from sorrel.models.pytorch import PyTorchIQN
+from sorrel.models.pytorch.ppo import PyTorchPPO
 from sorrel.utils.logging import Logger, ConsoleLogger, TensorboardLogger
 from sorrel.utils.visualization import ImageRenderer
 
@@ -60,24 +60,21 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
             action_spec = ActionSpec(["up", "down", "left", "right"])
 
             # create the model
-            model = PyTorchIQN(
+            model = PyTorchPPO(
                 input_size=observation_spec.input_size,
                 action_space=action_spec.n_actions,
                 layer_size=250,
                 epsilon=0.7,
                 device="cpu",
                 seed=torch.random.seed(),
-                n_frames=5,
-                n_step=3,
-                sync_freq=200,
-                model_update_freq=4,
-                batch_size=64,
-                memory_size=1024,
-                LR=0.00025,
-                TAU=0.001,
-                GAMMA=0.99,
-                n_quantiles=12,
-            )
+                lr_actor=0.0001,
+                lr_critic=0.00005,
+                gamma=0.99,
+                k_epochs=10,
+                eps_clip=0.2,
+                entropy_coefficient=0.01,
+                max_turns=100
+                )
 
             agents.append(
                 LeakyEmotionsAgent(
