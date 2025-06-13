@@ -38,7 +38,7 @@ class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
         """Gets the action from the model, using the stacked states."""
         if not hasattr(self.model, "name"):
             prev_states = self.model.memory.current_state()
-            stacked_states = np.vstack((prev_states, state))
+            stacked_states = np.vstack((prev_states, state)) if prev_states else state
 
             model_input = stacked_states.reshape(1, -1)
             action = self.model.take_action(model_input)
@@ -201,34 +201,37 @@ class Wolf(Agent):
         
         Previously called the hunt() function.
         """
+        self.sleep()
+        if not self.asleep:
+            new_location = self.movement(action)
 
-        new_location = self.movement(action)
-
-        # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
-        target_object = world.observe(new_location)
-        
-        if isinstance(target_object, LeakyEmotionsAgent):
-            target_object.alive = False
-            if world.num_agents == 0:
-                world.game_over()
-
-            # Final memory for the dead agent, RIP
-            target_object.add_memory(
-                state=target_object.pov(world), 
-                action=0,
-                reward=-100,
-                done=True
-            )
-
-            world.total_reward -= 100
-
-            dead_agent = world.remove(new_location)
-            world.dead_agents.append(dead_agent)
+            # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
+            target_object = world.observe(new_location)
             
+            if isinstance(target_object, LeakyEmotionsAgent):
+                target_object.alive = False
+                if world.num_agents == 0:
+                    world.game_over()
 
-        # try moving to new_location
-        world.move(self, new_location)
+                # Final memory for the dead agent, RIP
+                target_object_state = target_object.pov(world)
+                target_object_would_act = target_object.get_action(target_object_state)
 
+                target_object.add_memory(
+                    state=target_object_state, 
+                    action=target_object_would_act,
+                    reward=-100,
+                    done=True
+                )
+
+                world.total_reward -= 100
+
+                dead_agent = world.remove(new_location)
+                world.dead_agents.append(dead_agent)
+                
+
+            # try moving to new_location
+            world.move(self, new_location)
         return 0.
 
     def sleep(self):

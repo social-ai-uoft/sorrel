@@ -35,6 +35,8 @@ class RolloutBuffer(Buffer):
     log_probs (np.ndarray): The action log probs array.
     """
   def __init__(self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1):
+    print(capacity)
+    print(obs_shape)
     super().__init__(capacity, obs_shape, n_frames)
     self.log_probs = np.zeros(capacity, dtype=np.float32)
 

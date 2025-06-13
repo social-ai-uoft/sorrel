@@ -52,9 +52,11 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                 # don't forget to pass it in as part of config when creating this experiment!
                 vision_radius=self.config.model.agent_vision_radius,
             )
+            
             observation_spec.override_input_size(
-                np.array(observation_spec.input_size).reshape(1, -1).tolist()
+                np.zeros(observation_spec.input_size).reshape(1, -1).shape
             )
+            
 
             # create the action spec
             action_spec = ActionSpec(["up", "down", "left", "right"])
@@ -72,7 +74,7 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                 gamma=0.99,
                 k_epochs=10,
                 eps_clip=0.2,
-                entropy_coefficient=0.01,
+                entropy_coef=0.01,
                 max_turns=100
                 )
 
@@ -222,11 +224,11 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                     self.agents[0].model.epsilon,
                 )
             
-            tb_logger = TensorboardLogger(self.config.experiment.epochs, "tensorboard_log")
-            tb_logger.record_turn(epoch,
-                    total_loss,
-                    self.world.total_reward,
-                    self.agents[0].model.epsilon)
+            # tb_logger = TensorboardLogger(self.config.experiment.epochs, "tensorboard_log")
+            # tb_logger.record_turn(epoch,
+            #         total_loss,
+            #         self.world.total_reward,
+            #         self.agents[0].model.epsilon)
             
 
             # update epsilon
