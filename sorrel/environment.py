@@ -1,5 +1,6 @@
 import os
 from abc import abstractmethod
+from multiprocessing import Pool
 from pathlib import Path
 
 from numpy import ndenumerate
@@ -147,10 +148,10 @@ class Environment[W: Gridworld]:
                 renderer.save_gif(epoch, output_dir)
 
             # At the end of each epoch, train the agents.
-            total_loss = 0
-            for agent in self.agents:
-                loss = agent.model.train_step()
-                total_loss += loss
+            with Pool() as pool:
+                # Use multiprocessing to train agents in parallel
+                models = [agent.model for agent in self.agents]
+                total_loss = sum(pool.map(lambda model: model.train_step(), models))
 
             # Log the information
             if logging:
