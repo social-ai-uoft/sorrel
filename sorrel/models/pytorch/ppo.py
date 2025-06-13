@@ -203,6 +203,12 @@ class PyTorchPPO(PyTorchModel):
     
     return action, log_prob
   
+  def state_value(self, state: np.ndarray):
+    with torch.no_grad():
+      state_ = torch.tensor(state)
+      state_value: torch.Tensor = self.policy.critic(state_)
+    return state_value.detach().numpy().squeeze()
+  
   def train_step(self):
 
     # Estimate discounted returns

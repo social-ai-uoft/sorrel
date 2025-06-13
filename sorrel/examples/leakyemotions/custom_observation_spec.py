@@ -88,7 +88,7 @@ class LeakyEmotionsObservationSpec(OneHotObservationSpec):
   
             if entity.kind == "Bush":
                 bush_ripeness_layer[0, *index[1:]] = entity.ripeness
-            elif entity.kind == "Agent":
+            elif entity.kind == "LeakyEmotionsAgent":
                 agent_qvalues_layer[0, *index[1:]] = entity.emotion
 
         return np.concatenate((appearance, bush_ripeness_layer, agent_qvalues_layer), axis = 0)

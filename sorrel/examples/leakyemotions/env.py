@@ -10,7 +10,7 @@ from pathlib import Path
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
-from sorrel.models.pytorch import PyTorchIQN
+from sorrel.models.pytorch.ppo import PyTorchPPO
 from sorrel.utils.logging import Logger, ConsoleLogger, TensorboardLogger
 from sorrel.utils.visualization import ImageRenderer
 
@@ -53,30 +53,27 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                 vision_radius=self.config.model.agent_vision_radius,
             )
             observation_spec.override_input_size(
-                np.array(observation_spec.input_size).reshape(1, -1).tolist()
+                np.zeros(observation_spec.input_size, dtype=int).reshape(1, -1).shape
             )
 
             # create the action spec
             action_spec = ActionSpec(["up", "down", "left", "right"])
 
             # create the model
-            model = PyTorchIQN(
+            model = PyTorchPPO(
                 input_size=observation_spec.input_size,
                 action_space=action_spec.n_actions,
                 layer_size=250,
                 epsilon=0.7,
                 device="cpu",
                 seed=torch.random.seed(),
-                n_frames=5,
-                n_step=3,
-                sync_freq=200,
-                model_update_freq=4,
-                batch_size=64,
-                memory_size=1024,
-                LR=0.00025,
-                TAU=0.001,
-                GAMMA=0.99,
-                n_quantiles=12,
+                entropy_coef=0.01,
+                eps_clip=0.2,
+                gamma=0.9,
+                k_epochs=10,
+                lr_actor=.001,
+                lr_critic=.0005,
+                max_turns=100
             )
 
             agents.append(
@@ -224,12 +221,6 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                     self.world.total_reward,
                     self.agents[0].model.epsilon,
                 )
-            
-            tb_logger = TensorboardLogger(self.config.experiment.epochs, "tensorboard_log")
-            tb_logger.record_turn(epoch,
-                    total_loss,
-                    self.world.total_reward,
-                    self.agents[0].model.epsilon)
             
 
             # update epsilon

@@ -128,11 +128,3 @@ class Buffer:
 
     def __len__(self):
         return self.size
-
-    def __getitem__(self, idx):
-        return (
-            self.states[idx],
-            self.actions[idx],
-            self.rewards[idx],
-            self.dones[idx]
-        )

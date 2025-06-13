@@ -4,6 +4,8 @@ from sorrel.examples.leakyemotions.entities import EmptyEntity
 from sorrel.examples.leakyemotions.env import LeakyEmotionsEnv
 from sorrel.examples.leakyemotions.world import LeakyEmotionsWorld
 
+from sorrel.utils.logging import TensorboardLogger
+
 # begin main
 if __name__ == "__main__":
 
@@ -33,6 +35,10 @@ if __name__ == "__main__":
     # construct the environment
     experiment = LeakyEmotionsEnv(env, config)
     # run the experiment with default parameters
-    experiment.run_experiment()
+    experiment.run_experiment(
+        logger=TensorboardLogger(
+            max_epochs = config.experiment.epochs,
+            log_dir='./data/tensorboard')
+    )
 
 # end main
