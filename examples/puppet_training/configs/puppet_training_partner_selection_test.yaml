@@ -2,7 +2,7 @@
 experiment:
   name: state_punishment_beta
   epochs: 2000000
-  max_turns: 10
+  max_turns: 15
   epsilon_decay: 0.0001
 
 env:
@@ -94,7 +94,7 @@ resource_val:
 
 # Root folder for accessing file structure and modules
 root: '/Users/yikaitang/Documents/GitHub/puppet_training'
-seed: 2
+seed: 222
 log: True
 random: False
 state_mode: 'composite'
@@ -111,6 +111,6 @@ partner_entity_value_reset_interval: 1
 # exp_name: 'puppet_training_reset_val_per_1epoch_x0to10x_v2_onlyshowValue_curriculum' 
 exp_name: 'puppet_training_reset_val_per_1epoch_x0to10x_v2_curriculum_partner_selection_env' 
 exp_name: 'puppet_training_full_partner_selection_env_fixed'
-exp_name: 'puppet_training_only_partners_a1_onlyshowValue_all_issue_fixed'
-# exp_name: 'test2'
+exp_name: 'puppet_training_only_partners_a1_onlyshowValue_memory_issue_fixed'
+exp_name: 'test3_compare2'
 

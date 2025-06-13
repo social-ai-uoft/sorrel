@@ -42,7 +42,7 @@ def visual_field(
         if not return_rgb:
             C += 1
     if env.full_partner_selection:
-        C += 22
+        C += 23
 
     new = np.stack([np.zeros_like(world, dtype=np.float64) for _ in range(C)], axis=0)[
         :, :, :, 0
@@ -61,6 +61,7 @@ def visual_field(
             if has_value_map:
                 if world[location].can_see_others_worldview:
                     placeholder = np.append(world[location].value_dict[world[H, W, 0].kind] * 255, world[H, W, 0].appearance)
+                    placeholder = np.append(placeholder, float(world[H, W, 0].passable))
                     # new[:, H, W] = [world[location].value_dict[world[H, W, 0].kind] * 255] + world[H, W, 0].appearance
                     for agent in env.partner_agents:
                         placeholder = np.append(placeholder, agent.appearance)
@@ -69,6 +70,7 @@ def visual_field(
                     new[:, H, W] = placeholder
                 else:
                     placeholder = [world[location].value_dict[world[H, W, 0].kind] * 255] + world[H, W, 0].appearance
+                    placeholder = np.append(placeholder, float(world[H, W, 0].passable))
                     for j in range(2):
                         placeholder = np.append(placeholder, [0 for _ in range(len(world[H, W, 0].appearance))])
                         placeholder = np.append(placeholder, [0])
@@ -84,7 +86,7 @@ def visual_field(
         
 
     # If no location, return the full visual field
-    if location is None:
+    if env.full_mdp:
         if return_rgb:
             return new.astype(np.uint8).transpose(
                 (1, 2, 0)
@@ -109,16 +111,17 @@ def visual_field(
         # Shift the array.
         # Replace coordinates outside the map with nans. We will fix this later.
         new = shift(array=new, shift=shift_dims, cval=np.nan)
-
         # Set up the dimensions of the array to crop
         crop_h = (world.shape[0] // 2 - vision, world.shape[0] // 2 + vision + 1)
         crop_w = (world.shape[1] // 2 - vision, world.shape[1] // 2 + vision + 1)
         # Crop the array to the selected dimensions
         new = new[:, slice(*crop_h), slice(*crop_w)]
+        
 
         # append value to wall_appearance
         if has_value_map:
             wall_appearance = np.insert(wall_appearance, 0, -1)
+            wall_appearance = np.append(wall_appearance, 0)
             if env.full_partner_selection:
                 placeholder = wall_appearance
                 if world[location].can_see_others_worldview:

@@ -39,14 +39,33 @@ class NoisyLinear(nn.Linear):
         # 3 / in_features is heuristic for the standard deviation.
         std = math.sqrt(3 / self.in_features)
         self.weight.data.uniform_(-std, std)
-        self.bias.data.uniform_(-std, std)
+        if self.bias is not None:
+            self.bias.data.uniform_(-std, std)
+
+    # def forward(self, x: torch.Tensor) -> torch.Tensor:
+    #     """Sample random noise in the sigma weight and bias buffers."""
+    #     self.epsilon_weight.normal_()
+    #     bias = self.bias
+    #     if bias is not None:
+    #         self.epsilon_bias.normal_()
+    #         with torch.no_grad():
+    #             bias += self.sigma_bias * self.epsilon_bias
+    #     return F.linear(x, self.weight + self.sigma_weight * self.epsilon_weight, bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Sample random noise in the sigma weight and bias buffers."""
-        self.epsilon_weight.normal_()
-        bias = self.bias
-        if bias is not None:
-            self.epsilon_bias.normal_()
-            with torch.no_grad():
-                bias += self.sigma_bias * self.epsilon_bias
-        return F.linear(x, self.weight + self.sigma_weight * self.epsilon_weight, bias)
+        if self.training:
+            self.epsilon_weight.normal_()
+            weight = self.weight + self.sigma_weight * self.epsilon_weight
+
+            if self.bias is not None:
+                self.epsilon_bias.normal_()
+                bias = self.bias + self.sigma_bias * self.epsilon_bias
+            else:
+                bias = None
+        else:
+            # Use mean weights only during eval
+            weight = self.weight
+            bias = self.bias
+
+        return F.linear(x, weight, bias)

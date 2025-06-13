@@ -56,13 +56,13 @@ class Agent:
         action = 0  # Action outside the action space
         reward = 0.0
         done = 0.0
-        for _ in range(self.num_frames):
-            self.model.memory.add(state, action, reward, done)
+        if self.num_frames > 1:
+            for _ in range(self.num_frames-1):
+                self.model.memory.add(state, action, reward, done)
     
 
     def add_memory(self, state: np.ndarray, action: int, reward: float, done: bool) -> None:
         """Add an experience to the memory."""
-        print(self.model.memory.obs_shape, state.shape)
         self.model.memory.add(state, action, reward, float(done))
     
 
@@ -72,8 +72,12 @@ class Agent:
 
     def current_state(self, env: GridworldEnv) -> np.ndarray:
         state = self.pov(env)
-        prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
-        current_state = np.vstack((prev_states, state))
+        #TODO: find a better way to fix the memory issue
+        if self.num_frames > 1:
+            prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
+            current_state = np.vstack((prev_states, state))
+        else:
+            current_state = state
         return current_state
 
 
@@ -85,10 +89,13 @@ class Agent:
         # If the environment is a full MDP, get the whole world image
         if env.full_mdp:
             image = visual_field(
-                env.world, 
-                color_map, 
+                world=env.world, 
+                location=self.location, 
+                vision=self.vision,
+                color_map=color_map, 
                 channels=env.channels, 
-                has_value_map=self.cfg.has_value_map
+                has_value_map=self.cfg.has_value_map,
+                env=env
             )
         # Otherwise, use the agent observation function
         else:
@@ -105,6 +112,7 @@ class Agent:
                 has_value_map=self.cfg.has_value_map,
                 env=env
             )
+
 
         current_state = image.flatten()
 
@@ -159,6 +167,7 @@ class Agent:
 
         # Take action based on current state
         action = self.model.take_action(model_input)
+
         # Attempt the transition 
         attempted_location = self.movement(action)
         previous_location = self.location

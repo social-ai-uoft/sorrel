@@ -48,7 +48,7 @@ class ReplayBuffer:
 
 class ClaasyReplayBuffer:
 
-    def __init__(self, capacity: int, obs_shape: Sequence[int]):
+    def __init__(self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1):
         self.capacity = capacity
         self.obs_shape = obs_shape
         self.buffer = np.zeros((capacity, *obs_shape), dtype=np.float32)
@@ -57,6 +57,7 @@ class ClaasyReplayBuffer:
         self.dones = np.zeros(capacity, dtype=np.float32)
         self.idx = 0
         self.size = 0
+        self.n_frames = n_frames
     
     def add(self, obs, action, reward, done):
         """
@@ -74,6 +75,11 @@ class ClaasyReplayBuffer:
         self.dones[self.idx] = done
         self.idx = (self.idx + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
+
+    def add_empty(self):
+        """Advancing the id by `self.n_frames`, adding empty frames to the replay
+        buffer."""
+        self.idx = (self.idx + self.n_frames-1) % self.capacity
 
     def sample(self, batch_size: int, stacked_frames: int = 1):
         """

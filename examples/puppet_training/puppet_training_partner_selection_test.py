@@ -85,9 +85,8 @@ def run(cfg, **kwargs):
     # load weights
     if cfg.load_weights:
         for count, agent in enumerate(agents):
-            if agent.role == 'partner':
-                agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/puppet_training_only_partners_a1_onlyshowValue_memory_issue_fixed_seed2_agent{0}_iRainbowModel.pkl')
-        
+            agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/puppet_training_only_partners_a1_onlyshowValue_memory_issue_fixed_seed2_agent{0}_iRainbowModel_.pkl')
+            agent.model.eval()
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:
@@ -108,21 +107,11 @@ def run(cfg, **kwargs):
 
         # reset interval coef
         coef = 1 
-
-        if cfg.train_partners:
-            if cfg.curriculum:
-                if epoch < 100 * 500:
-                    coef = 1000
-                elif epoch < 100 * 1000:
-                    coef = 100
-                elif epoch < 100 * 1500:
-                    coef = 10
-                else:
-                    coef = 1
         
         # replace the entity values
         if cfg.resource_val.reset_interval > 0:
             if epoch % (cfg.resource_val.reset_interval * coef) == 0:
+            # if epoch == 0:
                 min_val_dict = {entity: cfg.resource_val.min_val for entity in vars(cfg.entity)}
                 max_val_dict = {entity: cfg.resource_val.max_val for entity in vars(cfg.entity)}
                 new_entity_vals = define_resource_values(cfg, 
@@ -174,7 +163,7 @@ def run(cfg, **kwargs):
         # TODO: frequency of switching - decider entity val < partner_distribution < partner_point val
 
         # Reset the environment at the start of each epoch
-        env.item_spawn_prob = cfg.env.prob.item_spawn * (1+ (0.5-(random.random()*0.5)))
+        env.item_spawn_prob = cfg.env.prob.item_spawn * (1+ (0.5-(random.random())))
         env.reset()
 
         random.shuffle(agents)
@@ -195,8 +184,8 @@ def run(cfg, **kwargs):
 
             turn = turn + 1
 
-            for agent in agents:
-                agent.model.start_epoch_action(**locals())
+            # for agent in agents:
+            #     agent.model.start_epoch_action(**locals())
 
             for agent in agents:
                 agent.reward = 0
@@ -206,15 +195,27 @@ def run(cfg, **kwargs):
             for entity in entities:
                 entity.transition(env)
 
+            # # load weights
+            # if cfg.load_weights:
+            #     for count, agent in enumerate(agents):
+            #         agent.model.load(f'{root}/examples/puppet_training/models/checkpoints/puppet_training_only_partners_a1_onlyshowValue_memory_issue_fixed_seed2_agent{0}_iRainbowModel_.pkl')
+            #         agent.model.eval()
+
             # Agent transition
             for agent in agents:
-
-                # # block the location of the gate 
-                # if turn >= 2:
-                #     assert env.world[(int((env.height-1)/2), env.height, 0)].passable == False, 'passable'
-                # # print('passable', env.world[(int((env.height-1)/2), env.height, 0)].passable)
-                # env.world[(int((env.height-1)/2), env.height, 0)].passable = False
                 
+                # for name, param in agent.model.qnetwork_local.named_parameters():
+                #     if param.grad is not None:
+                #         print(f"[GRAD] {name} has non-zero gradient")
+
+                # for name, param in agent.model.qnetwork_target.named_parameters():
+                #     if param.grad is not None:
+                #         print(f"[GRAD] {name} has non-zero gradient")
+
+                # for name, buf in agent.model.qnetwork_local.named_buffers():
+                #     if 'ff_1.epsilon_weight' in name:
+                #         print(f"[DEBUG] Buffer {name}: mean={buf.mean().item()}, std={buf.std().item()}")
+                #         print(agent.model.qnetwork_local.ff_1.training)
 
                 (state, action, reward, next_state, done_) = agent.transition(
                     env, 
@@ -226,18 +227,11 @@ def run(cfg, **kwargs):
                 if turn >= cfg.experiment.max_turns or done_:
                     done = 1
 
-                agent.add_memory(state, action, reward, done)
+                # agent.add_memory(state, action, reward, done)
 
                 game_points[agent.ixs] += int(reward)
 
-                agent.model.end_epoch_action(**locals())
-
-        # At the end of each epoch, train as long as the batch size is large enough.
-        if epoch > 10:
-            for agent in agents:
-                if agent.role == 'decider':
-                    loss = agent.model.train_model()
-                    losses[agent.ixs] += loss.detach().numpy()
+                # agent.model.end_epoch_action(**locals())
 
         # Add the game variables to the game object
         game_vars.record_turn(epoch, turn, losses, game_points)

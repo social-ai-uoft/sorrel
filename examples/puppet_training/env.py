@@ -168,7 +168,10 @@ class puppet_training(GridworldEnv):
 
         # place decider agents
         decider_loc = (int((self.height-1)/2), self.height, 0)
-        self.add(decider_loc, self.decider_agents[0])
+        try:
+            self.add(decider_loc, self.decider_agents[0])
+        except:
+            pass
         
         # Place initially spawned entities in the environment
         candidate_locs = [index for index in np.ndindex(self.world.shape) 

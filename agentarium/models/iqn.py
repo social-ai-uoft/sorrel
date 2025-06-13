@@ -262,7 +262,8 @@ class iRainbowModel(DoubleANN):
         # )
         self.memory = Buffer(
             capacity=BUFFER_SIZE,
-            obs_shape=(np.array(self.state_size).prod()+extra_percept_size,)
+            obs_shape=(np.array(self.state_size).prod()+extra_percept_size,),
+            n_frames=num_frames
         )
 
     def __str__(self):
@@ -290,7 +291,7 @@ class iRainbowModel(DoubleANN):
             self.qnetwork_local.eval()
             with torch.no_grad():
                 action_values = self.qnetwork_local.get_qvalues(state)  # .mean(0)
-            self.qnetwork_local.train()
+            
             action = np.argmax(action_values.cpu().data.numpy(), axis=1)
             if not eval:
                 return action[0]
@@ -311,9 +312,10 @@ class iRainbowModel(DoubleANN):
             experiences (Tuple[torch.Tensor]): tuple of (s, a, r, s', done) tuples \n
             gamma (float): discount factor
         """
+        self.qnetwork_local.train()
         loss = torch.tensor(0.0)
         self.optimizer.zero_grad()
-
+        
         if len(self.memory) > self.BATCH_SIZE:
 
             states, actions, rewards, next_states, dones, valid = self.memory.sample(batch_size=self.BATCH_SIZE, stacked_frames=self.num_frames)
@@ -407,6 +409,7 @@ class iRainbowModel(DoubleANN):
         Parameters:
             **kwargs: All local variables are passed into the model
         """
+        self.memory.add_empty()
         if kwargs["epoch"] % self.sync_freq == 0:
             self.qnetwork_target.load_state_dict(self.qnetwork_local.state_dict())
 
