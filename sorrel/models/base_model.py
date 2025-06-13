@@ -52,6 +52,16 @@ class BaseModel:
         """
         pass
 
+    def state_value(self, state) -> np.ndarray:
+        """Get the value of the given state.
+
+        Args:
+            state: The observed input.
+        
+        Returns:
+            The state value."""
+        return np.array(0.)
+
     def train_step(self) -> np.ndarray:
         """Train the model.
 

@@ -4,6 +4,7 @@ from datetime import datetime
 from sorrel.examples.leakyemotions.entities import EmptyEntity
 from sorrel.examples.leakyemotions.env import LeakyEmotionsEnv
 from sorrel.examples.leakyemotions.world import LeakyEmotionsWorld
+
 from sorrel.utils.logging import TensorboardLogger
 
 # begin main

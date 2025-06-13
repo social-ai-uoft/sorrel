@@ -22,6 +22,7 @@ class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
         self.sprite = Path(__file__).parent / "./assets/leakyemotionagent.png"
         self.id = 0
         self.alive = True
+        self.emotion = 0.
     
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
@@ -37,9 +38,20 @@ class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
         if not hasattr(self.model, "name"):
+<<<<<<< HEAD
+            prev_states = self.model.memory.current_state()
+            stacked_states = np.vstack((prev_states, state)) if prev_states else state
+=======
+>>>>>>> e45dcaa0676570db66069cf5e717262a08fed10a
+
+            # Update the agent emotion.
+            self.update_emotion(state)
+            
+            # Stack previous frames as needed.
             prev_states = self.model.memory.current_state()
             stacked_states = np.vstack((prev_states, state)) if prev_states else state
 
+            # Take action
             model_input = stacked_states.reshape(1, -1)
             action = self.model.take_action(model_input)
         
@@ -47,6 +59,14 @@ class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
             action = self.model.take_action(state)
         
         return action
+    
+    def update_emotion(self, state: np.ndarray) -> None:
+        """Update the agent's emotion based on its state value approximation.
+        
+        Args:
+            state: The observed input.
+        """
+        self.emotion = self.model.state_value(state)
 
     def act(self, world: LeakyEmotionsWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
@@ -205,8 +225,36 @@ class Wolf(Agent):
         if not self.asleep:
             new_location = self.movement(action)
 
+<<<<<<< HEAD
             # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
             target_object = world.observe(new_location)
+=======
+        new_location = self.movement(action)
+
+        # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
+        target_object = world.observe(new_location)
+        
+        if isinstance(target_object, LeakyEmotionsAgent):
+            target_object.alive = False
+            if world.num_agents == 0:
+                world.game_over()
+
+            # Final memory for the dead agent, RIP
+            target_object_state = target_object.pov(world)
+            target_object_action = target_object.get_action(target_object_state)
+
+            target_object.add_memory(
+                state=target_object_state, 
+                action=target_object_action,
+                reward=-100,
+                done=True
+            )
+
+            world.total_reward -= 100
+
+            dead_agent = world.remove(new_location)
+            world.dead_agents.append(dead_agent)
+>>>>>>> e45dcaa0676570db66069cf5e717262a08fed10a
             
             if isinstance(target_object, LeakyEmotionsAgent):
                 target_object.alive = False

@@ -11,6 +11,7 @@ from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
 from sorrel.models.pytorch.ppo import PyTorchPPO
+from sorrel.models.pytorch.ppo import PyTorchPPO
 from sorrel.utils.logging import Logger, ConsoleLogger, TensorboardLogger
 from sorrel.utils.visualization import ImageRenderer
 
@@ -54,7 +55,7 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
             )
             
             observation_spec.override_input_size(
-                np.zeros(observation_spec.input_size).reshape(1, -1).shape
+                np.zeros(observation_spec.input_size, dtype=int).reshape(1, -1).shape
             )
             
 
@@ -69,14 +70,14 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                 epsilon=0.7,
                 device="cpu",
                 seed=torch.random.seed(),
-                lr_actor=0.0001,
-                lr_critic=0.00005,
-                gamma=0.99,
-                k_epochs=10,
-                eps_clip=0.2,
                 entropy_coef=0.01,
+                eps_clip=0.2,
+                gamma=0.9,
+                k_epochs=10,
+                lr_actor=.001,
+                lr_critic=.0005,
                 max_turns=100
-                )
+            )
 
             agents.append(
                 LeakyEmotionsAgent(
@@ -223,12 +224,6 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                     self.world.total_reward,
                     self.agents[0].model.epsilon,
                 )
-            
-            # tb_logger = TensorboardLogger(self.config.experiment.epochs, "tensorboard_log")
-            # tb_logger.record_turn(epoch,
-            #         total_loss,
-            #         self.world.total_reward,
-            #         self.agents[0].model.epsilon)
             
 
             # update epsilon

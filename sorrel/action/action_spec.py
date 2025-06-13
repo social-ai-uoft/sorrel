@@ -26,5 +26,5 @@ class ActionSpec:
           str: The human-readable action.
         """
         if isinstance(action, tuple):
-            action = int(action[0].numpy().squeeze())
+            action = int(action[0].detach().cpu().numpy().squeeze())
         return self.actions[action]
