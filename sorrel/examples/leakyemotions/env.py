@@ -5,14 +5,13 @@ import omegaconf
 import os
 import torch
 from pathlib import Path
-from torch.utils.tensorboard import SummaryWriter
 
 # sorrel imports
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.utils.logging import Logger, ConsoleLogger
+from sorrel.utils.logging import Logger, ConsoleLogger, TensorboardLogger
 from sorrel.utils.visualization import ImageRenderer
 
 # imports from our example
@@ -168,7 +167,6 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
             logger: The logger to use. Defaults to a ConsoleLogger.
             output_dir: The directory to save the animations to. Defaults to "./data/" (relative to current working directory).
         """
-        writer = SummaryWriter()
         
         renderer = None
         if animate:
@@ -209,7 +207,6 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                 if output_dir is None:
                     output_dir = Path(os.getcwd()) / "./data/"
                 renderer.save_gif(epoch, output_dir)
-                print("gif yeah")
 
             # At the end of each epoch, train the agents.
             total_loss = 0
@@ -227,11 +224,15 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                     self.world.total_reward,
                     self.agents[0].model.epsilon,
                 )
-
-            writer.add_scalar("Reward", self.world.total_reward)
+            
+            tb_logger = TensorboardLogger(self.config.experiment.epochs, "tensorboard_log")
+            tb_logger.record_turn(epoch,
+                    total_loss,
+                    self.world.total_reward,
+                    self.agents[0].model.epsilon)
+            
 
             # update epsilon
             for agent in self.agents:
                 agent.model.epsilon_decay(self.config.model.epsilon_decay)
 
-        writer.close()
