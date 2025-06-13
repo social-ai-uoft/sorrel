@@ -51,7 +51,7 @@ class Buffer:
     def add_empty(self):
         """Advancing the id by `self.n_frames`, adding empty frames to the replay
         buffer."""
-        self.idx = (self.idx + self.n_frames) % self.capacity
+        self.idx = (self.idx + self.n_frames - 1) % self.capacity
 
     def sample(self, batch_size: int):
         """Sample a batch of experiences from the replay buffer.

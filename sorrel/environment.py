@@ -147,6 +147,10 @@ class Environment[W: Gridworld]:
                     output_dir = Path(os.getcwd()) / "./data/"
                 renderer.save_gif(epoch, output_dir)
 
+            # end epoch action for each agent model
+            for agent in self.agents:
+                agent.model.end_epoch_action(epoch=epoch)            
+
             # At the end of each epoch, train the agents.
             with Pool() as pool:
                 # Use multiprocessing to train agents in parallel

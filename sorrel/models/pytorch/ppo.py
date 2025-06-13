@@ -197,6 +197,18 @@ class PyTorchPPO(PyTorchModel):
     This should clear out the memory from previous epochs."""
     self.memory.clear()
 
+  def end_epoch_action(self, **kwargs):
+    """Actions after the epoch is started for the PPO model.
+    
+    This should truncate the memory based on the length of the game."""
+    index_to_truncate = np.nonzero(self.memory.dones)[0][0]
+    self.memory.states = self.memory.states[0:index_to_truncate+1]
+    self.memory.actions = self.memory.actions[0:index_to_truncate+1]
+    self.memory.log_probs = self.memory.log_probs[0:index_to_truncate+1] #type: ignore
+    self.memory.rewards = self.memory.rewards[0:index_to_truncate+1]
+    self.memory.dones = self.memory.dones[0:index_to_truncate+1] 
+
+
   def take_action(self, state: np.ndarray) -> tuple: #type: ignore
     with torch.no_grad():
       action, log_prob = self.policy.act(state)
