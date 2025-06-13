@@ -34,21 +34,21 @@ def create_models(cfg) -> tuple[list[iRainbowModel], list[iRainbowModel], list[i
                     )
                 )
             )
-            stonecutter_models.append(
-                iRainbowModel(
-                    **vars(cfg.model.seller)[model_name].parameters.to_dict(),
-                    seed=torch.random.seed(),
-                    input_size=(
-                        1,
-                        (
-                            len(cfg.agent.seller.obs.entity_list)
-                            * (2 * cfg.agent.seller.obs.vision_radius + 1)
-                            * (2 * cfg.agent.seller.obs.vision_radius + 1)
-                            + 2
-                        ),
-                    )
-                )
-            )
+            #stonecutter_models.append(
+                #iRainbowModel(
+                    #**vars(cfg.model.seller)[model_name].parameters.to_dict(),
+                    #seed=torch.random.seed(),
+                    #input_size=(
+                        #1,
+                        #(
+                            #len(cfg.agent.seller.obs.entity_list)
+                            #* (2 * cfg.agent.seller.obs.vision_radius + 1)
+                            #* (2 * cfg.agent.seller.obs.vision_radius + 1)
+                            #+ 2
+                        #),
+                    #)
+                #)
+            #)
 
     for _ in range(cfg.agent.buyer.num):
         model_name = cfg.agent.buyer.model
@@ -90,22 +90,22 @@ def create_agents(cfg, woodcutter_models, stonecutter_models, market_models) -> 
                 model=woodcutter_models[i],
             )
         )
-        stonecutters.append(
-            Seller(
-                cfg,
-                appearance=1,
-                is_majority=(
-                    i >= cfg.agent.seller.num * cfg.agent.seller.majority_percentage
-                ),
-                is_woodcutter=False,
-                observation_spec=EconEnvObsSpec(
-                    cfg.agent.seller.obs.entity_list,
-                    vision_radius=cfg.agent.seller.obs.vision_radius,
-                ),
-                action_spec=ActionSpec([0, 1, 2, 3, 4, 5, 6]),
-                model=stonecutter_models[i],
-            )
-        )
+        #stonecutters.append(
+            #Seller(
+                #cfg,
+                #appearance=1,
+                #is_majority=(
+                    #i >= cfg.agent.seller.num * cfg.agent.seller.majority_percentage
+                #),
+                #is_woodcutter=False,
+                #observation_spec=EconEnvObsSpec(
+                    #cfg.agent.seller.obs.entity_list,
+                    #vision_radius=cfg.agent.seller.obs.vision_radius,
+                #),
+                #action_spec=ActionSpec([0, 1, 2, 3, 4, 5, 6, 7]),
+                #model=stonecutter_models[i],
+            #)
+        #)
 
     for i in range(0, cfg.agent.buyer.num):
         markets.append(

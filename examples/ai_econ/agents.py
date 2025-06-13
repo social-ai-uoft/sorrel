@@ -54,6 +54,11 @@ class SellStoneBeam(Beam):
         super().__init__()
         self.sprite = f"./assets/zap.png"
 
+class MarketNavBeam(Beam):
+    def __init__(self):
+        super().__init__()
+        self.sprite = f"./assets/Pure_violet.webp" # Different color from selling beams for visual clarity
+        self.kind = "SellWoodBeam"  
 
 
 class Seller(Agent):
@@ -117,6 +122,7 @@ class Seller(Agent):
         self.near_market = False
         self.market_locations_cache = None
         self.last_market_check = 0
+        self.last_action_was_7 = False
 
     def pov(self, env: GridworldEnv) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
@@ -237,11 +243,10 @@ class Seller(Agent):
             location[1] < 0 or location[1] >= env.width):
             return False
         
-        # Check if the location is empty
         entity = env.observe(location)
-        
-        # Check if the entity is a wall
-        if entity.kind == "Wall":
+            
+        # Check if the location is passable (this will now catch walls)
+        if hasattr(entity, 'passable') and not entity.passable:
             return False
             
         # Check if there's an agent already at this location
@@ -253,125 +258,205 @@ class Seller(Agent):
 
 
     def get_action(self, state: np.ndarray) -> int:
-        """
-        Gets the action from the model, using the stacked states.
-        """
-
+        """Gets the action from the model, using the stacked states."""
         prev_states = self.model.memory.current_state(
             stacked_frames=self.model.num_frames - 1
         )
         stacked_states = np.vstack((prev_states, state))
         model_input = stacked_states.reshape(1, -1)
+        
+        # Store environment reference for future use if we don't have it yet
+        if not hasattr(self, 'current_env'):
+            if hasattr(self.model, 'env'):
+                self.current_env = self.model.env
 
-        # Store environment reference for future use
-        if not hasattr(self, 'current_env') and hasattr(self.model, 'env'):
-            self.current_env = self.model.env
+        # Get environment reference if available
         env = getattr(self, 'current_env', None)
-
+            
+        # If we have access to the environment, check for markets
         if env is not None:
-            # Update market visibility check
+            # Update the market visibility status every few turns
             if env.turn % 5 == 0:
                 self.near_market = self.can_see_market(env)
-            
-            # Check if any market has homing enabled
-            markets_enable_homing = False
-            if hasattr(env, 'markets') and env.markets:
-                markets_enable_homing = any(getattr(market, 'homing', False) for market in env.markets)
-            
-            # Only use market navigation if any market has homing enabled and market isn't visible
-            if not self.near_market and markets_enable_homing:
-                return self.chase_market(env)
         
-        # When homing is disabled, completely rely on other action
-        return int(self.model.take_action(model_input))
+        # Check if homing is enabled for markets before allowing action 7
+        homing_enabled = False
+        if env is not None and hasattr(env, 'markets') and env.markets:
+            # Enable the homing action if homing = True and the agent cannot see a market
+            homing_enabled = all(
+                hasattr(market, 'homing') and market.homing
+                for market in env.markets
+            ) and not self.near_market 
+        
+        raw_action = self.model.take_action(model_input)
+        
+        # If homing is false or we're near a market, disable action 7 
+        if raw_action == 7 and not homing_enabled:
+            action = np.random.randint(0, 7)  # Choose an action other than 7
+        else:
+            action = raw_action
+                
+        return action
+
+
 
     def act(self, env: GridworldEnv, action: int) -> float:
-            """
-            Act on the environment, returning the reward.
-            """
-            # store env reference for future use
-            if not hasattr(self, 'current_env') or self.current_env is None:
-                self.current_env = env
+        """Act on the environment, returning the reward."""
 
-            # MOVEMENT (0–3)
-            if 0 <= action <= 3:
-                if action == 0:  # move north
-                    if self.is_woodcutter:
-                        self.sprite = "./assets/hero-back.png"
-                    else:
-                        self.sprite = "./assets/hero-back-g.png"
-                    new_location = (self.location[0] - 1, self.location[1], self.location[2])
-                elif action == 1:  # move south
-                    if self.is_woodcutter:
-                        self.sprite = "./assets/hero.png"
-                    else:
-                        self.sprite = "./assets/hero-g.png"
-                    new_location = (self.location[0] + 1, self.location[1], self.location[2])
-                elif action == 2:  # move west
-                    if self.is_woodcutter:
-                        self.sprite = "./assets/hero-left.png"
-                    else:
-                        self.sprite = "./assets/hero-left-g.png"
-                    new_location = (self.location[0], self.location[1] - 1, self.location[2])
-                else:  # action == 3, move east
-                    if self.is_woodcutter:
-                        self.sprite = "./assets/hero-right.png"
-                    else:
-                        self.sprite = "./assets/hero-right-g.png"
-                    new_location = (self.location[0], self.location[1] + 1, self.location[2])
+        # Store environment reference for future use
+        if not hasattr(self, 'current_env') or self.current_env is None:
+            self.current_env = env
 
-                env.move(self, new_location)
-                return 0
+        # Update market visibility before beginning action
+        self.near_market = self.can_see_market(env)
 
-            # EXTRACT RESOURCE (4)
-            if action == 4:
-                node_below = env.observe((self.location[0], self.location[1], self.location[2] - 1))
-                if node_below.kind == "WoodNode" and node_below.num_resources > 0:
-                    if np.random.random() < self.wood_success_rate:
-                        self.wood_owned += 1
-                        node_below.num_resources -= 1
-                elif node_below.kind == "StoneNode" and node_below.num_resources > 0:
-                    if np.random.random() < self.stone_success_rate:
-                        self.stone_owned += 1
-                        node_below.num_resources -= 1
-                return 0
-
-            # SELL WOOD (5)
-            if action == 5:
+        # If agent can see market, disable action 7
+        if self.near_market and action == 7:
+            action = np.random.randint(0, 7)  # Choose any action except 7
+        
+        # First time action 7 is chosen, enter navigation state
+        elif action == 7:
+            # Check if all markets have homing enabled
+            homing_enabled = False
+            if hasattr(env, 'markets') and env.markets:
+                homing_enabled = all(
+                    hasattr(market, 'homing') and market.homing
+                    for market in env.markets
+                )
+                    
+            # If homing is disabled, replace with random movement action
+            if not homing_enabled:
+                action = np.random.randint(0, 7)  # Choose any action except 7
+            else:
+                # Create a visual beam to indicate market navigation
                 beam_loc = (self.location[0], self.location[1], 3)
-                env.add(beam_loc, SellWoodBeam())
+                env.add(beam_loc, MarketNavBeam())
+                
+                # Use the chase_market function to get the best movement action
+                movement_action = self.chase_market(env)
+                
+                # Execute the movement action instead
+                action = movement_action
+                
+                # Note that action 7 was chosen this turn so future actions will auto-navigate
+                self.last_action_was_7 = True
+        
+        # Continue automated navigation if we had previously chosen action 7 and haven't found market yet
+        elif hasattr(self, 'last_action_was_7') and self.last_action_was_7 and not self.near_market:
+            # Use the chase_market function to get the best movement action
+            action = self.chase_market(env)
+        else:
+            # Reset navigation state if we see a market
+            if hasattr(self, 'last_action_was_7'):
+                self.last_action_was_7 = False
 
-                if self.wood_owned < 1:
-                    return 0
+        # MOVEMENT (0–3)
+        if 0 <= action <= 3:
+            if action == 0:  # move north
+                if self.is_woodcutter:
+                    self.sprite = "./assets/hero-back.png"
+                else:
+                    self.sprite = "./assets/hero-back-g.png"
+                new_location = (
+                    self.location[0] - 1,
+                    self.location[1],
+                    self.location[2],
+                )
+            if action == 1:  # move south
+                if self.is_woodcutter:
+                    self.sprite = "./assets/hero.png"
+                else:
+                    self.sprite = "./assets/hero-g.png"
+                new_location = (
+                    self.location[0] + 1,
+                    self.location[1],
+                    self.location[2],
+                )
+            if action == 2:  # move west
+                if self.is_woodcutter:
+                    self.sprite = "./assets/hero-left.png"
+                else:
+                    self.sprite = "./assets/hero-left-g.png"
+                new_location = (
+                    self.location[0],
+                    self.location[1] - 1,
+                    self.location[2],
+                )
+            if action == 3:  # move east
+                if self.is_woodcutter:
+                    self.sprite = "./assets/hero-right.png"
+                else:
+                    self.sprite = "./assets/hero-right-g.png"
+                new_location = (
+                    self.location[0],
+                    self.location[1] + 1,
+                    self.location[2],
+                )
 
-                r = self.observation_spec.vision_radius
-                for H in range(max(self.location[0] - r, 0), min(self.location[0] + r + 1, env.height)):
-                    for W in range(max(self.location[1] - r, 0), min(self.location[1] + r + 1, env.width)):
-                        if env.observe((H, W, self.location[2])).kind == "Buyer":
-                            self.wood_owned -= 1
-                            env.seller_score += self.sell_reward
-                            return self.sell_reward
-                return 0
+            # try moving to new_location
+            env.move(self, new_location)
 
-            # SELL STONE (6)
-            if action == 6:
-                beam_loc = (self.location[0], self.location[1], 3)
-                env.add(beam_loc, SellStoneBeam())
-
-                if self.stone_owned < 1:
-                    return 0
-
-                r = self.observation_spec.vision_radius
-                for H in range(max(self.location[0] - r, 0), min(self.location[0] + r + 1, env.height)):
-                    for W in range(max(self.location[1] - r, 0), min(self.location[1] + r + 1, env.width)):
-                        if env.observe((H, W, self.location[2])).kind == "Buyer":
-                            self.stone_owned -= 1
-                            env.seller_score += self.sell_reward
-                            return self.sell_reward
-                return 0
-
-            # any other action... 
+        # EXTRACT RESOURCE (4)
+        if action == 4:
+            node_below = env.observe(
+                (self.location[0], self.location[1], self.location[2] - 1)
+            )
+            if node_below.kind == "WoodNode" and node_below.num_resources > 0:
+                if np.random.random() < self.wood_success_rate:
+                    self.wood_owned += 1
+                    node_below.num_resources -= 1
+                    return 1 #### Changed this (From 0 to 1)
+            elif node_below.kind == "StoneNode" and node_below.num_resources > 0:
+                if np.random.random() < self.stone_success_rate:
+                    self.stone_owned += 1
+                    node_below.num_resources -= 1
+                    return 1 ################# Changed this (From 0 to 1)
             return 0
+
+        # SELL WOOD (5)
+        if action == 5:
+            beam_loc = (self.location[0], self.location[1], 3)
+            env.add(beam_loc, SellWoodBeam())
+
+            if self.wood_owned < 1:
+                return 0  # not enough resources
+
+            r = self.observation_spec.vision_radius
+            for H in range(
+                max(self.location[0] - r, 0), min(self.location[0] + r, env.height)
+            ):
+                for W in range(
+                    max(self.location[1] - r, 0), min(self.location[1] + r, env.width)
+                ):
+                    if env.observe((H, W, self.location[2])).kind == "Buyer":
+                        self.wood_owned -= 1
+                        env.seller_score += self.sell_reward
+                        return self.sell_reward
+            return 0
+
+        # SELL STONE (6)
+        if action == 6:
+            beam_loc = (self.location[0], self.location[1], 3)
+            env.add(beam_loc, SellStoneBeam())
+
+            if self.stone_owned < 1:
+                return 0  # not enough resources
+
+            r = self.observation_spec.vision_radius
+            for H in range(
+                max(self.location[0] - r, 0), min(self.location[0] + r, env.height),
+            ):
+                for W in range(
+                    max(self.location[1] - r, 0), min(self.location[1] + r, env.width),
+                ):
+                    if env.observe((H, W, self.location[2])).kind == "Buyer":
+                        self.stone_owned -= 1
+                        env.seller_score += self.sell_reward
+                        return self.sell_reward
+            return 0
+
+        # Fallback
+        return 0
 
 
     def is_done(self, env: GridworldEnv) -> bool:

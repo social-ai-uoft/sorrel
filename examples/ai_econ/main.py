@@ -30,7 +30,7 @@ def run(env: EconEnv, cfg: Cfg):
     total_seller_score = 0
     total_seller_loss = 0
     total_buyer_loss = 0
-    percent_marker = int(0.5 * cfg.experiment.epochs)
+    percent_marker = int(0.2 * cfg.experiment.epochs)
 
     if cfg.experiment.log:
         from torch.utils.tensorboard import SummaryWriter
@@ -51,12 +51,12 @@ def run(env: EconEnv, cfg: Cfg):
 
         if epoch < percent_marker: 
             for i in range(cfg.agent.seller.num):
-                env.woodcutters[i].wood_owned = 5
-                env.stonecutters[i].stone_owned = 5
+                env.woodcutters[i].wood_owned = 0 
+                #env.stonecutters[i].stone_owned = 0
 
         for i in range(cfg.agent.seller.num):
             env.woodcutters[i].model.start_epoch_action(**locals())
-            env.stonecutters[i].model.start_epoch_action(**locals())
+            #env.stonecutters[i].model.start_epoch_action(**locals())
         for i in range(cfg.agent.buyer.num):
             env.markets[i].model.start_epoch_action(**locals())
 
@@ -69,7 +69,7 @@ def run(env: EconEnv, cfg: Cfg):
         if epoch > 10:
             for i in range(cfg.agent.seller.num):
                 total_seller_loss += env.woodcutters[i].model.train_step()
-                total_seller_loss += env.stonecutters[i].model.train_step()
+                #total_seller_loss += env.stonecutters[i].model.train_step()
             for i in range(cfg.agent.buyer.num):
                 total_buyer_loss += env.markets[i].model.train_step()
 
@@ -91,7 +91,7 @@ def run(env: EconEnv, cfg: Cfg):
         for i in range(cfg.agent.seller.num):
             new_epsilon = current_seller_epsilon - cfg.experiment.seller_epsilon_decay
             env.woodcutters[i].model.epsilon = max(new_epsilon, 0.01)
-            env.stonecutters[i].model.epsilon = max(new_epsilon, 0.01)
+            #env.stonecutters[i].model.epsilon = max(new_epsilon, 0.01)
 
 
 if __name__ == "__main__":

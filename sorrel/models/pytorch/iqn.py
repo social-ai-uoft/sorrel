@@ -271,9 +271,16 @@ class iRainbowModel(DoublePyTorchModel):
             action = np.argmax(action_values.cpu().data.numpy(), axis=1)
             return action[0]
         else:
-
-            action = random.choices(np.arange(self.action_space), k=1)
-            return action[0]
+            
+            # Random action selection with a small chance of choosing action 7
+            #if random.random() < 0.02:  # 2% of the time, choose action 7
+                #action = [7]
+            #else:  # 98% of the time, choose actions 0-6
+                #action = random.choices(np.arange(7), k=1)
+            
+            action = random.choice(range(self.action_space))
+            return action
+            #return action[0]
 
     def train_step(self) -> torch.Tensor:
         """Update value parameters using given batch of experience tuples.

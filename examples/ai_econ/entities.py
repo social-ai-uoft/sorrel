@@ -10,6 +10,7 @@ class Wall(Entity):
 
     def __init__(self):
         super().__init__()
+        self.passable = False  # cannot walk through walls
         self.sprite = f"./assets/wall.png"
 
 

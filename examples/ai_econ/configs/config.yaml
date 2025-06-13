@@ -2,7 +2,7 @@ experiment:
   seller_epsilon_decay: 0.0001
   epochs: 10000
   max_turns: 100
-  record_period: 100 # how many epochs in each data recording period
+  record_period: 500 # how many epochs in each data recording period
   log: True
 
 env:
@@ -53,7 +53,7 @@ model:
 agent:
   seller:
     model: iqn
-    num: 10 # population size for ONE group i.e. total num of sellers would be double this
+    num: 1 # population size for ONE group i.e. total num of sellers would be double this (before was 10)
     majority_percentage: 0.8
     skilled_success_rate: 0.9
     unskilled_success_rate: 0.25

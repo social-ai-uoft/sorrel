@@ -115,8 +115,12 @@ class EconEnv(GridworldEnv):
         east_spawn_area = []
         west_spawn_area = []
         for y, x in np.ndindex(self.height, self.width):
+
+            if isinstance(self.world[y, x, 2], Wall):
+                continue
+
             if x in range(locs["inner_end_x"], locs["outer_begin_x"]):
-                if y in range(locs["inner_begin_y"]):
+                if y in range(1, locs["inner_begin_y"]):
                     north_spawn_area.append((y, x, 2))
                 if y in range(locs["outer_end_y"], self.width - 1):
                     south_spawn_area.append((y, x, 2))
@@ -127,32 +131,37 @@ class EconEnv(GridworldEnv):
                     east_spawn_area.append((y, x, 2))
 
         # woodcutters: north area & south area
-        woodcutters_spawn_locations = random.sample(
-            north_spawn_area, self.cfg.agent.seller.num // 2
-        ) + random.sample(south_spawn_area, self.cfg.agent.seller.num // 2)
+        #woodcutters_spawn_locations = random.sample(
+            #north_spawn_area, self.cfg.agent.seller.num // 2
+        #) + random.sample(south_spawn_area, self.cfg.agent.seller.num // 2)
+        #random.shuffle(woodcutters_spawn_locations)
+
+        all_spawn_areas = north_spawn_area + south_spawn_area
+        woodcutters_spawn_locations = random.sample(all_spawn_areas, self.cfg.agent.seller.num)
         random.shuffle(woodcutters_spawn_locations)
+
         # stonecutters: east area & west area
         stonecutters_spawn_locations = random.sample(
             north_spawn_area, self.cfg.agent.seller.num // 2
         ) + random.sample(south_spawn_area, self.cfg.agent.seller.num // 2)
-        random.shuffle(stonecutters_spawn_locations)
+        #random.shuffle(stonecutters_spawn_locations)
 
         for woodcutter, woodcutter_location in zip(
             self.woodcutters, woodcutters_spawn_locations
         ):
             self.add(woodcutter_location, woodcutter)
-        for stonecutter, stonecutter_location in zip(
-            self.stonecutters, stonecutters_spawn_locations
-        ):
-            self.add(stonecutter_location, stonecutter)
+        #for stonecutter, stonecutter_location in zip(
+            #self.stonecutters, stonecutters_spawn_locations
+        #):
+            #self.add(stonecutter_location, stonecutter)
 
         # NOTE: for now we are only placing a single market (markets[0]) in the middle of the map
         #       regardless of how many markets there are.
 
-        self.add(locs["centre"] + (-4, -4), self.markets[0])
-        self.add(locs["centre"] + (-4, 4), self.markets[0])
-        self.add(locs["centre"] + (4, -4), self.markets[0])
-        self.add(locs["centre"] + (4, 4), self.markets[0])
+        #self.add(locs["centre"] + (-4, -4), self.markets[0])
+        #self.add(locs["centre"] + (-4, 4), self.markets[0])
+        #self.add(locs["centre"] + (4, -4), self.markets[0])
+        #self.add(locs["centre"] + (4, 4), self.markets[0])
 
     def reset(self):
         """Reset the environment and all its agents."""

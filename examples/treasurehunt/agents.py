@@ -49,6 +49,9 @@ class TreasurehuntAgent(Agent):
     def act(self, env: GridworldEnv, action: int) -> float:
         """Act on the environment, returning the reward."""
 
+        # delete later (XXXX)
+        action = np.clip(action, 0, len(self.action_spec.actions) - 1)
+
         # Translate the model output to an action string
         action = self.action_spec.get_readable_action(action)
 
