@@ -13,7 +13,7 @@ if __name__ == "__main__":
     # object configurations
     config = {
         "experiment": {
-            "epochs": 3000,
+            "epochs": 10000,
             "max_turns": 50,
             "record_period": 50,
         },
@@ -26,7 +26,7 @@ if __name__ == "__main__":
             "wolves": 0,
             "height": 25,
             "width": 25,
-            "spawn_prob": 0.02,
+            "spawn_prob": 0.01,
         },
     }
 
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     # run the experiment with default parameters
     experiment.run_experiment(logger=TensorboardLogger(
         max_epochs=config.experiment.epochs,
-        log_dir=f'./data/tensorboard/{datetime.now().strftime("%d%m%Y-%H%M%S")}/'
+        log_dir=f'./data/tensorboard/{datetime.now().strftime("%Y%d%m-%H%M%S")}/'
     ))
 
 # end main
