@@ -86,13 +86,50 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                     model=model,
                 )
             )
+        
+        wolf_num = self.config.world.wolves
+        for _ in range(wolf_num):
+            # create the observation spec
+            entity_list = ENTITY_LIST
+            observation_spec = LeakyEmotionsObservationSpec(
+                entity_list,
+                full_view=False,
+                # note that here we require self.config to have the entry model.agent_vision_radius
+                # don't forget to pass it in as part of config when creating this experiment!
+                vision_radius=self.config.model.agent_vision_radius,
+            )
+            
+            observation_spec.override_input_size(
+                np.zeros(observation_spec.input_size, dtype=int).reshape(1, -1).shape
+            )
+
+            # create the action spec
+            action_spec = ActionSpec(["up", "down", "left", "right"])
+
+            # create the model
+            model = PyTorchPPO(
+                input_size=observation_spec.input_size,
+                action_space=action_spec.n_actions,
+                layer_size=250,
+                epsilon=0.7,
+                device="cpu",
+                seed=torch.random.seed(),
+                entropy_coef=0.01,
+                eps_clip=0.2,
+                gamma=0.9,
+                k_epochs=10,
+                lr_actor=.001,
+                lr_critic=.0005,
+                max_turns=100
+            )
+            
             agents.append(
                 Wolf(
                     observation_spec=observation_spec, 
                     action_spec=action_spec, 
                     model=WolfModel(1, 4, 1)
+                )
             )
-        )
 
         self.agents = agents
 
@@ -180,6 +217,9 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
         for epoch in range(self.config.experiment.epochs + 1):
             # Reset the environment at the start of each epoch
             self.reset()
+
+            # if epoch % 1000 == 0:
+            #     self.config.world.wolves = (2 * self.config.world.wolves) + 1
 
             # Determine whether to animate this turn.
             animate_this_turn = animate and (

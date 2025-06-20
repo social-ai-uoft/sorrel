@@ -13,7 +13,7 @@ if __name__ == "__main__":
     # object configurations
     config = {
         "experiment": {
-            "epochs": 5000,
+            "epochs": 3000,
             "max_turns": 50,
             "record_period": 50,
         },
@@ -22,9 +22,10 @@ if __name__ == "__main__":
             "epsilon_decay": 0.0001,
         },
         "world": {
-            "agents": 2,
-            "height": 15,
-            "width": 15,
+            "agents": 5,
+            "wolves": 0,
+            "height": 25,
+            "width": 25,
             "spawn_prob": 0.02,
         },
     }

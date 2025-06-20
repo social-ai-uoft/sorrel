@@ -16,6 +16,7 @@ class LeakyEmotionsWorld(Gridworld):
         self.game_ended = False
         self.spawn_prob = config.world.spawn_prob
         self.num_agents = config.world.agents
+        self.num_wolves = config.world.wolves
         self.agents = config.world.agents
         self.max_turns = config.experiment.max_turns
 

@@ -38,11 +38,6 @@ class LeakyEmotionsAgent(Agent[LeakyEmotionsWorld]):
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
         if not hasattr(self.model, "name"):
-<<<<<<< HEAD
-            prev_states = self.model.memory.current_state()
-            stacked_states = np.vstack((prev_states, state)) if prev_states else state
-=======
->>>>>>> e45dcaa0676570db66069cf5e717262a08fed10a
 
             # Update the agent emotion.
             self.update_emotion(state)
@@ -225,10 +220,6 @@ class Wolf(Agent):
         if not self.asleep:
             new_location = self.movement(action)
 
-<<<<<<< HEAD
-            # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
-            target_object = world.observe(new_location)
-=======
         new_location = self.movement(action)
 
         # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
@@ -254,7 +245,6 @@ class Wolf(Agent):
 
             dead_agent = world.remove(new_location)
             world.dead_agents.append(dead_agent)
->>>>>>> e45dcaa0676570db66069cf5e717262a08fed10a
             
             if isinstance(target_object, LeakyEmotionsAgent):
                 target_object.alive = False
