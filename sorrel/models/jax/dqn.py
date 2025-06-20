@@ -1,51 +1,79 @@
 from typing import Sequence
 
+import optax
 import jax
 from flax import nnx
 from jax import numpy as jnp
 
 from sorrel.models import BaseModel
+from sorrel.buffers import Buffer
 
 
 class QNetwork(nnx.Module):
     """A simple Q-network for DQN using Flax NNX."""
 
-    # @nnx.compact
-    # def __call__(self, x, key):
-    #     x = nnx.Dense(features=64)(x)
-    #     x = nnx.relu(x)
-    #     x = nnx.Dense(features=64)(x)
-    #     x = nnx.relu(x)
-    #     q_values = nnx.Dense(features=self.action_space)(x)
-    #     return q_values
+    def __init__(self, flattened_input_size: int, action_space: int, layer_size: int, rngs: nnx.Rngs):
+
+        # TODO: give these layers more descriptive names
+        self.layer1 = nnx.Linear(flattened_input_size, layer_size, rngs=rngs)
+        self.layer2 = nnx.Linear(layer_size, layer_size, rngs=rngs)
+        self.layer3 = nnx.Linear(layer_size, action_space, rngs=rngs)
+
+    def __call__(self, x, key):
+        x = self.layer1(x)
+        x = jax.nn.relu(x)
+        x = self.layer2(x)
+        x = jax.nn.relu(x)
+        x = self.layer3(x)
+        x = jax.nn.relu(x)
+        return x
 
 class DQN(nnx.Module, BaseModel):
     """A simple DQN model using Flax NNX."""
 
+    action_space: int
+    epsilon: float
+    gamma: float
+
+    memory: Buffer
+    rngs: nnx.Rngs
+    local_network: QNetwork
+    target_network: QNetwork
+
+
+    # TODO: add device as a parameter?
+    # default values are taken from old DDQN Jax model
     def __init__(
         self,
         input_size: Sequence[int],
         action_space: int,
         layer_size: int,
-        epsilon: float,
-        device: str | torch.device,
-        seed: int | None = None,
+        lr: float = 0.001,
+        epsilon: float = 0.9,
+        gamma: float = 0.99,
+        memory_size: int = 5000,
+        batch_size: int = 64,
+        seed: float = 0,
     ):
         super().__init__()
         self.input_size = input_size
         self.action_space = action_space
-        self.layer_size = layer_size
         self.epsilon = epsilon
 
-        self.device = device
+        # TODO: double check obs_shape parameter is correct?
+        self.memory = Buffer(capacity=memory_size, obs_shape=input_size)
 
-        self.rng_key = jax.random.key(seed) if seed is not None else jax.random.key(0)
+        self.rngs = nnx.Rngs(seed)
 
-        self.local_network = QNetwork(
+        flattened_input_size = jnp.array(input_size).prod()
+        self.local_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
+        self.target_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
 
-        self.target_network = QNetwork(
+        self.local_optimizer = nnx.Optimizer(self.local_network, optax.Adam(lr))
+        self.target_optimizer = nnx.Optimizer(self.target_network, optax.Adam(lr))
 
-    def take_action(self, state):
+    # TODO
+    def take_action(self, state) -> int:
         """Selects an action based on the current state, using an epsilon-greedy
         strategy.
 
@@ -59,30 +87,31 @@ class DQN(nnx.Module, BaseModel):
         Returns:
         - The selected action, either random or the best according to the model.
         """
-
-        def action_fn(state, key, action_space, epsilon):
-            # Split the RNG key
-            rng_key, rng_key_action, rng_key_taus = jax.random.split(key, 3)
-
-            # Generate a random number using JAX's random number generator
-            random_number = jax.random.uniform(rng_key_action, shape=())
-
-            if random_number < epsilon:
-                # Exploration: choose a random action
-                rng_key, rng_key_random = jax.random.split(rng_key)
-                action = jax.random.randint(
-                    rng_key_random, shape=(), minval=0, maxval=action_space
-                )
-            else:
-                # Exploitation: choose the best action based on model prediction
-                q_values = model.apply_fn(model.params, state, rng_key_taus)
-                action = jnp.argmax(jnp.mean(q_values, axis=-1), axis=-1).item()
-
-            return action, rng_key
-
-        action, self.rng_key = nnx.jit(action_fn)(
-            state, self.rng_key, self.action_space, self.epsilon
-        )
-        return action
+        pass
     
+    # TODO
+    def train_step(self) -> jax.Array:
+        """Perform a training step, with control over batch size, discount factor, and
+        update type of the target model.
+
+        Parameters:
+        - batch_size: Determines the number of samples to be used in each training step. A larger batch size
+        generally leads to more stable gradient estimates, but it requires more memory and computational power.
+        - gamma: The discount factor used in the calculation of the return. It determines the importance of
+        future rewards. A value of 0 makes the agent short-sighted by only considering current rewards, while
+        a value close to 1 makes it strive for long-term high rewards.
+        - soft_update: A boolean flag that controls the type of update performed on the target model's parameters.
+        If True, a soft update is performed, where the target model parameters are gradually blended with the
+        local model parameters. If False, a hard update is performed, directly copying the local model parameters
+        to the target model.
+
+        The function conducts a single step of training, which involves sampling a batch of experiences,
+        computing the loss, updating the model parameters based on the computed gradients, and then updating
+        the target model parameters.
+
+        The choice between soft and hard updates for the target model is crucial for the stability of the training process.
+        Soft updates provide more stable but slower convergence, while hard updates can lead to faster convergence
+        but might cause instability in training dynamics.
+        """
+        pass
 
