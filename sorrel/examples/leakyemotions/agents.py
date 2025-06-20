@@ -220,19 +220,23 @@ class Wolf(Agent):
         if not self.asleep:
             new_location = self.movement(action)
 
+<<<<<<< HEAD
+            # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
+            target_object = world.observe(new_location)
+=======
         new_location = self.movement(action)
 
-        # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
-        target_object = world.observe(new_location)
-        
-        if isinstance(target_object, LeakyEmotionsAgent):
-            target_object.alive = False
-            if world.num_agents == 0:
-                world.game_over()
+            # decrease entity's value at new_location if it is a rabbit, otherwise do nothing 
+            target_object = world.observe(new_location)
+            
+            if isinstance(target_object, LeakyEmotionsAgent):
+                target_object.alive = False
+                if world.num_agents == 0:
+                    world.game_over()
 
-            # Final memory for the dead agent, RIP
-            target_object_state = target_object.pov(world)
-            target_object_action = target_object.get_action(target_object_state)
+                # Final memory for the dead agent, RIP
+                target_object_state = target_object.pov(world)
+                target_object_action = target_object.get_action(target_object_state)
 
             target_object.add_memory(
                 state=target_object_state, 
@@ -245,6 +249,7 @@ class Wolf(Agent):
 
             dead_agent = world.remove(new_location)
             world.dead_agents.append(dead_agent)
+>>>>>>> e45dcaa0676570db66069cf5e717262a08fed10a
             
             if isinstance(target_object, LeakyEmotionsAgent):
                 target_object.alive = False
@@ -265,11 +270,10 @@ class Wolf(Agent):
                 world.total_reward -= 100
 
                 dead_agent = world.remove(new_location)
-                world.dead_agents.append(dead_agent)
-                
+                world.dead_agents.append(dead_agent)         
 
-            # try moving to new_location
-            world.move(self, new_location)
+                # try moving to new_location
+                world.move(self, new_location)
         return 0.
 
     def sleep(self):

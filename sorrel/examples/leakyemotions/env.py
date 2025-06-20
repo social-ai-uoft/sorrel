@@ -212,7 +212,6 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
             )
-            print("animate true!")
 
         for epoch in range(self.config.experiment.epochs + 1):
             # Reset the environment at the start of each epoch
