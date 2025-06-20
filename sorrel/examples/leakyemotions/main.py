@@ -26,7 +26,7 @@ if __name__ == "__main__":
             "wolves": 0,
             "height": 25,
             "width": 25,
-            "spawn_prob": 0.02,
+            "spawn_prob": 0.01,
         },
     }
 

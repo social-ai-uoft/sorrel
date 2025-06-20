@@ -105,23 +105,6 @@ class LeakyEmotionsEnv(Environment[LeakyEmotionsWorld]):
 
             # create the action spec
             action_spec = ActionSpec(["up", "down", "left", "right"])
-
-            # create the model
-            model = PyTorchPPO(
-                input_size=observation_spec.input_size,
-                action_space=action_spec.n_actions,
-                layer_size=250,
-                epsilon=0.7,
-                device="cpu",
-                seed=torch.random.seed(),
-                entropy_coef=0.01,
-                eps_clip=0.2,
-                gamma=0.9,
-                k_epochs=10,
-                lr_actor=.001,
-                lr_critic=.0005,
-                max_turns=100
-            )
             
             agents.append(
                 Wolf(
