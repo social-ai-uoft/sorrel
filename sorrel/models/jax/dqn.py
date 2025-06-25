@@ -60,6 +60,7 @@ class DQN(nnx.Module, BaseModel):
         self.input_size = input_size
         self.action_space = action_space
         self.epsilon = epsilon
+        self.batch_size = batch_size
 
         # TODO: double check obs_shape parameter is correct?
         self.memory = Buffer(capacity=memory_size, obs_shape=input_size)
@@ -70,10 +71,8 @@ class DQN(nnx.Module, BaseModel):
         self.local_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
         self.target_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
 
-        self.local_optimizer = nnx.Optimizer(self.local_network, optax.Adam(lr))
-        self.target_optimizer = nnx.Optimizer(self.target_network, optax.Adam(lr))
+        self.optimizer = nnx.Optimizer(self.local_network, optax.Adam(lr))
 
-    # TODO
     def take_action(self, state) -> int:
         """Selects an action based on the current state, using an epsilon-greedy
         strategy.
@@ -90,7 +89,7 @@ class DQN(nnx.Module, BaseModel):
         """
         # make the RNG key for this method from the default stream of the nnx.Rngs object
         rng_key = self.rngs()
-        
+
         # Split the RNG key
         rng_key, rng_key_action= jax.random.split(rng_key, 2)
         # Generate a random number using JAX's random number generator
@@ -133,5 +132,37 @@ class DQN(nnx.Module, BaseModel):
         Soft updates provide more stable but slower convergence, while hard updates can lead to faster convergence
         but might cause instability in training dynamics.
         """
-        pass
+        
+        batch = self.memory.sample(self.batch_size)
+        states, actions, rewards, next_states, dones, _ = batch
+        dones = dones.reshape(-1, 1)
+        rewards = rewards.reshape(-1, 1)
 
+        def loss_fn(local_network):
+            q_values = local_network(states)
+            next_q_values = self.target_network(next_states)
+            max_next_q_values = jnp.max(next_q_values, axis=1)
+            target_q_values = rewards + (self.gamma * max_next_q_values * (1 - dones))
+            actions_one_hot = jax.nn.one_hot(actions, self.action_space)
+            predicted_q_values = jnp.sum(q_values * actions_one_hot, axis=1)
+            loss = jnp.mean((predicted_q_values - target_q_values) ** 2)
+            return loss
+
+        # update local model
+        loss, grads = nnx.value_and_grad(loss_fn)(self.local_network)
+        self.optimizer.update(grads=grads)
+
+        # soft update 
+        tau = 0.01
+        local_params = nnx.state(self.local_network, nnx.Param)
+        target_params = nnx.state(self.target_network, nnx.Param)
+        # TODO: this may not work
+        self.target_model_params = jax.tree.map(
+            lambda t, l: tau * l + (1 - tau) * t,
+            target_params,
+            local_params,
+        )
+
+        return loss
+
+    # TODO: hard update the target model at a certain interval, maybe as part of the end epoch action?
