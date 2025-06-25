@@ -20,6 +20,7 @@ class QNetwork(nnx.Module):
         self.layer3 = nnx.Linear(layer_size, action_space, rngs=rngs)
 
     def __call__(self, x, key):
+        """Forward pass; returns the prediction."""
         x = self.layer1(x)
         x = jax.nn.relu(x)
         x = self.layer2(x)
@@ -87,7 +88,26 @@ class DQN(nnx.Module, BaseModel):
         Returns:
         - The selected action, either random or the best according to the model.
         """
-        pass
+        # make the RNG key for this method from the default stream of the nnx.Rngs object
+        rng_key = self.rngs()
+        
+        # Split the RNG key
+        rng_key, rng_key_action= jax.random.split(rng_key, 2)
+        # Generate a random number using JAX's random number generator
+        random_number = jax.random.uniform(rng_key_action, shape=())
+
+        if random_number < self.epsilon:
+            # Exploration: choose a random action
+            rng_key, rng_key_random = jax.random.split(rng_key)
+            action = jax.random.randint(
+                rng_key_random, shape=(), minval=0, maxval=self.action_space
+            ).item()
+        else:
+            # Exploitation: choose the best action based on model prediction
+            q_values = self.local_network(state)
+            action = jnp.argmax(jnp.mean(q_values, axis=-1), axis=-1).item()
+
+        return action
     
     # TODO
     def train_step(self) -> jax.Array:
