@@ -19,7 +19,7 @@ class QNetwork(nnx.Module):
         self.layer2 = nnx.Linear(layer_size, layer_size, rngs=rngs)
         self.layer3 = nnx.Linear(layer_size, action_space, rngs=rngs)
 
-    def __call__(self, x, key):
+    def __call__(self, x):
         """Forward pass; returns the prediction."""
         x = self.layer1(x)
         x = jax.nn.relu(x)
@@ -29,7 +29,7 @@ class QNetwork(nnx.Module):
         x = jax.nn.relu(x)
         return x
 
-class DQN(nnx.Module, BaseModel):
+class DQN(BaseModel):
     """A simple DQN model using Flax NNX."""
 
     action_space: int
@@ -56,14 +56,17 @@ class DQN(nnx.Module, BaseModel):
         batch_size: int = 64,
         seed: float = 0,
     ):
-        super().__init__()
+        # super().__init__(input_size, action_space, memory_size)
         self.input_size = input_size
         self.action_space = action_space
         self.epsilon = epsilon
+        self.gamma = gamma
+        
+        self.memory_size = memory_size
         self.batch_size = batch_size
 
         # TODO: double check obs_shape parameter is correct?
-        self.memory = Buffer(capacity=memory_size, obs_shape=input_size)
+        self.memory = Buffer(capacity=memory_size, obs_shape=(jnp.array(self.input_size).prod(),))
 
         self.rngs = nnx.Rngs(seed)
 
@@ -71,7 +74,7 @@ class DQN(nnx.Module, BaseModel):
         self.local_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
         self.target_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
 
-        self.optimizer = nnx.Optimizer(self.local_network, optax.Adam(lr))
+        self.optimizer = nnx.Optimizer(self.local_network, optax.adam(lr))
 
     def take_action(self, state) -> int:
         """Selects an action based on the current state, using an epsilon-greedy
@@ -157,7 +160,7 @@ class DQN(nnx.Module, BaseModel):
         local_params = nnx.state(self.local_network, nnx.Param)
         target_params = nnx.state(self.target_network, nnx.Param)
         # TODO: this may not work
-        self.target_model_params = jax.tree.map(
+        target_params = jax.tree.map(
             lambda t, l: tau * l + (1 - tau) * t,
             target_params,
             local_params,
