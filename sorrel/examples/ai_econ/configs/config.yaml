@@ -1,0 +1,59 @@
+experiment:
+  seller_epsilon_decay: 0.0001
+  epochs: 10000
+  max_turns: 100
+  record_period: 1 # how many epochs in each data recording period
+  log: True
+
+env:
+  height: 41
+  width: 41
+  resource_renew_chance: 0.001
+  resource_renew_amount: 1
+
+model:
+  seller:
+    iqn:
+      type: PyTorchPPO  
+      parameters:
+        layer_size: 250
+        lr_actor: 0.0001  
+        lr_critic: 0.00005 
+        gamma: 0.99  
+        k_epochs: 10  
+        eps_clip: 0.2  
+        entropy_coef: 0.01  
+        device: cpu
+  buyer:
+    iqn:
+      type: PyTorchPPO  
+      parameters:
+        layer_size: 250
+        lr_actor: 0.0001  
+        lr_critic: 0.00005  
+        gamma: 0.99  
+        k_epochs: 10  
+        eps_clip: 0.2  
+        entropy_coef: 0.01 
+        device: cpu
+
+
+agent:
+  seller:
+    model: iqn
+    num: 1 # population size for ONE group i.e. total num of sellers would be double this (before was 10)
+    majority_percentage: 0.8
+    skilled_success_rate: 0.9
+    unskilled_success_rate: 0.25
+    sell_reward: 1
+    obs:
+      entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer", "SellWoodBeam", "SellStoneBeam"]
+      vision_radius: 7
+      num_frames: 5
+  buyer:
+    model: iqn
+    num: 1
+    buy_reward: 1
+    obs:
+      entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer", "SellWoodBeam", "SellStoneBeam"]
+      num_frames: 5
