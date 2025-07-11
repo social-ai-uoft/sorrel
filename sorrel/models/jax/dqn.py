@@ -15,7 +15,7 @@ class QNetwork(nnx.Module):
     def __init__(self, flattened_input_size: int, action_space: int, layer_size: int, rngs: nnx.Rngs):
 
         # TODO: give these layers more descriptive names
-        self.layer1 = nnx.Linear(flattened_input_size, layer_size, rngs=rngs)
+        self.layer1 = nnx.Linear(in_features=flattened_input_size, out_features=layer_size, rngs=rngs)
         self.layer2 = nnx.Linear(layer_size, layer_size, rngs=rngs)
         self.layer3 = nnx.Linear(layer_size, action_space, rngs=rngs)
 
@@ -70,7 +70,7 @@ class DQN(BaseModel):
 
         self.rngs = nnx.Rngs(seed)
 
-        flattened_input_size = jnp.array(input_size).prod()
+        flattened_input_size = int(jnp.array(input_size).prod())
         self.local_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
         self.target_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
 
