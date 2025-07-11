@@ -308,6 +308,14 @@ class iRainbowModel(DoublePyTorchModel):
                 batch_size=self.batch_size
             )
 
+            # Convert to torch tensors
+            states = torch.from_numpy(states)
+            next_states = torch.from_numpy(next_states)
+            actions = torch.from_numpy(actions)
+            rewards = torch.from_numpy(rewards)
+            dones = torch.from_numpy(dones)
+            valid = torch.from_numpy(valid)
+
             # Get max predicted Q values (for next states) from target model
             Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
             Q_targets_next: torch.Tensor = Q_targets_next.detach().cpu()
