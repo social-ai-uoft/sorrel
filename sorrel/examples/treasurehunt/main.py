@@ -17,10 +17,10 @@ if __name__ == "__main__":
             "epsilon_decay": 0.0001,
         },
         "world": {
-            "height": 10,
-            "width": 10,
+            "height": 50,
+            "width": 50,
             "gem_value": 10,
-            "spawn_prob": 0.02,
+            "spawn_prob": 0.01,
         },
     }
 

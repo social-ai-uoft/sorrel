@@ -1,21 +1,29 @@
 from typing import Sequence
 
-import optax
 import jax
+import optax
 from flax import nnx
 from jax import numpy as jnp
 
-from sorrel.models import BaseModel
 from sorrel.buffers import Buffer
+from sorrel.models import BaseModel
 
 
 class QNetwork(nnx.Module):
     """A simple Q-network for DQN using Flax NNX."""
 
-    def __init__(self, flattened_input_size: int, action_space: int, layer_size: int, rngs: nnx.Rngs):
+    def __init__(
+        self,
+        flattened_input_size: int,
+        action_space: int,
+        layer_size: int,
+        rngs: nnx.Rngs,
+    ):
 
         # TODO: give these layers more descriptive names
-        self.layer1 = nnx.Linear(in_features=flattened_input_size, out_features=layer_size, rngs=rngs)
+        self.layer1 = nnx.Linear(
+            in_features=flattened_input_size, out_features=layer_size, rngs=rngs
+        )
         self.layer2 = nnx.Linear(layer_size, layer_size, rngs=rngs)
         self.layer3 = nnx.Linear(layer_size, action_space, rngs=rngs)
 
@@ -29,6 +37,7 @@ class QNetwork(nnx.Module):
         x = jax.nn.relu(x)
         return x
 
+
 class DQN(BaseModel):
     """A simple DQN model using Flax NNX."""
 
@@ -40,7 +49,6 @@ class DQN(BaseModel):
     rngs: nnx.Rngs
     local_network: QNetwork
     target_network: QNetwork
-
 
     # TODO: add device as a parameter?
     # default values are taken from old DDQN Jax model
@@ -61,18 +69,24 @@ class DQN(BaseModel):
         self.action_space = action_space
         self.epsilon = epsilon
         self.gamma = gamma
-        
+
         self.memory_size = memory_size
         self.batch_size = batch_size
 
         # TODO: double check obs_shape parameter is correct?
-        self.memory = Buffer(capacity=memory_size, obs_shape=(jnp.array(self.input_size).prod(),))
+        self.memory = Buffer(
+            capacity=memory_size, obs_shape=(jnp.array(self.input_size).prod(),)
+        )
 
         self.rngs = nnx.Rngs(seed)
 
         flattened_input_size = int(jnp.array(input_size).prod())
-        self.local_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
-        self.target_network = QNetwork(flattened_input_size, action_space, layer_size, self.rngs)
+        self.local_network = QNetwork(
+            flattened_input_size, action_space, layer_size, self.rngs
+        )
+        self.target_network = QNetwork(
+            flattened_input_size, action_space, layer_size, self.rngs
+        )
 
         self.optimizer = nnx.Optimizer(self.local_network, optax.adam(lr))
 
@@ -94,7 +108,7 @@ class DQN(BaseModel):
         rng_key = self.rngs()
 
         # Split the RNG key
-        rng_key, rng_key_action= jax.random.split(rng_key, 2)
+        rng_key, rng_key_action = jax.random.split(rng_key, 2)
         # Generate a random number using JAX's random number generator
         random_number = jax.random.uniform(rng_key_action, shape=())
 
@@ -110,7 +124,7 @@ class DQN(BaseModel):
             action = jnp.argmax(jnp.mean(q_values, axis=-1), axis=-1).item()
 
         return action
-    
+
     # TODO
     def train_step(self) -> jax.Array:
         """Perform a training step, with control over batch size, discount factor, and
@@ -135,7 +149,7 @@ class DQN(BaseModel):
         Soft updates provide more stable but slower convergence, while hard updates can lead to faster convergence
         but might cause instability in training dynamics.
         """
-        
+
         batch = self.memory.sample(self.batch_size)
         states, actions, rewards, next_states, dones, _ = batch
         dones = dones.reshape(-1, 1)
@@ -145,7 +159,9 @@ class DQN(BaseModel):
             q_values = local_network(states)
             next_q_values = self.target_network(next_states)
             max_next_q_values = jnp.max(next_q_values, axis=1)
-            target_q_values = rewards + (self.gamma * max_next_q_values * (1 - dones))
+            target_q_values = rewards + (
+                (self.gamma * max_next_q_values).reshape(-1, 1) * (1 - dones)
+            )
             actions_one_hot = jax.nn.one_hot(actions, self.action_space)
             predicted_q_values = jnp.sum(q_values * actions_one_hot, axis=1)
             loss = jnp.mean((predicted_q_values - target_q_values) ** 2)
@@ -155,11 +171,11 @@ class DQN(BaseModel):
         loss, grads = nnx.value_and_grad(loss_fn)(self.local_network)
         self.optimizer.update(grads=grads)
 
-        # soft update 
+        # soft update
         tau = 0.01
         local_params = nnx.state(self.local_network, nnx.Param)
         target_params = nnx.state(self.target_network, nnx.Param)
-        # TODO: this may not work
+        # TODO: double check that this works correctly
         target_params = jax.tree.map(
             lambda t, l: tau * l + (1 - tau) * t,
             target_params,
@@ -169,3 +185,6 @@ class DQN(BaseModel):
         return loss
 
     # TODO: hard update the target model at a certain interval, maybe as part of the end epoch action?
+    def end_epoch_action(self, **kwargs) -> None:
+        """Perform any actions needed at the end of an epoch, such as updating the
+        target model."""
