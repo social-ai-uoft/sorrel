@@ -194,6 +194,7 @@ class EconEnv(Environment[EconWorld]):
     def reset(self):
         """Reset the environment and all its agents."""
         
+        super().reset()
         self.world.seller_score = 0
         self.world.buyer_score = 0
         for woodcutter in self.world.woodcutters:

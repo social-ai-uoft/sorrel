@@ -12,9 +12,10 @@ env:
   resource_renew_amount: 1
 
 model:
+  epsilon_decay: 0.
   seller:
-    iqn:
-      type: PyTorchPPO  
+    PyTorchPPO: 
+      type: PyTorchPPO
       parameters:
         layer_size: 250
         lr_actor: 0.0001  
@@ -25,8 +26,8 @@ model:
         entropy_coef: 0.01  
         device: cpu
   buyer:
-    iqn:
-      type: PyTorchPPO  
+    PyTorchPPO:
+      type: PyTorchPPO
       parameters:
         layer_size: 250
         lr_actor: 0.0001  
@@ -40,7 +41,7 @@ model:
 
 agent:
   seller:
-    model: iqn
+    model: PyTorchPPO
     num: 1 # population size for ONE group i.e. total num of sellers would be double this (before was 10)
     majority_percentage: 0.8
     skilled_success_rate: 0.9
@@ -51,8 +52,8 @@ agent:
       vision_radius: 7
       num_frames: 5
   buyer:
-    model: iqn
-    num: 1
+    model: PyTorchPPO
+    num: 4
     buy_reward: 1
     obs:
       entity_list: ["EmptyEntity", "Wall", "Land", "WoodNode", "StoneNode", "Seller", "Buyer", "SellWoodBeam", "SellStoneBeam"]

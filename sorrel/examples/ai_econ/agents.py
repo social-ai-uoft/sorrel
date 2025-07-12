@@ -242,10 +242,6 @@ class Seller(Agent):
         candidate_actions = np.where(path_distances == path_distances.min())[0]
         chosen_action = np.random.choice(candidate_actions)
         
-        ##### If the chosen action is 7, we need to return a tuple for PPO compatibility (ADJUST THIS HWEHWEHWEHWEH)
-
-        #if hasattr(self, 'model') and self.model == 'ppo' and isinstance(chosen_action, (int, np.integer)):
-            #return (tuple([chosen_action]), 0)
 
         return int(chosen_action)
 
@@ -326,6 +322,12 @@ class Seller(Agent):
 
     def act(self, env: "EconWorld", action: int) -> float:
         """Act on the environment, returning the reward."""
+        
+        obs = self.pov(env)
+        print(f"Agent at {self.location}: obs={obs.flatten()[:10]}...")
+    
+        node_below = env.observe((self.location[0], self.location[1], self.location[2] - 1))
+        print(f"Below: {node_below.kind}, Has: wood={self.wood_owned}, stone={self.stone_owned}")
 
         # Store environment reference for future use
         if not hasattr(self, 'current_env') or self.current_env is None:
@@ -429,12 +431,12 @@ class Seller(Agent):
                 if np.random.random() < self.wood_success_rate:
                     self.wood_owned += 1
                     node_below.num_resources -= 1
-                    return 1 #### Changed this (From 0 to 1)
+                    return 0 
             elif node_below.kind == "StoneNode" and node_below.num_resources > 0:
                 if np.random.random() < self.stone_success_rate:
                     self.stone_owned += 1
                     node_below.num_resources -= 1
-                    return 1 ################# Changed this (From 0 to 1)
+                    return 0 
             return 0
 
         # SELL WOOD (5)

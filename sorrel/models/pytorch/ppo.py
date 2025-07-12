@@ -171,10 +171,8 @@ class PyTorchPPO(PyTorchModel):
       entropy_coef: float = 0.01,
       seed: int | None = None,
   ):
-    print(device)
-
     
-    super().__init__(input_size, action_space, layer_size, device, seed)
+    super().__init__(input_size, action_space, layer_size, 0., device, seed)
     ac_input_size = int(np.prod(input_size))
     # Actor-critic network
     self.policy = ActorCritic(

@@ -202,10 +202,12 @@ def animate_gif(
         filename: A filename to save the images to \n
         folder: The path to save the gif to
     """
+
     if not os.path.exists(folder):
         print(f"Directory {folder} does not exist; creating directory.")
     Path(folder).mkdir(parents=True, exist_ok=True)
     path = os.path.join(folder, filename + ".gif")
+
 
     frames[0].save(
         os.path.expanduser(path),
