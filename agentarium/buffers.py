@@ -57,12 +57,12 @@ class ClaasyReplayBuffer:
         self.dones = np.zeros(capacity, dtype=np.float32)
         self.idx = 0
         self.size = 0
-        self.num_frames = 1
+        self.num_frames = num_frames
 
     def add_empty(self):
         """Advancing the id by `self.n_frames`, adding empty frames to the replay
         buffer."""
-        self.idx = (self.idx + self.num_frames) % self.capacity
+        self.idx = (self.idx + self.num_frames-1) % self.capacity
     
     def add(self, obs, action, reward, done):
         """

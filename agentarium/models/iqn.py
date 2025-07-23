@@ -291,7 +291,7 @@ class iRainbowModel(DoubleANN):
             self.qnetwork_local.eval()
             with torch.no_grad():
                 action_values = self.qnetwork_local.get_qvalues(state)  # .mean(0)
-            self.qnetwork_local.train()
+            
             action = np.argmax(action_values.cpu().data.numpy(), axis=1)
             if not eval:
                 return action[0]
@@ -313,6 +313,7 @@ class iRainbowModel(DoubleANN):
             experiences (Tuple[torch.Tensor]): tuple of (s, a, r, s', done) tuples \n
             gamma (float): discount factor
         """
+        self.qnetwork_local.train()
         loss = torch.tensor(0.0)
         self.optimizer.zero_grad()
 

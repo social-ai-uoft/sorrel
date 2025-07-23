@@ -55,7 +55,7 @@ class Agent:
         action = 0  # Action outside the action space
         reward = 0.0
         done = 0.0
-        for _ in range(self.num_frames):
+        for _ in range(self.num_frames-1):
             self.model.memory.add(state, action, reward, done)
     
 
@@ -76,8 +76,11 @@ class Agent:
         to_be_punished = sum(self.to_be_punished.values())
         state = np.concatenate([state, np.array([state_sys.prob*255])])
         state = np.concatenate([state, np.array([to_be_punished*255])])
-        prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
-        current_state = np.vstack((prev_states, state))
+        if self.num_frames > 1:
+            prev_states = self.model.memory.current_state(stacked_frames=self.num_frames-1)
+            current_state = np.vstack((prev_states, state))
+        else:
+            current_state = state
         return current_state
 
 
@@ -111,6 +114,10 @@ class Agent:
         '''
         Takes an action and returns a new location
         '''
+        vote_is_valid = False
+        if self.ixs == 0:
+            vote_is_valid = True
+
         if mode == 'simple':
             if action == 0: # UP
                 self.sprite = f'{self.cfg.root}/examples/state_punishment/assets/hero-back.png'
@@ -127,17 +134,19 @@ class Agent:
             if action == 4: # vote for state punishment
                 self.sprite = self.sprite
                 new_location = self.location
-                state_sys.prob += state_sys.change_per_vote
-                state_sys.prob = np.clip(state_sys.prob, 0, 1)
-                state_sys.level += 1
-                state_sys.level = int(np.clip(state_sys.level, 0, state_sys.max_level))
+                if vote_is_valid:
+                    state_sys.prob += state_sys.change_per_vote
+                    state_sys.prob = np.clip(state_sys.prob, 0, 1)
+                    state_sys.level += 1
+                    state_sys.level = int(np.clip(state_sys.level, 0, state_sys.max_level))
             if action == 5: # vote against state punishment
                 self.sprite = self.sprite
                 new_location = self.location
-                state_sys.prob -= state_sys.change_per_vote
-                state_sys.prob = np.clip(state_sys.prob, 0, 1)
-                state_sys.level -= 1
-                state_sys.level = int(np.clip(state_sys.level, 0, state_sys.max_level))
+                if vote_is_valid:
+                    state_sys.prob -= state_sys.change_per_vote
+                    state_sys.prob = np.clip(state_sys.prob, 0, 1)
+                    state_sys.level -= 1
+                    state_sys.level = int(np.clip(state_sys.level, 0, state_sys.max_level))
 
         elif mode == 'composite':
             if action%4 == 0: # UP
