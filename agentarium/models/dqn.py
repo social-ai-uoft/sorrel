@@ -35,7 +35,7 @@ class DQN(nn.Module):
         return self.forward(x)
 
 
-class DQNModel(DoubleANN):
+class iRainbowModel_dqn(DoubleANN):
     def __init__(
         self,
         state_size: ArrayLike,
@@ -56,7 +56,7 @@ class DQNModel(DoubleANN):
         GAMMA: float,
         N: int,
     ):
-        super(DQNModel, self).__init__(
+        super(iRainbowModel_dqn, self).__init__(
             state_size, extra_percept_size, action_size, layer_size, epsilon, device, seed
         )
 
@@ -84,7 +84,7 @@ class DQNModel(DoubleANN):
         )
 
     def __str__(self):
-        return f"DQNModel(in_size={np.array(self.state_size).prod() * self.num_frames}, out_size={self.action_size})"
+        return f"iRainbowModel_dqn(in_size={np.array(self.state_size).prod() * self.num_frames}, out_size={self.action_size})"
 
     def take_action(self, state, eval=False) -> int:
         epsilon = 0.0 if eval else self.epsilon
@@ -135,11 +135,11 @@ class DQNModel(DoubleANN):
 
     def end_epoch_action(self, **kwargs) -> None:
         self.transfer_memories(kwargs["agent"], extra_reward=True)
-
-        if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
-            kwargs["loss"] = self.train_model()
-            kwargs["loss"] = kwargs["loss"].detach()
-            if "game_vars" in kwargs:
-                kwargs["game_vars"].losses.append(kwargs["loss"])
-            else:
-                kwargs["losses"] += kwargs["loss"]
+        if kwargs["cfg"].train:
+            if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
+                kwargs["loss"] = self.train_model()
+                kwargs["loss"] = kwargs["loss"].detach()
+                if "game_vars" in kwargs:
+                    kwargs["game_vars"].losses.append(kwargs["loss"])
+                else:
+                    kwargs["losses"] += kwargs["loss"]

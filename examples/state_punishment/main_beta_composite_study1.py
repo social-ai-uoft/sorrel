@@ -86,12 +86,12 @@ def run(cfg, **kwargs):
 
     # load weights
     if cfg.load_weights:
-        if 'transfer' not in cfg.exp_name:
-            assert 's1' not in cfg.exp_name, ValueError('incorrect configurations')
+        # if 'transfer' not in cfg.exp_name:
+        #     assert 's1' not in cfg.exp_name, ValueError('incorrect configurations')
         for count, agent in enumerate(agents):
             agent.model.load(
-                f'{root}/examples/state_punishment/models/checkpoints/Study1_experiment_cond_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1_seed3_agent{agent.ixs}_iRainbowModel_copy.pkl')
-    
+                f'{root}/examples/state_punishment/models/checkpoints/Study1_experiment_cond_v3_one_voter_stacked_view_simple_actions_memory_issue_solved_3agents_respawn_0.04_s1_r1_seed3_agent{agent.ixs}_iRainbowModel.pkl')
+
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:
@@ -117,13 +117,14 @@ def run(cfg, **kwargs):
         else:
             assert 'fixed_punishment' in cfg.exp_name, ValueError("The exp name should contain 'fixed punishment'")
 
+    # track the within-epoch punishment level dynamics
+    within_epoch_punishment_level = []
+
     for epoch in range(cfg.experiment.epochs):
         gc.collect()
         # tracemalloc.start()
 
-
         # initialize state system
-        
         state_entity = state_sys(
             cfg.state_sys.init_prob, 
             fixed_prob_dict,
@@ -148,6 +149,10 @@ def run(cfg, **kwargs):
         turn = 0
         losses = [0 for _ in range(len(agents))]
         game_points = [0 for _ in range(len(agents))]
+
+        # track the recent within-epoch punishment level dynamics
+        if epoch % 100 == 0:
+            within_epoch_punishment_level = []
 
         # Container for data within epoch
         punishment_increase_record = [0 for _ in range(len(agents))]
@@ -231,10 +236,11 @@ def run(cfg, **kwargs):
                 agent.model.memory.rewards[agent.last_memory_idx] += consensus_reward
 
         # At the end of each epoch, train as long as the batch size is large enough.
-        for agent in agents:
-            loss = agent.model.train_model()
-            loss = loss.detach()
-            losses[agent.ixs] += loss
+        if cfg.train:
+            for agent in agents:
+                loss = agent.model.train_model()
+                loss = loss.detach()
+                losses[agent.ixs] += loss
 
         # Add the game variables to the game object
         game_vars.record_turn(epoch, turn, losses, [round(val, 2) for val in game_points])
@@ -265,6 +271,8 @@ def run(cfg, **kwargs):
         # calculate the sum of transgressions
         sum_transgressions = np.sum([val for agent in agents for resource in cfg.state_sys.resources for val in agent.transgression_record[resource]])
 
+        # update the within-epoch punishment level dynamics
+        within_epoch_punishment_level.append(state_entity.prob_record)
 
         # Add scalars to Tensorboard (multiple agents)
         if cfg.log:
@@ -288,13 +296,15 @@ def run(cfg, **kwargs):
                     {f'action_{k}': action_record[agent.ixs][k] for k in range(cfg.model.iqn.parameters.action_size)},
                     epoch
                 )
+            
             writer.add_scalar(f'state_punishment_level_avg', np.mean(state_entity.prob_record), epoch)
             writer.add_scalar(f'state_punishment_level_end', state_entity.prob, epoch)
             writer.add_scalar(f'state_punishment_level_init', state_entity.init_prob, epoch)
-            # writer.add_scalar(f'd_prime', d_prime, epoch)
             writer.add_scalar(f'transgressions', sum_transgressions, epoch)
             writer.add_scalars(f'punishment_prob_each_resource', punishment_prob_dict, epoch)
-            
+
+            np.savetxt("within_epoch_level_change_onevoter_iqn.csv", np.mean(within_epoch_punishment_level, axis=0), delimiter=",", header="value", comments="")
+
 
         # Special action: update epsilon
         for agent in agents:

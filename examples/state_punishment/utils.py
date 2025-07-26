@@ -2,6 +2,7 @@ from examples.state_punishment.agents import Agent, color_map
 from examples.state_punishment.entities import Coin, Gem, Wall, Bone, A, B, C, D, E
 
 from agentarium.models.iqn import iRainbowModel
+from agentarium.models.dqn import iRainbowModel_dqn
 import argparse
 import yaml
 import os
@@ -16,7 +17,7 @@ import gc
 
 DEVICES = ['cpu', 'cuda']
 MODELS = {
-    'iRainbowModel' : iRainbowModel
+    'iRainbowModel' : {'iqn': iRainbowModel, 'dqn': iRainbowModel_dqn}
 }
 AGENTS = {
     'agent' : Agent,
@@ -43,6 +44,7 @@ def init_log(cfg):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="path to config file", default='./config.yaml')
+    parser.add_argument("--model_type", help="type of model to use", default='iRainbowModel')
     args = parser.parse_args()
     return args
 
@@ -60,7 +62,7 @@ def load_config(args):
 def create_models(cfg):
     models = []
     for model_name in vars(cfg.model):
-        MODEL_TYPE = MODELS[vars(vars(cfg.model)[model_name])['type']]
+        MODEL_TYPE = MODELS[vars(vars(cfg.model)[model_name])['type']][cfg.algo]
         for _ in range(vars(vars(cfg.model)[model_name])['num']):
             model = MODEL_TYPE(**vars(vars(vars(cfg.model)[model_name])['parameters']), device = 'cpu', seed = 1)
             model.name = model_name

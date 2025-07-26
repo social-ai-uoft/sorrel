@@ -425,14 +425,15 @@ class iRainbowModel(DoubleANN):
         """
         self.transfer_memories(kwargs["agent"], extra_reward=True)
 
-        if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
-            kwargs["loss"] = self.train_model()
-            kwargs["loss"] = kwargs["loss"].detach() # memory can explode without this line!!!
-            if "game_vars" in kwargs:
-                kwargs["game_vars"].losses.append(kwargs["loss"])
+        if kwargs["cfg"].train:
+            if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
+                kwargs["loss"] = self.train_model()
+                kwargs["loss"] = kwargs["loss"].detach() # memory can explode without this line!!!
+                if "game_vars" in kwargs:
+                    kwargs["game_vars"].losses.append(kwargs["loss"])
 
-            else:
-                kwargs["losses"] += kwargs["loss"]
+                else:
+                    kwargs["losses"] += kwargs["loss"]
 
 
 def calculate_huber_loss(td_errors, k=1.0) -> torch.Tensor:

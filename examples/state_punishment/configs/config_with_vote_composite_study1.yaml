@@ -43,7 +43,7 @@ state_sys:
   resources: ['A', 'B', 'C', 'D', 'E']
 
 
-
+algo: iqn
 
 model:
   iqn:
@@ -132,17 +132,18 @@ replay:
 # Root folder for accessing file structure and modules
 root: '/Users/socialai/Documents/state_punishment_May6'
 seed: 1
+train: False
 log: True
 random: False
 seed: 3
 state_mode: 'composite'
 action_mode: 'simple'
-load_weights: False
+load_weights: True
 with_direct_cost: 0.0
 consensus_reward: 0
 
 exp_name: 'Study1_control_only_taboo_only_taboo_harmful_cond_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
-exp_name: 'Study1_experiment_cond_v3_one_voter_stacked_view_simple_actions_memory_issue_solved_3agents_respawn_0.04_s1_r1'
+exp_name: 'Study1_experiment_cond_v3_onevoter_eval_stacked_view_simple_actions_memory_issue_solved_3agents_respawn_0.04_s1_r1'
 # exp_name: 'Study1_experiment_cond_v2_improved_punishment_scheme_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
 # stacked_views,single_view
 
