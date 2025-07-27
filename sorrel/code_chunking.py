@@ -1,3 +1,5 @@
+import os
+
 import chromadb
 import tree_sitter_python as tspython
 from tree_sitter import Language, Parser
@@ -7,7 +9,7 @@ from tree_sitter import Language, Parser
 # TODO: change the embedding model
 
 
-def chunk_code_file(file_path: str):
+def chunk_code_file(file_path: str, collection: chromadb.Collection):
     """Chunk a Python code file into meaningful parts.
 
     IDs: 'file_path:chunk_number (indexed from 0)'
@@ -22,8 +24,6 @@ def chunk_code_file(file_path: str):
         is_class_function (if so, also provide class name)
     """
 
-    chroma_client = chromadb.Client()
-    collection = chroma_client.get_or_create_collection(name="test_collection")
     ids = []
     documents = []
     metadatas = []  # list of dicts
@@ -131,38 +131,31 @@ def chunk_code_file(file_path: str):
         collection.delete(ids=[f"{file_path}:{k}"])
         k += 1
 
-    # test retrieval
-    # results = collection.get(
-    #     where={"file_path": file_path}, include=["documents", "metadatas"]
-    # )
-    # for id, doc, meta in zip(
-    #     results["ids"], results["documents"], results["metadatas"]
-    # ):
-    #     print(f"ID: {id}")
-    #     print(f"Document: {doc}\nMetadata: {meta}\n")
-    #     print("-" * 40)
 
-    # test query
-    # results = collection.query(
-    #     query_texts=["Gimme function definitions"],
-    #     n_results=3,
-    #     where={"file_path": file_path},
-    #     include=["documents", "metadatas", "distances"],
-    # )
-    # for id, doc, meta, distance in zip(
-    #     results["ids"][0], results["documents"][0], results["metadatas"][0], results["distances"][0]
-    # ):
-    #     print(f"ID: {id}")
-    #     print(f"Document: {doc}\nMetadata: {meta}\n")
-    #     print(f"Distance: {distance}")
-    #     print("-" * 40)
+def chunk_code_directory(directory_path: str, collection: chromadb.Collection):
+    """Chunk all Python files in a directory."""
 
-    chroma_client.delete_collection(name="test_collection")
+    for root, _, files in os.walk(directory_path):
+        for file in files:
+            if file.endswith(".py"):
+                file_path = os.path.join(root, file)
+                chunk_code_file(file_path, collection)
+
+    print(collection.count())
+    results = collection.peek(limit=10, include=["documents", "metadatas"])
+    for result in results:
+        print(result["documents"], result["metadatas"])
 
 
 if __name__ == "__main__":
-    # Example usage
-    chunk_code_file("sorrel/utils/helpers.py")
+
+    chroma_client = chromadb.PersistentClient(path="/chroma_db")
+    collection = chroma_client.get_or_create_collection(name="test_collection")
+
+    chunk_code_directory("/sorrel", collection)
+
+    # chroma_client.delete_collection(name="test_collection")
+    # chroma_client.reset()
 
     # types:
     # module
