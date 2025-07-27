@@ -150,12 +150,34 @@ def chunk_code_directory(directory_path: str, collection: chromadb.Collection):
     print(f"Total chunks in collection: {collection.count()}")
 
 
+def test_retrieval(collection: chromadb.Collection):
+    """Test retrieval of chunks from the collection."""
+    query_text = "Python class for a Sorrel Entity named Apple that can be consumed and respawns randomly."
+    print(f"Querying for: {query_text}")
+    print("-" * 40)
+    results = collection.query(
+        query_texts=[query_text],
+        n_results=5,
+    )
+
+    print("Retrieved results:")
+    for doc, met, dis in zip(
+        results["documents"][0], results["metadatas"][0], results["distances"][0]
+    ):
+        print(f"Document: {doc}")
+        print(f"Metadata: {met}")
+        print(f"Distance: {dis}")
+        print("-" * 40)
+
+
 if __name__ == "__main__":
 
     chroma_client = chromadb.PersistentClient(path="/chroma_db")
     collection = chroma_client.get_or_create_collection(name="test_collection")
 
     chunk_code_directory("sorrel/", collection)
+
+    test_retrieval(collection)
 
     # Clean up the collection after processing
     # chroma_client.delete_collection(name="test_collection")
