@@ -4,9 +4,11 @@ import chromadb
 import tree_sitter_python as tspython
 from tree_sitter import Language, Parser
 
-# TODO: iterate all files
-# TODO: use persistent client & collection
 # TODO: change the embedding model
+
+
+def chunk_doc_file(file_path: str, collection: chromadb.Collection):
+    """Chunk a markdown file into meaningful parts."""
 
 
 def chunk_code_file(file_path: str, collection: chromadb.Collection):
@@ -30,6 +32,8 @@ def chunk_code_file(file_path: str, collection: chromadb.Collection):
 
     PY_LANGUAGE = Language(tspython.language())
     parser = Parser(PY_LANGUAGE)
+
+    print(f"Chunking file: {file_path}")
 
     with open(file_path, "rb") as f:
         code = f.read()
@@ -72,7 +76,8 @@ def chunk_code_file(file_path: str, collection: chromadb.Collection):
             child = module_node.children[j]
 
             if child.type == "class_definition":
-                # TODO: if a class chunk is too long, split into class function chunks
+                # TODO: if a class chunk is too long, split into class function chunks;
+                # ex. Gemini's embedding model has a limit of 2048 tokens
                 class_name = child.child_by_field_name("name").text.decode("utf-8")
                 end_byte = child.end_byte
                 ids.append(f"{file_path}:{len(ids)}")
@@ -141,10 +146,8 @@ def chunk_code_directory(directory_path: str, collection: chromadb.Collection):
                 file_path = os.path.join(root, file)
                 chunk_code_file(file_path, collection)
 
-    print(collection.count())
-    results = collection.peek(limit=10, include=["documents", "metadatas"])
-    for result in results:
-        print(result["documents"], result["metadatas"])
+    print(f"Finished processing directory: {directory_path}")
+    print(f"Total chunks in collection: {collection.count()}")
 
 
 if __name__ == "__main__":
@@ -152,8 +155,9 @@ if __name__ == "__main__":
     chroma_client = chromadb.PersistentClient(path="/chroma_db")
     collection = chroma_client.get_or_create_collection(name="test_collection")
 
-    chunk_code_directory("/sorrel", collection)
+    chunk_code_directory("sorrel/", collection)
 
+    # Clean up the collection after processing
     # chroma_client.delete_collection(name="test_collection")
     # chroma_client.reset()
 
