@@ -43,7 +43,7 @@ state_sys:
   resources: ['A', 'B', 'C', 'D', 'E']
 
 
-algo: iqn
+algo: dqn
 
 model:
   iqn:
@@ -133,12 +133,12 @@ replay:
 root: '/Users/socialai/Documents/state_punishment_May6'
 seed: 1
 train: False
-log: True
+log: False
 random: False
 seed: 3
 state_mode: 'composite'
 action_mode: 'simple'
-load_weights: True
+load_weights: False
 with_direct_cost: 0.0
 consensus_reward: 0
 

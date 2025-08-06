@@ -114,6 +114,7 @@ class Agent:
         '''
         Takes an action and returns a new location
         '''
+        # if allow only one vote
         vote_is_valid = False
         if self.ixs == 0:
             vote_is_valid = True
