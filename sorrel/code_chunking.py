@@ -2,12 +2,40 @@ import os
 import re
 
 import chromadb
+import google.genai
 import tree_sitter_python as tspython
+from chromadb import Documents, EmbeddingFunction, Embeddings
+from google.genai.types import EmbedContentConfig
 from tree_sitter import Language, Parser
 
-# from mistletoe import Document
+# TODO: use separate embedding function for queries and documents
 
-# TODO: change the embedding model
+
+class gemini_embedding(EmbeddingFunction):
+    """Embedding function for the corpus."""
+
+    def __init__(
+        self,
+        is_query: bool,
+        google_client: google.genai.Client,
+        model: str = "gemini-embedding-001",
+    ):
+        """Initialize the embedding function with a model."""
+        if is_query:
+            self.task_type = "RETRIEVAL_QUERY"
+        else:
+            self.task_type = "RETRIEVAL_DOCUMENT"
+        self.config = EmbedContentConfig(task_type=self.task_type)
+        self.client = google_client
+        self.model = model
+
+    def __call__(self, documents: Documents) -> Embeddings:
+        """Generate embeddings for the given documents."""
+        # Use Google GenAI to generate embeddings
+        response = self.client.models.embed_content(
+            model=self.model, contents=documents, config=self.config
+        )
+        return response.embeddings
 
 
 def chunk_doc_file(file_path: str, collection: chromadb.Collection):
@@ -242,25 +270,58 @@ def test_retrieval(collection: chromadb.Collection):
         print("-" * 40)
 
 
-if __name__ == "__main__":
+def update_collection(
+    chroma_client: chromadb.Client,
+    google_client: google.genai.Client,
+    collection_name: str = "test_collection",
+    peek: bool = False,
+    test: bool = False,
+):
 
-    chroma_client = chromadb.PersistentClient(path="/chroma_db")
-    collection = chroma_client.get_or_create_collection(name="test_collection")
+    collection = chroma_client.get_or_create_collection(
+        name=collection_name,
+        embedding_function=gemini_embedding(
+            is_query=False, google_client=google_client
+        ),
+    )
 
-    # chunk_code_directory("sorrel/", collection)
-    # chunk_document_directory("docs/source/tutorials/", collection)
+    chunk_code_directory("sorrel/", collection)
+    chunk_doc_directory("docs/source/tutorials/", collection)
     chunk_doc_file("README.md", collection)
 
-    results = collection.peek()
-    for ids, docs, metas in zip(
-        results["ids"], results["documents"], results["metadatas"]
-    ):
-        print(f"ID: {ids}, Document: {docs[:50]}..., Metadata: {metas}")
+    if peek:
+        print("Peeking into the collection:")
+        print("-" * 40)
+        results = collection.peek()
+        for ids, docs, metas in zip(
+            results["ids"], results["documents"], results["metadatas"]
+        ):
+            print(f"ID: {ids}, Document: {docs[:50]}..., Metadata: {metas}")
 
-    # test_retrieval(collection)
+    if test:
+        test_retrieval(collection)
+
+
+if __name__ == "__main__":
+
+    # chroma_client = chromadb.PersistentClient(path="/chroma_db")
+    # TODO: Vertex AI express mode does not have acceess to the embedding model
+    # google_client = google.genai.Client(vertexai=True, api_key=<replace with api key>)
+    collection_name = "test_collection"
+
+    # update_collection(chroma_client, collection_name, peek=True, test=True)
+
+    ef = gemini_embedding(is_query=False, google_client=google_client)
+    embeddings = ef(
+        [
+            "This is a test document.",
+            "Another test document for embedding.",
+        ]
+    )
+    print("Generated embeddings:" f"\n{embeddings[0]}\n{embeddings[1]}")
 
     # Clean up the collection after processing
-    chroma_client.delete_collection(name="test_collection")
+    # chroma_client.delete_collection(name="test_collection")
     # chroma_client.reset()
 
     # types:
