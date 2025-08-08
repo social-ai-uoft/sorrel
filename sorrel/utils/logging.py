@@ -157,7 +157,7 @@ class TensorboardLogger(Logger):
 
         Args:
             max_epochs (int): The length of the lists.
-            log_dir (str | PathLike): Where the
+            log_dir (str | PathLike): Where the Tensorboard log files should be stored.
             *args: Additional optional values to be stored in a dictionary.
         """
         super().__init__(max_epochs=max_epochs, *args)

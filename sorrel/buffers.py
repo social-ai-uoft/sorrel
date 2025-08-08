@@ -70,14 +70,14 @@ class Buffer:
         indices = indices[:, np.newaxis]
         indices = indices + np.arange(self.n_frames)
 
-        states = torch.from_numpy(self.states[indices]).view(batch_size, -1)
-        next_states = torch.from_numpy(self.states[indices + 1]).view(batch_size, -1)
-        actions = torch.from_numpy(self.actions[indices[:, -1]]).view(batch_size, -1)
-        rewards = torch.from_numpy(self.rewards[indices[:, -1]]).view(batch_size, -1)
-        dones = torch.from_numpy(self.dones[indices[:, -1]]).view(batch_size, -1)
-        valid = torch.from_numpy(
-            1.0 - np.any(self.dones[indices[:, :-1]], axis=-1)
-        ).view(batch_size, -1)
+        states = self.states[indices].reshape(batch_size, -1)
+        next_states = self.states[indices + 1].reshape(batch_size, -1)
+        actions = self.actions[indices[:, -1]].reshape(batch_size, -1)
+        rewards = self.rewards[indices[:, -1]].reshape(batch_size, -1)
+        dones = self.dones[indices[:, -1]].reshape(batch_size, -1)
+        valid = (1.0 - np.any(self.dones[indices[:, :-1]], axis=-1)).reshape(
+            batch_size, -1
+        )
 
         return states, actions, rewards, next_states, dones, valid
 
@@ -120,3 +120,6 @@ class Buffer:
 
     def __len__(self):
         return self.size
+
+    def __getitem__(self, idx):
+        return (self.states[idx], self.actions[idx], self.rewards[idx], self.dones[idx])

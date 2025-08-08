@@ -47,7 +47,7 @@ class BaseModel:
         Args:
             state: The observed input.
 
-        Return:
+        Returns:
             The action chosen.
         """
         pass
@@ -55,7 +55,7 @@ class BaseModel:
     def train_step(self) -> np.ndarray:
         """Train the model.
 
-        Return:
+        Returns:
             The loss value.
         """
         return np.array(0.0)

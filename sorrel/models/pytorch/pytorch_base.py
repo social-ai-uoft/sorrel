@@ -12,13 +12,13 @@ from sorrel.models import BaseModel
 class PyTorchModel(nn.Module, BaseModel):
     """Generic abstract PyTorch model.
 
-    Parameters:
-        input_size: (Sequence[int]) The dimensions of the input state, not including batch or timesteps. \n
-        action_space: (int) The number of model outputs.
-        layer_size: (int) The size of hidden layers.
-        epsilon: (float) The rate of epsilon-greedy actions.
-        device: (Union[str, torch.device]) The device to perform computations on.
-        seed: (int) Random seed
+    Attributes:
+        input_size (Sequence[int]): The dimensions of the input state, not including batch or timesteps. \n
+        action_space (int): The number of model outputs.
+        layer_size (int): The size of hidden layers.
+        epsilon (float): The rate of epsilon-greedy actions.
+        device (Union[str, torch.device]): The device to perform computations on.
+        seed (int): Random seed
     """
 
     def __init__(
@@ -57,7 +57,6 @@ class PyTorchModel(nn.Module, BaseModel):
 
     @abstractmethod
     def take_action(self, state) -> int:
-        """Take an action based on the model."""
         pass
 
     def start_epoch_action(self, **kwargs):
@@ -91,7 +90,7 @@ class PyTorchModel(nn.Module, BaseModel):
 
         If the model has an optimizer attribute, it will be saved as well.
 
-        Parameters:
+        Args:
             file_path: The full path to the model, including file extension.
         """
         if hasattr(self, "optimizer") and isinstance(
@@ -117,7 +116,7 @@ class PyTorchModel(nn.Module, BaseModel):
 
         If the model has an optimizer attribute, it will be loaded as well.
 
-        Parameters:
+        Args:
             file_path: The full path to the model, including file extension.
         """
         checkpoint = torch.load(file_path)
@@ -126,7 +125,7 @@ class PyTorchModel(nn.Module, BaseModel):
         if hasattr(self, "optimizer") and isinstance(
             self.optimizer, torch.optim.Optimizer
         ):
-            self.optimizer.load_state_dict(checkpoint["target"])
+            self.optimizer.load_state_dict(checkpoint["optimizer"])
 
     # ---------------------------------- #
     # endregion: Helper functions        #
@@ -137,14 +136,14 @@ class DoublePyTorchModel(PyTorchModel):
     """Generic abstract neural network model class with helper functions common across
     all models.
 
-    Parameters:
-        input_size: (Sequence[int]) The dimensions of the input state, not including batch or timesteps. \n
-        action_space: (int) The number of model outputs.
-        layer_size: (int) The size of hidden layers.
-        epsilon: (float) The rate of epsilon-greedy actions.
-        device: (Union[str, torch.device]) The device to perform computations on.
-        seed: (int) Random seed
-        local_model (nn.Module)
+    Attributes:
+        input_size (Sequence[int]): The dimensions of the input state, not including batch or timesteps. \n
+        action_space (int): The number of model outputs.
+        layer_size (int): The size of hidden layers.
+        epsilon (float): The rate of epsilon-greedy actions.
+        device (Union[str, torch.device]): The device to perform computations on.
+        seed (int): Random seed
+        models (dict[str, nn.Module]): A dictionary of models. By default, a dictionary with keys 'local' and 'target'.
     """
 
     def __init__(
@@ -168,41 +167,36 @@ class DoublePyTorchModel(PyTorchModel):
 
         If the model has an optimizer attribute, it will be saved as well.
 
-        Parameters:
+        Args:
             file_path: The full path to the model, including file extension.
         """
         if hasattr(self, "optimizer") and isinstance(
             self.optimizer, torch.optim.Optimizer
         ):
-            torch.save(
-                {
-                    "local": self.models["local"].state_dict(),
-                    "target": self.models["target"].state_dict(),
-                    "optim": self.optimizer.state_dict(),
-                },
-                file_path,
-            )
+            torch.save({
+                **{key: value.state_dict() for key, value in self.models.items()},
+                "optim": self.optimizer.state_dict(),
+            }, file_path)
         else:
-            torch.save(
-                {
-                    "local": self.models["local"].state_dict(),
-                    "target": self.models["target"].state_dict(),
-                },
-                file_path,
-            )
+            torch.save({
+                key: value.state_dict() for key, value in self.models.items()
+            }, file_path)
 
     def load(self, file_path: str | os.PathLike) -> None:
         """Load the model weights and parameters from the specified location.
 
         If the model has an optimizer attribute, it will be loaded as well.
 
-        Parameters:
+        Args:
             file_path: The full path to the model, including file extension.
         """
         checkpoint = torch.load(file_path)
 
-        self.models["local"].load_state_dict(checkpoint["local"])
-        self.models["target"].load_state_dict(checkpoint["target"])
+        # Load the models into the model dictionary.
+        for key in self.models.keys():
+            self.models[key].load_state_dict(checkpoint[key])
+
+        # Load the optimizer checkpoint.
         if hasattr(self, "optimizer") and isinstance(
             self.optimizer, torch.optim.Optimizer
         ):
