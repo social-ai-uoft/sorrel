@@ -1,14 +1,74 @@
 import os
+import re
 
 import chromadb
 import tree_sitter_python as tspython
 from tree_sitter import Language, Parser
 
+# from mistletoe import Document
+
 # TODO: change the embedding model
 
 
 def chunk_doc_file(file_path: str, collection: chromadb.Collection):
-    """Chunk a markdown file into meaningful parts."""
+    """Chunk a markdown file into meaningful parts.
+
+    IDs: 'file_path:chunk_number (indexed from 0)'
+
+    Metadata fields:
+        file_path
+        document_title
+        segment_title
+    """
+
+    ids = []
+    documents = []
+    metadatas = []  # list of dicts
+
+    print(f"Chunking file: {file_path}")
+
+    with open(file_path, encoding="utf-8") as f:
+        # TODO: remove hashes from document and segment titles in metadata
+        # go to the beginning of the file (assume it starts with a document title)
+        line = f.readline()
+        while not line.startswith("#"):
+            line = f.readline()
+
+        document_title = line.strip()
+        content = f.read()
+
+        titles = re.findall("^#.*$", content, flags=re.MULTILINE)
+        segments = re.split("^#.*$", content, flags=re.MULTILINE)
+
+        # if intro exists, add document title to combine with intro as the first chunk
+        m = re.search(titles[0], content)
+        if (
+            m and m.start() != 0
+        ):  # if the first title is not at the beginning of the content
+            titles.insert(0, document_title)
+
+        for title, segment in zip(titles, segments):
+            chunk = title + "\n" + segment
+            ids.append(f"{file_path}:{len(ids)}")
+            documents.append(chunk)
+            metadatas.append(
+                {
+                    "file_path": file_path,
+                    "document_title": document_title,
+                    "segment_title": title.strip(),
+                }
+            )
+
+    # Upsert to ChromaDB
+    collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
+
+    # As part of updating, remove extraneous previously existing chunks for this file
+    k = len(ids)
+    while collection.get(ids=[f"{file_path}:{k}"], include=[])[
+        "ids"
+    ]:  # only returns ids
+        collection.delete(ids=[f"{file_path}:{k}"])
+        k += 1
 
 
 def chunk_code_file(file_path: str, collection: chromadb.Collection):
@@ -146,7 +206,20 @@ def chunk_code_directory(directory_path: str, collection: chromadb.Collection):
                 file_path = os.path.join(root, file)
                 chunk_code_file(file_path, collection)
 
-    print(f"Finished processing directory: {directory_path}")
+    print(f"Finished processing code directory: {directory_path}")
+    print(f"Total chunks in collection: {collection.count()}")
+
+
+def chunk_doc_directory(directory_path: str, collection: chromadb.Collection):
+    """Chunk all markdown files in a directory."""
+
+    for root, _, files in os.walk(directory_path):
+        for file in files:
+            if file.endswith(".md"):
+                file_path = os.path.join(root, file)
+                chunk_doc_file(file_path, collection)
+
+    print(f"Finished processing documentation directory: {directory_path}")
     print(f"Total chunks in collection: {collection.count()}")
 
 
@@ -175,12 +248,20 @@ if __name__ == "__main__":
     chroma_client = chromadb.PersistentClient(path="/chroma_db")
     collection = chroma_client.get_or_create_collection(name="test_collection")
 
-    chunk_code_directory("sorrel/", collection)
+    # chunk_code_directory("sorrel/", collection)
+    # chunk_document_directory("docs/source/tutorials/", collection)
+    chunk_doc_file("README.md", collection)
 
-    test_retrieval(collection)
+    results = collection.peek()
+    for ids, docs, metas in zip(
+        results["ids"], results["documents"], results["metadatas"]
+    ):
+        print(f"ID: {ids}, Document: {docs[:50]}..., Metadata: {metas}")
+
+    # test_retrieval(collection)
 
     # Clean up the collection after processing
-    # chroma_client.delete_collection(name="test_collection")
+    chroma_client.delete_collection(name="test_collection")
     # chroma_client.reset()
 
     # types:
