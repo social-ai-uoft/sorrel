@@ -28,13 +28,12 @@ def chunk_doc_file(file_path: str, collection: chromadb.Collection):
     print(f"Chunking file: {file_path}")
 
     with open(file_path, encoding="utf-8") as f:
-        # TODO: remove hashes from document and segment titles in metadata
         # go to the beginning of the file (assume it starts with a document title)
         line = f.readline()
         while not line.startswith("#"):
             line = f.readline()
 
-        document_title = line.strip()
+        document_title = line.replace("#", "").strip()
         content = f.read()
 
         titles = re.findall("^#.*$", content, flags=re.MULTILINE)
@@ -55,7 +54,7 @@ def chunk_doc_file(file_path: str, collection: chromadb.Collection):
                 {
                     "file_path": file_path,
                     "document_title": document_title,
-                    "segment_title": title.strip(),
+                    "segment_title": title.replace("#", "").strip(),
                 }
             )
 
