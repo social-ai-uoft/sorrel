@@ -130,6 +130,7 @@ class state_sys():
         else:
             resource_index = self.resources.index(resource_name)
             punishment_prob = self.punishments_prob_matrix[resource_index][self.level]
+            # print(resource_name, punishment_prob)
         return punishment_prob
 
 

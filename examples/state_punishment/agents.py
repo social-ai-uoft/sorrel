@@ -214,7 +214,8 @@ class Agent:
             action, action_values = self.model.take_action(model_input, eval=True)
         else:
             action = self.model.take_action(model_input)
-        # action = random.randint(0,3)
+        if self.cfg.random:
+            action = random.randint(0,self.cfg.model.iqn.parameters.action_size-1)
         # Attempt the transition 
         attempted_location = self.movement(action, state_sys, action_mode)
         target_object = env.observe(attempted_location)
