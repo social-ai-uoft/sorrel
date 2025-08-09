@@ -1,0 +1,146 @@
+
+experiment:
+  name: state_punishment_beta
+  epochs: 2000000
+  max_turns: 100
+  epsilon_decay: 0.0001
+
+env:
+  height: 15
+  width: 15
+  layers: 1
+  channels: 10
+  default_object: EmptyObject
+  full_mdp: False # Whether to return the full agent # the result is not normal when True
+  tile_size: [16, 16] # Default sprite size for visualization (not used as model input yet) [16, 16]
+  prob:
+    item_spawn: 0.2 # 0.1 #0.15 # Initial item spawn rate. Later rate is lower as otherwise the entire map gets overwhelmed.
+    # item_choice: [0.1, 0.3, 0.4, 0.2] # gem, coin, food, bone
+    item_choice: [0.2, 0.2, 0.2, 0.2, 0.2] # [0.3, 0.7] [0.8, 0.2]
+    respawn_rate: 0.04
+  entity_names: ['A', 'B', 'C', 'D', 'E', 'Wall']
+
+state_sys:
+  resource_punishment_is_ambiguous: True
+  only_punish_taboo: False
+  prob_list: 
+    Gem: 0.0
+    Coin: 0.0
+    Bone: 1.
+  init_prob: 0.
+  magnitude: 30  # 30 # positive - punishment, negative - reward 
+  taboo: ['A', 'B', 'C', 'D', 'E'] # ['A', 'B', 'C', 'D', 'E']
+  potential_taboo: ['A', 'B', 'C', 'D', 'E']
+  num_resources: 5
+  num_steps: 10
+  exponentialness: 0.12
+  intercept_increase_speed: 2
+  max_level: 9
+  rewards: [2.9, 3.316, 4.59728, 8.5436224, 20.69835699]
+  collective_harms: [0.05, 0.55, 4.99, 11.57, 31.83] 
+  # [2.17, 2.86, 4.99, 11.57, 31.83]
+  resources: ['A', 'B', 'C', 'D', 'E']
+
+
+
+
+model:
+  iqn:
+    type: iRainbowModel
+    num: 3
+    device: cpu
+    parameters:
+      state_size: [6, 10, 7, 7] # If full_mdp is True, this is [channels, height, width]. If not, this is [channels, 2 * vision + 1, 2 * vision + 1]
+      extra_percept_size: 2 # added for extra percept
+      action_size: 6
+      layer_size: 250 # 250
+      num_frames: 5
+      n_step: 3
+      BATCH_SIZE: 64
+      BUFFER_SIZE: 1024
+      LR: 0.00025
+      TAU: .001
+      GAMMA: 0.99
+      N: 12
+      sync_freq: 200
+      model_update_freq: 4
+      epsilon: 0.01
+
+agent:
+  agent:
+    num: 3
+    model: iqn
+    num_memories: 5 # Should match num_frames in the model above
+    vision: 3
+    # appearance: (0.0, 0.0, 255.0)
+    appearance: 
+      - [0.0, 0.0, 255.0, 255.0, 0., 0.0, 0.0, 0.0, 0.0, 0.0]
+      - [0.0, 0.0, 255.0, 0., 255., 0.0, 0.0, 0.0, 0.0, 0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0.0, 255., 0., 0.0, 0.0, 0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0.0, 0., 255., 0.0, 0.0,  0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 255., 0.0, 0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 0., 255.0, 0.0]
+      - [0.0, 0.0, 255.0, 0.0, 0., 0.0, 0., 0., 0.0, 255., 0.0]
+    memory_size: 100 # If this is larger than max_turns above, could cause issues
+    # Not used right now
+    tile_size: (1, 1)
+    pov_size: 9
+    health: 10
+    extra_percept_size: 2 # added for extra percept
+
+entity:
+
+  A:
+    start_num: 1
+    value: 2.9
+    appearance: (0.0, 0.0, 255.0)
+    social_harm: 2.17
+  B:
+    start_num: 1
+    value: 3.316
+    appearance: (0.0, 0.0, 255.0)
+    social_harm: 2.86
+  C:
+    start_num: 1
+    value: 4.59728
+    appearance: (0.0, 0.0, 255.0)
+    social_harm: 4.99
+  D:
+    start_num: 1
+    value: 8.5436224
+    appearance: (0.0, 0.0, 255.0)
+    social_harm: 11.57
+  E:
+    start_num: 1
+    value: 20.69835699
+    appearance: (0.0, 0.0, 255.0)
+    social_harm: 31.83
+
+# Not used right now
+replay:
+  use_sprites: False
+  save: True
+  replay_frequency: 500
+  num_replays: 3
+  end_update: True
+  epsilon: 0.01
+  blit: False
+  fps: 2
+  turns: 100
+
+# Root folder for accessing file structure and modules
+root: '/Users/socialai/Documents/state_punishment_May6'
+seed: 1
+log: True
+random: False
+seed: 3
+state_mode: 'composite'
+action_mode: 'simple'
+load_weights: False
+with_direct_cost: 0.0
+consensus_reward: 0
+
+exp_name: 'Study1_control_only_taboo_only_taboo_harmful_cond_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
+exp_name: 'Study1_experiment_cond_v3_improved_punishment_scheme_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
+# exp_name: 'Study1_experiment_cond_v2_improved_punishment_scheme_stacked_view_simple_actions_3agents_respawn_0.04_s1_r1'
+# stacked_views,single_view
