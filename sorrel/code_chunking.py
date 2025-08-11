@@ -272,18 +272,20 @@ def test_retrieval(collection: chromadb.Collection):
 
 def update_collection(
     chroma_client: chromadb.Client,
-    google_client: google.genai.Client,
+    google_client: google.genai.Client | None = None,
     collection_name: str = "test_collection",
     peek: bool = False,
     test: bool = False,
 ):
-
-    collection = chroma_client.get_or_create_collection(
-        name=collection_name,
-        embedding_function=gemini_embedding(
-            is_query=False, google_client=google_client
-        ),
-    )
+    if google_client:
+        collection = chroma_client.get_or_create_collection(
+            name=collection_name,
+            embedding_function=gemini_embedding(
+                is_query=False, google_client=google_client
+            ),
+        )
+    else:
+        collection = chroma_client.get_or_create_collection(name=collection_name)
 
     chunk_code_directory("sorrel/", collection)
     chunk_doc_directory("docs/source/tutorials/", collection)
@@ -311,14 +313,14 @@ if __name__ == "__main__":
 
     # update_collection(chroma_client, collection_name, peek=True, test=True)
 
-    ef = gemini_embedding(is_query=False, google_client=google_client)
-    embeddings = ef(
-        [
-            "This is a test document.",
-            "Another test document for embedding.",
-        ]
-    )
-    print("Generated embeddings:" f"\n{embeddings[0]}\n{embeddings[1]}")
+    # ef = gemini_embedding(is_query=False, google_client=google_client)
+    # embeddings = ef(
+    #     [
+    #         "This is a test document.",
+    #         "Another test document for embedding.",
+    #     ]
+    # )
+    # print("Generated embeddings:" f"\n{embeddings[0]}\n{embeddings[1]}")
 
     # Clean up the collection after processing
     # chroma_client.delete_collection(name="test_collection")
