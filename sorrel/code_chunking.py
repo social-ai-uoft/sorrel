@@ -280,9 +280,11 @@ def update_collection(
     if google_client:
         collection = chroma_client.get_or_create_collection(
             name=collection_name,
-            embedding_function=gemini_embedding(
-                is_query=False, google_client=google_client
-            ),
+            # TODO: use the Gemini embedding
+            # TODO: problem: need to store embeddings, not contents, to use diff embedding for storing vs. querying
+            # embedding_function=gemini_embedding(
+            #     is_query=False, google_client=google_client
+            # ),
         )
     else:
         collection = chroma_client.get_or_create_collection(name=collection_name)
@@ -306,12 +308,12 @@ def update_collection(
 
 if __name__ == "__main__":
 
-    # chroma_client = chromadb.PersistentClient(path="/chroma_db")
+    chroma_client = chromadb.PersistentClient(path="/chroma_db")
     # TODO: Vertex AI express mode does not have acceess to the embedding model
     # google_client = google.genai.Client(vertexai=True, api_key=<replace with api key>)
     collection_name = "test_collection"
 
-    # update_collection(chroma_client, collection_name, peek=True, test=True)
+    update_collection(chroma_client, collection_name, peek=True, test=True)
 
     # ef = gemini_embedding(is_query=False, google_client=google_client)
     # embeddings = ef(
@@ -325,21 +327,3 @@ if __name__ == "__main__":
     # Clean up the collection after processing
     # chroma_client.delete_collection(name="test_collection")
     # chroma_client.reset()
-
-    # types:
-    # module
-    # comment
-    # future_import_statement
-    # import_statement
-    # import_from_statement
-    # class_definition
-    #   class, identifier, :, block
-    #       expression_statement, function_definition
-    # function_definition
-    #   def, identifier, parameters, ->, type, :, block
-
-    # field_names (for functions):
-    # name (functions, classes, etc)
-    # parameters
-    # return_type
-    # body
