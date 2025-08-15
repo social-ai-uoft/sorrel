@@ -14,7 +14,7 @@ NUM_RESULTS = 3
 # Gemini configs
 MODEL = "gemini-2.5-pro"
 
-JSON_PROMPT = "You are a configuration assistant for the Sorrel MARL framework. Your task is to analyze the user's request and populate the following JSON schema with corresponding values. You must extract all parameters explicitly mentioned by the user. For any parameters that are not mentioned, you must infer reasonable default values appropriate for a typical MARL experiment. The JSON output must be valid and adhere strictly to the provided schema."
+JSON_SYSTEM_INST = "You are a configuration assistant for the Sorrel MARL framework. Your task is to analyze the user's request and populate the following JSON schema with corresponding values. You must extract all parameters explicitly mentioned by the user. For any parameters that are not mentioned, you must infer reasonable default values appropriate for a typical MARL experiment. The JSON output must be valid and adhere strictly to the provided schema."
 
 JSON_SCHEMA = '{"experiment": {"name": "", "epochs": 1000, "max_turns": 200, "record_period": 100}, "world": {"class": "GridWorld", "width": 30, "height": 30, "default_entity": "EmptyEntity"}, "agents": [], "entities": []}'
 
@@ -31,16 +31,20 @@ def query_database(query: str, num_results: int, collection: chromadb.Collection
     results = collection.query(query_texts=[query], n_results=num_results)
     return results["documents"][0]
 
-def get_directory() -> Path:
-    """Prompt the user for a directory to save the generated files."""
-    directory = input("Enter the directory to save the generated files: ")
-    directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
+def prompt(google_client: google.genai.Client, collection: chromadb.Collection, interactive: bool = True, output_dir: str | Path | None  = None, request : str | None  = None) -> None:
 
-def prompt(google_client: google.genai.Client, collection: chromadb.Collection, output_dir: str) -> None:
-
-    request = input("Please describe the Sorrel MARL experiment you wish to create: ")
+    # Get inputs
+    if not interactive:
+        if output_dir is None:
+            raise ValueError("Output directory must be specified in non-interactive mode.")
+        if request is None:
+            raise ValueError("Request must be specified in non-interactive mode.")
+    else:
+        output_dir = input("Enter the directory to save the generated files: ")
+        request = input("Please describe the Sorrel MARL experiment you wish to create: ")
+    
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Process user input into json config
     json_response = google_client.models.generate_content(
@@ -74,6 +78,8 @@ def prompt(google_client: google.genai.Client, collection: chromadb.Collection, 
     # Generate environment
 
 
+
+
 def verify(generated_code: str, prev_prompts: list[str], client: google.genai.Client, model: str) -> str:
     code = generated_code
     compiles = False
@@ -96,7 +102,6 @@ def verify(generated_code: str, prev_prompts: list[str], client: google.genai.Cl
     
     return code
 
-
 if __name__ == "__main__":
     
     google_client = google.genai.Client(
@@ -108,4 +113,4 @@ if __name__ == "__main__":
     collection_name = "test_collection"
     collection = chroma_client.get_or_create_collection(name=collection_name)
 
-    prompt(google_client, collection, get_directory())
+    prompt(google_client, collection, interactive=False, output_dir="sorrel/examples/treasurehunt", request="Create a sorrel environment based on the 'Cleanup' scenario. It should be a 15x15 grid world. The world has a river running down the middle that starts clean but gets polluted when agents are nearby. There should be 7 agents who are rewarded for cleaning the river by firing a cleaning beam, but this action has a small cost. They are also incentivized to eat apples that spawn in the world. Apples should respawn randomly after being eaten.")
