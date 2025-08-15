@@ -115,11 +115,12 @@ class IQN(nn.Module):
         Returns:
             tuple: quantiles, torch.Tensor (size: (batch_size, n_tau, action_space)); taus, torch.Tensor (size) ((batch_size, n_tau, 1))
         """
+        # REMOVED: as suggested by Claude and GPT, input is not an image, so no need to add noise or normalize
         # Add noise to the input
-        eps = 0.01
-        noise = torch.rand_like(input) * eps
-        input = input / 255.0
-        input = input + noise
+        # eps = 0.01
+        # noise = torch.rand_like(input) * eps
+        # input = input / 255.0
+        # input = input + noise
 
         # Flatten the input from [1, N, 7, 9, 9] to [1, N * 7 * 9 * 9]
         # batch_size, timesteps, C, H, W = input.size()
@@ -301,7 +302,9 @@ class iRainbowModel(DoublePyTorchModel):
         loss = torch.tensor(0.0)
         self.optimizer.zero_grad()
 
-        if (len(self.memory) // self.n_frames // 2) > self.batch_size:
+        # REPLACED: as suggested by Gemini, Claude, and GPT
+        # if (len(self.memory) // self.n_frames // 2) > self.batch_size:
+        if len(self.memory) > self.batch_size:
 
             # Sample minibatch
             states, actions, rewards, next_states, dones, valid = self.memory.sample(
@@ -316,10 +319,22 @@ class iRainbowModel(DoublePyTorchModel):
             dones = torch.from_numpy(dones)
             valid = torch.from_numpy(valid)
 
+            # REPLACED: as suggested by Gemini, use local network to select action and target network to evaluate it
             # Get max predicted Q values (for next states) from target model
-            Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
-            Q_targets_next: torch.Tensor = Q_targets_next.detach().cpu()
-            action_indx = torch.argmax(Q_targets_next.mean(dim=1), dim=1, keepdim=True)
+            # Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
+            # Q_targets_next: torch.Tensor = Q_targets_next.detach().cpu()
+            # action_indx = torch.argmax(Q_targets_next.mean(dim=1), dim=1, keepdim=True)
+            # Q_targets_next = Q_targets_next.gather(
+            #     2,
+            #     action_indx.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1),
+            # ).transpose(1, 2)
+            q_values_next_local, _ = self.qnetwork_local(next_states, self.n_quantiles)
+            action_indx = torch.argmax(
+                q_values_next_local.mean(dim=1), dim=1, keepdim=True
+            )
+            Q_targets_next, _ = self.qnetwork_target(
+                next_states, self.n_quantiles
+            )
             Q_targets_next = Q_targets_next.gather(
                 2,
                 action_indx.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1),
@@ -353,10 +368,12 @@ class iRainbowModel(DoublePyTorchModel):
                 abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
             )
 
-            loss: torch.Tensor = quantil_l.sum(dim=1).mean(
-                dim=1
-            )  # , keepdim=True if per weights get multipl
-            loss = loss.mean()
+            # REPLACED: as suggested by Gemini & GPT, simply average across all quantile & batch dimensions
+            # loss: torch.Tensor = quantil_l.sum(dim=1).mean(
+            #     dim=1
+            # )  # , keepdim=True if per weights get multipl
+            # loss = loss.mean()
+            loss = quantil_l.mean()
 
             # Minimize the loss
             loss.backward()
@@ -398,12 +415,12 @@ class iRainbowModel(DoublePyTorchModel):
         Args:
             **kwargs: All local variables are passed into the model
         """
-        if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
-            kwargs["loss"] = self.train_step()
-            if "game_vars" in kwargs:
-                kwargs["game_vars"].losses.append(kwargs["loss"])
-            else:
-                kwargs["losses"] += kwargs["loss"]
+        # if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
+        #     kwargs["loss"] = self.train_step()
+        #     if "game_vars" in kwargs:
+        #         kwargs["game_vars"].losses.append(kwargs["loss"])
+        #     else:
+        #         kwargs["losses"] += kwargs["loss"]
 
 
 # ------------------------ #
