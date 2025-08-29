@@ -270,7 +270,7 @@ class AsciiObservationSpec(ObservationSpec[str]):
         
         Returns:
             str: The legend for an ASCII observation."""
-        self.map_legend = "Legend:\n=======\n" + "\n".join([f"{value}: {key}" for key, value in self.entity_map.items()]) + "\n\n"
+        self.map_legend = "Legend:\n=======\n" + "\n".join([f"{value}: {key}" for key, value in self.entity_map.items()]) + "\n"
         
     def observe(
         self,

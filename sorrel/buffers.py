@@ -127,6 +127,7 @@ class Buffer:
         return (self.states[idx], self.actions[idx], self.rewards[idx], self.dones[idx])
 
 class StrBuffer(Buffer):
+    """String buffer for LLM memories."""
     def __init__(
         self, capacity, obs_shape, n_frames = 1
     ):

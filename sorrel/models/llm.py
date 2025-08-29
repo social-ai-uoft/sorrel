@@ -58,6 +58,8 @@ class LLM(BaseModel):
       action_list: list,
       model_name: str,
       instructions: str,
+      temperature: float = 0.7,
+      max_tokens: int = 4096,
       **call_params
   ):
     super().__init__(1, action_space, memory_size)
@@ -68,31 +70,32 @@ class LLM(BaseModel):
     self.instructions = instructions
     self.client = Client(
       model_name,
-      max_tokens=4096
+      max_tokens=max_tokens
     )
     self.stm = ""
     self.memory = StrBuffer(
       capacity=memory_size,
       obs_shape=[11, 11]
     )
+    self.temperature = temperature
 
   def take_action(self, state) -> int:
 
     output = self.client.call(
       prompt=state,
       system_message=self.instructions,
-      temperature=0.7
+      temperature=self.temperature
     )
     response = output.lower() #type: ignore
-    print(response)
     return self.action_list.index(response)
   
   def format_memories(self, memories):
-    memories = [
-      f"State: {state}\n"
-      f"Action: {self.action_list.index(action)}\n"
-      f"Reward: {reward}\n"
-      f"Done: {done}\n" for state, action, reward, done in memories]
+    
+    states, actions, rewards, dones = memories
+    memories = list(zip(states, actions, rewards, dones))
+    memories = [f"Memory:\n=======\n{state}\nAction: {action}\nReward: {reward}\nDone: {done}\n" for state, action, reward, done in memories]
+    print(memories[0])
+
     return memories
 
   def recall(self, k: int = 1, method: str = 'recency'):
@@ -104,7 +107,7 @@ class LLM(BaseModel):
       method (str): The method for recall. By default, recency.
     """
     if method == "recency":
-      memories = self.format_memories(self.memory[-k:])
+      memories = self.format_memories(self.memory[self.memory.idx-k:self.memory.idx])
       self.stm = "\n\n".join(memories)
     elif method == 'frequency':
       # TODO: Implement frequency-based recall
