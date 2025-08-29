@@ -5,6 +5,8 @@ from typing import Sequence
 import numpy as np
 import torch
 
+from numpy.dtypes import StrDType
+
 
 class Buffer:
     """Buffer class for recording and storing agent actions.
@@ -123,3 +125,11 @@ class Buffer:
 
     def __getitem__(self, idx):
         return (self.states[idx], self.actions[idx], self.rewards[idx], self.dones[idx])
+
+class StrBuffer(Buffer):
+    def __init__(
+        self, capacity, obs_shape, n_frames = 1
+    ):
+        super().__init__(capacity, obs_shape, n_frames)
+        empty_state_sentinel = ''
+        self.states = np.full(self.capacity, fill_value=empty_state_sentinel, dtype=f'<U{(obs_shape[0] + 1)*obs_shape[1] + 100}')

@@ -62,6 +62,6 @@ class Entity[W]:
         By default, this function does nothing.
 
         Args:
-            env (Gridworld): The world toenact transition to.
+            world (Gridworld): The world to enact transition to.
         """
         pass  # Entities do not have a transition function by default

@@ -220,6 +220,7 @@ class AsciiObservationSpec(ObservationSpec[str]):
                 (2 * self.vision_radius + 1),
                 (2 * self.vision_radius + 1),
             )
+        self.generate_map_legend()
 
     def generate_map(self, entity_list: list[str]) -> dict[str, str]:
         """Generate a default entity map by automatically creating ascii character
@@ -263,7 +264,14 @@ class AsciiObservationSpec(ObservationSpec[str]):
                             "Ran out of ascii characters to assign to entities."
                         )
         return entity_map
-
+    
+    def generate_map_legend(self) -> None:
+        """Generate a string legend for an ASCII observation using the entity map.
+        
+        Returns:
+            str: The legend for an ASCII observation."""
+        self.map_legend = "Legend:\n=======\n" + "\n".join([f"{value}: {key}" for key, value in self.entity_map.items()]) + "\n\n"
+        
     def observe(
         self,
         world: Gridworld,
@@ -294,3 +302,26 @@ class AsciiObservationSpec(ObservationSpec[str]):
             vision=self.vision_radius if not self.full_view else None,
             location=location,
         )
+    
+    def observe_string(
+        self,
+        world: Gridworld,
+        location: tuple | None = None
+    ) -> str:
+        """Observes the environment using :py:func:`.visual_field_ascii()`,
+        and then formats it as a single string including additional context
+        such as the location of the agent on the map.
+        """
+        state = self.observe(world, location)
+        loc_string = "Location: "
+        # The location is the actual location on the grid
+        if self.full_view:
+            loc_string += str(location) + "\n"
+        # If not full view, the agent is centred on the observation.
+        else:
+            loc_string += f"({state.shape[0] // 2 + 1}, {state.shape[1] // 2 + 1})" + "\n"
+        replacements = {"[": "", "]": "", " ": "", "'": ""}
+        state_string = "State:\n" + np.array_str(state[:, :, -1]).translate(str.maketrans(replacements))
+        return loc_string + state_string + "\n" +  self.map_legend
+        
+
