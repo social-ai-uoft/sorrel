@@ -5,26 +5,26 @@ ci:
   # need to standardize venv in repo if we want to use it in CI
 
 repos:
-  - repo: https://github.com/python/black
+  - repo: https://github.com/psf/black
     rev: 25.1.0
     hooks:
       - id: black-jupyter
         language_version: python3.12
   - repo: https://github.com/PyCQA/isort
-    rev: 5.13.2
+    rev: 6.0.1
     hooks:
       - id: isort
         args: ["--profile", "black"]
   - repo: https://github.com/PyCQA/docformatter
     # temporary workaround as the docformatter people won't create a new release
     # for error: "expected one of ... but got: 'python_venv'"
-    rev: eb1df347edd128b30cd3368dddc3aa65edcfac38
+    rev: v1.7.7
     hooks:
       - id: docformatter
         additional_dependencies: [tomli]
         args: ["--in-place", "--config", "./pyproject.toml", "--black"]
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.19.0
+    rev: v3.20.0
     hooks:
       - id: pyupgrade
         # TODO: remove `--keep-runtime-typing` option
