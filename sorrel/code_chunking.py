@@ -45,6 +45,7 @@ def chunk_doc_file(file_path: str, collection: chromadb.Collection):
 
     Metadata fields:
         file_path
+        is_code
         document_title
         segment_title
     """
@@ -81,6 +82,7 @@ def chunk_doc_file(file_path: str, collection: chromadb.Collection):
             metadatas.append(
                 {
                     "file_path": file_path,
+                    "is_code": False,
                     "document_title": document_title,
                     "segment_title": title.replace("#", "").strip(),
                 }
@@ -105,6 +107,7 @@ def chunk_code_file(file_path: str, collection: chromadb.Collection):
 
     Metadata fields:
         file_path
+        is_code
         is_import
         is_class
         class_name
@@ -134,7 +137,15 @@ def chunk_code_file(file_path: str, collection: chromadb.Collection):
             # Empty module
             ids.append(f"{file_path}:0")
             documents.append(code.decode("utf-8"))
-            metadatas.append({"file_path": file_path})
+            metadatas.append(
+                {
+                    "file_path": file_path,
+                    "is_code": True,
+                    "is_import": False,
+                    "is_class": False,
+                    "is_function": False,
+                }
+            )
 
         # Chunk that includes all imports (i.e. before the first class or function definition)
         i = 0
@@ -150,6 +161,7 @@ def chunk_code_file(file_path: str, collection: chromadb.Collection):
             metadatas.append(
                 {
                     "file_path": file_path,
+                    "is_code": True,
                     "is_import": True,
                     "is_class": False,
                     "is_function": False,
@@ -172,6 +184,7 @@ def chunk_code_file(file_path: str, collection: chromadb.Collection):
                 metadatas.append(
                     {
                         "file_path": file_path,
+                        "is_code": True,
                         "is_import": False,
                         "is_class": True,
                         "class_name": class_name,
@@ -188,6 +201,7 @@ def chunk_code_file(file_path: str, collection: chromadb.Collection):
                 metadatas.append(
                     {
                         "file_path": file_path,
+                        "is_code": True,
                         "is_import": False,
                         "is_class": False,
                         "is_function": True,
@@ -206,6 +220,7 @@ def chunk_code_file(file_path: str, collection: chromadb.Collection):
             metadatas.append(
                 {
                     "file_path": file_path,
+                    "is_code": True,
                     "is_import": False,
                     "is_class": False,
                     "is_function": False,

@@ -1,15 +1,17 @@
 import ast
-from pathlib import Path
 import json
+from pathlib import Path
+
+import chromadb
 
 # TODO: maybe pip uninstall google-genais
 import google.genai
-import chromadb
+from google.genai.types import GenerateContentConfig
 
-TESTING = False  # Set to True to enable debug prints
+TESTING = True  # Set to True to enable debug prints
 
 # ChromaDB configs
-NUM_RESULTS = 3
+NUM_RESULTS = 5
 
 # Gemini configs
 MODEL = "gemini-2.5-pro"
@@ -26,31 +28,74 @@ ERROR_PROMPT = "The previous code you generated was syntactically incorrect and 
 
 MAX_ATTEMPTS = 3  # Max attempts to fix syntax errors in generated code
 
-def query_database(query: str, num_results: int, collection: chromadb.Collection) -> list[str]:
-    """Query the ChromaDB database for relevant code snippets."""
-    results = collection.query(query_texts=[query], n_results=num_results)
-    return results["documents"][0]
 
-def prompt(google_client: google.genai.Client, collection: chromadb.Collection, interactive: bool = True, output_dir: str | Path | None  = None, request : str | None  = None) -> None:
+def query_database(
+    query: str, num_results: int, collection: chromadb.Collection
+) -> list[str]:
+    """Query the ChromaDB database for relevant code snippets, and attach all relevant
+    import statements."""
+    # Only search for either documents or non-import code snippets
+    results = collection.query(
+        query_texts=[query],
+        n_results=num_results,
+        where={"$or": [{"is_code": False}, {"is_import": False}]},
+    )
+    completed_results = []
+    metadatas = results["metadatas"][0]
+    # Attach imports to code snippets
+    for i in range(num_results):
+        if metadatas[i]["is_code"]:
+            file_path = metadatas[i]["file_path"]
+            imports = collection.get(
+                where={"$and": [{"file_path": file_path}, {"is_import": True}]},
+                include=["documents"],
+            )["documents"][0]
+            completed_code = imports + results["documents"][0][i]
+            completed_results.append(completed_code)
+        else:
+            completed_results.append(results["documents"][0][i])
+    if TESTING:
+        print(f"Query to database: {query}")
+        print(f"Database query results:")
+        for i, result in enumerate(completed_results):
+            print(f"Result {i+1}:\n{result[:100]}...")
+    return completed_results
+
+
+def prompt(
+    google_client: google.genai.Client,
+    collection: chromadb.Collection,
+    interactive: bool = True,
+    output_dir: str | Path | None = None,
+    request: str | None = None,
+) -> None:
 
     # Get inputs
     if not interactive:
         if output_dir is None:
-            raise ValueError("Output directory must be specified in non-interactive mode.")
+            raise ValueError(
+                "Output directory must be specified in non-interactive mode."
+            )
         if request is None:
             raise ValueError("Request must be specified in non-interactive mode.")
     else:
         output_dir = input("Enter the directory to save the generated files: ")
-        request = input("Please describe the Sorrel MARL experiment you wish to create: ")
-    
+        request = input(
+            "Please describe the Sorrel MARL experiment you wish to create: "
+        )
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Process user input into json config
     json_response = google_client.models.generate_content(
-        model=MODEL, contents=[JSON_PROMPT, "User request: " + request, JSON_SCHEMA]
+        model=MODEL,
+        config=GenerateContentConfig(
+            system_instruction=[JSON_SYSTEM_INST, JSON_SCHEMA]
+        ),
+        contents="User request: " + request,
     )
-    
+
     # Gemini outputs with backticks, so we remove them
     json_response_text = json_response.text.replace("```json", "").replace("```", "")
     print("Inferred json configs:", json_response_text)
@@ -58,10 +103,14 @@ def prompt(google_client: google.genai.Client, collection: chromadb.Collection, 
     json_configs = json.loads(json_response_text)
 
     # Generate entities
+    # TODO: entities generated in seperate files might cause problems with imports
     entities = json_configs.get("entities", [])
-    for entity in entities:
+    for i, entity in enumerate(entities):
         query_results = query_database(
-            query=f"Classes and tutorials related to an entity with the following configs: {entity}", num_results=NUM_RESULTS, collection=collection)
+            query=f"Classes and tutorials related to an entity with the following configs: {entity}",
+            num_results=NUM_RESULTS,
+            collection=collection,
+        )
         prompts = [ENTITY_PROMPT.format(entity_configs=entity)] + query_results
         entity_response = google_client.models.generate_content(
             model=MODEL,
@@ -69,18 +118,22 @@ def prompt(google_client: google.genai.Client, collection: chromadb.Collection, 
         )
         entity_code = entity_response.text.replace("```python", "").replace("```", "")
         verified_code = verify(entity_code, prompts, google_client, MODEL)
-        with open(output_dir / f"entities.py", "a+") as f:
+        file_name = entity.get("class", f"Entity{i}").lower() + ".py"
+        with open(output_dir / file_name, "w+") as f:
             f.write(verified_code)
-    
+
     # Generate agents
     # TODO
 
     # Generate environment
 
 
-
-
-def verify(generated_code: str, prev_prompts: list[str], client: google.genai.Client, model: str) -> str:
+def verify(
+    generated_code: str,
+    prev_prompts: list[str],
+    client: google.genai.Client,
+    model: str,
+) -> str:
     code = generated_code
     compiles = False
 
@@ -99,11 +152,12 @@ def verify(generated_code: str, prev_prompts: list[str], client: google.genai.Cl
     if not compiles:
         print("Failed code: ", code)
         raise SyntaxError("Failed to generate valid code after multiple attempts.")
-    
+
     return code
 
+
 if __name__ == "__main__":
-    
+
     google_client = google.genai.Client(
         vertexai=True,
         project="sorrel-gemini",
@@ -113,4 +167,9 @@ if __name__ == "__main__":
     collection_name = "test_collection"
     collection = chroma_client.get_or_create_collection(name=collection_name)
 
-    prompt(google_client, collection, interactive=False, output_dir="sorrel/examples/treasurehunt", request="Create a sorrel environment based on the 'Cleanup' scenario. It should be a 15x15 grid world. The world has a river running down the middle that starts clean but gets polluted when agents are nearby. There should be 7 agents who are rewarded for cleaning the river by firing a cleaning beam, but this action has a small cost. They are also incentivized to eat apples that spawn in the world. Apples should respawn randomly after being eaten.")
+    # prompt(google_client, collection, interactive=False, output_dir="test-rag/", request="Create a sorrel environment based on the 'Cleanup' scenario. It should be a 15x15 grid world. The world has a river running down the middle that starts clean but gets polluted when agents are nearby. There should be 7 agents who are rewarded for cleaning the river by firing a cleaning beam, but this action has a small cost. They are also incentivized to eat apples that spawn in the world. Apples should respawn randomly after being eaten.")
+    query_database(
+        "Classes and tutorials related to an entity with the following configs: An entity representing a river that can become polluted over time when agents are nearby. The river should have a transition method that adds pollution entities to its location based on certain conditions.",
+        num_results=5,
+        collection=collection,
+    )
