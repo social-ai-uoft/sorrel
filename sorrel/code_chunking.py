@@ -324,7 +324,7 @@ def update_collection(
 if __name__ == "__main__":
 
     chroma_client = chromadb.PersistentClient(path="/chroma_db")
-    # TODO: Vertex AI express mode does not have acceess to the embedding model
+    # NOTE: currently Chroma just uses its own embedding function, not Gemini
     # google_client = google.genai.Client(vertexai=True, api_key=<replace with api key>)
     collection_name = "test_collection"
 
