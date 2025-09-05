@@ -8,7 +8,7 @@ import chromadb
 import google.genai
 from google.genai.types import GenerateContentConfig
 
-TESTING = True  # Set to True to enable debug prints
+TESTING = False  # Set to True to enable debug prints
 
 # ChromaDB configs
 NUM_RESULTS = 5
@@ -48,6 +48,13 @@ def query_database(
     for i in range(num_results):
         if metadatas[i]["is_code"]:
             file_path = metadatas[i]["file_path"]
+            imports = collection.get(
+                where={"$and": [{"file_path": file_path}, {"is_import": True}]},
+                include=["documents"],
+            )["documents"]
+            if len(results) == 0:
+                completed_results.append(results["documents"][0][i])
+                continue
             imports = collection.get(
                 where={"$and": [{"file_path": file_path}, {"is_import": True}]},
                 include=["documents"],
@@ -127,7 +134,7 @@ def prompt(
         file_path = output_dir / file_name
         entity_codes.append(
             "The following code snippet comes from the file"
-            + file_path
+            + str(file_path)
             + ": \n"
             + verified_code
         )
@@ -154,7 +161,7 @@ def prompt(
             f.write(verified_code)
         agent_codes.append(
             "The following code snippet comes from the file"
-            + file_path
+            + str(file_path)
             + ": \n"
             + verified_code
         )
@@ -215,9 +222,9 @@ if __name__ == "__main__":
     collection_name = "test_collection"
     collection = chroma_client.get_or_create_collection(name=collection_name)
 
-    # prompt(google_client, collection, interactive=False, output_dir="test-rag/", request="Create a sorrel environment based on the 'Cleanup' scenario. It should be a 15x15 grid world. The world has a river running down the middle that starts clean but gets polluted when agents are nearby. There should be 7 agents who are rewarded for cleaning the river by firing a cleaning beam, but this action has a small cost. They are also incentivized to eat apples that spawn in the world. Apples should respawn randomly after being eaten.")
-    query_database(
-        "Classes and tutorials related to an entity with the following configs: An entity representing a river that can become polluted over time when agents are nearby. The river should have a transition method that adds pollution entities to its location based on certain conditions.",
-        num_results=5,
-        collection=collection,
-    )
+    prompt(google_client, collection, interactive=False, output_dir="test-rag/", request="Create a sorrel environment based on the 'Cleanup' scenario. It should be a 15x15 grid world. The world has a river running down the middle that starts clean but gets polluted when agents are nearby. There should be 7 agents who are rewarded for cleaning the river by firing a cleaning beam, but this action has a small cost. They are also incentivized to eat apples that spawn in the world. Apples should respawn randomly after being eaten.")
+    # query_database(
+    #     "Classes and tutorials related to an entity with the following configs: An entity representing a river that can become polluted over time when agents are nearby. The river should have a transition method that adds pollution entities to its location based on certain conditions.",
+    #     num_results=5,
+    #     collection=collection,
+    # )
