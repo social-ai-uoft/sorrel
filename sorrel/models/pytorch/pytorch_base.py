@@ -173,14 +173,18 @@ class DoublePyTorchModel(PyTorchModel):
         if hasattr(self, "optimizer") and isinstance(
             self.optimizer, torch.optim.Optimizer
         ):
-            torch.save({
-                **{key: value.state_dict() for key, value in self.models.items()},
-                "optim": self.optimizer.state_dict(),
-            }, file_path)
+            torch.save(
+                {
+                    **{key: value.state_dict() for key, value in self.models.items()},
+                    "optim": self.optimizer.state_dict(),
+                },
+                file_path,
+            )
         else:
-            torch.save({
-                key: value.state_dict() for key, value in self.models.items()
-            }, file_path)
+            torch.save(
+                {key: value.state_dict() for key, value in self.models.items()},
+                file_path,
+            )
 
     def load(self, file_path: str | os.PathLike) -> None:
         """Load the model weights and parameters from the specified location.

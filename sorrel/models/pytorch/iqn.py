@@ -332,9 +332,7 @@ class iRainbowModel(DoublePyTorchModel):
             action_indx = torch.argmax(
                 q_values_next_local.mean(dim=1), dim=1, keepdim=True
             )
-            Q_targets_next, _ = self.qnetwork_target(
-                next_states, self.n_quantiles
-            )
+            Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
             Q_targets_next = Q_targets_next.gather(
                 2,
                 action_indx.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1),
