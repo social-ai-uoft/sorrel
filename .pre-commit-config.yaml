@@ -1,23 +1,28 @@
 ---
+ci:
+  skip: [pyright]  # pyright is not run in CI, only locally
+  # using the pyright mirror with additional dependencies times out
+  # need to standardize venv in repo if we want to use it in CI
+
 repos:
   - repo: https://github.com/python/black
-    rev: 24.10.0
+    rev: 25.1.0
     hooks:
       - id: black-jupyter
+        language_version: python3.12
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
     hooks:
       - id: isort
-  - repo: https://github.com/pycqa/pydocstyle
-    rev: 6.3.0
+        args: ["--profile", "black"]
+  - repo: https://github.com/PyCQA/docformatter
+    # temporary workaround as the docformatter people won't create a new release
+    # for error: "expected one of ... but got: 'python_venv'"
+    rev: eb1df347edd128b30cd3368dddc3aa65edcfac38
     hooks:
-      - id: pydocstyle
-        exclude: ^(tests/)
-        args:
-          - --source
-          - --explain
-          - --convention=google
-        additional_dependencies: ["toml"]
+      - id: docformatter
+        additional_dependencies: [tomli]
+        args: ["--in-place", "--config", "./pyproject.toml", "--black"]
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.19.0
     hooks:
@@ -35,3 +40,8 @@ repos:
         additional_dependencies: ["pyright"]
         args:
           - --project=pyproject.toml
+  # - repo: https://github.com/RobertCraigie/pyright-python
+  #   rev: v1.1.401
+  #   hooks:
+  #   - id: pyright
+  #     additional_dependencies: ["matplotlib", "numpy", "pyyaml", "pytest", "torch", "jax", "flax", "hydra-core", "dill", "ipython", "pillow", "tensorboard"]

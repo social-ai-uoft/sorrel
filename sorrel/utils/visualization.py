@@ -9,11 +9,11 @@ from typing import Optional, Sequence
 # Import base packages
 import numpy as np
 from matplotlib import pyplot as plt
-from PIL import Image
+from PIL import Image as img  # this is the module
 from PIL.PngImagePlugin import PngImageFile
 
 # Import sorrel-specific packages
-from sorrel.environments import GridworldEnv
+from sorrel.worlds import Gridworld
 
 # --------------- #
 # endregion       #
@@ -24,31 +24,31 @@ from sorrel.environments import GridworldEnv
 # --------------------------- #
 
 
-def visual_field_sprite(
-    env: GridworldEnv,
+def render_sprite(
+    world: Gridworld,
     location: Optional[Sequence] = None,
     vision: Optional[int] = None,
-    tile_size: Sequence[int] = [16, 16],
+    tile_size: list[int] | np.ndarray = [16, 16],
 ) -> list[np.ndarray]:
-    """
-    Create an agent visual field of size (2k + 1, 2k + 1) tiles
+    """Render a sprite of (2k + 1, 2k + 1) tiles centered at location, where k=vision.
 
-    Parameters:
-        location: (Sequence, Optional) defines the location to centre the visualization on \n
-        vision: (int, Optional) defines the size of the visualization of (2v + 1, 2v + 1) pixels \n
-        tile_size: (Sequence[int]) defines the size of the sprites. Default: 16 x 16.
+    If vision or location is None, render the entire world.map.
+
+    Args:
+        location: defines the location to centre the visualization on. Defaults to None.
+        vision: defines the size of the visualization of (2v + 1, 2v + 1) pixels. Defaults to None.
+        tile_size: defines the size of the sprites. Default: 16 x 16.
 
     Returns:
         A list of np.ndarrays of C x H x W, determined either by the world size or the vision size.
     """
-    world = env.world
 
     # get wall sprite
-    wall_sprite = env.get_entities_of_kind("Wall")[0].sprite
+    wall_sprite = world.get_entities_of_kind("Wall")[0].sprite
 
     # If no vision or location is provided, show the whole map (do not centre on the location)
     if vision is None or location is None:
-        location = (world.shape[0] // 2, world.shape[1] // 2)
+        location = (world.map.shape[0] // 2, world.map.shape[1] // 2)
         # Use the largest location dimension to ensure that the entire map is visible in the event of a non-square map
         vision_i = location[0]
         vision_j = location[1]
@@ -59,7 +59,7 @@ def visual_field_sprite(
     # Layer handling...
     # Separate images will be generated per layer. These will be returned as a list and can then be plotted as a list.
     layers = []
-    for z in range(world.shape[2]):
+    for z in range(world.map.shape[2]):
 
         bounds = (
             location[0] - vision_i,
@@ -86,17 +86,17 @@ def visual_field_sprite(
 
         for i in range(bounds[0], bounds[1] + 1):
             for j in range(bounds[2], bounds[3] + 1):
-                if i < 0 or j < 0 or i >= world.shape[0] or j >= world.shape[1]:
+                if i < 0 or j < 0 or i >= world.map.shape[0] or j >= world.map.shape[1]:
                     # Tile is out of bounds, use wall_app
                     tile_image = (
-                        Image.open(os.path.expanduser(wall_sprite))
+                        img.open(os.path.expanduser(wall_sprite))
                         .resize(tile_size)
                         .convert("RGBA")
                     )
                 else:
-                    tile_appearance = world[i, j, z].sprite
+                    tile_appearance = world.map[i, j, z].sprite
                     tile_image = (
-                        Image.open(os.path.expanduser(tile_appearance))
+                        img.open(os.path.expanduser(tile_appearance))
                         .resize(tile_size)
                         .convert("RGBA")
                     )
@@ -136,7 +136,12 @@ def visual_field_sprite(
 
 
 def plot(image: np.ndarray | list[np.ndarray]) -> None:
-    """Plot helper function that takes an image or list of layers."""
+    r"""Plot helper function that takes an image or list of layers and plots it in
+    Matplotlib.
+
+    Args:
+        image: A numpy array or list of numpy arrays with the image layer(s).
+    """
     if isinstance(image, np.ndarray):
         plt.imshow(image)
         plt.show()
@@ -146,44 +151,51 @@ def plot(image: np.ndarray | list[np.ndarray]) -> None:
         plt.show()
 
 
-def image_from_array(image: np.ndarray | list[np.ndarray]) -> Image:
-    """Create a PIL image from an single-layer image or list of layers."""
+def image_from_array(image: np.ndarray | list[np.ndarray]) -> img.Image:
+    r"""Create a PIL image from an single-layer image or list of layers.
+
+    Args:
+        image: A numpy array or list of numpy arrays with the image layer(s).
+
+    Returns:
+        Image: A PIL image version of the image.
+    """
     if isinstance(image, np.ndarray):
-        output = Image.fromarray(image, mode="RGBA")
+        output = img.fromarray(image, mode="RGBA")
     else:
-        output = Image.fromarray(image[0], mode="RGBA")
+        output = img.fromarray(image[0], mode="RGBA")
         for layer in image[1:]:
-            next_layer = Image.fromarray(layer, mode="RGBA")
+            next_layer = img.fromarray(layer, mode="RGBA")
             output.paste(next_layer, (0, 0), mask=next_layer)
     return output
 
 
-def fig2img(fig) -> Image:
-    """Convert a Matplotlib figure to a PIL Image.
+def image_from_figure(fig) -> img.Image:
+    r"""Convert a Matplotlib figure to a PIL Image.
 
-    NOTE: DO NOT use this with plt.show(), as it will not work and will return a blank image.
+    .. note:: DO NOT use this with plt.show(), as it will not work and will return a blank image.
 
     Parameters:
         fig: If in fig, axis format, then fig. If in plt format, then plt.
 
     Returns:
-        img: An image file in PIL format."""
+        img: An image file in PIL format.
+    """
     import io
 
     buf = io.BytesIO()
     fig.savefig(buf)
     buf.seek(0)
-    img = Image.open(buf)
-    return img
+    image = img.open(buf)
+    return image
 
 
-def animate(
+def animate_gif(
     frames: Sequence[PngImageFile],
-    filename: str | os.PathLike,
+    filename: str,
     folder: str | os.PathLike,
 ) -> None:
-    """
-    Take an array of frames and assemble them into a GIF with the given path.
+    """Take an array of frames and assemble them into a GIF with the given path.
 
     Parameters:
         frames: the array of frames \n
@@ -203,6 +215,55 @@ def animate(
         duration=100,
         loop=0,
     )
+
+
+class ImageRenderer:
+    """Container for building images.
+
+    Attributes:
+        experiment_name (str): The name of the experiment.
+        record_period (int): How often to create an animation.
+        num_turns (int): The number of turns per game.
+        frames (list[PngImageFile]): The frames to animate.
+    """
+
+    def __init__(self, experiment_name: str, record_period: int, num_turns: int):
+        """Initialize an ImageRenderer.
+
+        Args:
+            experiment_name (str): The name of the experiment.
+            record_period (int): How often to create an animation.
+            num_turns (int): The number of turns per game.
+        """
+        self.experiment_name = experiment_name
+        self.record_period = record_period
+        self.num_turns = num_turns
+        self.frames = []
+
+    def clear(self):
+        """Zero out the frames."""
+        del self.frames[:]
+
+    def add_image(self, world: Gridworld) -> None:
+        """Add an image to the frames.
+
+        Args:
+            env (Gridworld): The environment.
+            epoch (int): The epoch.
+        """
+        full_sprite = render_sprite(world)
+        self.frames.append(image_from_array(full_sprite))
+
+    def save_gif(self, epoch: int, folder: os.PathLike) -> None:
+        """Save a gif to disk.
+
+        Args:
+            epoch (int): The epoch.
+            folder (os.PathLike): The destination folder.
+        """
+        animate_gif(self.frames, f"{self.experiment_name}_epoch{epoch}", folder)
+        # Clear frames
+        self.clear()
 
 
 # --------------------------- #

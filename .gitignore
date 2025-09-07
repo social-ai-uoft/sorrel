@@ -1,3 +1,6 @@
+.secrets
+.secret
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -137,10 +140,12 @@ dmypy.json
 
 # Output files
 output/
+outputs/
 logs/
-*.txt
-examples/*/data/*
-examples/*/checkpoints/*
+data/
+sorrel/examples/*/data/
+sorrel/examples/*/runs/
+sorrel/examples/*/checkpoints/
 pyvenv.cfg
 /bin
 /share

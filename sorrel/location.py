@@ -2,8 +2,7 @@ from __future__ import annotations
 
 
 class Location(tuple):
-    """
-    A custom subclass of tuple that represents a location in the environment.
+    """A custom subclass of tuple that represents a location in the environment.
 
     This class provides additional functionality for calculations, such as addition and scalar multiplication.
     Since it is a subclass of tuple, Location objects are immutable.
@@ -57,7 +56,8 @@ class Location(tuple):
             other (tuple | Vector): A set of coordinates (can be a Location object) or a vector.
 
         Return:
-            Location: The resulting location."""
+            Location: The resulting location.
+        """
 
         # Add a tuple/Location
         if isinstance(other, tuple):
@@ -78,7 +78,7 @@ class Location(tuple):
                 + " to a Location."
             )
 
-    def __mul__(self, other: int) -> Location:
+    def __mul__(self, other) -> Location:
         """Multiply a location by an integer amount (scalar multiplication).
 
         Args:
@@ -95,7 +95,7 @@ class Location(tuple):
         else:
             raise NotImplementedError
 
-    def __eq__(self, other: tuple | Vector) -> bool:
+    def __eq__(self, other) -> bool:
         """Compare self with another coordinate or a vector.
 
         Args:
@@ -135,8 +135,7 @@ class Location(tuple):
 
 
 class Vector:
-    """
-    A class that represents vectors. Handy for calculations involving beams and more.
+    """A class that represents vectors. Handy for calculations involving beams and more.
 
     Attributes:
         forward: The number of steps forward.
@@ -163,8 +162,7 @@ class Vector:
         layer: int = 0,
         direction: int = 0,
     ):  # Default direction: 0 degrees / UP / North
-        """
-        Initialize a vector object.
+        """Initialize a vector object.
 
         Args:
             forward: (int) The number of steps forward.
@@ -205,7 +203,10 @@ class Vector:
             raise NotImplementedError
 
     def __add__(self, other) -> Vector:
-        """Add two vectors together. The vectors must be with respect to the same direction."""
+        """Add two vectors together.
+
+        The vectors must be with respect to the same direction.
+        """
         if isinstance(other, Vector):
             # Rotate the vector to match the current direction.
             other.rotate(self.direction)
@@ -250,8 +251,8 @@ class Vector:
         self.direction = new_direction
 
     def compute(self) -> Location:
-        """Given a direction being faced and a number of paces
-        forward / right / backward / left, compute the location."""
+        """Given a direction being faced and a number of paces forward / right /
+        backward / left, compute the location."""
 
         match (self.direction):
             case 0:  # UP
@@ -281,6 +282,10 @@ class Vector:
                     Location(-1, 0),
                     Location(0, 1),
                     Location(1, 0),
+                )
+            case _:
+                raise ValueError(
+                    f"Invalid vector direction: expected int between 0 and 3 (inclusive), got {self.direction}."
                 )
 
         return (
