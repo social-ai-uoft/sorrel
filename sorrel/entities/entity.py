@@ -41,7 +41,7 @@ class Entity[W]:
         return f"{self.__class__.__name__}(value={self.value})"
 
     @property
-    def location(self) -> tuple[int, ...]:
+    def location(self) -> tuple:
         """Returns the location of the object.
 
         If location is none (i.e. not set after the entity is first initialized), raises
@@ -52,7 +52,7 @@ class Entity[W]:
         return self._location
 
     @location.setter
-    def location(self, value: tuple[int, ...]):
+    def location(self, value: tuple):
         """Sets the location of the object."""
         self._location = value
 

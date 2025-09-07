@@ -5,10 +5,10 @@ import numpy as np
 
 from sorrel.observation.visual_field import visual_field, visual_field_ascii
 from sorrel.utils.helpers import one_hot_encode
-from sorrel.worlds import Gridworld
+from sorrel.worlds import Gridworld, NodeWorld
 
 
-class ObservationSpec[T: (np.ndarray, str)]():
+class ObservationSpec[T: (np.ndarray, str), W]():
     r"""An abstract class of an object that contains the observation specifications for
     Sorrel agents.
 
@@ -69,7 +69,7 @@ class ObservationSpec[T: (np.ndarray, str)]():
     @abstractmethod
     def observe(
         self,
-        world: Gridworld,
+        world: W,
         location: tuple | None = None,
     ) -> np.ndarray:
         """Basic environment observation function.
@@ -106,7 +106,7 @@ class ObservationSpec[T: (np.ndarray, str)]():
         self.input_size = input_size
 
 
-class OneHotObservationSpec(ObservationSpec[np.ndarray]):
+class OneHotObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
     """A subclass of :py:class:`ObservationSpec` for Sorrel agents whose observations
     take the form of one-hot encodings.
 
@@ -193,7 +193,7 @@ class OneHotObservationSpec(ObservationSpec[np.ndarray]):
         )
 
 
-class AsciiObservationSpec(ObservationSpec[str]):
+class AsciiObservationSpec(ObservationSpec[str, Gridworld]):
     """A subclass of :py:class:`ObservationSpec` for Sorrel agents whose observations
     take the form of ascii representations.
 
@@ -264,14 +264,19 @@ class AsciiObservationSpec(ObservationSpec[str]):
                             "Ran out of ascii characters to assign to entities."
                         )
         return entity_map
-    
+
     def generate_map_legend(self) -> None:
         """Generate a string legend for an ASCII observation using the entity map.
-        
+
         Returns:
-            str: The legend for an ASCII observation."""
-        self.map_legend = "Legend:\n=======\n" + "\n".join([f"{value}: {key}" for key, value in self.entity_map.items()]) + "\n"
-        
+            str: The legend for an ASCII observation.
+        """
+        self.map_legend = (
+            "Legend:\n=======\n"
+            + "\n".join([f"{value}: {key}" for key, value in self.entity_map.items()])
+            + "\n"
+        )
+
     def observe(
         self,
         world: Gridworld,
@@ -302,16 +307,11 @@ class AsciiObservationSpec(ObservationSpec[str]):
             vision=self.vision_radius if not self.full_view else None,
             location=location,
         )
-    
-    def observe_string(
-        self,
-        world: Gridworld,
-        location: tuple | None = None
-    ) -> str:
-        """Observes the environment using :py:func:`.visual_field_ascii()`,
-        and then formats it as a single string including additional context
-        such as the location of the agent on the map.
-        """
+
+    def observe_string(self, world: Gridworld, location: tuple | None = None) -> str:
+        """Observes the environment using :py:func:`.visual_field_ascii()`, and then
+        formats it as a single string including additional context such as the location
+        of the agent on the map."""
         state = self.observe(world, location)
         loc_string = "Location: "
         # The location is the actual location on the grid
@@ -319,9 +319,48 @@ class AsciiObservationSpec(ObservationSpec[str]):
             loc_string += str(location) + "\n"
         # If not full view, the agent is centred on the observation.
         else:
-            loc_string += f"({state.shape[0] // 2 + 1}, {state.shape[1] // 2 + 1})" + "\n"
+            loc_string += (
+                f"({state.shape[0] // 2 + 1}, {state.shape[1] // 2 + 1})" + "\n"
+            )
         replacements = {"[": "", "]": "", " ": "", "'": ""}
-        state_string = "State:\n" + np.array_str(state[:, :, -1]).translate(str.maketrans(replacements))
-        return loc_string + state_string + "\n" +  self.map_legend
-        
+        state_string = "State:\n" + np.array_str(state[:, :, -1]).translate(
+            str.maketrans(replacements)
+        )
+        return loc_string + state_string + "\n" + self.map_legend
 
+
+class NodeObservationSpec(ObservationSpec[str, NodeWorld]):
+    """A subclass of :py:class:`ObservationSpec` for Sorrel agents who are observing a
+    node world."""
+
+    def __init__(self, entity_list: list[str]):
+        # Full view and env_dims are not used, so dummy values are passed in
+        super().__init__(entity_list, full_view=True, env_dims=(1, 1))
+
+    def generate_map(self, entity_list: list[str]) -> dict[str, str]:
+        # Since entities are referred to by their string representation,
+        # just create a dict that pairs each entity with itself.
+        return {entity: entity for entity in entity_list}
+
+    def observe(self, world: NodeWorld, location=None) -> np.ndarray:
+        """Override that returns a dummy observation.
+
+        TODO: Handle the string or numpy array in a cleaner way?
+        """
+        return np.array([])
+
+    def observe_string(self, world: NodeWorld, location: str) -> str:
+        verb_conj = ["Nothing is", " is", " are"]
+        loc_string = "Location: " + location + "\n"
+        curr_node = world[location]
+        entity_string = (", ".join([entity.kind for entity in curr_node.entities])) + (
+            f"{verb_conj[len(curr_node.entities)]} located here.\n"
+        )
+        vis_string = ""
+        for visible_node in curr_node.visible:
+            for entity in visible_node.entities:
+                vis_string += f"{entity} can be seen at {visible_node.name}.\n"
+        adj_string = (", ".join([node.name for node in curr_node.adjacent])) + (
+            f"{verb_conj[len(curr_node.adjacent)]} adjacent to this location and can be moved to."
+        )
+        return loc_string + entity_string + vis_string + adj_string

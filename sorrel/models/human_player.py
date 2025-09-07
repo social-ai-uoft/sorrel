@@ -10,7 +10,7 @@ from sorrel.utils.visualization import plot, render_sprite
 from sorrel.worlds import Gridworld
 
 
-class HumanObservation(ObservationSpec[str]):
+class HumanObservation(ObservationSpec[str, Gridworld]):
 
     def observe(self, world: Gridworld, location: tuple | None = None) -> np.ndarray:
 

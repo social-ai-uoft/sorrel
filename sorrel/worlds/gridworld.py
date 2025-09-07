@@ -4,9 +4,10 @@ import numpy as np
 
 from sorrel.entities.entity import Entity
 from sorrel.location import Location
+from sorrel.worlds.base_world import World
 
 
-class Gridworld:
+class Gridworld(World):
     """Basic gridworld environment class with functions for getting and manipulating the
     locations of entities.
 
