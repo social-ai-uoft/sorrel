@@ -29,8 +29,8 @@ from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.worlds import Gridworld
 
-from .entities import Empty, StagResource, HareResource
-from .world import StagHuntWorld
+from sorrel.examples.staghunt.entities import Empty, StagResource, HareResource
+from sorrel.examples.staghunt.world import StagHuntWorld
 
 
 class StagHuntAgent(Agent[StagHuntWorld]):

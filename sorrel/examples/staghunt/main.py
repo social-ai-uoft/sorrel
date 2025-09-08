@@ -14,9 +14,9 @@ density, world dimensions and vision radius can be adjusted in the
 # world.  This ensures that default cells behave as expected during
 # regeneration and spawning.
 
-from .entities import Empty
-from .env import StagHuntEnv
-from .world import StagHuntWorld
+from sorrel.examples.staghunt.entities import Empty
+from sorrel.examples.staghunt.env import StagHuntEnv
+from sorrel.examples.staghunt.world import StagHuntWorld
 
 
 def run_stag_hunt() -> None:

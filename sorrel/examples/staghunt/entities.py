@@ -20,7 +20,7 @@ import numpy as np
 from sorrel.entities import Entity
 
 if TYPE_CHECKING:
-    from .world import StagHuntWorld
+    from sorrel.examples.staghunt.world import StagHuntWorld
 
 
 class Wall(Entity["StagHuntWorld"]):

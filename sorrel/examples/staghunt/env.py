@@ -25,9 +25,9 @@ from sorrel.environment import Environment
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.observation.observation_spec import OneHotObservationSpec
 
-from .agents import StagHuntAgent
-from .entities import Empty, Wall, Spawn, StagResource, HareResource
-from .world import StagHuntWorld
+from sorrel.examples.staghunt.agents import StagHuntAgent
+from sorrel.examples.staghunt.entities import Empty, Wall, Spawn, StagResource, HareResource
+from sorrel.examples.staghunt.world import StagHuntWorld
 
 
 class StagHuntEnv(Environment[StagHuntWorld]):
