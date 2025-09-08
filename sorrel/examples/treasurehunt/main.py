@@ -8,7 +8,7 @@ if __name__ == "__main__":
     # object configurations
     config = {
         "experiment": {
-            "epochs": 500,
+            "epochs": 1,
             "max_turns": 100,
             "record_period": 50,
         },

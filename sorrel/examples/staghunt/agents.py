@@ -60,7 +60,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     def __init__(self, observation_spec: ObservationSpec, action_spec: ActionSpec, model: PyTorchIQN):
         super().__init__(observation_spec, action_spec, model)
         # assign a default sprite; can be overridden externally
-        self.sprite = Path(__file__).parent / "./assets/agent.png"
+        self.sprite = Path(__file__).parent / "./assets/hero.png"
 
         # orientation encoded as 0: north, 1: east, 2: south, 3: west
         self.orientation: int = 0
