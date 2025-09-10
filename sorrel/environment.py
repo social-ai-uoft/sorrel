@@ -39,11 +39,11 @@ class Environment[W: Gridworld]:
             # note that if config is a list, we assume it is a dotlist
             self.config = OmegaConf.from_dotlist(config)
 
-        self.setup_agents()
-
         self.world = world
         self.turn = 0
         self.world.create_world()
+
+        self.setup_agents()
         self.populate_environment()
 
     @abstractmethod
