@@ -213,6 +213,7 @@ def animate_gif(
         append_images=frames[1:],
         save_all=True,
         duration=100,
+        disposal=2,
         loop=0,
     )
 

@@ -103,7 +103,7 @@ class TagAgent(Agent[TagWorld]):
             tagged = world.observe(
                 (self.location[0], self.location[1] + 1, self.location[2])
             )
-        if self.is_it and tagged is not None:
+        if self.is_it and tagged is not None and isinstance(tagged, TagAgent):
             self.is_it = False
             tagged.is_it = True
 

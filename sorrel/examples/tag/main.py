@@ -10,28 +10,28 @@ if __name__ == "__main__":
     config = {
         "experiment": {
             "epochs": 500,
-            "max_turns": 100,
+            "max_turns": 10,
             "record_period": 50,
         },
         "model": {
             "epsilon_decay": 0.0001,
         },
         "world": {
-            "height": 5,
-            "width": 5,
+            "height": 11,
+            "width": 11,
         },
     }
 
     # construct the world
-    env = TagWorld(config=config, default_entity=EmptyEntity())
+    world = TagWorld(config=config, default_entity=EmptyEntity())
     # construct the environment
-    experiment = TagEnv(env, config)
+    experiment = TagEnv(world, config)
 
     experiment.run_experiment(
-        animate=False,
-        logger=TensorboardLogger(
-            max_epochs=config["experiment"]["epochs"], log_dir="./data/logs/"
-        ),
+        # animate=False,
+        # logger=TensorboardLogger(
+        #     max_epochs=config["experiment"]["epochs"], log_dir="./data/logs/"
+        # ),
     )
 
 # end main
