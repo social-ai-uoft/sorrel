@@ -1,10 +1,14 @@
 # smart_icon_downscale_rgba.py
+import os
+import sys
+
 from PIL import Image, ImageFilter, ImageOps
-import os, sys
+
 
 def _resampling():
     # Pillow >=9.1 uses Image.Resampling
-    return getattr(Image, "Resampling", Image).LANCZOS
+    return getattr(Image, "Resampling", Image).Resampling.LANCZOS
+
 
 def _autocontrast_rgba(img_rgba, cutoff=1):
     r, g, b, a = img_rgba.split()
@@ -14,8 +18,10 @@ def _autocontrast_rgba(img_rgba, cutoff=1):
     out = Image.merge("RGBA", (r2, g2, b2, a))
     return out
 
+
 def downscale_pixel_art(img, size):
-    return img.resize(size, Image.NEAREST)
+    return img.resize(size, Image.Resampling.NEAREST)
+
 
 def downscale_photo(img, size):
     img = ImageOps.exif_transpose(img).convert("RGBA")
@@ -33,6 +39,7 @@ def downscale_photo(img, size):
     img = img.filter(ImageFilter.UnsharpMask(radius=0.6, percent=140, threshold=2))
     img = _autocontrast_rgba(img, cutoff=1)  # <-- safe for RGBA now
     return img
+
 
 def convert(input_path, output_path=None, size=(16, 16), mode="auto"):
     img = Image.open(input_path).convert("RGBA")
@@ -54,9 +61,12 @@ def convert(input_path, output_path=None, size=(16, 16), mode="auto"):
     out.save(output_path)
     print(f"Saved: {output_path}")
 
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python smart_icon_downscale_rgba.py <input> [output] [mode=auto|pixel|photo]")
+        print(
+            "Usage: python smart_icon_downscale_rgba.py <input> [output] [mode=auto|pixel|photo]"
+        )
         sys.exit(1)
     inp = sys.argv[1]
     out = sys.argv[2] if len(sys.argv) >= 3 else None

@@ -8,7 +8,13 @@ documentation within each file and the accompanying design specification
 for further details.
 """
 
-from sorrel.examples.staghunt.world import StagHuntWorld  # noqa: F401
-from sorrel.examples.staghunt.env import StagHuntEnv  # noqa: F401
 from sorrel.examples.staghunt.agents import StagHuntAgent  # noqa: F401
-from sorrel.examples.staghunt.entities import Wall, Empty, Spawn, StagResource, HareResource  # noqa: F401
+from sorrel.examples.staghunt.entities import (  # noqa: F401
+    Empty,
+    HareResource,
+    Spawn,
+    StagResource,
+    Wall,
+)
+from sorrel.examples.staghunt.env import StagHuntEnv  # noqa: F401
+from sorrel.examples.staghunt.world import StagHuntWorld  # noqa: F401

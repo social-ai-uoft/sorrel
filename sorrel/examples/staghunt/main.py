@@ -14,9 +14,13 @@ density, world dimensions and vision radius can be adjusted in the
 # world.  This ensures that default cells behave as expected during
 # regeneration and spawning.
 
+from datetime import datetime
+from pathlib import Path
+
 from sorrel.examples.staghunt.entities import Empty
 from sorrel.examples.staghunt.env import StagHuntEnv
 from sorrel.examples.staghunt.world import StagHuntWorld
+from sorrel.utils.logging import TensorboardLogger
 
 
 def run_stag_hunt() -> None:
@@ -25,7 +29,7 @@ def run_stag_hunt() -> None:
     config = {
         "experiment": {
             # number of episodes/epochs to run
-            "epochs": 10,
+            "epochs": 100,
             # maximum number of turns per episode
             "max_turns": 200,
             # recording period for animation (unused here)
@@ -77,7 +81,13 @@ def run_stag_hunt() -> None:
     # construct the environment
     experiment = StagHuntEnv(world, config)
     # run the experiment
-    experiment.run_experiment()
+    experiment.run_experiment(
+        logger=TensorboardLogger(
+            max_epochs=config["experiment"]["epochs"],
+            log_dir=Path(__file__).parent
+            / f'runs/{datetime.now().strftime("%Y%m%d-%H%M%S")}',
+        )
+    )
 
 
 if __name__ == "__main__":

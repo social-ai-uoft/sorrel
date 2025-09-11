@@ -15,19 +15,24 @@ details on the expected configuration keys.
 from __future__ import annotations
 
 import random
-from typing import Any, List, Tuple
+from typing import Any
 
 import numpy as np
 import torch
 
 from sorrel.action.action_spec import ActionSpec
 from sorrel.environment import Environment
+from sorrel.examples.staghunt.agents import StagHuntAgent
+from sorrel.examples.staghunt.entities import (
+    Empty,
+    HareResource,
+    Spawn,
+    StagResource,
+    Wall,
+)
+from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.observation.observation_spec import OneHotObservationSpec
-
-from sorrel.examples.staghunt.agents import StagHuntAgent
-from sorrel.examples.staghunt.entities import Empty, Wall, Spawn, StagResource, HareResource
-from sorrel.examples.staghunt.world import StagHuntWorld
 
 
 class StagHuntEnv(Environment[StagHuntWorld]):
@@ -43,9 +48,9 @@ class StagHuntEnv(Environment[StagHuntWorld]):
     def setup_agents(self) -> None:
         """Create and configure the agents for the stag hunt experiment.
 
-        The number of agents and their observation/action specifications are
-        derived from the configuration.  Each agent is assigned an IQN
-        model with configurable hyperparameters.
+        The number of agents and their observation/action specifications are derived
+        from the configuration.  Each agent is assigned an IQN model with configurable
+        hyperparameters.
         """
         cfg = self.config
         # support both dictionary and OmegaConf DictConfig
@@ -57,9 +62,15 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             model_cfg = cfg.model
         else:
             model_cfg = cfg.get("model", {})
-        n_agents = int(world_cfg.get("num_agents", 2)) #TODO: ideally the default should be 8
+        n_agents = int(
+            world_cfg.get("num_agents", 2)
+        )  # TODO: ideally the default should be 8
+        if hasattr(world_cfg, "interaction_reward"):
+            interaction_reward = world_cfg.interaction_reward
+        else:
+            interaction_reward = 1.0
 
-        agents: List[StagHuntAgent] = []
+        agents = []
         # list all entity kinds present in the environment for one‑hot encoding
         entity_list = [
             "Empty",
@@ -87,7 +98,9 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 np.array(observation_spec.input_size).reshape(1, -1).tolist()
             )
             base_size = int(np.prod(observation_spec.input_size))
-            full_input_dim = base_size + 3 #TODO: we can make the additional size a config param
+            full_input_dim = (
+                base_size + 3
+            )  # TODO: we can make the additional size a config param
 
             # action spec: five discrete actions
             action_spec = ActionSpec(
@@ -112,10 +125,12 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 GAMMA=float(model_cfg.get("GAMMA", 0.99)),
                 n_quantiles=int(model_cfg.get("n_quantiles", 12)),
             )
+
             agent = StagHuntAgent(
                 observation_spec=observation_spec,
                 action_spec=action_spec,
                 model=model,
+                interaction_reward=interaction_reward,
             )
             agents.append(agent)
         self.agents = agents
@@ -132,39 +147,35 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         world = self.world
         world.reset_spawn_points()
 
-        # prepare a list for valid spawn locations on the top layer
-        spawn_locations: List[Tuple[int, int, int]] = []
-
-        for index in np.ndindex(world.map.shape):
-            y, x, layer = index
-            if layer == 0:
-                # bottom layer: walls at border, spawn in interior
-                if y == 0 or y == world.height - 1 or x == 0 or x == world.width - 1:
-                    world.add(index, Wall())
-                else:
+        for y, x, layer in np.ndindex(world.map.shape):
+            index = (y, x, layer)
+            # edges: walls at border
+            if y == 0 or y == world.height - 1 or x == 0 or x == world.width - 1:
+                world.add(index, Wall())
+            else:
+                if layer == 0:
                     # interior cells are spawnable and traversable
                     spawn_cell = Spawn()
                     world.add(index, spawn_cell)
                     world.spawn_points.append(index)
-            elif layer == 1:
-                # top layer: optionally place initial resources
-                if (y, x, 0) not in world.spawn_points:
-                    world.add(index, Empty())
-                else:
-                    # spawn points correspond to empty starting cell on top
+                elif layer == 1:
                     world.add(index, Empty())
 
         # randomly populate resources on the top layer according to density
         # TODO: should be compatible with a ASCII map defining initial resources
-        for (y, x, layer) in world.spawn_points:
+        for y, x, layer in world.spawn_points:
             # top layer coordinates
             top = (y, x, 1)
             if np.random.random() < world.resource_density:
                 # choose resource type uniformly at random
                 if np.random.random() < 0.5:
-                    world.add(top, StagResource(world.taste_reward, world.destroyable_health))
+                    world.add(
+                        top, StagResource(world.taste_reward, world.destroyable_health)
+                    )
                 else:
-                    world.add(top, HareResource(world.taste_reward, world.destroyable_health))
+                    world.add(
+                        top, HareResource(world.taste_reward, world.destroyable_health)
+                    )
             else:
                 world.add(top, Empty())
 
@@ -174,71 +185,3 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             # top layer coordinate for agent
             top = (loc[0], loc[1], 1)
             world.add(top, agent)
-
-    # ------------------------------------------------------------------ #
-    # Interaction logic                                                   #
-    # ------------------------------------------------------------------ #
-    def handle_interaction(self, agent: StagHuntAgent, other: StagHuntAgent) -> float:
-        """Resolve an interaction between two ready agents.
-
-        Determines each agent's strategy by taking the majority vote over
-        their inventories.  Computes the row and column payoffs using
-        ``world.payoff_matrix`` (with the column player's payoff being the
-        transpose).  Adds a constant bonus for initiating an interaction
-        (``interaction_reward`` hyperparameter if present).  Resets both
-        agents' inventories, respawns them at random spawn points and
-        returns the reward to assign to the initiating agent.
-
-        Parameters
-        ----------
-        agent : StagHuntAgent
-            The agent initiating the interaction (the ``row" player).
-        other : StagHuntAgent
-            The opponent agent (the ``column" player).
-
-        Returns
-        -------
-        float
-            The reward received by the initiating agent.
-        """
-        world = self.world
-        # determine strategies via majority resource counts; tie breaks in favour of stag
-        def majority_resource(inv: dict[str, int]) -> int:
-            stag_count = inv.get("stag", 0)
-            hare_count = inv.get("hare", 0)
-            return 0 if stag_count >= hare_count else 1
-        row_strategy = majority_resource(agent.inventory)
-        col_strategy = majority_resource(other.inventory)
-        # compute payoffs
-        row_payoff = world.payoff_matrix[row_strategy][col_strategy]
-        col_payoff = world.payoff_matrix[col_strategy][row_strategy]
-        # interaction bonus from config; default to 1.0
-        # extract interaction bonus from configuration; support both dict and OmegaConf
-        cfg = self.config
-        if hasattr(cfg, "world"):
-            bonus = float(getattr(cfg.world, "interaction_reward", 1.0))
-        else:
-            bonus = float(cfg.get("world", {}).get("interaction_reward", 1.0))
-        # clear inventories and ready flags
-        agent.inventory = {"stag": 0, "hare": 0}
-        agent.ready = False
-        other.inventory = {"stag": 0, "hare": 0}
-        other.ready = False
-        # remove agents from their current positions on the top layer
-        a_loc = agent.location
-        o_loc = other.location
-        world.remove(a_loc)
-        world.remove(o_loc)
-        # respawn at random spawn points
-        spawn_points = world.spawn_points
-        # choose two distinct spawn points at random
-        new_a_loc, new_o_loc = random.sample(spawn_points, 2)
-        world.add((new_a_loc[0], new_a_loc[1], 1), agent)
-        world.add((new_o_loc[0], new_o_loc[1], 1), other)
-        # reset orientations
-        agent.orientation = 0
-        other.orientation = 0
-        # accumulate reward for both agents in world.total_reward
-        world.total_reward += row_payoff + col_payoff + 2 * bonus
-        # return the initiating agent's reward
-        return row_payoff + bonus

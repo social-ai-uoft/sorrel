@@ -1,7 +1,7 @@
-"""The world definition for the Stag Hunt game.
+"""The world definition for the Stag Hunt game.
 
 This module defines a custom :class:`Gridworld` subclass for the stag hunt
-social‑dilemma environment.  The world contains two layers: a bottom
+social dilemma environment.  The world contains two layers: a bottom
 terrain layer consisting of walls, empty spaces and designated spawn
 locations, and a top layer containing all dynamic entities such as
 resources and agents.  The world is parametrised by a configuration
@@ -27,8 +27,9 @@ except ImportError:  # pragma: no cover
     DictConfig = None  # type: ignore
     OmegaConf = None  # type: ignore
 
-from sorrel.worlds import Gridworld
 from typing import Any
+
+from sorrel.worlds import Gridworld
 
 
 class StagHuntWorld(Gridworld):
@@ -73,8 +74,8 @@ class StagHuntWorld(Gridworld):
         sub‑dictionary of world parameters.
         """
         # Determine whether config uses OmegaConf semantics
-        if OmegaConf is not None and isinstance(config, DictConfig):
-            world_cfg = config.world
+        if OmegaConf is not None and isinstance(config, DictConfig):  # type: ignore[arg-type]
+            world_cfg = config.world  # type: ignore[attr-defined]
             height = int(world_cfg.height)
             width = int(world_cfg.width)
         else:
@@ -88,11 +89,13 @@ class StagHuntWorld(Gridworld):
 
         # Copy relevant hyperparameters; support both dict and OmegaConf styles
         def get_world_param(key: str, default: Any) -> Any:
-            if OmegaConf is not None and isinstance(config, DictConfig):  # OmegaConf style
+            if OmegaConf is not None and isinstance(config, DictConfig):  # type: ignore[arg-type]
                 return getattr(world_cfg, key, default)
             return world_cfg.get(key, default)
 
-        self.num_agents: int = int(get_world_param("num_agents", 2)) #TODO: ideally the default should be 8
+        self.num_agents: int = int(
+            get_world_param("num_agents", 2)
+        )  # TODO: ideally the default should be 8
         self.resource_density: float = float(get_world_param("resource_density", 0.05))
         self.taste_reward: float = float(get_world_param("taste_reward", 0.1))
         self.destroyable_health: int = int(get_world_param("destroyable_health", 3))
@@ -106,5 +109,8 @@ class StagHuntWorld(Gridworld):
         self.spawn_points: list[tuple[int, int, int]] = []
 
     def reset_spawn_points(self) -> None:
-        """Clear the list of spawn points.  Called during environment reset."""
+        """Clear the list of spawn points.
+
+        Called during environment reset.
+        """
         self.spawn_points = []

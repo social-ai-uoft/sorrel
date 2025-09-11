@@ -18,19 +18,19 @@ the beam.
 
 from __future__ import annotations
 
+import random
 from pathlib import Path
 from typing import Dict, Tuple
 
 import numpy as np
 
-from sorrel.agents import Agent
 from sorrel.action.action_spec import ActionSpec
-from sorrel.observation.observation_spec import ObservationSpec
-from sorrel.models.pytorch import PyTorchIQN
-from sorrel.worlds import Gridworld
-
-from sorrel.examples.staghunt.entities import Empty, StagResource, HareResource
+from sorrel.agents import Agent
+from sorrel.examples.staghunt.entities import Empty, HareResource, StagResource
 from sorrel.examples.staghunt.world import StagHuntWorld
+from sorrel.models.pytorch import PyTorchIQN
+from sorrel.observation.observation_spec import ObservationSpec
+from sorrel.worlds import Gridworld
 
 
 class StagHuntAgent(Agent[StagHuntWorld]):
@@ -52,12 +52,18 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     # Mapping from orientation to vector offset (dy, dx)
     ORIENTATION_VECTORS: Dict[int, Tuple[int, int]] = {
         0: (-1, 0),  # north
-        1: (0, 1),   # east
-        2: (1, 0),   # south
+        1: (0, 1),  # east
+        2: (1, 0),  # south
         3: (0, -1),  # west
     }
 
-    def __init__(self, observation_spec: ObservationSpec, action_spec: ActionSpec, model: PyTorchIQN):
+    def __init__(
+        self,
+        observation_spec: ObservationSpec,
+        action_spec: ActionSpec,
+        model: PyTorchIQN,
+        interaction_reward: float = 1.0,
+    ):
         super().__init__(observation_spec, action_spec, model)
         # assign a default sprite; can be overridden externally
         self.sprite = Path(__file__).parent / "./assets/hero.png"
@@ -68,6 +74,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.inventory: Dict[str, int] = {"stag": 0, "hare": 0}
         # whether the agent is ready to interact (has at least one resource)
         self.ready: bool = False
+        # interaction reward value
+        self.interaction_reward = interaction_reward
 
     # ------------------------------------------------------------------ #
     # Agent lifecycle methods                                             #
@@ -75,8 +83,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     def reset(self) -> None:
         """Reset the agent state at the start of an episode.
 
-        Clears the inventory, resets the orientation and notifies the model
-        that a new episode has begun.
+        Clears the inventory, resets the orientation and notifies the model that a new
+        episode has begun.
         """
         self.orientation = 0
         self.inventory = {"stag": 0, "hare": 0}
@@ -116,9 +124,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     def get_action(self, state: np.ndarray) -> int:
         """Select an action using the underlying model.
 
-        A stack of previous states is concatenated internally by the model's
-        memory.  The model returns an integer index into the action
-        specification.
+        A stack of previous states is concatenated internally by the model's memory. The
+        model returns an integer index into the action specification.
         """
         prev_states = self.model.memory.current_state()
         stacked_states = np.vstack((prev_states, state))
@@ -151,7 +158,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             if world.valid_location(new_pos):
                 # pick up reward associated with the entity on the top layer
                 target_entity = world.observe(new_pos)
-                if isinstance(target_entity, StagResource) or isinstance(target_entity, HareResource):
+                if isinstance(target_entity, StagResource) or isinstance(
+                    target_entity, HareResource
+                ):
                     # collect resource: add to inventory and mark ready
                     self.inventory[target_entity.name] += 1
                     self.ready = True
@@ -182,13 +191,13 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                         break
                     beam_cells.append(target)
                 # check if any agent is hit
-                #TODO: interaction should consider when there are more than 2 agents; we can first figure out all agens in the beam
+                # TODO: interaction should consider when there are more than 2 agents; we can first figure out all agens in the beam
                 # and then randomly pick one to interact with
                 for cell in beam_cells:
                     entity = world.observe(cell)
                     if isinstance(entity, StagHuntAgent) and entity.ready:
                         # delegate payoff computation to the environment
-                        reward += world.environment.handle_interaction(self, entity)
+                        reward += self.handle_interaction(entity, world)
                         break
         # return accumulated reward from this action
         return reward
@@ -199,3 +208,71 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         Agents act until the world signals termination via ``world.is_done``.
         """
         return world.is_done
+
+    # ------------------------------------------------------------------ #
+    # Interaction logic                                                   #
+    # ------------------------------------------------------------------ #
+    def handle_interaction(
+        self: StagHuntAgent, other: StagHuntAgent, world: StagHuntWorld
+    ) -> float:
+        """Resolve an interaction between two ready agents.
+
+        Determines each agent's strategy by taking the majority vote over
+        their inventories.  Computes the row and column payoffs using
+        ``world.payoff_matrix`` (with the column player's payoff being the
+        transpose).  Adds a constant bonus for initiating an interaction
+        (``interaction_reward`` hyperparameter if present).  Resets both
+        agents' inventories, respawns them at random spawn points and
+        returns the reward to assign to the initiating agent.
+
+        Parameters
+        ----------
+        agent : StagHuntAgent
+            The agent initiating the interaction (the ``row" player).
+        other : StagHuntAgent
+            The opponent agent (the ``column" player).
+
+        Returns
+        -------
+        float
+            The reward received by the initiating agent.
+        """
+
+        # determine strategies via majority resource counts; tie breaks in favour of stag
+        def majority_resource(inv: dict[str, int]) -> int:
+            stag_count = inv.get("stag", 0)
+            hare_count = inv.get("hare", 0)
+            return 0 if stag_count >= hare_count else 1
+
+        row_strategy = majority_resource(self.inventory)
+        col_strategy = majority_resource(other.inventory)
+        # compute payoffs
+        row_payoff = world.payoff_matrix[row_strategy][col_strategy]
+        col_payoff = world.payoff_matrix[col_strategy][row_strategy]
+        # interaction bonus from config; default to 1.0
+        # extract interaction bonus from configuration; support both dict and OmegaConf
+        bonus = self.interaction_reward
+        # clear inventories and ready flags
+        self.inventory = {"stag": 0, "hare": 0}
+        self.ready = False
+        other.inventory = {"stag": 0, "hare": 0}
+        other.ready = False
+        # remove agents from their current positions on the top layer
+        a_loc = self.location
+        o_loc = other.location
+        world.remove(a_loc)
+        world.remove(o_loc)
+        # respawn at random spawn points
+        spawn_points = world.spawn_points
+        # choose two distinct spawn points at random
+
+        new_a_loc, new_o_loc = random.sample(spawn_points, k=2)
+        world.add((new_a_loc[0], new_a_loc[1], 1), self)
+        world.add((new_o_loc[0], new_o_loc[1], 1), other)
+        # reset orientations
+        self.orientation = 0
+        other.orientation = 0
+        # accumulate reward for both agents in world.total_reward
+        world.total_reward += row_payoff + col_payoff + 2 * bonus
+        # return the initiating agent's reward
+        return row_payoff + bonus

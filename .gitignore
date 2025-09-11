@@ -143,11 +143,9 @@ output/
 outputs/
 logs/
 data/
-sorrel/examples/cleanup/data/
-sorrel/examples/cleanup/runs/
-sorrel/examples/cleanup/checkpoints/
-sorrel/examples/treasurehunt/data/
+sorrel/examples/*/data/
+sorrel/examples/*/runs/
+sorrel/examples/*/checkpoints/
 pyvenv.cfg
 /bin
 /share
-sorrel/examples/ai_econ/data
