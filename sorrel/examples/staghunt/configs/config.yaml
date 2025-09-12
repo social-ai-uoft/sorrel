@@ -1,0 +1,34 @@
+experiment:
+  epochs: 100
+  max_turns: 200
+  record_period: 1
+model:
+  GAMMA: 0.99
+  LR: 0.00025
+  TAU: 0.001
+  agent_vision_radius: 5
+  batch_size: 64
+  epsilon: 0.5
+  epsilon_decay: 0.0001
+  layer_size: 128
+  memory_size: 512
+  model_update_freq: 4
+  n_frames: 3
+  n_quantiles: 8
+  n_step: 3
+  sync_freq: 100
+world:
+  beam_length: 3
+  beam_radius: 1
+  destroyable_health: 3
+  height: 11
+  interaction_reward: 1.0
+  num_agents: 2
+  payoff_matrix:
+  - - 4
+    - 0
+  - - 2
+    - 2
+  resource_density: 0.05
+  taste_reward: 0.1
+  width: 11

@@ -1,0 +1,44 @@
+{
+    "experiment": {
+        "epochs": 100,
+        "max_turns": 200,
+        "record_period": 1
+    },
+    "model": {
+        "agent_vision_radius": 5,
+        "epsilon_decay": 0.0001,
+        "layer_size": 128,
+        "epsilon": 0.5,
+        "n_frames": 3,
+        "n_step": 3,
+        "sync_freq": 100,
+        "model_update_freq": 4,
+        "batch_size": 64,
+        "memory_size": 512,
+        "LR": 0.00025,
+        "TAU": 0.001,
+        "GAMMA": 0.99,
+        "n_quantiles": 8
+    },
+    "world": {
+        "height": 11,
+        "width": 11,
+        "num_agents": 2,
+        "resource_density": 0.05,
+        "taste_reward": 0.1,
+        "destroyable_health": 3,
+        "beam_length": 3,
+        "beam_radius": 1,
+        "payoff_matrix": [
+            [
+                4,
+                0
+            ],
+            [
+                2,
+                2
+            ]
+        ],
+        "interaction_reward": 1.0
+    }
+}

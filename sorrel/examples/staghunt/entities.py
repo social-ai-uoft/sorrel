@@ -22,6 +22,16 @@ if TYPE_CHECKING:
     from sorrel.examples.staghunt.world import StagHuntWorld
 
 
+entity_list = [
+            "Empty",
+            "Wall",
+            "Spawn",
+            "StagResource",
+            "HareResource",
+            "StagHuntAgent",
+            "Sand"
+        ]
+
 class Wall(Entity["StagHuntWorld"]):
     """An impassable wall entity.
 
@@ -87,7 +97,7 @@ class Spawn(Entity["StagHuntWorld"]):
 
     def __init__(self) -> None:
         super().__init__()
-        self.passable = False #TODO: set to True if we want agents to be able to move over spawn points
+        self.passable = True  # Spawn points should be passable so agents can move over them
         self.value = 0
         self.sprite = Path(__file__).parent / "./assets/spawn.png"
 

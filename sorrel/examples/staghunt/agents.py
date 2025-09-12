@@ -50,11 +50,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     """
 
     # Mapping from orientation to vector offset (dy, dx)
+    # Note: In grid coordinates, y increases downward, x increases rightward
     ORIENTATION_VECTORS: Dict[int, Tuple[int, int]] = {
-        0: (-1, 0),  # north
-        1: (0, 1),  # east
-        2: (1, 0),  # south
-        3: (0, -1),  # west
+        0: (-1, 0),  # north (up)
+        1: (0, 1),   # east (right)
+        2: (1, 0),   # south (down)
+        3: (0, -1),  # west (left)
     }
 
     def __init__(
@@ -66,7 +67,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     ):
         super().__init__(observation_spec, action_spec, model)
         # assign a default sprite; can be overridden externally
-        self.sprite = Path(__file__).parent / "./assets/hero.png"
+        self._base_sprite = Path(__file__).parent / "./assets/hero.png"
 
         # orientation encoded as 0: north, 1: east, 2: south, 3: west
         self.orientation: int = 0
@@ -76,6 +77,20 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.ready: bool = False
         # interaction reward value
         self.interaction_reward = interaction_reward
+        
+        # Define directional sprites
+        # Note: Based on cleanup example, hero-back.png faces UP, hero.png faces DOWN
+        self._directional_sprites = {
+            0: Path(__file__).parent / "./assets/hero-back.png",  # north (up)
+            1: Path(__file__).parent / "./assets/hero-right.png", # east
+            2: Path(__file__).parent / "./assets/hero.png",      # south (down)
+            3: Path(__file__).parent / "./assets/hero-left.png",  # west
+        }
+
+    @property
+    def sprite(self) -> Path:
+        """Return the sprite based on the current orientation."""
+        return self._directional_sprites[self.orientation]
 
     # ------------------------------------------------------------------ #
     # Agent lifecycle methods                                             #
@@ -262,11 +277,23 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         o_loc = other.location
         world.remove(a_loc)
         world.remove(o_loc)
-        # respawn at random spawn points
-        spawn_points = world.spawn_points
-        # choose two distinct spawn points at random
-
-        new_a_loc, new_o_loc = random.sample(spawn_points, k=2)
+        # respawn at random spawn points that are not occupied
+        spawn_points = world.agent_spawn_points
+        # find unoccupied spawn points
+        unoccupied_spawns = []
+        for spawn_point in spawn_points:
+            y, x, z = spawn_point
+            # check if there's an agent at this spawn point (layer 1)
+            entity_at_spawn = world.observe((y, x, 1))
+            if entity_at_spawn.kind == "Empty":
+                unoccupied_spawns.append(spawn_point)
+        
+        # if not enough unoccupied spawns, use all spawns (fallback)
+        if len(unoccupied_spawns) < 2:
+            unoccupied_spawns = spawn_points
+        
+        # choose two distinct spawn points at random from unoccupied ones
+        new_a_loc, new_o_loc = random.sample(unoccupied_spawns, k=2)
         world.add((new_a_loc[0], new_a_loc[1], 1), self)
         world.add((new_o_loc[0], new_o_loc[1], 1), other)
         # reset orientations

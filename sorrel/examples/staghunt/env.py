@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from sorrel.agents import Agent
 from sorrel.action.action_spec import ActionSpec
 from sorrel.environment import Environment
 from sorrel.examples.staghunt.agents import StagHuntAgent
@@ -149,9 +150,6 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         world = self.world
         world.reset_spawn_points()
 
-        # prepare a list for valid spawn locations on the top layer
-        spawn_locations: List[Tuple[int, int, int]] = []
-
         for y, x, layer in np.ndindex(world.map.shape):
             index = (y, x, layer)
             if y == 0 or y == world.height - 1 or x == 0 or x == world.width - 1:
@@ -193,3 +191,12 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             # top layer coordinate for agent
             top = (loc[0], loc[1], 1)
             world.add(top, agent)
+
+    def override_agents(self, agents: list[Agent]) -> None:
+        """Override the current agent configuration with a list of new agents and resets
+        the environment.
+
+        Args:
+            agents: A list of new agents
+        """
+        self.agents = agents
