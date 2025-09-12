@@ -47,6 +47,7 @@ class ObservationSpec[T: (np.ndarray, str)]():
             raise TypeError("vision_radius must be provided when full_view is false.")
         self.full_view = full_view
         self.vision_radius = vision_radius if vision_radius else 0
+        self.entity_list = entity_list  # Store the entity list for debugging and other uses
         self.entity_map = self.generate_map(entity_list)
         self.input_size = (1,)
 
@@ -125,6 +126,8 @@ class OneHotObservationSpec(ObservationSpec[np.ndarray]):
         env_dims: Sequence[int] | None = None,
     ):
         super().__init__(entity_list, full_view, vision_radius, env_dims)
+        # Store the entity list for debugging and other uses
+        self.entity_list = entity_list
         # By default, input_size is (channels, x, y)
         if self.full_view:
             assert isinstance(env_dims, Sequence)  # safeguarded in super().__init__()

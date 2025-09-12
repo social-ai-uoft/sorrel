@@ -29,7 +29,8 @@ entity_list = [
             "StagResource",
             "HareResource",
             "StagHuntAgent",
-            "Sand"
+            "Sand",
+            "InteractionBeam"
         ]
 
 class Wall(Entity["StagHuntWorld"]):
@@ -149,3 +150,33 @@ class HareResource(Resource):
     def __init__(self, taste_reward: float, destroyable_health: int) -> None:
         super().__init__(taste_reward, destroyable_health)
         self.sprite = Path(__file__).parent / "./assets/hare.png"
+
+
+# --------------------------- #
+# region: Beams               #
+# --------------------------- #
+
+
+class Beam(Entity["StagHuntWorld"]):
+    """Generic beam class for agent interaction beams."""
+
+    def __init__(self):
+        super().__init__()
+        self.sprite = Path(__file__).parent / "./assets/beam.png"
+        self.turn_counter = 0
+        self.has_transitions = True
+
+    def transition(self, world: "StagHuntWorld"):
+        # Beams persist for one full turn, then disappear.
+        if self.turn_counter >= 3:
+            world.remove(self.location)
+            world.add(self.location, Empty())
+        else:
+            self.turn_counter += 1
+
+
+class InteractionBeam(Beam):
+    """Beam used for agent interactions in stag hunt."""
+    
+    def __init__(self):
+        super().__init__()

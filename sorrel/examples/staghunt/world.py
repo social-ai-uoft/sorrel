@@ -83,9 +83,14 @@ class StagHuntWorld(Gridworld):
             height = int(world_cfg.get("height", 11))
             width = int(world_cfg.get("width", 11))
 
-        # number of layers: bottom terrain and top dynamic layer
-        layers = 2
+        # number of layers: bottom terrain, middle dynamic layer, top beam layer
+        layers = 3
         super().__init__(height, width, layers, default_entity)
+        
+        # Define layer indices for clarity
+        self.terrain_layer = 0
+        self.dynamic_layer = 1
+        self.beam_layer = 2
 
         # Copy relevant hyperparameters; support both dict and OmegaConf styles
         def get_world_param(key: str, default: Any) -> Any:

@@ -26,11 +26,12 @@ import numpy as np
 
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
-from sorrel.examples.staghunt.entities import Empty, HareResource, StagResource
+from sorrel.examples.staghunt.entities import Empty, HareResource, StagResource, InteractionBeam
 from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.worlds import Gridworld
+from sorrel.location import Location, Vector
 
 
 class StagHuntAgent(Agent[StagHuntWorld]):
@@ -189,33 +190,83 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             # rotate orientation clockwise
             self.orientation = (self.orientation + 1) % 4
         elif action_name == "interact":
-            # fire a beam in the facing direction if ready and allow the
-            # environment to process the interaction
+            # fire an interaction beam if ready
             if self.ready:
-                # compute beam cells
+                # spawn the visual beam
+                self.spawn_interaction_beam(world)
+                
+                # check for interactions with other agents in the beam area
                 dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
-                beam_cells = []
+                beam_radius = getattr(world, 'beam_radius', 3)
                 y, x, z = self.location
-                for step in range(1, world.beam_length + 1):
-                    target = (y + dy * step, x + dx * step, z)
+                
+                # Check forward beam cells for other agents
+                for step in range(1, beam_radius + 1):
+                    target = (y + dy * step, x + dx * step, world.dynamic_layer)
                     if not world.valid_location(target):
                         break
-                    # stop if a wall is encountered on the bottom layer
-                    bottom = (target[0], target[1], 0)
-                    if not world.map[bottom].passable:
+                    # stop if a wall is encountered on the terrain layer
+                    terrain_target = (target[0], target[1], world.terrain_layer)
+                    if not world.map[terrain_target].passable:
                         break
-                    beam_cells.append(target)
-                # check if any agent is hit
-                # TODO: interaction should consider when there are more than 2 agents; we can first figure out all agens in the beam
-                # and then randomly pick one to interact with
-                for cell in beam_cells:
-                    entity = world.observe(cell)
+                    
+                    entity = world.observe(target)
                     if isinstance(entity, StagHuntAgent) and entity.ready:
                         # delegate payoff computation to the environment
                         reward += self.handle_interaction(entity, world)
                         break
         # return accumulated reward from this action
         return reward
+
+    def spawn_interaction_beam(self, world: StagHuntWorld) -> None:
+        """Generate an interaction beam extending in front of the agent.
+        
+        Args:
+            world: The world to spawn the beam in.
+        """
+        # Get the tiles in front of the agent
+        forward_vector = Vector(1, 0, direction=self.orientation)
+        right_vector = Vector(0, 1, direction=self.orientation)
+        left_vector = Vector(0, -1, direction=self.orientation)
+        
+        # Get beam radius from world config (default to 3 if not set)
+        beam_radius = getattr(world, 'beam_radius', 3)
+        
+        # Calculate beam locations (similar to cleanup beam pattern)
+        beam_locs = []
+        y, x, z = self.location
+        
+        # Forward beam locations
+        for i in range(1, beam_radius + 1):
+            # Compute the actual offset using vector multiplication and addition
+            forward_offset = forward_vector * i
+            forward_loc = forward_offset.compute()
+            target = (y + forward_loc.y, x + forward_loc.x, world.beam_layer)
+            if world.valid_location(target):
+                beam_locs.append(target)
+        
+        # Side beam locations
+        for i in range(beam_radius):
+            # Right side
+            right_offset = right_vector + (forward_vector * i)
+            right_loc = right_offset.compute()
+            right_target = (y + right_loc.y, x + right_loc.x, world.beam_layer)
+            if world.valid_location(right_target):
+                beam_locs.append(right_target)
+            
+            # Left side
+            left_offset = left_vector + (forward_vector * i)
+            left_loc = left_offset.compute()
+            left_target = (y + left_loc.y, x + left_loc.x, world.beam_layer)
+            if world.valid_location(left_target):
+                beam_locs.append(left_target)
+        
+        # Place beams in valid locations
+        for loc in beam_locs:
+            # Check if there's a wall on the terrain layer
+            terrain_loc = (loc[0], loc[1], world.terrain_layer)
+            if world.valid_location(terrain_loc) and world.map[terrain_loc].passable:
+                world.add(loc, InteractionBeam())
 
     def is_done(self, world: StagHuntWorld) -> bool:
         """Check whether this agent is done acting.

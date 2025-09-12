@@ -81,7 +81,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             "StagResource",
             "HareResource",
             "StagHuntAgent",
-            "Sand"
+            "Sand",
+            "InteractionBeam"
         ]
         for _ in range(n_agents):
             # observation spec: uses partial view with specified vision radius
@@ -154,43 +155,46 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             index = (y, x, layer)
             if y == 0 or y == world.height - 1 or x == 0 or x == world.width - 1:
                 world.add(index, Wall())
-            elif layer == 0:
+            elif layer == world.terrain_layer:
                 # interior cells are spawnable and traversable
-                if (y, x, 1) in world.agent_spawn_points:
+                if (y, x, world.dynamic_layer) in world.agent_spawn_points:
                     world.add(index, Spawn())
-                elif (y, x, 1) not in world.resource_spawn_points:
+                elif (y, x, world.dynamic_layer) not in world.resource_spawn_points:
                     world.add(index, Sand())
-            elif layer == 1:
-                # top layer: optionally place initial resources
-                if (y, x, 1) not in world.agent_spawn_points:
+            elif layer == world.dynamic_layer:
+                # dynamic layer: optionally place initial resources
+                if (y, x, world.dynamic_layer) not in world.agent_spawn_points:
                     if np.random.random() < world.resource_density:
                         # choose resource type uniformly at random
-                        world.resource_spawn_points.append((y, x, 1))
+                        world.resource_spawn_points.append((y, x, world.dynamic_layer))
                     else:
                         world.add(index, Empty())
+            elif layer == world.beam_layer:
+                # beam layer: initially empty
+                world.add(index, Empty())
                 # else:
                 #     # spawn points correspond to empty starting cell on top
                 #     world.add(index, Empty())
                 
 
-        # randomly populate resources on the top layer according to density
+        # randomly populate resources on the dynamic layer according to density
         # TODO: should be compatible with a ASCII map defining initial resources
         for y, x, layer in world.resource_spawn_points:
-            # top layer coordinates
-            top = (y, x, 1)
+            # dynamic layer coordinates
+            dynamic = (y, x, world.dynamic_layer)
             # choose resource type uniformly at random
             if np.random.random() < 0.5:
-                world.add(top, StagResource(world.taste_reward, world.destroyable_health))
+                world.add(dynamic, StagResource(world.taste_reward, world.destroyable_health))
             else:
-                world.add(top, HareResource(world.taste_reward, world.destroyable_health))
+                world.add(dynamic, HareResource(world.taste_reward, world.destroyable_health))
     
 
         # choose initial agent positions uniformly from spawn points without replacement
         chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
         for loc, agent in zip(chosen_positions, self.agents):
-            # top layer coordinate for agent
-            top = (loc[0], loc[1], 1)
-            world.add(top, agent)
+            # dynamic layer coordinate for agent
+            dynamic = (loc[0], loc[1], world.dynamic_layer)
+            world.add(dynamic, agent)
 
     def override_agents(self, agents: list[Agent]) -> None:
         """Override the current agent configuration with a list of new agents and resets
