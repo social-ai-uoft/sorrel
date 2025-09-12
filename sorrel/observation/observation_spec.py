@@ -47,7 +47,9 @@ class ObservationSpec[T: (np.ndarray, str)]():
             raise TypeError("vision_radius must be provided when full_view is false.")
         self.full_view = full_view
         self.vision_radius = vision_radius if vision_radius else 0
-        self.entity_list = entity_list  # Store the entity list for debugging and other uses
+        self.entity_list = (
+            entity_list  # Store the entity list for debugging and other uses
+        )
         self.entity_map = self.generate_map(entity_list)
         self.input_size = (1,)
 

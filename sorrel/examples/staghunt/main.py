@@ -16,6 +16,7 @@ density, world dimensions and vision radius can be adjusted in the
 
 from datetime import datetime
 from pathlib import Path
+
 import yaml
 
 from sorrel.examples.staghunt.entities import Empty
@@ -77,11 +78,11 @@ def run_stag_hunt() -> None:
         },
     }
 
-   # save config to YAML file
+    # save config to YAML file
     config_dir = Path(__file__).parent / "configs"
     config_dir.mkdir(parents=True, exist_ok=True)  # ensure folder exists
     with open(config_dir / "config.yaml", "w") as f:
-        yaml.safe_dump(config, f, default_flow_style=False)           
+        yaml.safe_dump(config, f, default_flow_style=False)
 
     # construct the world; we pass our own Empty entity as the default
     world = StagHuntWorld(config=config, default_entity=Empty())

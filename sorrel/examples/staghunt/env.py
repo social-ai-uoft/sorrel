@@ -20,17 +20,17 @@ from typing import Any
 import numpy as np
 import torch
 
-from sorrel.agents import Agent
 from sorrel.action.action_spec import ActionSpec
+from sorrel.agents import Agent
 from sorrel.environment import Environment
 from sorrel.examples.staghunt.agents import StagHuntAgent
 from sorrel.examples.staghunt.entities import (
     Empty,
     HareResource,
+    Sand,
     Spawn,
     StagResource,
     Wall,
-    Sand,
 )
 from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
@@ -82,7 +82,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             "HareResource",
             "StagHuntAgent",
             "Sand",
-            "InteractionBeam"
+            "InteractionBeam",
         ]
         for _ in range(n_agents):
             # observation spec: uses partial view with specified vision radius
@@ -175,7 +175,6 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 # else:
                 #     # spawn points correspond to empty starting cell on top
                 #     world.add(index, Empty())
-                
 
         # randomly populate resources on the dynamic layer according to density
         # TODO: should be compatible with a ASCII map defining initial resources
@@ -184,10 +183,13 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             dynamic = (y, x, world.dynamic_layer)
             # choose resource type uniformly at random
             if np.random.random() < 0.5:
-                world.add(dynamic, StagResource(world.taste_reward, world.destroyable_health))
+                world.add(
+                    dynamic, StagResource(world.taste_reward, world.destroyable_health)
+                )
             else:
-                world.add(dynamic, HareResource(world.taste_reward, world.destroyable_health))
-    
+                world.add(
+                    dynamic, HareResource(world.taste_reward, world.destroyable_health)
+                )
 
         # choose initial agent positions uniformly from spawn points without replacement
         chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))

@@ -23,15 +23,16 @@ if TYPE_CHECKING:
 
 
 entity_list = [
-            "Empty",
-            "Wall",
-            "Spawn",
-            "StagResource",
-            "HareResource",
-            "StagHuntAgent",
-            "Sand",
-            "InteractionBeam"
-        ]
+    "Empty",
+    "Wall",
+    "Spawn",
+    "StagResource",
+    "HareResource",
+    "StagHuntAgent",
+    "Sand",
+    "InteractionBeam",
+]
+
 
 class Wall(Entity["StagHuntWorld"]):
     """An impassable wall entity.
@@ -47,6 +48,7 @@ class Wall(Entity["StagHuntWorld"]):
         self.value = 0
         # Path to wall sprite; placeholder image filename
         self.sprite = Path(__file__).parent / "./assets/wall.png"
+
 
 class Sand(Entity["StagHuntWorld"]):
     """An entity that represents a block of sand in the stag hunt environment."""
@@ -98,7 +100,9 @@ class Spawn(Entity["StagHuntWorld"]):
 
     def __init__(self) -> None:
         super().__init__()
-        self.passable = True  # Spawn points should be passable so agents can move over them
+        self.passable = (
+            True  # Spawn points should be passable so agents can move over them
+        )
         self.value = 0
         self.sprite = Path(__file__).parent / "./assets/spawn.png"
 
@@ -166,7 +170,7 @@ class Beam(Entity["StagHuntWorld"]):
         self.turn_counter = 0
         self.has_transitions = True
 
-    def transition(self, world: "StagHuntWorld"):
+    def transition(self, world: StagHuntWorld):
         # Beams persist for one full turn, then disappear.
         if self.turn_counter >= 3:
             world.remove(self.location)
@@ -177,6 +181,6 @@ class Beam(Entity["StagHuntWorld"]):
 
 class InteractionBeam(Beam):
     """Beam used for agent interactions in stag hunt."""
-    
+
     def __init__(self):
         super().__init__()

@@ -26,12 +26,17 @@ import numpy as np
 
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
-from sorrel.examples.staghunt.entities import Empty, HareResource, StagResource, InteractionBeam
+from sorrel.examples.staghunt.entities import (
+    Empty,
+    HareResource,
+    InteractionBeam,
+    StagResource,
+)
 from sorrel.examples.staghunt.world import StagHuntWorld
+from sorrel.location import Location, Vector
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.worlds import Gridworld
-from sorrel.location import Location, Vector
 
 
 class StagHuntAgent(Agent[StagHuntWorld]):
@@ -54,8 +59,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     # Note: In grid coordinates, y increases downward, x increases rightward
     ORIENTATION_VECTORS: Dict[int, Tuple[int, int]] = {
         0: (-1, 0),  # north (up)
-        1: (0, 1),   # east (right)
-        2: (1, 0),   # south (down)
+        1: (0, 1),  # east (right)
+        2: (1, 0),  # south (down)
         3: (0, -1),  # west (left)
     }
 
@@ -78,13 +83,13 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.ready: bool = False
         # interaction reward value
         self.interaction_reward = interaction_reward
-        
+
         # Define directional sprites
         # Note: Based on cleanup example, hero-back.png faces UP, hero.png faces DOWN
         self._directional_sprites = {
             0: Path(__file__).parent / "./assets/hero-back.png",  # north (up)
-            1: Path(__file__).parent / "./assets/hero-right.png", # east
-            2: Path(__file__).parent / "./assets/hero.png",      # south (down)
+            1: Path(__file__).parent / "./assets/hero-right.png",  # east
+            2: Path(__file__).parent / "./assets/hero.png",  # south (down)
             3: Path(__file__).parent / "./assets/hero-left.png",  # west
         }
 
@@ -194,12 +199,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             if self.ready:
                 # spawn the visual beam
                 self.spawn_interaction_beam(world)
-                
+
                 # check for interactions with other agents in the beam area
                 dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
-                beam_radius = getattr(world, 'beam_radius', 3)
+                beam_radius = getattr(world, "beam_radius", 3)
                 y, x, z = self.location
-                
+
                 # Check forward beam cells for other agents
                 for step in range(1, beam_radius + 1):
                     target = (y + dy * step, x + dx * step, world.dynamic_layer)
@@ -209,7 +214,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     terrain_target = (target[0], target[1], world.terrain_layer)
                     if not world.map[terrain_target].passable:
                         break
-                    
+
                     entity = world.observe(target)
                     if isinstance(entity, StagHuntAgent) and entity.ready:
                         # delegate payoff computation to the environment
@@ -220,7 +225,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
     def spawn_interaction_beam(self, world: StagHuntWorld) -> None:
         """Generate an interaction beam extending in front of the agent.
-        
+
         Args:
             world: The world to spawn the beam in.
         """
@@ -228,14 +233,14 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         forward_vector = Vector(1, 0, direction=self.orientation)
         right_vector = Vector(0, 1, direction=self.orientation)
         left_vector = Vector(0, -1, direction=self.orientation)
-        
+
         # Get beam radius from world config (default to 3 if not set)
-        beam_radius = getattr(world, 'beam_radius', 3)
-        
+        beam_radius = getattr(world, "beam_radius", 3)
+
         # Calculate beam locations (similar to cleanup beam pattern)
         beam_locs = []
         y, x, z = self.location
-        
+
         # Forward beam locations
         for i in range(1, beam_radius + 1):
             # Compute the actual offset using vector multiplication and addition
@@ -244,7 +249,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             target = (y + forward_loc.y, x + forward_loc.x, world.beam_layer)
             if world.valid_location(target):
                 beam_locs.append(target)
-        
+
         # Side beam locations
         for i in range(beam_radius):
             # Right side
@@ -253,14 +258,14 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             right_target = (y + right_loc.y, x + right_loc.x, world.beam_layer)
             if world.valid_location(right_target):
                 beam_locs.append(right_target)
-            
+
             # Left side
             left_offset = left_vector + (forward_vector * i)
             left_loc = left_offset.compute()
             left_target = (y + left_loc.y, x + left_loc.x, world.beam_layer)
             if world.valid_location(left_target):
                 beam_locs.append(left_target)
-        
+
         # Place beams in valid locations
         for loc in beam_locs:
             # Check if there's a wall on the terrain layer
@@ -338,11 +343,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             entity_at_spawn = world.observe((y, x, 1))
             if entity_at_spawn.kind == "Empty":
                 unoccupied_spawns.append(spawn_point)
-        
+
         # if not enough unoccupied spawns, use all spawns (fallback)
         if len(unoccupied_spawns) < 2:
             unoccupied_spawns = spawn_points
-        
+
         # choose two distinct spawn points at random from unoccupied ones
         new_a_loc, new_o_loc = random.sample(unoccupied_spawns, k=2)
         world.add((new_a_loc[0], new_a_loc[1], 1), self)

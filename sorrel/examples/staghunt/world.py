@@ -86,7 +86,7 @@ class StagHuntWorld(Gridworld):
         # number of layers: bottom terrain, middle dynamic layer, top beam layer
         layers = 3
         super().__init__(height, width, layers, default_entity)
-        
+
         # Define layer indices for clarity
         self.terrain_layer = 0
         self.dynamic_layer = 1
@@ -111,12 +111,18 @@ class StagHuntWorld(Gridworld):
         ]
 
         # record spawn points; to be populated by the environment
-        self.agent_spawn_points: list[tuple[int, int, int]] = [(2, 2, 1), (3, 3, 1), (4, 4, 1), (5, 5, 1)]
+        self.agent_spawn_points: list[tuple[int, int, int]] = [
+            (2, 2, 1),
+            (3, 3, 1),
+            (4, 4, 1),
+            (5, 5, 1),
+        ]
         self.resource_spawn_points: list[tuple[int, int, int]] = []
 
     def reset_spawn_points(self) -> None:
-        """Clear the list of spawn points.  
-        
-        Called during environment reset."""
+        """Clear the list of spawn points.
+
+        Called during environment reset.
+        """
         self.agent_spawn_points = [(2, 2, 1), (3, 3, 1), (4, 4, 1), (5, 5, 1)]
         self.resource_spawn_points = []
