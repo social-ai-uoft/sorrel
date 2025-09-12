@@ -29,6 +29,7 @@ from sorrel.examples.staghunt.entities import (
     Spawn,
     StagResource,
     Wall,
+    Sand,
 )
 from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
@@ -79,6 +80,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             "StagResource",
             "HareResource",
             "StagHuntAgent",
+            "Sand"
         ]
         for _ in range(n_agents):
             # observation spec: uses partial view with specified vision radius
@@ -147,40 +149,46 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         world = self.world
         world.reset_spawn_points()
 
+        # prepare a list for valid spawn locations on the top layer
+        spawn_locations: List[Tuple[int, int, int]] = []
+
         for y, x, layer in np.ndindex(world.map.shape):
             index = (y, x, layer)
-            # edges: walls at border
             if y == 0 or y == world.height - 1 or x == 0 or x == world.width - 1:
                 world.add(index, Wall())
-            else:
-                if layer == 0:
-                    # interior cells are spawnable and traversable
-                    spawn_cell = Spawn()
-                    world.add(index, spawn_cell)
-                    world.spawn_points.append(index)
-                elif layer == 1:
-                    world.add(index, Empty())
+            elif layer == 0:
+                # interior cells are spawnable and traversable
+                if (y, x, 1) in world.agent_spawn_points:
+                    world.add(index, Spawn())
+                elif (y, x, 1) not in world.resource_spawn_points:
+                    world.add(index, Sand())
+            elif layer == 1:
+                # top layer: optionally place initial resources
+                if (y, x, 1) not in world.agent_spawn_points:
+                    if np.random.random() < world.resource_density:
+                        # choose resource type uniformly at random
+                        world.resource_spawn_points.append((y, x, 1))
+                    else:
+                        world.add(index, Empty())
+                # else:
+                #     # spawn points correspond to empty starting cell on top
+                #     world.add(index, Empty())
+                
 
         # randomly populate resources on the top layer according to density
         # TODO: should be compatible with a ASCII map defining initial resources
-        for y, x, layer in world.spawn_points:
+        for y, x, layer in world.resource_spawn_points:
             # top layer coordinates
             top = (y, x, 1)
-            if np.random.random() < world.resource_density:
-                # choose resource type uniformly at random
-                if np.random.random() < 0.5:
-                    world.add(
-                        top, StagResource(world.taste_reward, world.destroyable_health)
-                    )
-                else:
-                    world.add(
-                        top, HareResource(world.taste_reward, world.destroyable_health)
-                    )
+            # choose resource type uniformly at random
+            if np.random.random() < 0.5:
+                world.add(top, StagResource(world.taste_reward, world.destroyable_health))
             else:
-                world.add(top, Empty())
+                world.add(top, HareResource(world.taste_reward, world.destroyable_health))
+    
 
         # choose initial agent positions uniformly from spawn points without replacement
-        chosen_positions = random.sample(world.spawn_points, len(self.agents))
+        chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
         for loc, agent in zip(chosen_positions, self.agents):
             # top layer coordinate for agent
             top = (loc[0], loc[1], 1)

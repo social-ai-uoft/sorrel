@@ -59,7 +59,7 @@ def run_stag_hunt() -> None:
             "height": 11,
             "width": 11,
             # number of players in the game
-            "num_agents": 4,
+            "num_agents": 2,
             # probability an empty cell spawns a resource each step
             "resource_density": 0.05,
             # intrinsic reward for collecting a resource

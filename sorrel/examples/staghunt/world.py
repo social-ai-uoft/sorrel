@@ -106,11 +106,12 @@ class StagHuntWorld(Gridworld):
         ]
 
         # record spawn points; to be populated by the environment
-        self.spawn_points: list[tuple[int, int, int]] = []
+        self.agent_spawn_points: list[tuple[int, int, int]] = [(2, 2, 1), (3, 3, 1), (4, 4, 1), (5, 5, 1)]
+        self.resource_spawn_points: list[tuple[int, int, int]] = []
 
     def reset_spawn_points(self) -> None:
-        """Clear the list of spawn points.
-
-        Called during environment reset.
-        """
-        self.spawn_points = []
+        """Clear the list of spawn points.  
+        
+        Called during environment reset."""
+        self.agent_spawn_points = [(2, 2, 1), (3, 3, 1), (4, 4, 1), (5, 5, 1)]
+        self.resource_spawn_points = []

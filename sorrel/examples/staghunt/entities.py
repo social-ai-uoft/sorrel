@@ -37,6 +37,15 @@ class Wall(Entity["StagHuntWorld"]):
         # Path to wall sprite; placeholder image filename
         self.sprite = Path(__file__).parent / "./assets/wall.png"
 
+class Sand(Entity["StagHuntWorld"]):
+    """An entity that represents a block of sand in the stag hunt environment."""
+
+    def __init__(self):
+        super().__init__()
+        # We technically don't need to make Sand passable here since it's on a different layer from Agent
+        self.passable = True
+        self.sprite = Path(__file__).parent / "./assets/sand.png"
+
 
 class Empty(Entity["StagHuntWorld"]):
     """An empty traversable cell.
@@ -78,7 +87,7 @@ class Spawn(Entity["StagHuntWorld"]):
 
     def __init__(self) -> None:
         super().__init__()
-        self.passable = True
+        self.passable = False #TODO: set to True if we want agents to be able to move over spawn points
         self.value = 0
         self.sprite = Path(__file__).parent / "./assets/spawn.png"
 
