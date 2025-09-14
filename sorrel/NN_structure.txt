@@ -1,0 +1,28 @@
+Description 1:
+The neural network’s architecture starts with a visual encoder, a 2Dconvolutional neural net with two layers. The first layer has 16 channels, with kernel size and stride size 8 to match the sprites) followed by another convolutional layer with 32 channels and 4 by 4 kernel and stride 1. The visual
+encoder is followed by a 2-layer fully connected multilayer perception (MLP)
+with 64 rectified linear unit-neurons in each layer and a long short-term memory
+(256 units). Finally, there is a policy and a value head. The policy head is a MLP
+with 256 neurons outputting the probability over the 8 basic actions (movement
+and interact) and the value head is an MLP with 256 neurons outputting a scalar
+(value of the current state). finally linear policy and value heads. The inventory
+which is a vector of size 3, is added to the output of the convolutional layers
+before entering the 2-layer MLP. We used a discount-factor of 0.99, the learning
+rate was 0.0004, and the weight of entropy regularization of the policy logits
+was 0.003. We used the RMS-prop optimizer (learning rate = 0.0004, epsilon= 1e − 5, momentum = 0.0, and decay = 0.99). The agent also minimized a
+contrastive predictive coding loss (66) in the manner of an auxiliary objective (67)
+and used PopArt (68). This architecture has been widely used on a range of social
+multiagent tasks (65).
+ 
+Description 2:
+In detail, the neural network’s architecture consisted of a visual encoder
+(2D convolutional neural net with six channels, with kernel size and stride
+size one) followed by a two-layer fully connected multilayer perceptron
+(MLP) with 64 rectified-linear unit (RELU) neurons in each layer, a long shortterm memory network (LSTM) (128 units), and, finally, linear policy and
+value heads, outputting the value of the current state and a probability over
+actions to be chosen. We used a discount factor of 0.99, the learning rate was
+0.0004, and the weight of entropy regularization of the policy logits was
+0.003. We used the root mean squared propagation (RMSProp) optimizer
+(learning rate = 0.0004, epsilon = 1e-5, momentum = 0.0, decay = 0.99). The
+agent also minimized a contrastive predictive coding (CPC) loss (63) in the
+manner of an auxiliary objective (64).

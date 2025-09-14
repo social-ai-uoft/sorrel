@@ -172,8 +172,7 @@ class Beam(Entity["StagHuntWorld"]):
 
     def transition(self, world: StagHuntWorld):
         # Beams persist for one full turn, then disappear.
-        if self.turn_counter >= 3:
-            world.remove(self.location)
+        if self.turn_counter >= 1:
             world.add(self.location, Empty())
         else:
             self.turn_counter += 1

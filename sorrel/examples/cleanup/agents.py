@@ -217,7 +217,7 @@ class Beam(Entity):
 
     def transition(self, world: Gridworld):
         # Beams persist for one full turn, then disappear.
-        if self.turn_counter >= 1:
+        if self.turn_counter >= 0:
             world.add(self.location, EmptyEntity())
         else:
             self.turn_counter += 1

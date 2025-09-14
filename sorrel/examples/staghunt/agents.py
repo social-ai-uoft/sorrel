@@ -230,9 +230,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             world: The world to spawn the beam in.
         """
         # Get the tiles in front of the agent
-        forward_vector = Vector(1, 0, direction=self.orientation)
-        right_vector = Vector(0, 1, direction=self.orientation)
-        left_vector = Vector(0, -1, direction=self.orientation)
+        # Use the same orientation system as movement - directly calculate offsets
+        dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
+        
+        # Calculate right and left vectors by rotating 90 degrees
+        right_dy, right_dx = -dx, dy  # 90 degrees clockwise
+        left_dy, left_dx = dx, -dy    # 90 degrees counter-clockwise
 
         # Get beam radius from world config (default to 3 if not set)
         beam_radius = getattr(world, "beam_radius", 3)
@@ -243,26 +246,20 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
         # Forward beam locations
         for i in range(1, beam_radius + 1):
-            # Compute the actual offset using vector multiplication and addition
-            forward_offset = forward_vector * i
-            forward_loc = forward_offset.compute()
-            target = (y + forward_loc.y, x + forward_loc.x, world.beam_layer)
+            # Calculate offset directly using orientation vectors
+            target = (y + dy * i, x + dx * i, world.beam_layer)
             if world.valid_location(target):
                 beam_locs.append(target)
 
         # Side beam locations
         for i in range(beam_radius):
             # Right side
-            right_offset = right_vector + (forward_vector * i)
-            right_loc = right_offset.compute()
-            right_target = (y + right_loc.y, x + right_loc.x, world.beam_layer)
+            right_target = (y + right_dy + dy * i, x + right_dx + dx * i, world.beam_layer)
             if world.valid_location(right_target):
                 beam_locs.append(right_target)
 
             # Left side
-            left_offset = left_vector + (forward_vector * i)
-            left_loc = left_offset.compute()
-            left_target = (y + left_loc.y, x + left_loc.x, world.beam_layer)
+            left_target = (y + left_dy + dy * i, x + left_dx + dx * i, world.beam_layer)
             if world.valid_location(left_target):
                 beam_locs.append(left_target)
 

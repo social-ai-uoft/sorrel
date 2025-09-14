@@ -19,7 +19,7 @@ model:
   sync_freq: 100
 world:
   beam_length: 3
-  beam_radius: 1
+  beam_radius: 2
   destroyable_health: 3
   height: 11
   interaction_reward: 1.0
