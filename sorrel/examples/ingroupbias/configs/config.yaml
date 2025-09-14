@@ -1,0 +1,27 @@
+experiment:
+  epochs: 1000
+  max_turns: 500
+  record_period: 50
+model:
+  GAMMA: 0.99
+  LR: 0.00025
+  TAU: 0.001
+  agent_vision_radius: 5
+  batch_size: 64
+  epsilon: 0.5
+  epsilon_decay: 0.0001
+  layer_size: 128
+  memory_size: 1024
+  model_update_freq: 4
+  n_frames: 5
+  n_quantiles: 12
+  n_step: 3
+  sync_freq: 200
+world:
+  beam_length: 3
+  freeze_duration: 16
+  height: 15
+  num_agents: 8
+  resource_density: 0.02
+  respawn_delay: 50
+  width: 15
