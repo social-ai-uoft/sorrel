@@ -106,6 +106,7 @@ class StagHuntWorld(Gridworld):
         self.destroyable_health: int = int(get_world_param("destroyable_health", 3))
         self.beam_length: int = int(get_world_param("beam_length", 3))
         self.beam_radius: int = int(get_world_param("beam_radius", 1))
+        self.beam_cooldown: int = int(get_world_param("beam_cooldown", 3))
         self.payoff_matrix: list[list[int]] = [
             list(row) for row in get_world_param("payoff_matrix", [[4, 0], [2, 2]])
         ]

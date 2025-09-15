@@ -23,7 +23,8 @@ import torch
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
-from sorrel.examples.staghunt.agents import StagHuntAgent
+from sorrel.examples.staghunt.agents_v2 import StagHuntAgent
+
 from sorrel.examples.staghunt.entities import (
     Empty,
     HareResource,
@@ -34,7 +35,7 @@ from sorrel.examples.staghunt.entities import (
 )
 from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.observation.observation_spec import OneHotObservationSpec
+from sorrel.examples.staghunt.agents_v2 import StagHuntObservation
 
 
 class StagHuntEnv(Environment[StagHuntWorld]):
@@ -80,31 +81,23 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             "Spawn",
             "StagResource",
             "HareResource",
-            "StagHuntAgent",
+            "StagHuntAgentNorth",    # 0: north
+            "StagHuntAgentEast",     # 1: east  
+            "StagHuntAgentSouth",    # 2: south
+            "StagHuntAgentWest",     # 3: west
             "Sand",
             "InteractionBeam",
         ]
         for _ in range(n_agents):
             # observation spec: uses partial view with specified vision radius
             vision_radius = int(model_cfg.get("agent_vision_radius", 5))
-            observation_spec = OneHotObservationSpec(
+            observation_spec = StagHuntObservation(
                 entity_list,
                 full_view=False,
                 vision_radius=vision_radius,
             )
-            # flatten the observation before feeding into the model
-            # The base visual observation produces a tensor of shape
-            # (channels, H, W).  We will append three additional features
-            # (inventory counts and ready flag) in ``StagHuntAgent.pov``.  To
-            # compute the correct input dimension, take the product of
-            # observation_spec.input_size and add 3.
-            observation_spec.override_input_size(
-                np.array(observation_spec.input_size).reshape(1, -1).tolist()
-            )
-            base_size = int(np.prod(observation_spec.input_size))
-            full_input_dim = (
-                base_size + 3
-            )  # TODO: we can make the additional size a config param
+            # The StagHuntObservation handles extra features internally
+            full_input_dim = observation_spec.input_size[1]  # Get the actual input size
 
             # action spec: eight discrete actions
             action_spec = ActionSpec(
@@ -182,7 +175,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             # dynamic layer coordinates
             dynamic = (y, x, world.dynamic_layer)
             # choose resource type uniformly at random
-            if np.random.random() < 0.5:
+            if np.random.random() < 0.2:
                 world.add(
                     dynamic, StagResource(world.taste_reward, world.destroyable_health)
                 )

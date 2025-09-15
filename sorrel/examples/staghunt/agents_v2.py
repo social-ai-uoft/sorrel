@@ -1,6 +1,6 @@
 """Agent implementation for the stag hunt environment with custom observation spec.
 
-This module defines :class:`StagHuntAgentV2`, a subclass of
+This module defines :class:`StagHuntAgent`, a subclass of
 ``sorrel.agents.Agent`` that encapsulates the behaviour of players in the
 stag hunt arena.  Each agent maintains an orientation and a small
 inventory of collected resources (stag and hare).  The agent can move
@@ -105,7 +105,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         return np.concatenate((visual_field, extra_features))
 
 
-class StagHuntAgentV2(Agent[StagHuntWorld]):
+class StagHuntAgent(Agent[StagHuntWorld]):
     """An agent that plays the stag hunt with custom observation spec.
 
     Parameters
@@ -149,6 +149,8 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
         self.ready: bool = False
         # interaction reward value
         self.interaction_reward = interaction_reward
+        # beam cooldown tracking
+        self.beam_cooldown_timer = 0
 
         # Define directional sprites
         # Note: Based on cleanup example, hero-back.png faces UP, hero.png faces DOWN
@@ -164,6 +166,16 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
         """Return the sprite based on the current orientation."""
         return self._directional_sprites[self.orientation]
 
+    def update_agent_kind(self) -> None:
+        """Update the agent's kind based on current orientation."""
+        orientation_names = {0: "North", 1: "East", 2: "South", 3: "West"}
+        self.kind = f"StagHuntAgent{orientation_names[self.orientation]}"
+
+    def update_cooldown(self) -> None:
+        """Update the beam cooldown timer."""
+        if self.beam_cooldown_timer > 0:
+            self.beam_cooldown_timer -= 1
+
     # ------------------------------------------------------------------ #
     # Agent lifecycle methods                                             #
     # ------------------------------------------------------------------ #
@@ -176,6 +188,8 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
         self.orientation = 0
         self.inventory = {"stag": 0, "hare": 0}
         self.ready = False
+        self.beam_cooldown_timer = 0  # Reset beam cooldown
+        self.update_agent_kind()  # Initialize agent kind based on orientation
         # reset the underlying model (e.g., clear memory of past states)
         self.model.reset()
 
@@ -216,7 +230,7 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
             pass
         # handle movement forward/backward relative to orientation
         elif action_name == "FORWARD" or action_name == "BACKWARD":
-            dy, dx = StagHuntAgentV2.ORIENTATION_VECTORS[self.orientation]
+            dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
             # invert direction for backward movement
             if action_name == "BACKWARD":
                 dy, dx = (-dy, -dx)
@@ -238,7 +252,7 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
                 world.move(self, new_pos)
         # handle sidestep movements
         elif action_name == "STEP_LEFT" or action_name == "STEP_RIGHT":
-            dy, dx = StagHuntAgentV2.ORIENTATION_VECTORS[self.orientation]
+            dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
             # calculate perpendicular vectors for sidestep
             if action_name == "STEP_LEFT":
                 # sidestep left: rotate orientation vector 90° counterclockwise
@@ -265,21 +279,23 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
         elif action_name == "TURN_LEFT":
             # rotate orientation counter‑clockwise
             self.orientation = (self.orientation - 1) % 4
+            self.update_agent_kind()  # Update agent kind to reflect new orientation
         elif action_name == "TURN_RIGHT":
             # rotate orientation clockwise
             self.orientation = (self.orientation + 1) % 4
+            self.update_agent_kind()  # Update agent kind to reflect new orientation
         elif action_name == "INTERACT":
-            # fire an interaction beam if ready
-            if self.ready:
+            # fire an interaction beam if ready and cooldown is over
+            if self.ready and self.beam_cooldown_timer == 0:
                 # spawn the visual beam
                 self.spawn_interaction_beam(world)
 
                 # check for interactions with other agents in the beam area
-                dy, dx = StagHuntAgentV2.ORIENTATION_VECTORS[self.orientation]
+                dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
                 beam_radius = getattr(world, "beam_radius", 3)
                 y, x, z = self.location
 
-                # Check forward beam cells for other agents
+                # Check forward beam cells for other agents and resources
                 for step in range(1, beam_radius + 1):
                     target = (y + dy * step, x + dx * step, world.dynamic_layer)
                     if not world.valid_location(target):
@@ -290,10 +306,21 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
                         break
 
                     entity = world.observe(target)
-                    if isinstance(entity, StagHuntAgentV2) and entity.ready:
+                    if isinstance(entity, StagHuntAgent) and entity.ready:
                         # delegate payoff computation to the environment
                         reward += self.handle_interaction(entity, world)
                         break
+                    elif isinstance(entity, (StagResource, HareResource)):
+                        # zap the resource to decrease its health
+                        entity.on_zap(world)
+                        # continue checking for agents (don't break)
+                
+                # set cooldown timer after using beam
+                self.beam_cooldown_timer = getattr(world, "beam_cooldown", 3)
+        
+        # update cooldown timers
+        self.update_cooldown()
+        
         # return accumulated reward from this action
         return reward
 
@@ -305,7 +332,7 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
         """
         # Get the tiles in front of the agent
         # Use the same orientation system as movement - directly calculate offsets
-        dy, dx = StagHuntAgentV2.ORIENTATION_VECTORS[self.orientation]
+        dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
         
         # Calculate right and left vectors by rotating 90 degrees
         right_dy, right_dx = -dx, dy  # 90 degrees clockwise
@@ -351,11 +378,12 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
         """
         return world.is_done
 
+
     # ------------------------------------------------------------------ #
     # Interaction logic                                                   #
     # ------------------------------------------------------------------ #
     def handle_interaction(
-        self: StagHuntAgentV2, other: StagHuntAgentV2, world: StagHuntWorld
+        self: StagHuntAgent, other: StagHuntAgent, world: StagHuntWorld
     ) -> float:
         """Resolve an interaction between two ready agents.
 
@@ -369,9 +397,9 @@ class StagHuntAgentV2(Agent[StagHuntWorld]):
 
         Parameters
         ----------
-        agent : StagHuntAgentV2
+        agent : StagHuntAgent
             The agent initiating the interaction (the ``row" player).
-        other : StagHuntAgentV2
+        other : StagHuntAgent
             The opponent agent (the ``column" player).
 
         Returns

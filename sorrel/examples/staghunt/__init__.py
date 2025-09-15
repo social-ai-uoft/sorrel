@@ -8,7 +8,7 @@ documentation within each file and the accompanying design specification
 for further details.
 """
 
-from sorrel.examples.staghunt.agents import StagHuntAgent  # noqa: F401
+from sorrel.examples.staghunt.agents_v2 import StagHuntAgent  # noqa: F401
 from sorrel.examples.staghunt.entities import (  # noqa: F401
     Empty,
     HareResource,

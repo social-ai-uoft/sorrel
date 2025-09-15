@@ -18,6 +18,7 @@ model:
   n_step: 3
   sync_freq: 100
 world:
+  beam_cooldown: 3
   beam_length: 3
   beam_radius: 1
   destroyable_health: 3
@@ -29,6 +30,6 @@ world:
     - 0
   - - 2
     - 2
-  resource_density: 0.05
+  resource_density: 0.15
   taste_reward: 0.1
   width: 11

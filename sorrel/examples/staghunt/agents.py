@@ -83,6 +83,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.ready: bool = False
         # interaction reward value
         self.interaction_reward = interaction_reward
+        # beam cooldown tracking
+        self.beam_cooldown_timer = 0
 
         # Define directional sprites
         # Note: Based on cleanup example, hero-back.png faces UP, hero.png faces DOWN
@@ -98,6 +100,16 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         """Return the sprite based on the current orientation."""
         return self._directional_sprites[self.orientation]
 
+    def update_agent_kind(self) -> None:
+        """Update the agent's kind based on current orientation."""
+        orientation_names = {0: "North", 1: "East", 2: "South", 3: "West"}
+        self.kind = f"StagHuntAgent{orientation_names[self.orientation]}"
+
+    def update_cooldown(self) -> None:
+        """Update the beam cooldown timer."""
+        if self.beam_cooldown_timer > 0:
+            self.beam_cooldown_timer -= 1
+
     # ------------------------------------------------------------------ #
     # Agent lifecycle methods                                             #
     # ------------------------------------------------------------------ #
@@ -110,6 +122,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.orientation = 0
         self.inventory = {"stag": 0, "hare": 0}
         self.ready = False
+        self.beam_cooldown_timer = 0  # Reset beam cooldown
+        self.update_agent_kind()  # Initialize agent kind based on orientation
         # reset the underlying model (e.g., clear memory of past states)
         self.model.reset()
 
@@ -220,12 +234,14 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         elif action_name == "TURN_LEFT":
             # rotate orientation counter‑clockwise
             self.orientation = (self.orientation - 1) % 4
+            self.update_agent_kind()  # Update agent kind to reflect new orientation
         elif action_name == "TURN_RIGHT":
             # rotate orientation clockwise
             self.orientation = (self.orientation + 1) % 4
+            self.update_agent_kind()  # Update agent kind to reflect new orientation
         elif action_name == "INTERACT":
-            # fire an interaction beam if ready
-            if self.ready:
+            # fire an interaction beam if ready and cooldown is over
+            if self.ready and self.beam_cooldown_timer == 0:
                 # spawn the visual beam
                 self.spawn_interaction_beam(world)
 
@@ -234,7 +250,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 beam_radius = getattr(world, "beam_radius", 3)
                 y, x, z = self.location
 
-                # Check forward beam cells for other agents
+                # Check forward beam cells for other agents and resources
                 for step in range(1, beam_radius + 1):
                     target = (y + dy * step, x + dx * step, world.dynamic_layer)
                     if not world.valid_location(target):
@@ -249,6 +265,17 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                         # delegate payoff computation to the environment
                         reward += self.handle_interaction(entity, world)
                         break
+                    elif isinstance(entity, (StagResource, HareResource)):
+                        # zap the resource to decrease its health
+                        entity.on_zap(world)
+                        # continue checking for agents (don't break)
+                
+                # set cooldown timer after using beam
+                self.beam_cooldown_timer = getattr(world, "beam_cooldown", 3)
+        
+        # update cooldown timers
+        self.update_cooldown()
+        
         # return accumulated reward from this action
         return reward
 
@@ -305,6 +332,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         Agents act until the world signals termination via ``world.is_done``.
         """
         return world.is_done
+
 
     # ------------------------------------------------------------------ #
     # Interaction logic                                                   #

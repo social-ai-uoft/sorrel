@@ -63,7 +63,7 @@ def run_stag_hunt() -> None:
             # number of players in the game
             "num_agents": 2,
             # probability an empty cell spawns a resource each step
-            "resource_density": 0.05,
+            "resource_density": 0.15,
             # intrinsic reward for collecting a resource
             "taste_reward": 0.1,
             # zap hits required to destroy a resource
@@ -71,6 +71,7 @@ def run_stag_hunt() -> None:
             # beam characteristics
             "beam_length": 3,
             "beam_radius": 1,
+            "beam_cooldown": 3,  # number of turns before beam can be used again
             # payoff matrix for the row player (stag=0, hare=1)
             "payoff_matrix": [[4, 0], [2, 2]],
             # bonus awarded for participating in an interaction
