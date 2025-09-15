@@ -22,7 +22,23 @@ import yaml
 from sorrel.examples.staghunt.entities import Empty
 from sorrel.examples.staghunt.env import StagHuntEnv
 from sorrel.examples.staghunt.world import StagHuntWorld
-from sorrel.utils.logging import TensorboardLogger
+from sorrel.utils.logging import TensorboardLogger, ConsoleLogger, Logger
+
+
+class CombinedLogger(Logger):
+    """A logger that combines console and tensorboard logging."""
+    
+    def __init__(self, max_epochs: int, log_dir: str | Path, *args):
+        super().__init__(max_epochs, *args)
+        self.console_logger = ConsoleLogger(max_epochs, *args)
+        self.tensorboard_logger = TensorboardLogger(max_epochs, log_dir, *args)
+    
+    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+        # Log to both console and tensorboard
+        self.console_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
+        self.tensorboard_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
+        # Also call parent to store data
+        super().record_turn(epoch, loss, reward, epsilon, **kwargs)
 
 
 def run_stag_hunt() -> None:
@@ -31,9 +47,9 @@ def run_stag_hunt() -> None:
     config = {
         "experiment": {
             # number of episodes/epochs to run
-            "epochs": 100,
+            "epochs": 10000,
             # maximum number of turns per episode
-            "max_turns": 50,
+            "max_turns": 100,
             # recording period for animation (unused here)
             "record_period": 1,
         },
@@ -61,7 +77,7 @@ def run_stag_hunt() -> None:
             "height": 11,
             "width": 11,
             # number of players in the game
-            "num_agents": 2,
+            "num_agents": 1,
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
             # intrinsic reward for collecting a resource
@@ -72,6 +88,8 @@ def run_stag_hunt() -> None:
             "beam_length": 3,
             "beam_radius": 1,
             "beam_cooldown": 3,  # number of turns before beam can be used again
+            # respawn timing
+            "respawn_lag": 10,  # number of turns before a resource can respawn
             # payoff matrix for the row player (stag=0, hare=1)
             "payoff_matrix": [[4, 0], [2, 2]],
             # bonus awarded for participating in an interaction
@@ -89,13 +107,12 @@ def run_stag_hunt() -> None:
     world = StagHuntWorld(config=config, default_entity=Empty())
     # construct the environment
     experiment = StagHuntEnv(world, config)
-    # run the experiment
+    # run the experiment with both console and tensorboard logging
     experiment.run_experiment(
-        # logger=TensorboardLogger(
-        #     max_epochs=config["experiment"]["epochs"],
-        #     log_dir=Path(__file__).parent
-        #     / f'runs/{datetime.now().strftime("%Y%m%d-%H%M%S")}',
-        # )
+        logger=CombinedLogger(
+            max_epochs=config["experiment"]["epochs"],
+            log_dir=Path(__file__).parent / f'runs/{datetime.now().strftime("%Y%m%d-%H%M%S")}',
+        )
     )
 
 

@@ -28,6 +28,7 @@ from sorrel.examples.staghunt.agents_v2 import StagHuntAgent
 from sorrel.examples.staghunt.entities import (
     Empty,
     HareResource,
+    Resource,
     Sand,
     Spawn,
     StagResource,
@@ -101,7 +102,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
 
             # action spec: eight discrete actions
             action_spec = ActionSpec(
-                ["NOOP", "FORWARD", "BACKWARD", "STEP_LEFT", "STEP_RIGHT", "TURN_LEFT", "TURN_RIGHT", "INTERACT"]
+                ["NOOP", "FORWARD", "BACKWARD", "STEP_LEFT", "STEP_RIGHT", "TURN_LEFT", "TURN_RIGHT",] #"INTERACT"]
             )
             # create a simple IQN model; hyperparameters can be tuned via config
             model = PyTorchIQN(
@@ -153,7 +154,11 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 if (y, x, world.dynamic_layer) in world.agent_spawn_points:
                     world.add(index, Spawn())
                 elif (y, x, world.dynamic_layer) not in world.resource_spawn_points:
-                    world.add(index, Sand())
+                    # Non-resource locations get Sand that cannot convert to resources
+                    world.add(index, Sand(can_convert_to_resource=False, respawn_ready=True))
+                else:
+                    # Resource spawn points get Sand that can convert to resources
+                    world.add(index, Sand(can_convert_to_resource=True, respawn_ready=True))
             elif layer == world.dynamic_layer:
                 # dynamic layer: optionally place initial resources
                 if (y, x, world.dynamic_layer) not in world.agent_spawn_points:
@@ -161,9 +166,10 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                         # choose resource type uniformly at random
                         world.resource_spawn_points.append((y, x, world.dynamic_layer))
                     else:
+                        # non-resource locations get Empty entities (attributes inherited from terrain)
                         world.add(index, Empty())
             elif layer == world.beam_layer:
-                # beam layer: initially empty
+                # beam layer: initially empty (attributes inherited from terrain)
                 world.add(index, Empty())
                 # else:
                 #     # spawn points correspond to empty starting cell on top

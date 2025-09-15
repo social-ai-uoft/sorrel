@@ -104,6 +104,7 @@ class StagHuntWorld(Gridworld):
         self.resource_density: float = float(get_world_param("resource_density", 0.05))
         self.taste_reward: float = float(get_world_param("taste_reward", 0.1))
         self.destroyable_health: int = int(get_world_param("destroyable_health", 3))
+        self.respawn_lag: int = int(get_world_param("respawn_lag", 10))
         self.beam_length: int = int(get_world_param("beam_length", 3))
         self.beam_radius: int = int(get_world_param("beam_radius", 1))
         self.beam_cooldown: int = int(get_world_param("beam_cooldown", 3))

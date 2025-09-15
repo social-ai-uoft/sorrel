@@ -51,13 +51,32 @@ class Wall(Entity["StagHuntWorld"]):
 
 
 class Sand(Entity["StagHuntWorld"]):
-    """An entity that represents a block of sand in the stag hunt environment."""
+    """An entity that represents a block of sand in the stag hunt environment.
+    
+    Sand entities track whether they can spawn resources and manage respawn timing.
+    """
 
-    def __init__(self):
+    def __init__(self, can_convert_to_resource: bool = False, respawn_ready: bool = True):
         super().__init__()
         # We technically don't need to make Sand passable here since it's on a different layer from Agent
         self.passable = True
+        self.can_convert_to_resource = can_convert_to_resource
+        self.respawn_ready = respawn_ready
+        self.respawn_timer = 0  # Timer for respawn lag
+        self.has_transitions = True  # Enable transitions for respawn timing
         self.sprite = Path(__file__).parent / "./assets/sand.png"
+
+    def transition(self, world: StagHuntWorld) -> None:
+        """Handle respawn timing for resource spawn points.
+        
+        Sand entities that can convert to resources but are not ready will
+        count down their respawn timer until they become ready again.
+        """
+        if self.can_convert_to_resource and not self.respawn_ready:
+            self.respawn_timer += 1
+            if self.respawn_timer >= world.respawn_lag:
+                self.respawn_ready = True
+                self.respawn_timer = 0
 
 
 class Empty(Entity["StagHuntWorld"]):
@@ -65,7 +84,8 @@ class Empty(Entity["StagHuntWorld"]):
 
     Empty cells hold no resources and allow agents to move through.  In the
     regeneration step, empty cells can spawn new resources with probability
-    determined by the world's ``resource_density`` hyperparameter.
+    determined by the world's ``resource_density`` hyperparameter. The ability
+    to spawn resources is inherited from the terrain layer below.
     """
 
     def __init__(self) -> None:
@@ -75,20 +95,28 @@ class Empty(Entity["StagHuntWorld"]):
         self.sprite = Path(__file__).parent / "./assets/empty.png"
 
     def transition(self, world: StagHuntWorld) -> None:
-        # TODO: remove empty respawn; resources should only respawn on places initialised with resources
         """Randomly spawn a resource on this cell during regeneration.
 
         When the world performs its regeneration step, empty cells may spawn
-        either a StagResource or HareResource.  The probability is given by
-        ``world.resource_density`` and the class is selected uniformly at
-        random.  If a resource is spawned, the empty entity is replaced.
+        either a StagResource or HareResource, but only if the terrain below
+        can convert to a resource and is ready to respawn. The probability is 
+        given by ``world.resource_density`` and the class is selected uniformly 
+        at random.  If a resource is spawned, the empty entity is replaced.
         """
-        if np.random.random() < world.resource_density:
-            # choose between stag and hare resources with equal probability
-            res_cls = StagResource if np.random.random() < 0.5 else HareResource
-            world.add(
-                self.location, res_cls(world.taste_reward, world.destroyable_health)
-            )
+        # Check the terrain layer below for resource spawn capability and readiness
+        terrain_location = (self.location[0], self.location[1], world.terrain_layer)
+        if world.valid_location(terrain_location):
+            terrain_entity = world.observe(terrain_location)
+            if (hasattr(terrain_entity, 'can_convert_to_resource') and 
+                hasattr(terrain_entity, 'respawn_ready') and
+                terrain_entity.can_convert_to_resource and 
+                terrain_entity.respawn_ready and 
+                np.random.random() < world.resource_density):
+                # choose between stag and hare resources with equal probability
+                res_cls = StagResource if np.random.random() < 0.2 else HareResource
+                world.add(
+                    self.location, res_cls(world.taste_reward, world.destroyable_health)
+                )
 
 
 class Spawn(Entity["StagHuntWorld"]):
@@ -128,11 +156,12 @@ class Resource(Entity["StagHuntWorld"]):
         """Handle a zap event on this resource.
 
         Reduces health by one.  When health reaches zero, the resource is removed and
-        replaced with an empty entity.  No reward is awarded for destroying resources.
+        replaced with an empty entity that can convert back to a resource.  No reward 
+        is awarded for destroying resources.
         """
         self.health -= 1
         if self.health <= 0:
-            # replace with empty cell
+            # replace with empty cell (attributes inherited from terrain layer)
             world.add(self.location, Empty())
 
 

@@ -203,6 +203,13 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     self.inventory[target_entity.name] += 1
                     self.ready = True
                     reward += target_entity.value  # taste reward
+                    # Reset respawn readiness on the terrain layer below
+                    terrain_location = (new_pos[0], new_pos[1], world.terrain_layer)
+                    if world.valid_location(terrain_location):
+                        terrain_entity = world.observe(terrain_location)
+                        if hasattr(terrain_entity, 'respawn_ready'):
+                            terrain_entity.respawn_ready = False
+                            terrain_entity.respawn_timer = 0
                 # move into the cell (if passable)
                 world.move(self, new_pos)
         # handle sidestep movements
@@ -229,6 +236,13 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     self.inventory[target_entity.name] += 1
                     self.ready = True
                     reward += target_entity.value  # taste reward
+                    # Reset respawn readiness on the terrain layer below
+                    terrain_location = (new_pos[0], new_pos[1], world.terrain_layer)
+                    if world.valid_location(terrain_location):
+                        terrain_entity = world.observe(terrain_location)
+                        if hasattr(terrain_entity, 'respawn_ready'):
+                            terrain_entity.respawn_ready = False
+                            terrain_entity.respawn_timer = 0
                 # move into the cell (if passable)
                 world.move(self, new_pos)
         elif action_name == "TURN_LEFT":
