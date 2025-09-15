@@ -33,13 +33,13 @@ def run_stag_hunt() -> None:
             # number of episodes/epochs to run
             "epochs": 100,
             # maximum number of turns per episode
-            "max_turns": 200,
+            "max_turns": 50,
             # recording period for animation (unused here)
             "record_period": 1,
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
-            "agent_vision_radius": 5,
+            "agent_vision_radius": 2,
             # epsilon decay hyperparameter for the IQN model
             "epsilon_decay": 0.0001,
             # model architecture parameters
@@ -90,11 +90,11 @@ def run_stag_hunt() -> None:
     experiment = StagHuntEnv(world, config)
     # run the experiment
     experiment.run_experiment(
-        logger=TensorboardLogger(
-            max_epochs=config["experiment"]["epochs"],
-            log_dir=Path(__file__).parent
-            / f'runs/{datetime.now().strftime("%Y%m%d-%H%M%S")}',
-        )
+        # logger=TensorboardLogger(
+        #     max_epochs=config["experiment"]["epochs"],
+        #     log_dir=Path(__file__).parent
+        #     / f'runs/{datetime.now().strftime("%Y%m%d-%H%M%S")}',
+        # )
     )
 
 

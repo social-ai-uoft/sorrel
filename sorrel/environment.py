@@ -157,7 +157,7 @@ class Environment[W: Gridworld]:
             #     total_loss = sum(pool.map(lambda model: model.train_step(), models))
             total_loss = 0
             for agent in self.agents:
-                total_loss = agent.model.train_step()
+                total_loss += agent.model.train_step()
 
             # Log the information
             if logging:

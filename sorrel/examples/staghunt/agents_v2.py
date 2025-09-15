@@ -1,6 +1,6 @@
-"""Agent implementation for the stag hunt environment.
+"""Agent implementation for the stag hunt environment with custom observation spec.
 
-This module defines :class:`StagHuntAgent`, a subclass of
+This module defines :class:`StagHuntAgentV2`, a subclass of
 ``sorrel.agents.Agent`` that encapsulates the behaviour of players in the
 stag hunt arena.  Each agent maintains an orientation and a small
 inventory of collected resources (stag and hare).  The agent can move
@@ -10,10 +10,8 @@ another ready agent.  The agent obtains small taste rewards upon
 collecting resources and larger payoffs via the interaction matrix when
 engaging another player.
 
-The logic for resolving the interaction, computing payoffs and
-respawning players is delegated to the environment via the
-``handle_interaction`` method; this agent simply decides when to fire
-the beam.
+This version includes a custom observation spec that handles inventory
+and ready flag as extra scalar observations, similar to the cleanup example.
 """
 
 from __future__ import annotations
@@ -35,17 +33,85 @@ from sorrel.examples.staghunt.entities import (
 from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.location import Location, Vector
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.observation.observation_spec import ObservationSpec
+from sorrel.observation import observation_spec
 from sorrel.worlds import Gridworld
 
 
-class StagHuntAgent(Agent[StagHuntWorld]):
-    """An agent that plays the stag hunt.
+class StagHuntObservation(observation_spec.OneHotObservationSpec):
+    """Custom observation function for the StagHunt agent class.
+    
+    This observation spec includes inventory and ready flag as extra scalar features,
+    similar to the cleanup example's positional embedding approach.
+    """
+
+    def __init__(
+        self,
+        entity_list: list[str],
+        full_view: bool = False,
+        vision_radius: int | None = None,
+    ):
+        super().__init__(entity_list, full_view, vision_radius)
+        
+        # Calculate input size including extra features
+        if self.full_view:
+            # For full view, we need to know the world dimensions
+            # This will be set when observe() is called
+            self.input_size = (1, len(entity_list) * 0 + 3)  # Placeholder, will be updated
+        else:
+            self.input_size = (
+                1,
+                (
+                    len(entity_list)
+                    * (2 * self.vision_radius + 1)
+                    * (2 * self.vision_radius + 1)
+                )
+                + 3,  # Extra features: inv_stag, inv_hare, ready_flag
+            )
+
+    def observe(self, world: Gridworld, location: tuple | Location | None = None) -> np.ndarray:
+        """Observe the environment with extra scalar features.
+        
+        Args:
+            world: The world to observe
+            location: The location to observe from (must be provided)
+            
+        Returns:
+            Observation array with visual field + extra features
+        """
+        if location is None:
+            raise ValueError("Location must be provided for StagHuntObservation")
+            
+        # Get the base visual observation
+        visual_field = super().observe(world, location).flatten()
+        
+        # Get the agent at this location to extract inventory and ready state
+        agent = None
+        if hasattr(world, 'agents'):
+            for a in world.agents:
+                if a.location == location:
+                    agent = a
+                    break
+        
+        if agent is None:
+            # If no agent found, use default values
+            extra_features = np.array([0, 0, 0], dtype=visual_field.dtype)
+        else:
+            # Extract inventory and ready flag from the agent
+            inv_stag = agent.inventory.get("stag", 0)
+            inv_hare = agent.inventory.get("hare", 0)
+            ready_flag = 1 if agent.ready else 0
+            extra_features = np.array([inv_stag, inv_hare, ready_flag], dtype=visual_field.dtype)
+        
+        return np.concatenate((visual_field, extra_features))
+
+
+class StagHuntAgentV2(Agent[StagHuntWorld]):
+    """An agent that plays the stag hunt with custom observation spec.
 
     Parameters
     ----------
-    observation_spec : ObservationSpec
-        Specification of the agent's observation space.
+    observation_spec : StagHuntObservation
+        Custom observation specification that includes inventory and ready flag.
     action_spec : ActionSpec
         Specification of the agent's discrete action space.  The
         ``actions`` list passed into the spec should define readable
@@ -66,7 +132,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
     def __init__(
         self,
-        observation_spec: ObservationSpec,
+        observation_spec: StagHuntObservation,
         action_spec: ActionSpec,
         model: PyTorchIQN,
         interaction_reward: float = 1.0,
@@ -115,32 +181,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
     def pov(self, world: StagHuntWorld) -> np.ndarray:
         """Return the agent's observation vector.
-
-        The base observation is a one‑hot encoding of the cells within the
-        agent's vision radius, provided by the observation specification.  We
-        augment this flattened visual field with three additional values:
-
-        1. The number of stag resources currently held in the agent's
-           inventory.
-        2. The number of hare resources currently held in the agent's
-           inventory.
-        3. A binary flag indicating whether the agent is ready to shoot
-           (i.e. has at least one resource in inventory).
-
-        These extra features allow the model to condition its behaviour on
-        internal state, reproducing the ``InventoryObserver`` and
-        ``ReadyToShootObservation`` channels described in the design spec.
+        
+        This method now simply delegates to the observation spec, which handles
+        the extra features automatically.
         """
-        # observe returns an array of shape (channels, H, W)
-        obs = self.observation_spec.observe(world, self.location)
-        # flatten to a vector for the model input
-        flat = obs.reshape(-1)
-        # append inventory counts and ready flag
-        inv_stag = self.inventory.get("stag", 0)
-        inv_hare = self.inventory.get("hare", 0)
-        ready_flag = 1 if self.ready else 0
-        extra = np.array([inv_stag, inv_hare, ready_flag], dtype=flat.dtype)
-        return np.concatenate([flat, extra]).reshape(1, -1)
+        return self.observation_spec.observe(world, self.location).reshape(1, -1)
 
     def get_action(self, state: np.ndarray) -> int:
         """Select an action using the underlying model.
@@ -171,7 +216,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             pass
         # handle movement forward/backward relative to orientation
         elif action_name == "FORWARD" or action_name == "BACKWARD":
-            dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
+            dy, dx = StagHuntAgentV2.ORIENTATION_VECTORS[self.orientation]
             # invert direction for backward movement
             if action_name == "BACKWARD":
                 dy, dx = (-dy, -dx)
@@ -193,7 +238,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 world.move(self, new_pos)
         # handle sidestep movements
         elif action_name == "STEP_LEFT" or action_name == "STEP_RIGHT":
-            dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
+            dy, dx = StagHuntAgentV2.ORIENTATION_VECTORS[self.orientation]
             # calculate perpendicular vectors for sidestep
             if action_name == "STEP_LEFT":
                 # sidestep left: rotate orientation vector 90° counterclockwise
@@ -230,7 +275,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 self.spawn_interaction_beam(world)
 
                 # check for interactions with other agents in the beam area
-                dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
+                dy, dx = StagHuntAgentV2.ORIENTATION_VECTORS[self.orientation]
                 beam_radius = getattr(world, "beam_radius", 3)
                 y, x, z = self.location
 
@@ -245,7 +290,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                         break
 
                     entity = world.observe(target)
-                    if isinstance(entity, StagHuntAgent) and entity.ready:
+                    if isinstance(entity, StagHuntAgentV2) and entity.ready:
                         # delegate payoff computation to the environment
                         reward += self.handle_interaction(entity, world)
                         break
@@ -260,7 +305,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         """
         # Get the tiles in front of the agent
         # Use the same orientation system as movement - directly calculate offsets
-        dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
+        dy, dx = StagHuntAgentV2.ORIENTATION_VECTORS[self.orientation]
         
         # Calculate right and left vectors by rotating 90 degrees
         right_dy, right_dx = -dx, dy  # 90 degrees clockwise
@@ -310,7 +355,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     # Interaction logic                                                   #
     # ------------------------------------------------------------------ #
     def handle_interaction(
-        self: StagHuntAgent, other: StagHuntAgent, world: StagHuntWorld
+        self: StagHuntAgentV2, other: StagHuntAgentV2, world: StagHuntWorld
     ) -> float:
         """Resolve an interaction between two ready agents.
 
@@ -324,9 +369,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
         Parameters
         ----------
-        agent : StagHuntAgent
+        agent : StagHuntAgentV2
             The agent initiating the interaction (the ``row" player).
-        other : StagHuntAgent
+        other : StagHuntAgentV2
             The opponent agent (the ``column" player).
 
         Returns

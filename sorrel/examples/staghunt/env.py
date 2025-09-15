@@ -106,9 +106,9 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 base_size + 3
             )  # TODO: we can make the additional size a config param
 
-            # action spec: five discrete actions
+            # action spec: eight discrete actions
             action_spec = ActionSpec(
-                ["move_forward", "move_backward", "turn_left", "turn_right", "interact"]
+                ["NOOP", "FORWARD", "BACKWARD", "STEP_LEFT", "STEP_RIGHT", "TURN_LEFT", "TURN_RIGHT", "INTERACT"]
             )
             # create a simple IQN model; hyperparameters can be tuned via config
             model = PyTorchIQN(

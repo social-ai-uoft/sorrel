@@ -1,12 +1,12 @@
 experiment:
   epochs: 100
-  max_turns: 200
+  max_turns: 50
   record_period: 1
 model:
   GAMMA: 0.99
   LR: 0.00025
   TAU: 0.001
-  agent_vision_radius: 5
+  agent_vision_radius: 2
   batch_size: 64
   epsilon: 0.5
   epsilon_decay: 0.0001
@@ -19,7 +19,7 @@ model:
   sync_freq: 100
 world:
   beam_length: 3
-  beam_radius: 2
+  beam_radius: 1
   destroyable_health: 3
   height: 11
   interaction_reward: 1.0
