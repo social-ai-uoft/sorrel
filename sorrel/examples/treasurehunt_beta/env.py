@@ -82,8 +82,8 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
         self.agents = agents
 
     def populate_environment(self):
-        """Populate the treasurehunt world by creating walls, then randomly spawning the
-        agents.
+        """Populate the treasurehunt world by creating walls, placing initial resources,
+        then randomly spawning the agents.
 
         Note that self.world.map is already created with the specified dimensions, and
         every space is filled with EmptyEntity, as part of super().__init__() when this
@@ -104,7 +104,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 # valid spawn location
                 valid_spawn_locations.append(index)
 
-        # spawn the agents
+        # spawn the agents first
         # using np.random.choice, we choose indices in valid_spawn_locations
         agent_locations_indices = np.random.choice(
             len(valid_spawn_locations), size=len(self.agents), replace=False
@@ -113,3 +113,30 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
         for loc, agent in zip(agent_locations, self.agents):
             loc = tuple(loc)
             self.world.add(loc, agent)
+
+        # Remove agent locations from valid spawn locations for resources
+        remaining_spawn_locations = [loc for loc in valid_spawn_locations if loc not in agent_locations]
+
+        # Place initial resources
+        initial_resources = self.config.experiment.get("initial_resources", 15)
+        resource_locations_indices = np.random.choice(
+            len(remaining_spawn_locations), size=min(initial_resources, len(remaining_spawn_locations)), replace=False
+        )
+        resource_locations = [remaining_spawn_locations[i] for i in resource_locations_indices]
+        
+        for loc in resource_locations:
+            # Randomly choose which resource to place
+            resource_type = np.random.choice([
+                "gem", "apple", "coin", "crystal", "treasure"
+            ])
+            
+            if resource_type == "gem":
+                self.world.add(loc, Gem(self.world.gem_value))
+            elif resource_type == "apple":
+                self.world.add(loc, Apple(self.world.apple_value))
+            elif resource_type == "coin":
+                self.world.add(loc, Coin(self.world.coin_value))
+            elif resource_type == "crystal":
+                self.world.add(loc, Crystal(self.world.crystal_value))
+            elif resource_type == "treasure":
+                self.world.add(loc, Treasure(self.world.treasure_value))

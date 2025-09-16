@@ -34,6 +34,7 @@ if __name__ == "__main__":
             "record_period": 50,
             "run_name": "treasurehunt_with_respawn",  # Name for this run (will be included in log directory)
             "num_agents": 1,  # Number of agents in the environment
+            "initial_resources": 15,  # Number of initial resources to place
         },
         "model": {
             "agent_vision_radius": 2,
