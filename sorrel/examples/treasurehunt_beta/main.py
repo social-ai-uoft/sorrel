@@ -79,7 +79,7 @@ if __name__ == "__main__":
         "model": {
             "agent_vision_radius": 2,
             "epsilon_decay": 0.0001,
-            "full_view": False,  # Whether agents can see the entire environment
+            "full_view": True,  # Whether agents can see the entire environment
         },
         "world": {
             "height": 10,

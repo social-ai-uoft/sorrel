@@ -43,6 +43,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 # note that here we require self.config to have the entry model.agent_vision_radius
                 # don't forget to pass it in as part of config when creating this experiment!
                 vision_radius=self.config.model.agent_vision_radius,
+                env_dims=(self.config.world.height, self.config.world.width) if self.config.model.full_view else None,
             )
             observation_spec.override_input_size(
                 np.array(observation_spec.input_size).reshape(1, -1).tolist()
