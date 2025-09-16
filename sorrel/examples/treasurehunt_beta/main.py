@@ -78,6 +78,7 @@ if __name__ == "__main__":
         },
         "model": {
             "agent_vision_radius": 2,
+            "epsilon": 1.0,  # Initial epsilon value for exploration
             "epsilon_decay": 0.0001,
             "full_view": True,  # Whether agents can see the entire environment
         },
@@ -101,6 +102,7 @@ if __name__ == "__main__":
     print(f"Run name: {config['experiment']['run_name']}")
     print(f"Epochs: {config['experiment']['epochs']}, Max turns per epoch: {config['experiment']['max_turns']}")
     print(f"Number of agents: {config['experiment']['num_agents']}")
+    print(f"Epsilon: {config['model']['epsilon']}, Epsilon decay: {config['model']['epsilon_decay']}")
     print(f"Respawn rate: {config['world']['spawn_prob']}")
     print(f"Resource values - Gem: {config['world']['gem_value']}, Apple: {config['world']['apple_value']}, Coin: {config['world']['coin_value']}, Bone: {config['world']['bone_value']}, Food: {config['world']['food_value']}")
     print(f"Log directory: {log_dir}")
