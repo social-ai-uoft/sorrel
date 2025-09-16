@@ -24,8 +24,8 @@ class TreasurehuntWorld(Gridworld):
         self.gem_value = config.world.gem_value
         self.apple_value = config.world.apple_value
         self.coin_value = config.world.coin_value
-        self.crystal_value = config.world.crystal_value
-        self.treasure_value = config.world.treasure_value
+        self.bone_value = config.world.bone_value
+        self.food_value = config.world.food_value
         self.spawn_prob = config.world.spawn_prob
 
 

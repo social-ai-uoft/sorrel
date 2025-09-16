@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.agents import Agent
-from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_beta.world import TreasurehuntWorld
 
 # end imports
 
@@ -18,12 +18,40 @@ class TreasurehuntAgent(Agent[TreasurehuntWorld]):
     def __init__(self, observation_spec, action_spec, model):
         super().__init__(observation_spec, action_spec, model)
         self.sprite = Path(__file__).parent / "./assets/hero.png"
+        # Track all encounters for this epoch
+        self.encounters = {
+            "gem": 0,
+            "apple": 0, 
+            "coin": 0,
+            "bone": 0,
+            "food": 0,
+            "wall": 0,
+            "empty": 0,
+            "sand": 0,
+            "agent": 0
+        }
+        # Track individual score for this epoch
+        self.individual_score = 0
 
     # end constructor
 
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
         self.model.reset()
+        # Reset encounter tracking for new epoch
+        self.encounters = {
+            "gem": 0,
+            "apple": 0, 
+            "coin": 0,
+            "bone": 0,
+            "food": 0,
+            "wall": 0,
+            "empty": 0,
+            "sand": 0,
+            "agent": 0
+        }
+        # Reset individual score for new epoch
+        self.individual_score = 0
 
     def pov(self, world: TreasurehuntWorld) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
@@ -59,6 +87,14 @@ class TreasurehuntAgent(Agent[TreasurehuntWorld]):
         # get reward obtained from object at new_location
         target_object = world.observe(new_location)
         reward = target_object.value
+
+        # Track all encounters (everything the agent encounters)
+        entity_class_name = target_object.__class__.__name__.lower()
+        if entity_class_name in self.encounters:
+            self.encounters[entity_class_name] += 1
+
+        # Update individual score
+        self.individual_score += reward
 
         # try moving to new_location
         world.move(self, new_location)

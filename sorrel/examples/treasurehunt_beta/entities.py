@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.entities import Entity
-from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_beta.world import TreasurehuntWorld
 
 # end imports
 
@@ -57,27 +57,27 @@ class Coin(Entity[TreasurehuntWorld]):
         super().__init__()
         self.passable = True  # Agents can move onto Coins
         self.value = coin_value
-        self.sprite = Path(__file__).parent / "./assets/gem.png"  # Reuse gem sprite for coin
+        self.sprite = Path(__file__).parent / "./assets/coin.png"
 
 
-class Crystal(Entity[TreasurehuntWorld]):
-    """An entity that represents a crystal in the treasurehunt environment."""
+class Bone(Entity[TreasurehuntWorld]):
+    """An entity that represents a bone in the treasurehunt environment."""
 
-    def __init__(self, crystal_value):
+    def __init__(self, bone_value):
         super().__init__()
-        self.passable = True  # Agents can move onto Crystals
-        self.value = crystal_value
-        self.sprite = Path(__file__).parent / "../staghunt/assets/gem.png"  # Use different gem sprite
+        self.passable = True  # Agents can move onto Bones
+        self.value = bone_value
+        self.sprite = Path(__file__).parent / "./assets/bone.png"
 
 
-class Treasure(Entity[TreasurehuntWorld]):
-    """An entity that represents a treasure chest in the treasurehunt environment."""
+class Food(Entity[TreasurehuntWorld]):
+    """An entity that represents food in the treasurehunt environment."""
 
-    def __init__(self, treasure_value):
+    def __init__(self, food_value):
         super().__init__()
-        self.passable = True  # Agents can move onto Treasures
-        self.value = treasure_value
-        self.sprite = Path(__file__).parent / "./assets/hero.png"  # Use hero sprite as placeholder
+        self.passable = True  # Agents can move onto Food
+        self.value = food_value
+        self.sprite = Path(__file__).parent / "./assets/food.png"
 
 
 class EmptyEntity(Entity[TreasurehuntWorld]):
@@ -97,7 +97,7 @@ class EmptyEntity(Entity[TreasurehuntWorld]):
         ):
             # Randomly choose which resource to spawn
             resource_type = np.random.choice([
-                "gem", "apple", "coin", "crystal", "treasure"
+                "gem", "apple", "coin", "bone", "food"
             ])
             
             if resource_type == "gem":
@@ -106,7 +106,7 @@ class EmptyEntity(Entity[TreasurehuntWorld]):
                 world.add(self.location, Apple(world.apple_value))
             elif resource_type == "coin":
                 world.add(self.location, Coin(world.coin_value))
-            elif resource_type == "crystal":
-                world.add(self.location, Crystal(world.crystal_value))
-            elif resource_type == "treasure":
-                world.add(self.location, Treasure(world.treasure_value))
+            elif resource_type == "bone":
+                world.add(self.location, Bone(world.bone_value))
+            elif resource_type == "food":
+                world.add(self.location, Food(world.food_value))

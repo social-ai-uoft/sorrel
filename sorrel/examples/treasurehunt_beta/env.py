@@ -7,9 +7,9 @@ from sorrel.action.action_spec import ActionSpec
 from sorrel.environment import Environment
 
 # imports from our example
-from sorrel.examples.treasurehunt.agents import TreasurehuntAgent
-from sorrel.examples.treasurehunt.entities import EmptyEntity, Sand, Wall, Gem, Apple, Coin, Crystal, Treasure
-from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_beta.agents import TreasurehuntAgent
+from sorrel.examples.treasurehunt_beta.entities import EmptyEntity, Sand, Wall, Gem, Apple, Coin, Bone, Food
+from sorrel.examples.treasurehunt_beta.world import TreasurehuntWorld
 
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
@@ -36,7 +36,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
         agents = []
         for _ in range(agent_num):
             # create the observation spec
-            entity_list = ["EmptyEntity", "Wall", "Sand", "Gem", "Apple", "Coin", "Crystal", "Treasure", "TreasurehuntAgent"]
+            entity_list = ["EmptyEntity", "Wall", "Sand", "Gem", "Apple", "Coin", "Bone", "Food", "TreasurehuntAgent"]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=self.config.model.full_view,
@@ -127,7 +127,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
         for loc in resource_locations:
             # Randomly choose which resource to place
             resource_type = np.random.choice([
-                "gem", "apple", "coin", "crystal", "treasure"
+                "gem", "apple", "coin", "bone", "food"
             ])
             
             if resource_type == "gem":
@@ -136,7 +136,8 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 self.world.add(loc, Apple(self.world.apple_value))
             elif resource_type == "coin":
                 self.world.add(loc, Coin(self.world.coin_value))
-            elif resource_type == "crystal":
-                self.world.add(loc, Crystal(self.world.crystal_value))
-            elif resource_type == "treasure":
-                self.world.add(loc, Treasure(self.world.treasure_value))
+            elif resource_type == "bone":
+                self.world.add(loc, Bone(self.world.bone_value))
+            elif resource_type == "food":
+                self.world.add(loc, Food(self.world.food_value))
+
