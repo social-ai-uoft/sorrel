@@ -36,7 +36,7 @@ class TagEnv(Environment[TagWorld]):
         agents = []
         for _ in range(agent_num):
             # create the observation spec
-            entity_list = ["EmptyEntity", "Wall", "TagAgent"]
+            entity_list = ["EmptyEntity", "Wall", "TagAgent", "ItAgent"]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 # agents always have full view in tag
@@ -82,6 +82,7 @@ class TagEnv(Environment[TagWorld]):
         it_agent_index = np.random.choice(len(agents))
         it_agent = agents[it_agent_index]
         it_agent.is_it = True
+        it_agent.kind = "ItAgent"
 
         self.agents = agents
 

@@ -62,7 +62,8 @@ class TagAgent(Agent[TagWorld]):
         world.move(self, new_location)
 
         # if this agent is "it" and there is another agent near the new location, tag them
-        tagged = None
+        # if there are multiple, randomly tag one
+        tagged = []
         if (
             self.location[0] != 0
             and world.observe(
@@ -70,8 +71,10 @@ class TagAgent(Agent[TagWorld]):
             ).kind
             == "TagAgent"
         ):
-            tagged = world.observe(
-                (self.location[0] - 1, self.location[1], self.location[2])
+            tagged.append(
+                world.observe(
+                    (self.location[0] - 1, self.location[1], self.location[2])
+                )
             )
         if (
             self.location[0] != world.height - 1
@@ -80,8 +83,10 @@ class TagAgent(Agent[TagWorld]):
             ).kind
             == "TagAgent"
         ):
-            tagged = world.observe(
-                (self.location[0] + 1, self.location[1], self.location[2])
+            tagged.append(
+                world.observe(
+                    (self.location[0] + 1, self.location[1], self.location[2])
+                )
             )
         if (
             self.location[1] != 0
@@ -90,8 +95,10 @@ class TagAgent(Agent[TagWorld]):
             ).kind
             == "TagAgent"
         ):
-            tagged = world.observe(
-                (self.location[0], self.location[1] - 1, self.location[2])
+            tagged.append(
+                world.observe(
+                    (self.location[0], self.location[1] - 1, self.location[2])
+                )
             )
         if (
             self.location[1] != world.width - 1
@@ -100,12 +107,19 @@ class TagAgent(Agent[TagWorld]):
             ).kind
             == "TagAgent"
         ):
-            tagged = world.observe(
-                (self.location[0], self.location[1] + 1, self.location[2])
+            tagged.append(
+                world.observe(
+                    (self.location[0], self.location[1] + 1, self.location[2])
+                )
             )
-        if self.is_it and tagged is not None and isinstance(tagged, TagAgent):
+
+        tagged_agent = np.random.choice(tagged) if len(tagged) > 0 else None
+
+        if self.is_it and tagged_agent is not None and isinstance(tagged, TagAgent):
             self.is_it = False
-            tagged.is_it = True
+            self.kind = "TagAgent"
+            tagged_agent.is_it = True
+            tagged_agent.kind = "ItAgent"
 
         # get reward based on if this agent is not "it"
         if not self.is_it:
