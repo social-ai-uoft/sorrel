@@ -39,7 +39,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
             entity_list = ["EmptyEntity", "Wall", "Sand", "Gem", "Apple", "Coin", "Crystal", "Treasure", "TreasurehuntAgent"]
             observation_spec = OneHotObservationSpec(
                 entity_list,
-                full_view=False,
+                full_view=self.config.model.full_view,
                 # note that here we require self.config to have the entry model.agent_vision_radius
                 # don't forget to pass it in as part of config when creating this experiment!
                 vision_radius=self.config.model.agent_vision_radius,
