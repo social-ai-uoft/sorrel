@@ -56,7 +56,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         if self.full_view:
             # For full view, we need to know the world dimensions
             # This will be set when observe() is called
-            self.input_size = (1, len(entity_list) * 0 + 3)  # Placeholder, will be updated
+            self.input_size = (1, len(entity_list) * 0 + 4)  # Placeholder, will be updated
         else:
             self.input_size = (
                 1,
@@ -65,7 +65,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                     * (2 * self.vision_radius + 1)
                     * (2 * self.vision_radius + 1)
                 )
-                + 3,  # Extra features: inv_stag, inv_hare, ready_flag
+                + 4,  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
             )
 
     def observe(self, world: Gridworld, location: tuple | Location | None = None) -> np.ndarray:
@@ -94,13 +94,14 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         
         if agent is None:
             # If no agent found, use default values
-            extra_features = np.array([0, 0, 0], dtype=visual_field.dtype)
+            extra_features = np.array([0, 0, 0, 0], dtype=visual_field.dtype)
         else:
-            # Extract inventory and ready flag from the agent
+            # Extract inventory, ready flag, and interaction reward flag from the agent
             inv_stag = agent.inventory.get("stag", 0)
             inv_hare = agent.inventory.get("hare", 0)
             ready_flag = 1 if agent.ready else 0
-            extra_features = np.array([inv_stag, inv_hare, ready_flag], dtype=visual_field.dtype)
+            interaction_reward_flag = 1 if agent.received_interaction_reward else 0
+            extra_features = np.array([inv_stag, inv_hare, ready_flag, interaction_reward_flag], dtype=visual_field.dtype)
         
         return np.concatenate((visual_field, extra_features))
 
@@ -155,6 +156,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.is_frozen: bool = False
         self.freeze_timer: int = 0
         self.is_removed: bool = False
+        # pending reward from interactions (received when frozen)
+        self.pending_reward: float = 0.0
+        # flag indicating if agent received interaction reward in previous step
+        self.received_interaction_reward: bool = False
         self.respawn_timer: int = 0
         self._removed_from_world: bool = False
 
@@ -218,6 +223,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.inventory = {"stag": 0, "hare": 0}
         self.ready = False
         self.beam_cooldown_timer = 0  # Reset beam cooldown
+        self.pending_reward = 0.0  # Reset pending reward
+        self.received_interaction_reward = False  # Reset interaction reward flag
         # Reset freezing state
         self.is_frozen = False
         self.freeze_timer = 0
@@ -263,6 +270,31 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             
         action_name = self.action_spec.get_readable_action(action)
         reward = 0.0
+        
+        # apply any pending reward from interactions
+        if self.pending_reward > 0:
+            reward += self.pending_reward
+            self.pending_reward = 0.0
+            self.received_interaction_reward = True
+        else:
+            self.received_interaction_reward = False
+
+        # Check for resources at current location (in case one spawned during regeneration)
+        current_entity = world.observe(self.location)
+        if isinstance(current_entity, StagResource) or isinstance(current_entity, HareResource):
+            # collect resource: add to inventory and mark ready
+            self.inventory[current_entity.name] += 1
+            self.ready = True
+            reward += current_entity.value  # taste reward
+            # Reset respawn readiness on the terrain layer below
+            terrain_location = (self.location[0], self.location[1], world.terrain_layer)
+            if world.valid_location(terrain_location):
+                terrain_entity = world.observe(terrain_location)
+                if hasattr(terrain_entity, 'respawn_ready'):
+                    terrain_entity.respawn_ready = False
+                    terrain_entity.respawn_timer = 0
+            # Replace the resource with empty entity
+            world.add(self.location, Empty())
 
         # handle NOOP action - do nothing
         if action_name == "NOOP":
@@ -493,6 +525,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.freeze_agent(freeze_duration)
         other.freeze_agent(freeze_duration)
         
+        # store the other agent's reward to be given on their next turn
+        other.pending_reward += col_payoff + bonus
         # accumulate reward for both agents in world.total_reward
         world.total_reward += row_payoff + col_payoff + 2 * bonus
         # return the initiating agent's reward

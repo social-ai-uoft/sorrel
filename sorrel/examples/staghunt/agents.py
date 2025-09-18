@@ -85,6 +85,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.interaction_reward = interaction_reward
         # beam cooldown tracking
         self.beam_cooldown_timer = 0
+        # pending reward from interactions (received when frozen)
+        self.pending_reward: float = 0.0
+        # flag indicating if agent received interaction reward in previous step
+        self.received_interaction_reward: bool = False
 
         # Define directional sprites
         # Note: Based on cleanup example, hero-back.png faces UP, hero.png faces DOWN
@@ -123,6 +127,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.inventory = {"stag": 0, "hare": 0}
         self.ready = False
         self.beam_cooldown_timer = 0  # Reset beam cooldown
+        self.pending_reward = 0.0  # Reset pending reward
+        self.received_interaction_reward = False  # Reset interaction reward flag
         self.update_agent_kind()  # Initialize agent kind based on orientation
         # reset the underlying model (e.g., clear memory of past states)
         self.model.reset()
@@ -149,11 +155,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         obs = self.observation_spec.observe(world, self.location)
         # flatten to a vector for the model input
         flat = obs.reshape(-1)
-        # append inventory counts and ready flag
+        # append inventory counts, ready flag, and interaction reward flag
         inv_stag = self.inventory.get("stag", 0)
         inv_hare = self.inventory.get("hare", 0)
         ready_flag = 1 if self.ready else 0
-        extra = np.array([inv_stag, inv_hare, ready_flag], dtype=flat.dtype)
+        interaction_reward_flag = 1 if self.received_interaction_reward else 0
+        extra = np.array([inv_stag, inv_hare, ready_flag, interaction_reward_flag], dtype=flat.dtype)
         return np.concatenate([flat, extra]).reshape(1, -1)
 
     def get_action(self, state: np.ndarray) -> int:
@@ -179,6 +186,31 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         """
         action_name = self.action_spec.get_readable_action(action)
         reward = 0.0
+        
+        # apply any pending reward from interactions
+        if self.pending_reward > 0:
+            reward += self.pending_reward
+            self.pending_reward = 0.0
+            self.received_interaction_reward = True
+        else:
+            self.received_interaction_reward = False
+
+        # Check for resources at current location (in case one spawned during regeneration)
+        current_entity = world.observe(self.location)
+        if isinstance(current_entity, StagResource) or isinstance(current_entity, HareResource):
+            # collect resource: add to inventory and mark ready
+            self.inventory[current_entity.name] += 1
+            self.ready = True
+            reward += current_entity.value  # taste reward
+            # Reset respawn readiness on the terrain layer below
+            terrain_location = (self.location[0], self.location[1], world.terrain_layer)
+            if world.valid_location(terrain_location):
+                terrain_entity = world.observe(terrain_location)
+                if hasattr(terrain_entity, 'respawn_ready'):
+                    terrain_entity.respawn_ready = False
+                    terrain_entity.respawn_timer = 0
+            # Replace the resource with empty entity
+            world.add(self.location, Empty())
 
         # handle NOOP action - do nothing
         if action_name == "NOOP":
@@ -423,6 +455,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # reset orientations
         self.orientation = 0
         other.orientation = 0
+        # store the other agent's reward to be given on their next turn
+        other.pending_reward += col_payoff + bonus
         # accumulate reward for both agents in world.total_reward
         world.total_reward += row_payoff + col_payoff + 2 * bonus
         # return the initiating agent's reward
