@@ -120,6 +120,8 @@ class StagHuntWorld(Gridworld):
         self.beam_length: int = int(get_world_param("beam_length", 3))
         self.beam_radius: int = int(get_world_param("beam_radius", 1))
         self.beam_cooldown: int = int(get_world_param("beam_cooldown", 3))
+        self.freeze_duration: int = int(get_world_param("freeze_duration", 5))
+        self.respawn_delay: int = int(get_world_param("respawn_delay", 10))
         self.payoff_matrix: list[list[int]] = [
             list(row) for row in get_world_param("payoff_matrix", [[4, 0], [2, 2]])
         ]

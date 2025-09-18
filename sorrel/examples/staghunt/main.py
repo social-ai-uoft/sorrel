@@ -73,7 +73,10 @@ def run_stag_hunt() -> None:
             "n_quantiles": 8,
         },
         "world": {
-            # grid dimensions
+            # map generation mode
+            "generation_mode": "ascii_map",  # "random" or "ascii_map"
+            "ascii_map_file": "stag_hunt_ascii_map_clean.txt",  # only used when generation_mode is "ascii_map"
+            # grid dimensions (only used for random generation)
             "height": 11,
             "width": 11,
             # number of players in the game
@@ -94,6 +97,9 @@ def run_stag_hunt() -> None:
             "payoff_matrix": [[4, 0], [2, 2]],
             # bonus awarded for participating in an interaction
             "interaction_reward": 1.0,
+            # agent freezing parameters
+            "freeze_duration": 5,  # X: number of frames agent stays frozen after interaction
+            "respawn_delay": 10,   # Y: number of frames before agent respawns after removal
         },
     }
 

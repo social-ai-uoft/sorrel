@@ -273,6 +273,14 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         for loc, agent in zip(chosen_positions, self.agents):
             world.add(loc, agent)
 
+    def take_turn(self) -> None:
+        """Performs a full step in the environment with agent state updates."""
+        # Update agent freezing and respawn states first
+        self.update_agent_states()
+        
+        # Call parent take_turn method
+        super().take_turn()
+
     def override_agents(self, agents: list[Agent]) -> None:
         """Override the current agent configuration with a list of new agents and resets
         the environment.
@@ -281,3 +289,54 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             agents: A list of new agents
         """
         self.agents = agents
+
+    def update_agent_states(self) -> None:
+        """Update all agent freezing and respawn states."""
+        for agent in self.agents:
+            if hasattr(agent, 'update_freeze_state'):
+                agent.update_freeze_state()
+                
+                # Handle removing agent from world when it becomes removed
+                if (hasattr(agent, 'is_removed') and agent.is_removed and 
+                    hasattr(agent, 'respawn_timer') and agent.respawn_timer > 0 and
+                    hasattr(agent, '_removed_from_world') and not agent._removed_from_world and
+                    agent.location in self.world.map):
+                    # Remove agent from world (only once)
+                    self.world.remove(agent.location)
+                    agent._removed_from_world = True
+                    agent.location = None
+                
+                # Handle respawning when timer expires
+                if (hasattr(agent, 'is_removed') and agent.is_removed and 
+                    hasattr(agent, 'respawn_timer') and agent.respawn_timer == 0):
+                    self.respawn_agent(agent)
+
+    def respawn_agent(self, agent) -> None:
+        """Respawn an agent at a random spawn point."""
+        if not hasattr(agent, 'is_removed') or not agent.is_removed:
+            return
+            
+        # Find unoccupied spawn points
+        unoccupied_spawns = []
+        for spawn_point in self.world.agent_spawn_points:
+            y, x, z = spawn_point
+            # check if there's an agent at this spawn point (layer 1)
+            entity_at_spawn = self.world.observe((y, x, 1))
+            if entity_at_spawn.kind == "Empty":
+                unoccupied_spawns.append(spawn_point)
+
+        # if no unoccupied spawns, use all spawns (fallback)
+        if not unoccupied_spawns:
+            unoccupied_spawns = self.world.agent_spawn_points
+
+        # choose a random spawn point
+        new_loc = random.choice(unoccupied_spawns)
+        
+        # Reset agent state
+        agent.reset()
+        
+        # Reset removal flag
+        agent._removed_from_world = False
+        
+        # Place agent at new location
+        self.world.add(new_loc, agent)

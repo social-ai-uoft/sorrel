@@ -56,10 +56,14 @@ class MapBasedWorldGenerator:
             FileNotFoundError: If map file doesn't exist
             ValueError: If map file is empty or invalid
         """
-        if not self.map_file_path.exists():
-            raise FileNotFoundError(f"Map file not found: {self.map_file_path}")
+        # Construct the full path by combining docs directory with map file name
+        docs_dir = Path(__file__).parent / "docs"
+        full_map_path = docs_dir / self.map_file_path.name
         
-        with open(self.map_file_path, 'r', encoding='utf-8') as f:
+        if not full_map_path.exists():
+            raise FileNotFoundError(f"Map file not found: {full_map_path}")
+        
+        with open(full_map_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
         
         # Filter out comment lines and empty lines, keep only map data

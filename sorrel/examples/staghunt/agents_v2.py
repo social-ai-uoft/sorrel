@@ -151,6 +151,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.interaction_reward = interaction_reward
         # beam cooldown tracking
         self.beam_cooldown_timer = 0
+        # freezing state tracking
+        self.is_frozen: bool = False
+        self.freeze_timer: int = 0
+        self.is_removed: bool = False
+        self.respawn_timer: int = 0
+        self._removed_from_world: bool = False
 
         # Define directional sprites
         # Note: Based on cleanup example, hero-back.png faces UP, hero.png faces DOWN
@@ -176,6 +182,29 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         if self.beam_cooldown_timer > 0:
             self.beam_cooldown_timer -= 1
 
+    def freeze_agent(self, freeze_duration: int) -> None:
+        """Freeze the agent for a specified number of frames."""
+        self.is_frozen = True
+        self.freeze_timer = freeze_duration
+
+    def update_freeze_state(self) -> None:
+        """Update the freezing state and timers."""
+        if self.is_frozen and self.freeze_timer > 0:
+            self.freeze_timer -= 1
+            if self.freeze_timer == 0:
+                self.is_frozen = False
+                self.is_removed = True
+                self._removed_from_world = False  # Reset flag for removal
+                # Set respawn timer when agent becomes removed
+                self.respawn_timer = getattr(self, '_respawn_delay', 10)
+        elif self.is_removed and self.respawn_timer > 0:
+            self.respawn_timer -= 1
+
+    def can_act(self) -> bool:
+        """Check if the agent can take actions (not frozen or removed)."""
+        return not self.is_frozen and not self.is_removed
+
+
     # ------------------------------------------------------------------ #
     # Agent lifecycle methods                                             #
     # ------------------------------------------------------------------ #
@@ -189,6 +218,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.inventory = {"stag": 0, "hare": 0}
         self.ready = False
         self.beam_cooldown_timer = 0  # Reset beam cooldown
+        # Reset freezing state
+        self.is_frozen = False
+        self.freeze_timer = 0
+        self.is_removed = False
+        self.respawn_timer = 0
+        self._removed_from_world = False
         self.update_agent_kind()  # Initialize agent kind based on orientation
         # reset the underlying model (e.g., clear memory of past states)
         self.model.reset()
@@ -222,6 +257,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         resources (taste reward) and from interacting with another agent
         (stag‑hunt payoff handled by the environment).
         """
+        # Skip action if agent is frozen or removed
+        if not self.can_act():
+            return 0.0
+            
         action_name = self.action_spec.get_readable_action(action)
         reward = 0.0
 
@@ -441,33 +480,19 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.ready = False
         other.inventory = {"stag": 0, "hare": 0}
         other.ready = False
-        # remove agents from their current positions on the top layer
-        a_loc = self.location
-        o_loc = other.location
-        world.remove(a_loc)
-        world.remove(o_loc)
-        # respawn at random spawn points that are not occupied
-        spawn_points = world.agent_spawn_points
-        # find unoccupied spawn points
-        unoccupied_spawns = []
-        for spawn_point in spawn_points:
-            y, x, z = spawn_point
-            # check if there's an agent at this spawn point (layer 1)
-            entity_at_spawn = world.observe((y, x, 1))
-            if entity_at_spawn.kind == "Empty":
-                unoccupied_spawns.append(spawn_point)
-
-        # if not enough unoccupied spawns, use all spawns (fallback)
-        if len(unoccupied_spawns) < 2:
-            unoccupied_spawns = spawn_points
-
-        # choose two distinct spawn points at random from unoccupied ones
-        new_a_loc, new_o_loc = random.sample(unoccupied_spawns, k=2)
-        world.add((new_a_loc[0], new_a_loc[1], 1), self)
-        world.add((new_o_loc[0], new_o_loc[1], 1), other)
-        # reset orientations
-        self.orientation = 0
-        other.orientation = 0
+        
+        # Get freeze and respawn parameters from world config
+        freeze_duration = getattr(world, 'freeze_duration', 5)
+        respawn_delay = getattr(world, 'respawn_delay', 10)
+        
+        # Store respawn delay for later use
+        self._respawn_delay = respawn_delay
+        other._respawn_delay = respawn_delay
+        
+        # Freeze both agents instead of immediately respawning
+        self.freeze_agent(freeze_duration)
+        other.freeze_agent(freeze_duration)
+        
         # accumulate reward for both agents in world.total_reward
         world.total_reward += row_payoff + col_payoff + 2 * bonus
         # return the initiating agent's reward

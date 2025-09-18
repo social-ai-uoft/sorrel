@@ -19,25 +19,27 @@ model:
   sync_freq: 100
 world:
   # Map Generation Configuration
-  generation_mode: "ascii_map"  # "random" or "ascii_map"
-  ascii_map_file: "stag_hunt_ascii_map_clean.txt"  # only used when generation_mode is "ascii_map"
+  generation_mode: "random"  # "random" or "ascii_map"
   
-  # Game mechanics (unchanged from original)
+  # Random generation parameters
+  height: 11
+  width: 11
+  num_agents: 4
+  
+  # Game mechanics
   beam_cooldown: 3
   beam_length: 3
   beam_radius: 2
   destroyable_health: 3
   interaction_reward: 1.0
-  num_agents: 4  # Must match or be less than spawn points in map
   payoff_matrix:
   - - 4
     - 0
   - - 2
     - 2
-  resource_density: 0.15  # Only used for random generation
+  resource_density: 0.15
   respawn_lag: 10
   taste_reward: 0.1
   # agent freezing parameters
   freeze_duration: 5  # X: number of frames agent stays frozen after interaction
   respawn_delay: 10   # Y: number of frames before agent respawns after removal
-  # height and width are automatically determined from the ASCII map
