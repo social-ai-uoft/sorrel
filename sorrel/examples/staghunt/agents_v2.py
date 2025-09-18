@@ -279,23 +279,6 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         else:
             self.received_interaction_reward = False
 
-        # Check for resources at current location (in case one spawned during regeneration)
-        current_entity = world.observe(self.location)
-        if isinstance(current_entity, StagResource) or isinstance(current_entity, HareResource):
-            # collect resource: add to inventory and mark ready
-            self.inventory[current_entity.name] += 1
-            self.ready = True
-            reward += current_entity.value  # taste reward
-            # Reset respawn readiness on the terrain layer below
-            terrain_location = (self.location[0], self.location[1], world.terrain_layer)
-            if world.valid_location(terrain_location):
-                terrain_entity = world.observe(terrain_location)
-                if hasattr(terrain_entity, 'respawn_ready'):
-                    terrain_entity.respawn_ready = False
-                    terrain_entity.respawn_timer = 0
-            # Replace the resource with empty entity
-            world.add(self.location, Empty())
-
         # handle NOOP action - do nothing
         if action_name == "NOOP":
             pass

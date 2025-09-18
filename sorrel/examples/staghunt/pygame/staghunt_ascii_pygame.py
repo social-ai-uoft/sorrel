@@ -230,7 +230,17 @@ class StagHuntASCIIPygame:
                 else:
                     # Use original Sand logic - can_convert_to_resource based on resource locations
                     can_convert = (y, x, world.dynamic_layer) in world.resource_spawn_points
-                    world.add(terrain_loc, Sand(can_convert_to_resource=can_convert, respawn_ready=True))
+                    
+                    # Determine resource type for this location
+                    resource_type = None
+                    if can_convert:
+                        # Find the resource type for this location
+                        for ry, rx, rtype in map_data.resource_locations:
+                            if ry == y and rx == x:
+                                resource_type = rtype
+                                break
+                    
+                    world.add(terrain_loc, Sand(can_convert_to_resource=can_convert, respawn_ready=True, resource_type=resource_type))
         
         # Place resources EXACTLY where map specifies
         for y, x, resource_type in map_data.resource_locations:

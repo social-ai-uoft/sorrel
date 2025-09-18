@@ -164,6 +164,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     world.add(index, Sand(can_convert_to_resource=False, respawn_ready=True))
                 else:
                     # Resource spawn points get Sand that can convert to resources
+                    # We'll set the resource type later after resources are placed
                     world.add(index, Sand(can_convert_to_resource=True, respawn_ready=True))
             elif layer == world.dynamic_layer:
                 # dynamic layer: optionally place initial resources
@@ -184,13 +185,22 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             dynamic = (y, x, world.dynamic_layer)
             # choose resource type uniformly at random
             if np.random.random() < 0.2:
+                resource_type = 'stag'
                 world.add(
                     dynamic, StagResource(world.taste_reward, world.destroyable_health)
                 )
             else:
+                resource_type = 'hare'
                 world.add(
                     dynamic, HareResource(world.taste_reward, world.destroyable_health)
                 )
+            
+            # Update the Sand entity below to remember this resource type
+            terrain_loc = (y, x, world.terrain_layer)
+            if world.valid_location(terrain_loc):
+                terrain_entity = world.observe(terrain_loc)
+                if hasattr(terrain_entity, 'can_convert_to_resource') and terrain_entity.can_convert_to_resource:
+                    terrain_entity.resource_type = resource_type
 
         # choose initial agent positions uniformly from spawn points without replacement
         chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
@@ -239,7 +249,17 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 else:
                     # Use original Sand logic - can_convert_to_resource based on resource locations
                     can_convert = (y, x, world.dynamic_layer) in world.resource_spawn_points
-                    world.add(terrain_loc, Sand(can_convert_to_resource=can_convert, respawn_ready=True))
+                    
+                    # Determine resource type for this location
+                    resource_type = None
+                    if can_convert:
+                        # Find the resource type for this location
+                        for ry, rx, rtype in map_data.resource_locations:
+                            if ry == y and rx == x:
+                                resource_type = rtype
+                                break
+                    
+                    world.add(terrain_loc, Sand(can_convert_to_resource=can_convert, respawn_ready=True, resource_type=resource_type))
         
         # Place resources EXACTLY where map specifies
         for y, x, resource_type in map_data.resource_locations:

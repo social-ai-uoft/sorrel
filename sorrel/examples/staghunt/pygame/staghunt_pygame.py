@@ -404,13 +404,23 @@ class StagHuntPygame:
             if isinstance(entity, Empty):
                 # Randomly choose stag or hare
                 if np.random.random() < 0.3:  # 30% chance for stag
+                    resource_type = 'stag'
                     resource = StagResource(self.config["world"]["taste_reward"], 
                                           self.config["world"]["destroyable_health"])
                 else:  # 70% chance for hare
+                    resource_type = 'hare'
                     resource = HareResource(self.config["world"]["taste_reward"], 
                                           self.config["world"]["destroyable_health"])
                 
                 self.world.add(location, resource)
+                
+                # Update the Sand entity below to remember this resource type
+                terrain_loc = (y, x, 0)  # terrain layer
+                if self.world.valid_location(terrain_loc):
+                    terrain_entity = self.world.observe(terrain_loc)
+                    if hasattr(terrain_entity, 'can_convert_to_resource') and terrain_entity.can_convert_to_resource:
+                        terrain_entity.resource_type = resource_type
+                
                 spawned += 1
 
 
