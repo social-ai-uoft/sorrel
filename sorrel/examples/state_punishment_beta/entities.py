@@ -28,37 +28,63 @@ class Wall(Entity):
         self.sprite = Path(__file__).parent / "./assets/wall.png"
 
 
-class Gem(Entity):
-    """Gem entity with positive value but potential social harm."""
+
+
+class A(Entity):
+    """Resource A with configurable value and social harm."""
     
-    def __init__(self, value: float = 5.0, social_harm: float = 1.0):
+    def __init__(self, value: float = 3.0, social_harm: float = 0.5):
         super().__init__()
-        self.kind = "Gem"
+        self.kind = "A"
         self.passable = True
         self.value = value
         self.social_harm = social_harm
         self.sprite = Path(__file__).parent / "./assets/gem.png"
 
 
-class Coin(Entity):
-    """Coin entity with positive value and no social harm."""
+class B(Entity):
+    """Resource B with configurable value and social harm."""
     
-    def __init__(self, value: float = 10.0, social_harm: float = 0.0):
+    def __init__(self, value: float = 7.0, social_harm: float = 1.0):
         super().__init__()
-        self.kind = "Coin"
+        self.kind = "B"
         self.passable = True
         self.value = value
         self.social_harm = social_harm
         self.sprite = Path(__file__).parent / "./assets/coin.png"
 
 
-class Bone(Entity):
-    """Bone entity with negative value and high social harm."""
+class C(Entity):
+    """Resource C with configurable value and social harm."""
     
-    def __init__(self, value: float = -3.0, social_harm: float = 2.0):
+    def __init__(self, value: float = 2.0, social_harm: float = 0.3):
         super().__init__()
-        self.kind = "Bone"
+        self.kind = "C"
+        self.passable = True
+        self.value = value
+        self.social_harm = social_harm
+        self.sprite = Path(__file__).parent / "./assets/gem.png"
+
+
+class D(Entity):
+    """Resource D with configurable value and social harm."""
+    
+    def __init__(self, value: float = -2.0, social_harm: float = 1.5):
+        super().__init__()
+        self.kind = "D"
         self.passable = True
         self.value = value
         self.social_harm = social_harm
         self.sprite = Path(__file__).parent / "./assets/bone.png"
+
+
+class E(Entity):
+    """Resource E with configurable value and social harm."""
+    
+    def __init__(self, value: float = 1.0, social_harm: float = 0.1):
+        super().__init__()
+        self.kind = "E"
+        self.passable = True
+        self.value = value
+        self.social_harm = social_harm
+        self.sprite = Path(__file__).parent / "./assets/coin.png"

@@ -20,7 +20,8 @@ class StatePunishmentAgent(Agent):
                  model: PyTorchIQN,
                  agent_id: int = 0,
                  use_composite_views: bool = False,
-                 use_composite_actions: bool = False):
+                 use_composite_actions: bool = False,
+                 use_multi_env_composite: bool = False):
         """
         Initialize the state punishment agent.
         
@@ -36,6 +37,7 @@ class StatePunishmentAgent(Agent):
         self.agent_id = agent_id
         self.use_composite_views = use_composite_views
         self.use_composite_actions = use_composite_actions
+        self.use_multi_env_composite = use_multi_env_composite
         self.sprite = Path(__file__).parent / "./assets/hero.png"
         
         # Track encounters and rewards
@@ -43,10 +45,21 @@ class StatePunishmentAgent(Agent):
         self.individual_score = 0.0
         self.vote_history = []
         
+        # Multi-environment composite state tracking
+        self.composite_envs = []
+        self.state_stack_size = 6  # Number of environments to stack
+        
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
-        prev_states = self.model.memory.current_state()
-        stacked_states = np.vstack((prev_states, state))
+        if self.use_multi_env_composite and self.composite_envs:
+            # Use multi-environment composite state
+            composite_state = self.generate_multi_env_composite_state()
+            prev_states = self.model.memory.current_state()
+            stacked_states = np.vstack((prev_states, composite_state))
+        else:
+            # Use single environment state
+            prev_states = self.model.memory.current_state()
+            stacked_states = np.vstack((prev_states, state))
 
         model_input = stacked_states.reshape(1, -1)
         action = self.model.take_action(model_input)
@@ -54,9 +67,97 @@ class StatePunishmentAgent(Agent):
 
     def pov(self, world) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
+        if self.use_composite_views and hasattr(self, 'composite_envs') and self.composite_envs:
+            # Use composite views - observe from multiple agent perspectives
+            return self.generate_composite_view(world)
+        else:
+            # Use single agent view
+            return self.generate_single_view(world)
+    
+    def generate_single_view(self, world) -> np.ndarray:
+        """Generate observation from single agent perspective."""
         image = self.observation_spec.observe(world, self.location)
         # flatten the image to get the state
-        return image.reshape(1, -1)
+        visual_field = image.reshape(1, -1)
+        
+        # Add extra features: punishment level, social harm, and random noise
+        punishment_level = world.state_system.prob
+        social_harm = world.get_social_harm(self.agent_id)
+        random_noise = np.random.random()
+        
+        extra_features = np.array([punishment_level, social_harm, random_noise], dtype=visual_field.dtype).reshape(1, -1)
+        return np.concatenate([visual_field, extra_features], axis=1)
+    
+    def generate_composite_view(self, world) -> np.ndarray:
+        """Generate composite observation from multiple agent perspectives."""
+        # Get own view
+        own_view = self.generate_single_view(world)
+        
+        # Get views from other agents' perspectives
+        other_views = []
+        for env in self.composite_envs:
+            if env is not None and env != world:
+                # Get view from this environment's agent perspective
+                if hasattr(env, 'agents') and env.agents:
+                    other_agent = env.agents[0]  # Each env has one agent
+                    other_view = other_agent.generate_single_view(env.world)
+                    other_views.append(other_view)
+        
+        # Combine all views
+        all_views = [own_view] + other_views
+        
+        # Pad to fixed number of views (e.g., 3 total views)
+        max_views = 3
+        while len(all_views) < max_views:
+            if all_views:
+                zero_view = np.zeros_like(all_views[0])
+                all_views.append(zero_view)
+            else:
+                break
+        
+        # Concatenate all views
+        composite_view = np.concatenate(all_views[:max_views], axis=1)
+        return composite_view
+    
+    def generate_multi_env_composite_state(self) -> np.ndarray:
+        """
+        Generate composite state from multiple environments.
+        This creates a stacked state representation across multiple agent perspectives.
+        """
+        if not self.composite_envs:
+            # Fallback to single environment if no composite envs available
+            return self.pov(self.composite_envs[0] if self.composite_envs else None)
+        
+        env_states = []
+        for env in self.composite_envs:
+            if env is not None:
+                env_state = self.pov(env)
+                env_states.append(env_state)
+            else:
+                # Create zero state if environment is None
+                if env_states:
+                    zero_state = np.zeros_like(env_states[0])
+                    env_states.append(zero_state)
+        
+        # Pad to state_stack_size if needed
+        while len(env_states) < self.state_stack_size:
+            if env_states:
+                zero_state = np.zeros_like(env_states[0])
+                env_states.append(zero_state)
+            else:
+                break
+        
+        # Concatenate all environment states
+        if env_states:
+            composite_state = np.concatenate(env_states[:self.state_stack_size])
+            return composite_state
+        else:
+            # Return zero state if no environments available
+            return np.zeros(self.observation_spec.input_size)
+    
+    def set_composite_environments(self, envs: list) -> None:
+        """Set the environments to use for composite state generation."""
+        self.composite_envs = envs[:self.state_stack_size]
         
         
     def act(self, world, action: int) -> float:
@@ -160,9 +261,9 @@ class StatePunishmentAgent(Agent):
                     punishment = world.state_system.calculate_punishment(target_object.kind)
                     reward += punishment
                     
-                    # Update social harm
+                    # Update social harm for all other agents
                     if hasattr(target_object, 'social_harm'):
-                        world.update_social_harm(self.agent_id, target_object.kind)
+                        world.update_social_harm(self.agent_id, target_object)
                 
                 # Move the agent to the new location
                 world.move(self, new_location)

@@ -19,7 +19,7 @@ In the State Punishment game, agents navigate a gridworld environment collecting
 - Real-time feedback on how their votes affect the system
 - Social harm tracking for each agent
 
-### 3. **Noob Action**
+### 3. **Noop Action**
 - Agents can choose to do nothing (action 6 in simple mode, action 13 in composite mode)
 - Useful for strategic waiting and exploration
 - Helps agents learn when not to act
@@ -40,13 +40,13 @@ In the State Punishment game, agents navigate a gridworld environment collecting
 #### Simple Mode (7 actions):
 - `up`, `down`, `left`, `right`: Movement
 - `vote_increase`, `vote_decrease`: Voting
-- `noob`: Do nothing
+- `noop`: Do nothing
 
 #### Composite Mode (13 actions):
 - `up_no_vote`, `down_no_vote`, `left_no_vote`, `right_no_vote`: Movement without voting
 - `up_increase`, `down_increase`, `left_increase`, `right_increase`: Movement + vote to increase punishment
 - `up_decrease`, `down_decrease`, `left_decrease`, `right_decrease`: Movement + vote to decrease punishment
-- `noob`: Do nothing
+- `noop`: Do nothing
 
 ### Observation Space
 - Standard gridworld observation (entity positions, types)
@@ -143,7 +143,7 @@ This implementation modernizes the original state_punishment game by:
 2. **Clean Architecture**: Separates world, environment, and agent logic
 3. **Modern Patterns**: Follows established Sorrel patterns from other games
 4. **Simplified Configuration**: Dictionary-based config instead of complex YAML
-5. **Enhanced Features**: Composite views/actions, noob action, better logging
+5. **Enhanced Features**: Composite views/actions, noop action, better logging
 6. **Code Quality**: Cleaner, more maintainable code structure
 
 ## Future Enhancements

@@ -11,7 +11,7 @@ from sorrel.models.pytorch import PyTorchIQN
 
 from .world import StatePunishmentWorld
 from .agents import StatePunishmentAgent
-from .entities import EmptyEntity, Wall, Gem, Coin, Bone
+from .entities import EmptyEntity, Wall, A, B, C, D, E
 
 
 class StatePunishmentEnv(Environment[StatePunishmentWorld]):
@@ -20,6 +20,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
     def __init__(self, world: StatePunishmentWorld, config: dict) -> None:
         self.use_composite_views = config.get("use_composite_views", False)
         self.use_composite_actions = config.get("use_composite_actions", False)
+        self.use_multi_env_composite = config.get("use_multi_env_composite", False)
         super().__init__(world, config)
 
     def setup_agents(self):
@@ -28,8 +29,8 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         agents = []
         
         for i in range(agent_num):
-            # Create the observation spec
-            entity_list = ["EmptyEntity", "Wall", "Gem", "Coin", "Bone", "StatePunishmentAgent"]
+            # Create the observation spec with all 5 resource types
+            entity_list = ["EmptyEntity", "Wall", "A", "B", "C", "D", "E", "StatePunishmentAgent"]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=self.config.model.full_view,
@@ -41,22 +42,32 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
             # Create the action spec
             if self.use_composite_actions:
-                # Composite actions: 4 movements × 3 voting options + noob = 13 actions
+                # Composite actions: 4 movements × 3 voting options + noop = 13 actions
                 action_names = [
                     "up_no_vote", "down_no_vote", "left_no_vote", "right_no_vote",
                     "up_increase", "down_increase", "left_increase", "right_increase", 
                     "up_decrease", "down_decrease", "left_decrease", "right_decrease",
-                    "noob"
+                    "noop"
                 ]
             else:
-                # Simple actions: 4 movements + 2 voting + noob = 7 actions
-                action_names = ["up", "down", "left", "right", "vote_increase", "vote_decrease", "noob"]
+                # Simple actions: 4 movements + 2 voting + noop = 7 actions
+                action_names = ["up", "down", "left", "right", "vote_increase", "vote_decrease", "noop"]
                 
             action_spec = ActionSpec(action_names)
 
-            # Create the model
+            # Create the model with extra features (3 additional: punishment_level, social_harm, random_noise)
+            # The input_size should be a tuple representing the flattened dimensions
+            # We need to add 3 to the total flattened size
+            base_flattened_size = observation_spec.input_size[0] * observation_spec.input_size[1] * observation_spec.input_size[2] + 3
+            
+            # Adjust for composite views (multiply by number of views)
+            if self.use_composite_views:
+                # Composite views use 3 different agent perspectives
+                flattened_size = base_flattened_size * 3
+            else:
+                flattened_size = base_flattened_size
             model = PyTorchIQN(
-                input_size=observation_spec.input_size,
+                input_size=(flattened_size,),
                 action_space=action_spec.n_actions,
                 layer_size=self.config.model.layer_size,
                 epsilon=self.config.model.epsilon,
@@ -82,6 +93,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     agent_id=i,
                     use_composite_views=self.use_composite_views,
                     use_composite_actions=self.use_composite_actions,
+                    use_multi_env_composite=self.use_multi_env_composite,
                 )
             )
 
@@ -122,15 +134,8 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         resource_locations = [remaining_spawn_locations[i] for i in resource_locations_indices]
         
         for loc in resource_locations:
-            # Randomly choose which resource to place
-            resource_type = np.random.choice(["gem", "coin", "bone"])
-            
-            if resource_type == "gem":
-                self.world.add(loc, Gem(self.world.gem_value))
-            elif resource_type == "coin":
-                self.world.add(loc, Coin(self.world.coin_value))
-            elif resource_type == "bone":
-                self.world.add(loc, Bone(self.world.bone_value))
+            # Use complex entity spawning
+            self.world.spawn_entity(loc)
 
     def take_turn(self):
         """Override take_turn to add resource spawning after agent turns."""
@@ -150,16 +155,8 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
             if (isinstance(self.world.map[index], EmptyEntity) and 
                 np.random.random() < self.world.spawn_prob):
                 
-                # Randomly choose resource type
-                resource_type = np.random.choice(["gem", "coin", "bone"])
-                
-                if resource_type == "gem":
-                    self.world.add(index, Gem(self.world.gem_value))
-                elif resource_type == "coin":
-                    self.world.add(index, Coin(self.world.coin_value))
-                elif resource_type == "bone":
-                    self.world.add(index, Bone(self.world.bone_value))
-                
+                # Use complex entity spawning
+                self.world.spawn_entity(index)
                 spawned_count += 1
         
                     
@@ -170,6 +167,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         
         # Reset world (parent already calls create_world, but we need our custom reset)
         self.world.reset()
+        
+        # Reset epoch tracking in state system
+        self.world.state_system.reset_epoch()
         
         # Repopulate environment (parent already calls this, but we need our custom population)
         self.populate_environment()
@@ -191,5 +191,15 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         metrics["Global/punishment_level"] = self.world.state_system.prob
         metrics["Global/total_votes"] = len(self.world.state_system.vote_history)
         metrics["Global/mean_individual_score"] = np.mean([agent.individual_score for agent in self.agents])
+        
+        # Vote tracking metrics
+        vote_stats = self.world.state_system.get_epoch_vote_stats()
+        metrics["Global/epoch_vote_up"] = vote_stats['vote_up']
+        metrics["Global/epoch_vote_down"] = vote_stats['vote_down']
+        metrics["Global/epoch_total_votes"] = vote_stats['total_votes']
+        
+        # Transgression and punishment statistics
+        transgression_stats = self.world.state_system.get_transgression_stats()
+        metrics.update(transgression_stats)
         
         return metrics

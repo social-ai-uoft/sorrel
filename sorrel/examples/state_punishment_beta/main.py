@@ -70,6 +70,7 @@ class StatePunishmentLogger(CombinedLogger):
 
 def run_state_punishment(use_composite_views: bool = False, 
                         use_composite_actions: bool = False,
+                        use_multi_env_composite: bool = False,
                         num_agents: int = 3,
                         epochs: int = 10000) -> None:
     """Run the state punishment experiment with specified parameters."""
@@ -86,8 +87,8 @@ def run_state_punishment(use_composite_views: bool = False,
         },
         "model": {
             "agent_vision_radius": 2,
-            "epsilon": 1.0,
-            "epsilon_decay": 0.0001,
+            "epsilon": 0.5,
+            "epsilon_decay": 0.001,
             "full_view": True,
             "layer_size": 128,
             "n_frames": 3,
@@ -105,18 +106,24 @@ def run_state_punishment(use_composite_views: bool = False,
         "world": {
             "height": 10,
             "width": 10,
-            "gem_value": 5.0,
-            "coin_value": 10.0,
-            "bone_value": -3.0,
+            "a_value": 3.0,
+            "b_value": 7.0,
+            "c_value": 2.0,
+            "d_value": -2.0,
+            "e_value": 1.0,
             "spawn_prob": 0.05,
             "respawn_prob": 0.02,
             "init_punishment_prob": 0.1,
             "punishment_magnitude": -10.0,
             "change_per_vote": 0.2,
-            "taboo_resources": ["Gem", "Bone"],
+            "taboo_resources": ["A", "B", "C", "D", "E"],
+            "entity_spawn_probs": {
+                "A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2
+            }
         },
         "use_composite_views": use_composite_views,
         "use_composite_actions": use_composite_actions,
+        "use_multi_env_composite": use_multi_env_composite,
     }
 
     # Create log directory with run name and timestamp
@@ -128,16 +135,54 @@ def run_state_punishment(use_composite_views: bool = False,
     print(f"Epochs: {config['experiment']['epochs']}, Max turns per epoch: {config['experiment']['max_turns']}")
     print(f"Number of agents: {config['experiment']['num_agents']}")
     print(f"Composite views: {use_composite_views}, Composite actions: {use_composite_actions}")
+    print(f"Multi-env composite: {use_multi_env_composite}")
     print(f"Epsilon: {config['model']['epsilon']}, Epsilon decay: {config['model']['epsilon_decay']}")
     print(f"Punishment magnitude: {config['world']['punishment_magnitude']}")
     print(f"Initial punishment prob: {config['world']['init_punishment_prob']}")
+    print(f"Taboo resources: {config['world']['taboo_resources']}")
     print(f"Log directory: {log_dir}")
 
-    # Construct the world
-    world = StatePunishmentWorld(config=config, default_entity=EmptyEntity())
+    # Create separate environments for each agent (like original state_punishment)
+    experiments = []
+    shared_state_system = None  # Shared state system for social harm
+    shared_social_harm = None  # Shared social harm tracker
     
-    # Construct the environment
-    experiment = StatePunishmentEnv(world, config)
+    for i in range(config["experiment"]["num_agents"]):
+        # Create individual world for each agent
+        world = StatePunishmentWorld(config=config, default_entity=EmptyEntity())
+        
+        # Share the state system across all agents for social harm
+        if shared_state_system is None:
+            shared_state_system = world.state_system
+        else:
+            world.state_system = shared_state_system
+        
+        # Share the social harm tracker across all agents
+        if shared_social_harm is None:
+            shared_social_harm = world.social_harm
+        else:
+            world.social_harm = shared_social_harm
+        
+        # Create individual environment for each agent
+        experiment = StatePunishmentEnv(world, config)
+        
+        # Remove all agents except the current one
+        experiment.agents = [experiment.agents[i]]
+        
+        # Update agent_id to 0 since each agent is now alone in their environment
+        experiment.agents[0].agent_id = 0
+        
+        experiments.append(experiment)
+    
+    # Set up composite environments for each agent if using composite views
+    if use_composite_views:
+        for i, exp in enumerate(experiments):
+            # Set composite environments for this agent (all other environments)
+            composite_envs = [experiments[j] for j in range(len(experiments)) if j != i]
+            exp.agents[0].set_composite_environments(composite_envs)
+    
+    # Use the first experiment as the main one for logging purposes
+    experiment = experiments[0]
     
     # Run the experiment with basic logging
     logger = CombinedLogger(
@@ -156,7 +201,11 @@ def run_state_punishment(use_composite_views: bool = False,
         original_record_turn(epoch, loss, reward, epsilon, **kwargs)
     
     logger.record_turn = record_turn_with_punishment
-    experiment.run_experiment(logger=logger)
+    
+    # Run experiments for each agent independently
+    for i, exp in enumerate(experiments):
+        print(f"\nRunning experiment for Agent {i}...")
+        exp.run_experiment(logger=logger)
 
 
 if __name__ == "__main__":
@@ -167,6 +216,8 @@ if __name__ == "__main__":
                        help="Use composite views (multiple agent perspectives)")
     parser.add_argument("--composite-actions", action="store_true", 
                        help="Use composite actions (movement + voting combined)")
+    parser.add_argument("--multi-env-composite", action="store_true", 
+                       help="Use multi-environment composite state generation")
     parser.add_argument("--num-agents", type=int, default=3, 
                        help="Number of agents in the environment")
     parser.add_argument("--epochs", type=int, default=10000, 
@@ -177,6 +228,7 @@ if __name__ == "__main__":
     run_state_punishment(
         use_composite_views=args.composite_views,
         use_composite_actions=args.composite_actions,
+        use_multi_env_composite=args.multi_env_composite,
         num_agents=args.num_agents,
         epochs=args.epochs
     )
