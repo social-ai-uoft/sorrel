@@ -1,5 +1,6 @@
 """Entities for the state punishment game."""
 
+import numpy as np
 from pathlib import Path
 from sorrel.entities import Entity
 
@@ -14,6 +15,13 @@ class EmptyEntity(Entity):
         self.value = 0
         self.social_harm = 0
         self.sprite = Path(__file__).parent / "./assets/empty.png"
+        self.has_transitions = True
+    
+    def transition(self, world):
+        """Randomly spawn resources in empty locations."""
+        if hasattr(world, 'spawn_prob') and np.random.random() < world.spawn_prob:
+            # Use the world's spawn_entity method to create a new resource
+            world.spawn_entity(self.location)
 
 
 class Wall(Entity):
@@ -63,7 +71,7 @@ class C(Entity):
         self.passable = True
         self.value = value
         self.social_harm = social_harm
-        self.sprite = Path(__file__).parent / "./assets/gem.png"
+        self.sprite = Path(__file__).parent / "./assets/food.png"
 
 
 class D(Entity):
@@ -75,7 +83,7 @@ class D(Entity):
         self.passable = True
         self.value = value
         self.social_harm = social_harm
-        self.sprite = Path(__file__).parent / "./assets/bone.png"
+        self.sprite = Path(__file__).parent / "./assets/apple.png"
 
 
 class E(Entity):
@@ -87,4 +95,4 @@ class E(Entity):
         self.passable = True
         self.value = value
         self.social_harm = social_harm
-        self.sprite = Path(__file__).parent / "./assets/coin.png"
+        self.sprite = Path(__file__).parent / "./assets/bone.png"

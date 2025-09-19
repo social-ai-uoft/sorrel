@@ -35,7 +35,7 @@ world:
   init_punishment_prob: 0.1
   punishment_magnitude: -10.0
   change_per_vote: 0.2
-  taboo_resources: ["Gem", "Bone"]
+  taboo_resources: ["A", "B", "C", "D", "E"]
 
 # Feature flags
 use_composite_views: false

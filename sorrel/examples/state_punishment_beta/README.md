@@ -1,157 +1,155 @@
-# State Punishment Beta
+# State Punishment Beta - Game Rules
 
-A modern implementation of the state punishment game using the Sorrel framework. This game explores collective punishment, voting mechanisms, and social dynamics in a multi-agent environment.
+## Overview
 
-## Game Overview
+The State Punishment Beta is a multi-agent reinforcement learning game that explores collective punishment, voting mechanisms, and social dynamics. Agents navigate a gridworld environment, collect resources, and participate in a democratic voting system that controls punishment probabilities for taboo resource collection.
 
-In the State Punishment game, agents navigate a gridworld environment collecting resources while participating in a collective punishment system. Agents can vote to increase or decrease the punishment probability for certain "taboo" resources, creating a dynamic social environment where individual and collective interests interact.
+## Game Environment
 
-## Key Features
+### Grid World
+- **Size**: 10×10 grid (configurable)
+- **Layers**: 1 layer
+- **Boundaries**: Walls around the perimeter
+- **Duration**: 100 turns per episode (configurable)
+- **Agents**: 3 agents (configurable)
 
-### 1. **Composite Views & Actions Support**
-- **Composite Views**: Agents can observe the world from multiple perspectives (their own + other agents)
-- **Composite Actions**: Movement and voting can be combined into single actions
-- **Simple Mode**: Traditional separate movement and voting actions
-- **Configurable**: Enable/disable via command line arguments or configuration
+### Agent Characteristics
+- **Unique Identity**: Each agent has a distinct visual representation
+- **Vision**: 2-tile radius around agent (configurable)
+- **Movement**: 4-directional (up, down, left, right)
+- **Actions**: Movement + Voting + No-op
 
-### 2. **Punishment Level Visibility**
-- Agents can see the current punishment probability in their observations
-- Real-time feedback on how their votes affect the system
-- Social harm tracking for each agent
+## Resources
 
-### 3. **Noop Action**
-- Agents can choose to do nothing (action 6 in simple mode, action 13 in composite mode)
-- Useful for strategic waiting and exploration
-- Helps agents learn when not to act
+All five resources (A, B, C, D, E) are considered **taboo** and subject to punishment:
 
-### 4. **Dynamic Punishment System**
-- Punishment probability changes based on agent votes
-- Different resources have different punishment schedules
-- Social harm affects all agents when taboo resources are collected
+| Resource | Value | Social Harm | Asset | Description |
+|----------|-------|-------------|-------|-------------|
+| **A** | +3.0 | 0.5 | 🟢 Gem | Moderate value, low social harm |
+| **B** | +7.0 | 1.0 | 🟡 Coin | High value, moderate social harm |
+| **C** | +2.0 | 0.3 | 🍎 Food | Low value, low social harm |
+| **D** | -2.0 | 1.5 | 🍎 Apple | Negative value, high social harm |
+| **E** | +1.0 | 0.1 | 🦴 Bone | Low value, minimal social harm |
 
-## Game Mechanics
+## Actions
 
-### Resources
-- **Gem**: High value (+5), but causes social harm and can be punished
-- **Coin**: High value (+10), no social harm, never punished
-- **Bone**: Negative value (-3), high social harm, always punished when taboo
+### Simple Mode (7 actions)
+1. **Movement**: `up`, `down`, `left`, `right`
+2. **Voting**: `vote_increase`, `vote_decrease`
+3. **No-op**: `noop` (do nothing)
 
-### Actions
-#### Simple Mode (7 actions):
-- `up`, `down`, `left`, `right`: Movement
-- `vote_increase`, `vote_decrease`: Voting
-- `noop`: Do nothing
+### Composite Mode (13 actions)
+- **Combined Actions**: Movement + Voting in single action
+  - `up_no_vote`, `down_no_vote`, `left_no_vote`, `right_no_vote`
+  - `up_increase`, `down_increase`, `left_increase`, `right_increase`
+  - `up_decrease`, `down_decrease`, `left_decrease`, `right_decrease`
+- **No-op**: `noop`
 
-#### Composite Mode (13 actions):
-- `up_no_vote`, `down_no_vote`, `left_no_vote`, `right_no_vote`: Movement without voting
-- `up_increase`, `down_increase`, `left_increase`, `right_increase`: Movement + vote to increase punishment
-- `up_decrease`, `down_decrease`, `left_decrease`, `right_decrease`: Movement + vote to decrease punishment
-- `noop`: Do nothing
+## Voting System
 
-### Observation Space
-- Standard gridworld observation (entity positions, types)
-- **Punishment Level**: Current punishment probability (0-1)
-- **Social Harm**: Current social harm affecting this agent
-- **Vote Activity**: Recent voting patterns (normalized)
+### Voting Costs
+- **Cost**: -0.1 reward for each vote (both increase and decrease)
+- **No Cost**: Choosing not to vote (no-op) has no cost
 
-## Usage
+### Voting Effects
+- **Increase Vote**: +0.2 to punishment probability
+- **Decrease Vote**: -0.2 to punishment probability
+- **Range**: Punishment probability is clamped between 0.0 and 1.0
+- **Initial**: Starts at 0.1 (10%)
 
-### Basic Usage
-```bash
-# Run with default settings (simple mode, 3 agents)
-python main.py
+### Punishment Calculation
+- **Probability**: Based on current voting level (0-100%)
+- **Magnitude**: -10.0 (configurable)
+- **Formula**: `punishment = magnitude × punishment_probability`
+- **Example**: At 50% probability, punishment = -10.0 × 0.5 = -5.0
 
-# Run with composite views and actions
-python main.py --composite-views --composite-actions
+## Social Harm System
 
-# Run with custom number of agents and epochs
-python main.py --num-agents 5 --epochs 20000
+### How Social Harm Works
+1. **Trigger**: When any agent collects a resource with `social_harm > 0`
+2. **Distribution**: Social harm is added to ALL OTHER agents (not the collector)
+3. **Accumulation**: Social harm accumulates over time
+4. **Application**: Each agent receives their accumulated social harm as a reward penalty at the end of their turn
+5. **Reset**: Social harm is reset to 0 after being applied
+
+### Social Harm Values
+- **Resource A**: 0.5 social harm
+- **Resource B**: 1.0 social harm  
+- **Resource C**: 0.3 social harm
+- **Resource D**: 1.5 social harm
+- **Resource E**: 0.1 social harm
+
+## Resource Spawning
+
+### Dynamic Spawning
+- **Probability**: 5% chance per turn for each empty cell
+- **Method**: EmptyEntity transition system
+- **Distribution**: Equal probability (20%) for each resource type
+- **Initial**: 15 resources placed randomly at game start
+
+## Reward Structure
+
+### Individual Rewards
+- **Resource Value**: Direct value from collected resource
+- **Punishment**: Negative reward if punishment is applied
+- **Voting Cost**: -0.1 for each vote cast
+- **Social Harm**: Penalty from other agents' resource collection
+
+### Total Reward Formula
+```
+Total Reward = Resource Value + Punishment + Voting Cost + Social Harm
 ```
 
-### Command Line Arguments
-- `--composite-views`: Enable composite state observations
-- `--composite-actions`: Enable composite actions (movement + voting)
-- `--num-agents N`: Number of agents in the environment (default: 3)
-- `--epochs N`: Number of training epochs (default: 10000)
+## Observation System
 
-### Configuration
-The game can be configured via `configs/config.yaml` or by modifying the configuration dictionary in `main.py`.
+### Agent Observations
+- **Visual Field**: 2-tile radius around agent (5×5 grid)
+- **Entity Types**: EmptyEntity, Wall, A, B, C, D, E, Agent0, Agent1, Agent2
+- **One-Hot Encoding**: Each entity type has unique representation
+- **Agent Distinction**: Each agent appears differently to others
 
-Key parameters:
-- `world.init_punishment_prob`: Initial punishment probability (0-1)
-- `world.punishment_magnitude`: Magnitude of punishment (negative value)
-- `world.change_per_vote`: How much punishment probability changes per vote
-- `world.taboo_resources`: List of resources that can be punished
-- `world.spawn_prob`: Probability of new resources spawning each turn
+### Extra Features
+- **Punishment Level**: Current punishment probability (0.0-1.0)
+- **Social Harm**: Agent's current accumulated social harm
+- **Random Noise**: Random value for exploration
 
-## File Structure
+## Game Dynamics
 
-```
-state_punishment_beta/
-├── main.py              # Main experiment script
-├── world.py             # StatePunishmentWorld class
-├── env.py               # StatePunishmentEnv class  
-├── agents.py            # StatePunishmentAgent class
-├── entities.py          # Game entities (Gem, Coin, Bone, etc.)
-├── state_system.py      # Punishment state management
-├── configs/
-│   └── config.yaml      # Configuration file
-└── README.md            # This file
-```
+### Strategic Considerations
+1. **Individual vs Collective**: High-value resources provide individual benefit but create social harm
+2. **Voting Strategy**: Agents must balance voting costs with punishment control
+3. **Social Coordination**: Agents can influence each other's behavior through voting
+4. **Resource Management**: Different resources have different risk/reward profiles
 
-## Key Classes
+### Learning Challenges
+- **Multi-Agent Coordination**: Agents must learn to cooperate despite individual incentives
+- **Dynamic Environment**: Punishment levels change based on collective voting
+- **Social Dilemma**: Individual benefit vs. collective welfare
+- **Temporal Dependencies**: Actions have delayed consequences through social harm
 
-### StatePunishmentWorld
-- Inherits from `Gridworld`
-- Manages punishment state system
-- Handles resource spawning and social harm
-- Tracks punishment level and voting
+## Configuration Parameters
 
-### StatePunishmentEnv
-- Inherits from `Environment[StatePunishmentWorld]`
-- Implements agent setup and environment population
-- Handles agent transitions and reward calculation
-- Manages punishment system updates
+### Key Settings
+- **Initial Punishment**: 0.1 (10%)
+- **Punishment Magnitude**: -10.0
+- **Vote Change**: 0.2 per vote
+- **Voting Cost**: -0.1 per vote
+- **Spawn Probability**: 0.05 per turn
+- **Max Turns**: 100
+- **Number of Agents**: 3
 
-### StatePunishmentAgent
-- Handles individual agent behavior
-- Supports both simple and composite action modes
-- Integrates punishment level into observations
-- Manages voting actions and resource collection
+### Advanced Features
+- **Composite Views**: Agents can observe from multiple perspectives
+- **Composite Actions**: Movement and voting combined
+- **Multi-Environment**: Agents can interact across environments
 
-### StateSystem
-- Manages punishment probability and voting
-- Handles punishment calculations
-- Tracks punishment level changes and history
+## Win Conditions
 
-## Logging and Metrics
+### No Explicit Win Condition
+- **Objective**: Maximize cumulative reward over episode
+- **Success Metrics**: 
+  - High individual reward
+  - Low social harm received
+  - Effective punishment management
+  - Cooperative behavior emergence
 
-The game includes comprehensive logging with:
-- Individual agent scores and encounters
-- Punishment level dynamics
-- Voting behavior patterns
-- Social harm distribution
-- Resource collection statistics
-
-Metrics are logged to both console and TensorBoard for analysis.
-
-## Differences from Original
-
-This implementation modernizes the original state_punishment game by:
-
-1. **Framework Migration**: Uses Sorrel instead of agentarium
-2. **Clean Architecture**: Separates world, environment, and agent logic
-3. **Modern Patterns**: Follows established Sorrel patterns from other games
-4. **Simplified Configuration**: Dictionary-based config instead of complex YAML
-5. **Enhanced Features**: Composite views/actions, noop action, better logging
-6. **Code Quality**: Cleaner, more maintainable code structure
-
-## Future Enhancements
-
-Potential improvements for future versions:
-- More sophisticated punishment schedules
-- Dynamic taboo resource assignment
-- Multi-level voting systems
-- Communication between agents
-- Asymmetric agent roles
-- Environmental factors affecting punishment

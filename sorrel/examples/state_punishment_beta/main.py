@@ -1,10 +1,11 @@
 """Main script for running the state punishment game."""
 
+import argparse
 from datetime import datetime
 from pathlib import Path
 
 from sorrel.examples.state_punishment_beta.entities import EmptyEntity
-from sorrel.examples.state_punishment_beta.env import StatePunishmentEnv
+from sorrel.examples.state_punishment_beta.env import StatePunishmentEnv, MultiAgentStatePunishmentEnv
 from sorrel.examples.state_punishment_beta.world import StatePunishmentWorld
 from sorrel.utils.logging import TensorboardLogger, ConsoleLogger, Logger
 
@@ -23,63 +24,16 @@ class CombinedLogger(Logger):
         self.tensorboard_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
 
 
-class StatePunishmentLogger(CombinedLogger):
-    """Custom logger for state punishment game with additional metrics."""
-    
-    def __init__(self, max_epochs: int, log_dir: str | Path, experiment=None, *args):
-        super().__init__(max_epochs, log_dir, *args)
-        self.experiment = experiment
-        # Initialize additional values for logging
-        self.additional_values = {}
-    
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
-        # Add state punishment specific metrics
-        punishment_metrics = {}
-        
-        if self.experiment and hasattr(self.experiment, 'agents'):
-            # Record turn for each agent individually with hierarchical tags
-            for i, agent in enumerate(self.experiment.agents):
-                if hasattr(agent, 'encounters'):
-                    # Individual agent score
-                    punishment_metrics[f"Agent_{i}/individual_score"] = agent.individual_score
-                    
-                    # All encounters for this agent
-                    for entity_type, count in agent.encounters.items():
-                        punishment_metrics[f"Agent_{i}/{entity_type}_encounters"] = count
-                        
-                    # Voting behavior
-                    if hasattr(agent, 'vote_history'):
-                        punishment_metrics[f"Agent_{i}/total_votes"] = len(agent.vote_history)
-                        if agent.vote_history:
-                            punishment_metrics[f"Agent_{i}/vote_ratio"] = sum(agent.vote_history) / len(agent.vote_history)
-            
-            # Global punishment metrics
-            if hasattr(self.experiment, 'world') and hasattr(self.experiment.world, 'state_system'):
-                # Record both current and average punishment level
-                punishment_metrics["Global/punishment_level_current"] = self.experiment.world.state_system.prob
-                punishment_metrics["Global/punishment_level_avg"] = self.experiment.world.get_average_punishment_level()
-                punishment_metrics["Global/total_votes"] = len(self.experiment.world.state_system.vote_history)
-                punishment_metrics["Global/mean_individual_score"] = sum(agent.individual_score for agent in self.experiment.agents) / len(self.experiment.agents)
-        
-        # Update additional values
-        self.additional_values.update(punishment_metrics)
-        
-        # Call parent record_turn with the additional metrics
-        super().record_turn(epoch, loss, reward, epsilon, **punishment_metrics)
-
-
-def run_state_punishment(use_composite_views: bool = False, 
-                        use_composite_actions: bool = False,
-                        use_multi_env_composite: bool = False,
-                        num_agents: int = 3,
-                        epochs: int = 10000) -> None:
-    """Run the state punishment experiment with specified parameters."""
-    
-    # Configuration dictionary
-    config = {
+def create_config(use_composite_views: bool = False, 
+                 use_composite_actions: bool = False,
+                 use_multi_env_composite: bool = False,
+                 num_agents: int = 3,
+                 epochs: int = 10000) -> dict:
+    """Create configuration dictionary for the experiment."""
+    return {
         "experiment": {
             "epochs": epochs,
-              "max_turns": 100,
+            "max_turns": 100,
             "record_period": 50,
             "run_name": f"state_punishment_{'composite' if use_composite_views or use_composite_actions else 'simple'}_{num_agents}agents",
             "num_agents": num_agents,
@@ -126,91 +80,74 @@ def run_state_punishment(use_composite_views: bool = False,
         "use_multi_env_composite": use_multi_env_composite,
     }
 
-    # Create log directory with run name and timestamp
+
+def main(use_composite_views: bool = False, 
+         use_composite_actions: bool = False,
+         use_multi_env_composite: bool = False,
+         num_agents: int = 3,
+         epochs: int = 10000) -> None:
+    """Run the state punishment experiment."""
+    
+    # Create configuration
+    config = create_config(use_composite_views, use_composite_actions, use_multi_env_composite, num_agents, epochs)
+    
+    # Create log directory
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     log_dir = Path(__file__).parent / f'runs/{config["experiment"]["run_name"]}_{timestamp}'
-
+    
     print(f"Running State Punishment experiment...")
     print(f"Run name: {config['experiment']['run_name']}")
     print(f"Epochs: {config['experiment']['epochs']}, Max turns per epoch: {config['experiment']['max_turns']}")
     print(f"Number of agents: {config['experiment']['num_agents']}")
     print(f"Composite views: {use_composite_views}, Composite actions: {use_composite_actions}")
     print(f"Multi-env composite: {use_multi_env_composite}")
-    print(f"Epsilon: {config['model']['epsilon']}, Epsilon decay: {config['model']['epsilon_decay']}")
-    print(f"Punishment magnitude: {config['world']['punishment_magnitude']}")
-    print(f"Initial punishment prob: {config['world']['init_punishment_prob']}")
-    print(f"Taboo resources: {config['world']['taboo_resources']}")
     print(f"Log directory: {log_dir}")
 
-    # Create separate environments for each agent (like original state_punishment)
-    experiments = []
-    shared_state_system = None  # Shared state system for social harm
-    shared_social_harm = None  # Shared social harm tracker
+    # Create environments for each agent
+    environments = []
+    shared_state_system = None
+    shared_social_harm = None
     
-    for i in range(config["experiment"]["num_agents"]):
-        # Create individual world for each agent
+    for i in range(num_agents):
         world = StatePunishmentWorld(config=config, default_entity=EmptyEntity())
         
-        # Share the state system across all agents for social harm
         if shared_state_system is None:
             shared_state_system = world.state_system
         else:
             world.state_system = shared_state_system
         
-        # Share the social harm tracker across all agents
         if shared_social_harm is None:
             shared_social_harm = world.social_harm
         else:
             world.social_harm = shared_social_harm
         
-        # Create individual environment for each agent
-        experiment = StatePunishmentEnv(world, config)
+        # Create a modified config for this specific agent environment
+        agent_config = dict(config)
+        agent_config["experiment"]["num_agents"] = 1  # Each environment has only one agent
+        agent_config["model"]["n_frames"] = 1  # Single frame per observation
         
-        # Remove all agents except the current one
-        experiment.agents = [experiment.agents[i]]
-        
-        # Update agent_id to 0 since each agent is now alone in their environment
-        experiment.agents[0].agent_id = 0
-        
-        experiments.append(experiment)
+        env = StatePunishmentEnv(world, agent_config)
+        env.agents[0].agent_id = i
+        environments.append(env)
     
-    # Set up composite environments for each agent if using composite views
-    if use_composite_views:
-        for i, exp in enumerate(experiments):
-            # Set composite environments for this agent (all other environments)
-            composite_envs = [experiments[j] for j in range(len(experiments)) if j != i]
-            exp.agents[0].set_composite_environments(composite_envs)
+    # Create the multi-agent environment that coordinates all individual environments
+    multi_agent_env = MultiAgentStatePunishmentEnv(
+        individual_envs=environments,
+        shared_state_system=shared_state_system,
+        shared_social_harm=shared_social_harm
+    )
     
-    # Use the first experiment as the main one for logging purposes
-    experiment = experiments[0]
-    
-    # Run the experiment with basic logging
+    # Create logger
     logger = CombinedLogger(
         max_epochs=config["experiment"]["epochs"],
         log_dir=log_dir,
     )
     
-    # Add punishment level tracking
-    original_record_turn = logger.record_turn
-    def record_turn_with_punishment(epoch, loss, reward, epsilon=0, **kwargs):
-        # Print punishment level information
-        if hasattr(experiment, 'world') and hasattr(experiment.world, 'state_system'):
-            avg_punishment = experiment.world.get_average_punishment_level()
-            current_punishment = experiment.world.state_system.prob
-            print(f"Epoch {epoch}: Current punishment level: {current_punishment:.3f}, Average: {avg_punishment:.3f}")
-        original_record_turn(epoch, loss, reward, epsilon, **kwargs)
-    
-    logger.record_turn = record_turn_with_punishment
-    
-    # Run experiments for each agent independently
-    for i, exp in enumerate(experiments):
-        print(f"\nRunning experiment for Agent {i}...")
-        exp.run_experiment(logger=logger)
+    # Run the experiment using the multi-agent environment
+    multi_agent_env.run_experiment(logger=logger)
 
 
 if __name__ == "__main__":
-    import argparse
-    
     parser = argparse.ArgumentParser(description="Run State Punishment Game")
     parser.add_argument("--composite-views", action="store_true", 
                        help="Use composite views (multiple agent perspectives)")
@@ -225,7 +162,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    run_state_punishment(
+    main(
         use_composite_views=args.composite_views,
         use_composite_actions=args.composite_actions,
         use_multi_env_composite=args.multi_env_composite,

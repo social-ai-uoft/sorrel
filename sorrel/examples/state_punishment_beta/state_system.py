@@ -121,12 +121,7 @@ class StateSystem:
         resource_names = ["A", "B", "C", "D", "E"]
         
         for i, resource in enumerate(resource_names[:self.num_resources]):
-            if resource in self.taboo_resources:
-                # Use exponential matrix for taboo resources
-                schedules[resource] = self.punishments_prob_matrix[i].tolist()
-            else:
-                # Non-taboo resources have lower punishment probabilities
-                schedules[resource] = [0.1 * self.punishments_prob_matrix[i][j] for j in range(self.num_steps)]
+            schedules[resource] = self.punishments_prob_matrix[i].tolist()
         
         return schedules
     
