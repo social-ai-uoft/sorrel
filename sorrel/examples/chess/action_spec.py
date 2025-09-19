@@ -1,5 +1,6 @@
 from sorrel.action.action_spec import ActionSpec
 
+
 class ChessActionSpec(ActionSpec):
     """Action specification covering every possible move on an 8x8 chess board.
 
@@ -29,20 +30,19 @@ class ChessActionSpec(ActionSpec):
 
         Row 0 is the top (rank 8) and column 0 is file ``"a"``.
         """
-        file = chr(ord('a') + col)
+        file = chr(ord("a") + col)
         rank = str(8 - row)
         return f"{file}{rank}"
-    
+
     @staticmethod
     def algebraic(loc: str) -> tuple[int, int, int]:
-        """Convert algebraic notation to board coordinates.
-        """
+        """Convert algebraic notation to board coordinates."""
         file = loc[0]
         rank = loc[1]
-        col = ord(file) - ord('a')
+        col = ord(file) - ord("a")
         row = 8 - int(rank)
         return row, col, 0
-    
+
     @staticmethod
     def algebraic_move(move: str) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
         return (

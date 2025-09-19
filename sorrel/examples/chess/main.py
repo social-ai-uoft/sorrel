@@ -5,8 +5,8 @@ creates a ``ChessWorld`` (8x8 board) and a ``ChessEnvironment`` with a minimal
 configuration, then runs a short experiment using the random agents.
 """
 
-from sorrel.examples.chess.world import ChessWorld
 from sorrel.examples.chess.env import ChessEnvironment
+from sorrel.examples.chess.world import ChessWorld
 
 if __name__ == "__main__":
     # Minimal configuration – only the experiment parameters are required for

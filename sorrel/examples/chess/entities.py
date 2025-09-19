@@ -1,13 +1,12 @@
-"""Chess entity definitions for the Sorrel example.
-"""
+"""Chess entity definitions for the Sorrel example."""
 
 from pathlib import Path
+
 from sorrel.entities.entity import Entity
 
 
 class EmptySquare(Entity):
-    """A passable empty board cell.
-    """
+    """A passable empty board cell."""
 
     def __init__(self):
         super().__init__()
@@ -45,7 +44,7 @@ class ChessPiece(Entity):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.colour})"
-    
+
     def sprite_name(self) -> str:
         return f"./assets/{self.kind.lower()}-{self.colour.lower()}.png"
 

@@ -9,13 +9,15 @@ move generation.
 from __future__ import annotations
 
 import copy
+
 import numpy as np
 
-from sorrel.location import Location
 from sorrel.entities.entity import Entity
-from sorrel.worlds.gridworld import Gridworld
 from sorrel.examples.chess import entities
-from sorrel.examples.chess.action_spec import ChessActionSpec 
+from sorrel.examples.chess.action_spec import ChessActionSpec
+from sorrel.location import Location
+from sorrel.worlds.gridworld import Gridworld
+
 
 class ChessWorld(Gridworld):
     """A simple 8x8 chess board.
@@ -28,13 +30,12 @@ class ChessWorld(Gridworld):
         default_entity = default_entity or entities.EmptySquare()
         super().__init__(height=8, width=8, layers=1, default_entity=default_entity)
 
-    
     def observe_algebraic(self, loc: str) -> Entity:
         return self.observe(ChessActionSpec.algebraic(loc))
 
     def is_valid_move(self, end: Location, colour: str) -> bool:
-        """Return ``True`` if ``end`` is inside the board and
-        the move does not capture a friendly piece.
+        """Return ``True`` if ``end`` is inside the board and the move does not capture
+        a friendly piece.
 
         Args:
             end (Location): The location to check.
@@ -49,12 +50,11 @@ class ChessWorld(Gridworld):
             return True
         return False
 
-
     def apply_move(self, start: Location, end: Location) -> float:
         """Move an entity from ``start`` to ``end`` if the destination is passable.
 
         Args:
-            start: 
+            start:
 
         Return the reward if a piece is taken.
         """
@@ -86,23 +86,27 @@ class ChessWorld(Gridworld):
         return reward
 
     def _opponent(self, colour: str) -> str:
-        """Return the opposing colour.
-        """
+        """Return the opposing colour."""
         return "black" if colour == "white" else "white"
 
-    def _is_square_attacked(self, pos: Location | tuple[int, int, int], attacker_colour: str) -> bool:
+    def _is_square_attacked(
+        self, pos: Location | tuple[int, int, int], attacker_colour: str
+    ) -> bool:
         """Return True if any piece of *attacker_colour* attacks *pos*.
 
-        This checks pawn captures, knight jumps, king adjacency, and sliding
-        attacks for rooks, bishops and queens.  It stops scanning a direction
-        when a piece blocks the line of sight.
+        This checks pawn captures, knight jumps, king adjacency, and sliding attacks for
+        rooks, bishops and queens.  It stops scanning a direction when a piece blocks
+        the line of sight.
         """
         row, col, _ = pos
         for r in range(self.height):
             for c in range(self.width):
                 start = (r, c, 0)
                 piece = self.observe(start)
-                if not isinstance(piece, entities.ChessPiece) or piece.colour != attacker_colour:
+                if (
+                    not isinstance(piece, entities.ChessPiece)
+                    or piece.colour != attacker_colour
+                ):
                     continue
                 kind = getattr(piece, "kind", "")
                 if kind == "Pawn":
@@ -111,7 +115,16 @@ class ChessWorld(Gridworld):
                         if (r + direction, c + dc, 0) == pos:
                             return True
                 elif kind == "Knight":
-                    jumps = [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]
+                    jumps = [
+                        (2, 1),
+                        (2, -1),
+                        (-2, 1),
+                        (-2, -1),
+                        (1, 2),
+                        (1, -2),
+                        (-1, 2),
+                        (-1, -2),
+                    ]
                     if any((r + dr, c + dc, 0) == pos for dr, dc in jumps):
                         return True
                 elif kind == "King":
@@ -204,7 +217,10 @@ class ChessWorld(Gridworld):
             for col in range(self.width):
                 pos = (row, col, 0)
                 piece = self.observe(pos)
-                if isinstance(piece, entities.King) and getattr(piece, "colour", None) == colour:
+                if (
+                    isinstance(piece, entities.King)
+                    and getattr(piece, "colour", None) == colour
+                ):
                     king_pos = pos
                     break
             if king_pos:
@@ -229,9 +245,8 @@ class ChessWorld(Gridworld):
         return len(self.legal_moves(colour)) == 0
 
     def is_stalemate(self, colour: str) -> bool:
-        """Return ``True`` if the colour is in stalemate conditions: the player is not in
-        check, but has zero legal moves.
-        """
+        """Return ``True`` if the colour is in stalemate conditions: the player is not
+        in check, but has zero legal moves."""
         if len(self.legal_moves(colour)) == 0 and not self.is_check(colour):
             return True
         return False
@@ -263,23 +278,30 @@ class ChessWorld(Gridworld):
             for col in range(self.width):
                 start = (row, col, 0)
                 entity = self.observe(start)
-                if not isinstance(entity, entities.ChessPiece) or entity.colour != colour:
+                if (
+                    not isinstance(entity, entities.ChessPiece)
+                    or entity.colour != colour
+                ):
                     continue
-
 
                 kind = getattr(entity, "kind", "")
 
                 if kind == "Pawn":
                     # Single forward move
                     forward = (row + pawn_dir, col, 0)
-                    if self.valid_location(forward) and getattr(self.observe(forward), "kind", None) == "EmptySquare":
+                    if (
+                        self.valid_location(forward)
+                        and getattr(self.observe(forward), "kind", None)
+                        == "EmptySquare"
+                    ):
                         try_add(start, forward)
                         # Double forward from starting position
                         if row == pawn_start_row:
                             double = (row + 2 * pawn_dir, col, 0)
                             if (
                                 self.valid_location(double)
-                                and getattr(self.observe(double), "kind", None) == "EmptySquare"
+                                and getattr(self.observe(double), "kind", None)
+                                == "EmptySquare"
                             ):
                                 try_add(start, double)
                     # Captures
@@ -287,7 +309,11 @@ class ChessWorld(Gridworld):
                         capture = (row + pawn_dir, col + dc, 0)
                         if self.valid_location(capture):
                             target = self.observe(capture)
-                            if getattr(target, "kind", None) != "EmptySquare" and hasattr(target, "colour") and getattr(target, "colour") != colour:
+                            if (
+                                getattr(target, "kind", None) != "EmptySquare"
+                                and hasattr(target, "colour")
+                                and getattr(target, "colour") != colour
+                            ):
                                 try_add(start, capture)
 
                 elif kind == "Rook":
@@ -323,7 +349,16 @@ class ChessWorld(Gridworld):
                             c += dc
 
                 elif kind == "Queen":
-                    directions = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+                    directions = [
+                        (1, 0),
+                        (-1, 0),
+                        (0, 1),
+                        (0, -1),
+                        (1, 1),
+                        (1, -1),
+                        (-1, 1),
+                        (-1, -1),
+                    ]
                     for dr, dc in directions:
                         r, c = row + dr, col + dc
                         while 0 <= r < self.height and 0 <= c < self.width:
@@ -339,13 +374,31 @@ class ChessWorld(Gridworld):
                             c += dc
 
                 elif kind == "Knight":
-                    jumps = [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]
+                    jumps = [
+                        (2, 1),
+                        (2, -1),
+                        (-2, 1),
+                        (-2, -1),
+                        (1, 2),
+                        (1, -2),
+                        (-1, 2),
+                        (-1, -2),
+                    ]
                     for dr, dc in jumps:
                         end = (row + dr, col + dc, 0)
                         try_add(start, end)
 
                 elif kind == "King":
-                    directions = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+                    directions = [
+                        (1, 0),
+                        (-1, 0),
+                        (0, 1),
+                        (0, -1),
+                        (1, 1),
+                        (1, -1),
+                        (-1, 1),
+                        (-1, -1),
+                    ]
                     for dr, dc in directions:
                         end = (row + dr, col + dc, 0)
                         try_add(start, end)
@@ -396,7 +449,6 @@ class ChessWorld(Gridworld):
         return mask
 
     def reset(self) -> None:
-        """Reset the board to the initial empty state.
-        """
+        """Reset the board to the initial empty state."""
 
         self.create_world()

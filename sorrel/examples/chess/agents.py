@@ -1,5 +1,4 @@
-"""Agents for the Chess example.
-"""
+"""Agents for the Chess example."""
 
 from __future__ import annotations
 
@@ -9,10 +8,11 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.agents import Agent
-from sorrel.models.base_model import BaseModel, RandomModel
 from sorrel.examples.chess.action_spec import ChessActionSpec
 from sorrel.examples.chess.observation_spec import ChessOneHotObservationSpec
 from sorrel.examples.chess.world import ChessWorld
+from sorrel.models.base_model import BaseModel, RandomModel
+
 
 class RandomChessAgent(Agent[ChessWorld]):
     """A minimal chess agent.
@@ -22,12 +22,12 @@ class RandomChessAgent(Agent[ChessWorld]):
     """
 
     def __init__(
-            self, 
-            observation_spec: ChessOneHotObservationSpec, 
-            action_spec: ChessActionSpec, 
-            model: BaseModel, 
-            colour: str
-        ):
+        self,
+        observation_spec: ChessOneHotObservationSpec,
+        action_spec: ChessActionSpec,
+        model: BaseModel,
+        colour: str,
+    ):
         super().__init__(observation_spec, action_spec, model)
         self.colour = colour.lower()
         # sprite is placeholder that is never accessed
@@ -37,7 +37,9 @@ class RandomChessAgent(Agent[ChessWorld]):
         self.model.reset()
 
     def pov(self, world: ChessWorld) -> np.ndarray:
-        image = self.observation_spec.observe(world, None)  # full view does not need a location
+        image = self.observation_spec.observe(
+            world, None
+        )  # full view does not need a location
         return image.reshape(1, -1)
 
     def get_action(self, state: np.ndarray) -> int:
@@ -94,11 +96,8 @@ def make_random_chess_agent(colour: str, world: ChessWorld) -> RandomChessAgent:
         full_view=True,
         env_dims=(world.height, world.width, world.layers),
     )
-    observation_spec.override_input_size(
-        (512, )
-    )
+    observation_spec.override_input_size((512,))
     action_spec = ChessActionSpec()  # full action space for chess moves
-
 
     model = RandomModel(
         observation_spec.input_size,
