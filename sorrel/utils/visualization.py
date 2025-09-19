@@ -43,24 +43,12 @@ def render_sprite(
         A list of np.ndarrays of C x H x W, determined either by the world size or the vision size.
     """
 
-    # get wall sprite
-    wall_sprite = world.get_entities_of_kind("Wall")[0].sprite
-
     # If no vision or location is provided, show the whole map (do not centre on the location)
     if vision is None or location is None:
-        location = (world.map.shape[0] // 2, world.map.shape[1] // 2)
-        # Use the largest location dimension to ensure that the entire map is visible in the event of a non-square map
-        vision_i = location[0]
-        vision_j = location[1]
+        bounds = (0, world.height - 1, 0, world.width - 1)
     else:
         vision_i = vision
         vision_j = vision
-
-    # Layer handling...
-    # Separate images will be generated per layer. These will be returned as a list and can then be plotted as a list.
-    layers = []
-    for z in range(world.map.shape[2]):
-
         bounds = (
             location[0] - vision_i,
             location[0] + vision_i,
@@ -68,17 +56,34 @@ def render_sprite(
             location[1] + vision_j,
         )
 
+    # Layer handling...
+    # Separate images will be generated per layer. These will be returned as a list and can then be plotted as a list.
+    layers = []
+    for z in range(world.map.shape[2]):
+
         image_r = np.zeros(
-            ((2 * vision_i + 1) * tile_size[0], (2 * vision_j + 1) * tile_size[1])
+            (
+                (bounds[1] - bounds[0] + 1) * tile_size[0],
+                (bounds[3] - bounds[2] + 1) * tile_size[1],
+            )
         )
         image_g = np.zeros(
-            ((2 * vision_i + 1) * tile_size[0], (2 * vision_j + 1) * tile_size[1])
+            (
+                (bounds[1] - bounds[0] + 1) * tile_size[0],
+                (bounds[3] - bounds[2] + 1) * tile_size[1],
+            )
         )
         image_b = np.zeros(
-            ((2 * vision_i + 1) * tile_size[0], (2 * vision_j + 1) * tile_size[1])
+            (
+                (bounds[1] - bounds[0] + 1) * tile_size[0],
+                (bounds[3] - bounds[2] + 1) * tile_size[1],
+            )
         )
         image_a = np.zeros(
-            ((2 * vision_i + 1) * tile_size[0], (2 * vision_j + 1) * tile_size[1])
+            (
+                (bounds[1] - bounds[0] + 1) * tile_size[0],
+                (bounds[3] - bounds[2] + 1) * tile_size[1],
+            )
         )
 
         image_i = 0
@@ -87,6 +92,8 @@ def render_sprite(
         for i in range(bounds[0], bounds[1] + 1):
             for j in range(bounds[2], bounds[3] + 1):
                 if i < 0 or j < 0 or i >= world.map.shape[0] or j >= world.map.shape[1]:
+                    # get wall sprite
+                    wall_sprite = world.get_entities_of_kind("Wall")[0].sprite
                     # Tile is out of bounds, use wall_app
                     tile_image = (
                         img.open(os.path.expanduser(wall_sprite))

@@ -114,7 +114,7 @@ class ConsoleLogger(Logger):
             f"║ Epoch:{str(epoch).rjust(6)} ║ Loss:{str(loss).rjust(7)} ║ Reward:{str(reward).rjust(5)} ║"
         )
         print(f"╚══════════════╩══════════════╩══════════════╝", end="\r")
-        if epoch == self.max_epochs - 1:
+        if epoch == self.max_epochs:
             print(f"╚══════════════╩══════════════╩══════════════╝")
         super().record_turn(epoch, loss, reward, epsilon, **kwargs)
 

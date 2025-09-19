@@ -172,4 +172,5 @@ class Environment[W: Gridworld]:
 
             # update epsilon
             for agent in self.agents:
-                agent.model.epsilon_decay(self.config.model.epsilon_decay)
+                if hasattr(self.config.model, "epsilon_decay"):
+                    agent.model.epsilon_decay(self.config.model.epsilon_decay)
