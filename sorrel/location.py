@@ -132,6 +132,21 @@ class Location(tuple):
     def __len__(self):
         """Return the dimension of this Location."""
         return self.dims
+    
+    def adjacent(self, world_dims: tuple[int, int, int]) -> list[Location]:
+        """Get adjacent locations to the current location. Excludes values that are outside of the world map."""
+        bounds_x = (0, world_dims[0])
+        bounds_y = (0, world_dims[1])
+
+        adjacent_locs: list[Location] = []
+
+        for vec in ((1, 0), (0, 1), (-1, 0), (0, -1)):
+            adjacent_loc = self + Vector(*vec)
+            if not adjacent_loc.x < bounds_x[0] and not adjacent_loc.x >= bounds_x[1] and not adjacent_loc.y < bounds_y[0] and not adjacent_loc.y >= bounds_y[1]:
+                adjacent_locs.append(adjacent_loc)
+
+        return adjacent_locs
+
 
 
 class Vector:

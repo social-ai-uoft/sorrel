@@ -1,0 +1,37 @@
+experiment:
+  name: cooking
+  epochs: 1000
+  max_turns: 100
+  epsilon_decay: 0.0001
+  record_period: 50
+
+world:
+  height: 9
+  width: 9
+  layers: 1
+
+model:
+  iqn:
+    type: iRainbowModel
+    parameters:
+      layer_size: 250
+      n_step: 3
+      batch_size: 64
+      memory_size: 1024
+      LR: 0.00025
+      TAU: .001
+      GAMMA: 0.99
+      n_quantiles: 12
+      sync_freq: 200
+      model_update_freq: 4
+      epsilon: 0.8
+      device: cpu
+  epsilon_decay: 0.0003
+
+agent:
+  agent:
+    num: 1
+    model: iqn
+    obs:
+      vision: 3
+      n_frames: 3
