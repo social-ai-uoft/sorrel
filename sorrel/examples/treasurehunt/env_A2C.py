@@ -34,7 +34,7 @@ class TreasurehuntFlexEnv(Environment[TreasurehuntWorld]):
         Requires self.config.model.agent_vision_radius to be defined. Model type is
         determined by self.config.model.type.
         """
-        agent_num = 2
+        agent_num = 1
         agents = []
         model_type = self.config.model.get("type", "a2c").lower()
 
