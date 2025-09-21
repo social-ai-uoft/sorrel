@@ -70,33 +70,34 @@ if __name__ == "__main__":
     config = {
         "experiment": {
             "epochs": 100000,
-            "max_turns": 50,
-            "record_period": 50,
-            "run_name": "treasurehunt_with_respawn",  # Name for this run (will be included in log directory)
-            "num_agents": 1,  # Number of agents in the environment
-            "initial_resources": 15,  # Number of initial resources to place
+            "max_turns": 100,
+            "record_period": 100,
+            "run_name": "treasurehunt_5r_check_withrespawn_frame1_eps1_gamma0.95_2agents",  # Name for this run (will be included in log directory)
+            "num_agents": 2,  # Number of agents in the environment
+            "initial_resources": 50,  # Number of initial resources to place
         },
         "model": {
-            "agent_vision_radius": 2,
-            "epsilon": 1.0,  # Initial epsilon value for exploration
-            "epsilon_decay": 0.0001,
-            "full_view": True,  # Whether agents can see the entire environment
+            "agent_vision_radius": 5,
+            "epsilon": 1,  # Initial epsilon value for exploration
+            "epsilon_decay": 0.001,
+            "full_view": False,  # Whether agents can see the entire environment
         },
         "world": {
-            "height": 10,
-            "width": 10,
-            "gem_value": 2,
-            "apple_value": 1,
-            "coin_value": -1,
-            "bone_value": -3,
-            "food_value": -4,
-            "spawn_prob": 0.04,
+            "height": 25,
+            "width": 25,
+            "gem_value": 1.16315789, # 1.16315789,  0.61578947, -0.48124632, -2.57052564, -9.98226639 
+            "apple_value": 0.61578947,
+            "coin_value": -0.48124632,
+            "bone_value": -2.57052564,
+            "food_value": -9.98226639,
+            "spawn_prob": 0.005,
         },
     }
 
     # Create log directory with run name and timestamp
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     log_dir = Path(__file__).parent / f'runs/{config["experiment"]["run_name"]}_{timestamp}'
+    anim_dir = Path(__file__).parent / f'data/{config["experiment"]["run_name"]}'
 
     print(f"Running Treasurehunt experiment...")
     print(f"Run name: {config['experiment']['run_name']}")
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     print(f"Number of agents: {config['experiment']['num_agents']}")
     print(f"Epsilon: {config['model']['epsilon']}, Epsilon decay: {config['model']['epsilon_decay']}")
     print(f"Respawn rate: {config['world']['spawn_prob']}")
-    print(f"Resource values - Gem: {config['world']['gem_value']}, Apple: {config['world']['apple_value']}, Coin: {config['world']['coin_value']}, Bone: {config['world']['bone_value']}, Food: {config['world']['food_value']}")
+    # print(f"Resource values - Gem: {config['world']['gem_value']}, Apple: {config['world']['apple_value']}, Coin: {config['world']['coin_value']}, Bone: {config['world']['bone_value']}, Food: {config['world']['food_value']}")
     print(f"Log directory: {log_dir}")
 
     # construct the world
@@ -117,7 +118,8 @@ if __name__ == "__main__":
         logger=EncounterLogger(
             max_epochs=config["experiment"]["epochs"],
             log_dir=log_dir,
-        )
+        ),
+        output_dir=anim_dir
     )
 
 # end main

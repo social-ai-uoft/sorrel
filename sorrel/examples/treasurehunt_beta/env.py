@@ -60,7 +60,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 epsilon=self.config.model.epsilon,
                 device="cpu",
                 seed=torch.random.seed(),
-                n_frames=5,
+                n_frames=1,
                 n_step=3,
                 sync_freq=200,
                 model_update_freq=4,
@@ -68,7 +68,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 memory_size=1024,
                 LR=0.00025,
                 TAU=0.001,
-                GAMMA=0.99,
+                GAMMA=0.95,
                 n_quantiles=12,
             )
 

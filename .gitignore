@@ -149,3 +149,5 @@ sorrel/examples/*/checkpoints/
 pyvenv.cfg
 /bin
 /share
+/treasurehunt_3r_check_withoutrespawn
+/treasurehunt_3r_check_withoutrespawn_frame1
