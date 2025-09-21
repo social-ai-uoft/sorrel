@@ -323,6 +323,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 action_space=action_spec.n_actions,
                 layer_size=self.config.model.layer_size,
                 epsilon=self.config.model.epsilon,
+                epsilon_min=self.config.model.epsilon_min,
                 device=self.config.model.device,
                 seed=torch.random.seed(),
                 n_frames=self.config.model.n_frames,

@@ -73,13 +73,9 @@ class StatePunishmentAgent(Agent):
 
     def pov(self, world) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
-        if (
-            self.use_composite_views
-            and hasattr(self, "composite_envs")
-            and self.composite_envs
-        ):
+        if self.use_composite_views:
             # Use composite views - observe from multiple agent perspectives
-            return self.generate_multi_env_composite_state()
+            return self.generate_multi_env_composite_state(world)
         else:
             # Use single agent view
             return self.generate_single_view(world)
@@ -130,17 +126,26 @@ class StatePunishmentAgent(Agent):
         # Concatenate all views
         composite_view = np.concatenate(all_views[:max_views], axis=1)
         return composite_view
-
-    def generate_multi_env_composite_state(self) -> np.ndarray:
-        """Generate composite state from multiple environments.
-
-        This creates a stacked state representation where the agent observes what it
-        would see if it were in each environment at its current location.
+    
+    def generate_multi_env_composite_state(self, world=None) -> np.ndarray:
+        """
+        Generate composite state from multiple environments.
+        This creates a stacked state representation where the agent observes
+        what it would see if it were in each environment at its current location.
         """
         if not self.composite_envs:
             # Fallback to single environment if no composite envs available
-            return self.generate_single_view(self.world)
-
+            # But still need to generate a composite-sized state for consistency
+            if world is not None:
+                single_view = self.generate_single_view(world)
+            else:
+                # Create a zero state of the expected size
+                single_view_size = self.observation_spec.input_size[0] * self.observation_spec.input_size[1] * self.observation_spec.input_size[2] + 3
+                single_view = np.zeros((1, single_view_size))
+            # Create a composite state by repeating the single view
+            composite_state = np.concatenate([single_view] * self.state_stack_size)
+            return composite_state
+        
         env_states = []
         for env in self.composite_envs:
             if env is not None and hasattr(env, "world"):
@@ -400,7 +405,7 @@ class StatePunishmentAgent(Agent):
 
         if other_environments and use_composite_views:
             # Multi-agent mode with composite views
-            state = self.generate_multi_env_composite_state()
+            state = self.generate_multi_env_composite_state(world)
         else:
             # Single agent mode or multi-agent without composite views
             state = self.pov(world)

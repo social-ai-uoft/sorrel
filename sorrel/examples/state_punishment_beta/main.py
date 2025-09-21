@@ -23,7 +23,11 @@ class CombinedLogger(Logger):
 
     def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
         # Log to both console and tensorboard
-        self.console_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
+        try:
+            self.console_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
+        except UnicodeEncodeError:
+            # Fallback to simple ASCII logging if Unicode characters can't be displayed
+            print(f"Epoch: {epoch}, Loss: {loss:.4f}, Reward: {reward:.2f}, Epsilon: {epsilon:.3f}")
         self.tensorboard_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
 
 
@@ -38,28 +42,29 @@ def create_config(
     return {
         "experiment": {
             "epochs": epochs,
-            "max_turns": 100,
-            "record_period": 50,
+            "max_turns": 150,
+            "record_period": 100,
             "run_name": f"state_punishment_{'composite' if use_composite_views or use_composite_actions else 'simple'}_{num_agents}agents",
             "num_agents": num_agents,
             "initial_resources": 15,
         },
         "model": {
-            "agent_vision_radius": 2,
-            "epsilon": 0.5,
-            "epsilon_decay": 0.001,
+            "agent_vision_radius": 5,
+            "epsilon": 0.9,
+            "epsilon_min": 0.1,
+            "epsilon_decay": 0.0001,
             "full_view": True,
             "layer_size": 128,
-            "n_frames": 3,
+            "n_frames": 1,
             "n_step": 3,
-            "sync_freq": 100,
+            "sync_freq": 200,
             "model_update_freq": 4,
             "batch_size": 64,
-            "memory_size": 512,
+            "memory_size": 1024,
             "LR": 0.00025,
             "TAU": 0.001,
-            "GAMMA": 0.99,
-            "n_quantiles": 8,
+            "GAMMA": 0.95,
+            "n_quantiles": 12,
             "device": "cpu",
         },
         "world": {
@@ -74,7 +79,7 @@ def create_config(
             "respawn_prob": 0.02,
             "init_punishment_prob": 0.1,
             "punishment_magnitude": -10.0,
-            "change_per_vote": 0.2,
+            "change_per_vote": 0.1,
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
         },
