@@ -22,20 +22,47 @@ class TaxiAgent(Agent[TaxiWorld]):
     
     def pov(self, world: TaxiWorld) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
-        image = self.observation_spec.observe(world, self.location)
+        #image = self.observation_spec.observe(world, self.location)
         # flatten the image to get the state
-        return image.reshape(1, -1)
+        #return image.reshape(1, -1)
+
+        enc_state = TaxiAgent.encode_state(self.location[0] - 1, self.location[1] - 1, self.world.passenger_loc, self.world.destination_loc)
+        vec = [TaxiAgent.to_one_hot(enc_state)]
+        vec = np.array(vec).reshape(1, -1)
+        return vec
+    
+    def encode_state(row: int, col: int, passenger: int, destination: int) -> int:
+        return ((row * 5 + col) * 5 + passenger) * 4 + destination
+    
+    def to_one_hot(state: int, n_states: int = 500) -> np.ndarray:
+        one_hot = np.zeros(n_states, dtype=np.float32)
+        one_hot[state] = 1.0
+        return one_hot
     
     def get_action(self, state: np.ndarray) -> int:
-        if self.world != None:
-            if self.is_done(self.world):
-                return 1  
-        
-        prev_states = self.model.memory.current_state()
-        stacked_states = np.vstack((prev_states, state))
+        if self.is_done(self.world):
+            return 1  
+            
+        #print(self.location[0])  # Y
+        #print(self.location[1])  # X
 
-        model_input = stacked_states.reshape(1, -1)
-        action = self.model.take_action(model_input)
+        enc_state = TaxiAgent.encode_state(self.location[0] - 1, self.location[1] - 1, self.world.passenger_loc, self.world.destination_loc)
+        vec = [TaxiAgent.to_one_hot(enc_state)]
+        vec = np.array(vec).reshape(1, -1)
+        #print(vec)
+        #print(vec.shape)
+        
+        #prev_states = self.model.memory.current_state()
+        #stacked_states = np.vstack((prev_states, state))
+
+        #model_input = stacked_states.reshape(1, -1)
+        #print(model_input.shape)
+        #print(model_input)
+        #raise Exception("Debugging")
+        #for input in model_input[0]:
+        #    print(input, end=", ")
+        #action = self.model.take_action(model_input)
+        action = self.model.take_action(vec)
         return action
     
     def is_done(self, world: TaxiWorld) -> bool:
@@ -67,15 +94,15 @@ class TaxiAgent(Agent[TaxiWorld]):
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
             reward -= 1
         if action_name == "pickup":
-            reward += self.pickup(world)
+            reward += self.pickup(world, action)
         if action_name == "dropoff":
-            reward += self.dropoff(world)
+            reward += self.dropoff(world, action)
             
         world.move(self, new_location)
         
         return reward
     
-    def pickup(self, world: TaxiWorld) -> float:
+    def pickup(self, world: TaxiWorld, action: int) -> float:
         """Pick up a passenger if one is at the agent's location."""
         reward = 0
         
@@ -85,14 +112,15 @@ class TaxiAgent(Agent[TaxiWorld]):
 
         if isinstance(target_object, Passenger):
             world.remove(down)
-            reward = 20
+            reward = 0
             self.is_carrying = True
+            self.world.passenger_loc = 4  # passenger is picked up
         else:
             reward = -10
 
         return reward
     
-    def dropoff(self, world: TaxiWorld) -> float:
+    def dropoff(self, world: TaxiWorld, action: int) -> float:
         """Drop off a passenger if at the destination."""
         reward = 0
 
@@ -101,7 +129,7 @@ class TaxiAgent(Agent[TaxiWorld]):
         target_object = world.observe(down)
 
         if isinstance(target_object, Destination) and self.is_carrying:
-            reward = 100
+            reward = 50
             world.is_done = True
         else:
             reward = -10

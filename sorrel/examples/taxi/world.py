@@ -11,3 +11,6 @@ class TaxiWorld(Gridworld):
             config = OmegaConf.create(config)
 
         super().__init__(config.world.height, config.world.width, layers, default_entity)
+
+        self.passenger_loc = 0
+        self.destination_loc = 0

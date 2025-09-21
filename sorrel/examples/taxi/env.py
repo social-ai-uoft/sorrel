@@ -37,29 +37,33 @@ class TaxiEnv(Environment[TaxiWorld]):
                 np.array(observation_spec.input_size).reshape(1, -1).tolist()
             )
 
+            #print(observation_spec.input_size)
+            #raise Exception("Debugging")
+
             # create the action spec
             action_spec = ActionSpec(["up", "down", "left", "right", "pickup", "dropoff"])
 
             # create the model
             model = PyTorchIQN(
-                input_size=observation_spec.input_size,
+                #input_size=observation_spec.input_size,
+                input_size=(500,),
                 action_space=action_spec.n_actions,
                 layer_size=250,
                 epsilon=0.8,
                 device="cpu",
                 seed=torch.random.seed(),
-                n_frames=5,
+                n_frames=1,
                 n_step=3,
                 sync_freq=200,
                 model_update_freq=4,
                 batch_size=64,
                 memory_size=1024,
-                LR=0.00025,
-                #LR=0.0005,
+                #LR=0.00025,
+                LR=0.001,
                 TAU=0.001,
                 GAMMA=0.99,
-                #n_quantiles=12,
-                n_quantiles=64,
+                n_quantiles=12,
+                #n_quantiles=64,
             )
 
             agents.append(
@@ -115,4 +119,7 @@ class TaxiEnv(Environment[TaxiWorld]):
         passenger_destination_locations = [passenger_points[i] for i in passenger_destination_location_indices]
 
         self.world.add(tuple(passenger_destination_locations[0]), Passenger())
+        self.world.passenger_loc = passenger_destination_location_indices[0]
         self.world.add(tuple(passenger_destination_locations[1]), Destination())
+        self.world.destination_loc = passenger_destination_location_indices[1]
+        #print("Passenger location index:", self.world.passenger_loc, "destination location index: ", self.world.destination_loc)
