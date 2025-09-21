@@ -117,6 +117,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 action_space=action_spec.n_actions,
                 layer_size=int(model_cfg.get("layer_size", 250)),
                 epsilon=float(model_cfg.get("epsilon", 0.7)),
+                epsilon_min=float(model_cfg.get("epsilon_min", 0.1)),
                 device="cpu",
                 seed=torch.random.seed(),
                 n_frames=int(model_cfg.get("n_frames", 5)),
