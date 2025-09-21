@@ -12,20 +12,20 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.agents import Agent
-from sorrel.location import Location, Vector
-from sorrel.models.base_model import BaseModel
-from sorrel.worlds import Gridworld
 from sorrel.examples.cooking.entities import (
-    StationEntity,
-    Stove,
     Counter,
-    Plate,
-    Trash,
     EmptyEntity,
     IngredientEntity,
+    Plate,
+    StationEntity,
+    Stove,
+    Trash,
 )
+from sorrel.location import Location, Vector
+from sorrel.models.base_model import BaseModel
+from sorrel.observation.observation_spec import ObservationSpec
+from sorrel.worlds import Gridworld
 
 
 class CookingAgent(Agent):
@@ -45,7 +45,7 @@ class CookingAgent(Agent):
         self.inventory: list[IngredientEntity] = []
         self.max_inventory = 1  # simple capacity
         self.sprite = Path(__file__).parent / "./assets/hero.png"
-        self.reward = 0.
+        self.reward = 0.0
 
     def reset(self) -> None:
         """Reset the agent's internal state."""
@@ -60,7 +60,7 @@ class CookingAgent(Agent):
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
         if not hasattr(self.model, "name"):
-            
+
             # Stack previous frames as needed.
             prev_states = self.model.memory.current_state()
             stacked_states = np.vstack((prev_states, state))
@@ -69,10 +69,10 @@ class CookingAgent(Agent):
             model_input = stacked_states.reshape(1, -1)
             # Update the agent emotion.
             action = self.model.take_action(model_input)
-        
+
         else:
             action = self.model.take_action(state)
-        
+
         return action
 
     # Helper methods for station interaction
@@ -102,18 +102,39 @@ class CookingAgent(Agent):
         if action_name in {"up", "down", "left", "right"}:
             new_location = self.location
             if action_name == "up":
-                new_location = (self.location[0] - 1, self.location[1], self.location[2])
+                new_location = (
+                    self.location[0] - 1,
+                    self.location[1],
+                    self.location[2],
+                )
             elif action_name == "down":
-                new_location = (self.location[0] + 1, self.location[1], self.location[2])
+                new_location = (
+                    self.location[0] + 1,
+                    self.location[1],
+                    self.location[2],
+                )
             elif action_name == "left":
-                new_location = (self.location[0], self.location[1] - 1, self.location[2])
+                new_location = (
+                    self.location[0],
+                    self.location[1] - 1,
+                    self.location[2],
+                )
             elif action_name == "right":
-                new_location = (self.location[0], self.location[1] + 1, self.location[2])
+                new_location = (
+                    self.location[0],
+                    self.location[1] + 1,
+                    self.location[2],
+                )
             world.move(self, new_location)
             return reward
 
         # Interaction actions – need the entity at the agent layer
-        adjacent_entities = [world.observe(location) for location in Location(*self.location).adjacent((world.height, world.width, world.layers))]
+        adjacent_entities = [
+            world.observe(location)
+            for location in Location(*self.location).adjacent(
+                (world.height, world.width, world.layers)
+            )
+        ]
         if action_name == "pick":
             for adjacent_entity in adjacent_entities:
                 self._pick(adjacent_entity)
@@ -129,8 +150,10 @@ class CookingAgent(Agent):
             for adjacent_entity in adjacent_entities:
                 if isinstance(adjacent_entity, Plate) and self.inventory:
                     ingredient = self.inventory.pop()
-                    if getattr(ingredient, "cooked", False) and adjacent_entity.place(ingredient):
-                        for agent in world.get_entities_of_kind('CookingAgent'):
+                    if getattr(ingredient, "cooked", False) and adjacent_entity.place(
+                        ingredient
+                    ):
+                        for agent in world.get_entities_of_kind("CookingAgent"):
                             if isinstance(agent, CookingAgent):
                                 # Add reward to all agents (including those that may not have been rewarded yet)
                                 agent.reward += 1
@@ -139,7 +162,7 @@ class CookingAgent(Agent):
                 if isinstance(adjacent_entity, Trash):
                     self.inventory.clear()
         reward += self.reward
-        self.reward = 0.
+        self.reward = 0.0
         world.total_reward += reward
         return reward
 

@@ -1,8 +1,8 @@
 """Custom entity classes for the Cooking example.
 
-This module defines a minimal hierarchy of entity types that model kitchen
-stations and ingredients.  Only the attributes required by the test suite
-and the environment logic are implemented.
+This module defines a minimal hierarchy of entity types that model kitchen stations and
+ingredients.  Only the attributes required by the test suite and the environment logic
+are implemented.
 """
 
 from __future__ import annotations
@@ -13,15 +13,15 @@ from typing import List, Optional
 
 from sorrel.entities import Entity
 
+
 # ---------------------------------------------------------------------------
 # Base station entity
 # ---------------------------------------------------------------------------
 class StationEntity(Entity[object]):
     """Base class for kitchen stations (stove, counter, plate, trash).
 
-    Subclasses can define additional state such as held items or cooking
-    timers.  All stations are unpassable, i.e. agents cannot move onto the
-    same tile.
+    Subclasses can define additional state such as held items or cooking timers.  All
+    stations are unpassable, i.e. agents cannot move onto the same tile.
     """
 
     def __init__(self):
@@ -51,7 +51,8 @@ class StationEntity(Entity[object]):
         Returns:
             Entity | None: If possible, an ingredient.
         """
-        ...    
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Specific stations
@@ -60,7 +61,7 @@ class Stove(StationEntity):
     """A cooking station that can hold a single ingredient and cook it.
 
     Attributes:
-        cook_time (int): the number of turns required before the ingredient is considered cooked. 
+        cook_time (int): the number of turns required before the ingredient is considered cooked.
         timer (int): the remaining turns before a current item is cooked.
         is_busy (bool): whether the stove is in use.
     """
@@ -100,8 +101,10 @@ class Stove(StationEntity):
             return ing
         return None
 
+
 class Counter(StationEntity):
     """A simple storage counter that can hold a single ingredient."""
+
     def __init__(self):
         super().__init__()
         self.sprite = Path(__file__).parent / "assets" / "counter.png"
@@ -121,11 +124,12 @@ class Counter(StationEntity):
             return ing
         return None
 
+
 class Plate(StationEntity):
     """A plate can combine multiple cooked ingredients into a dish.
 
     Attributes:
-        contents: 
+        contents:
     """
 
     def __init__(self):
@@ -140,7 +144,7 @@ class Plate(StationEntity):
             self.sprite = Path(__file__).parent / "assets" / "plate-item.png"
             return True
         return False
-    
+
     def take(self) -> Optional[IngredientEntity]:
         item = None
         if self.contents:
@@ -155,8 +159,10 @@ class Plate(StationEntity):
         self.sprite = Path(__file__).parent / "assets" / "plate.png"
         return items
 
+
 class Trash(StationEntity):
     """A trash bin clears any held item when an agent interacts with it."""
+
     def __init__(self):
         super().__init__()
         self.sprite = Path(__file__).parent / "assets" / "trash.png"
@@ -167,6 +173,7 @@ class Trash(StationEntity):
 
     def take(self) -> None:
         return None
+
 
 # ---------------------------------------------------------------------------
 # Ingredient entities
@@ -187,14 +194,17 @@ class IngredientEntity(Entity[object]):
         self.passable = True
         self.sprite = Path(__file__).parent / "assets" / "ingredient.png"
 
+
 # Concrete ingredient examples used in unit tests
 class Onion(IngredientEntity):
     def __init__(self):
         super().__init__(name="Onion", cookable=True)
 
+
 class Tomato(IngredientEntity):
     def __init__(self):
         super().__init__(name="Tomato", cookable=True)
+
 
 # Re‑use the EmptyEntity from the cleanup example for the default grid cell.
 from sorrel.examples.cleanup.entities import EmptyEntity

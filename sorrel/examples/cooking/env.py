@@ -11,25 +11,25 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-import torch
 import numpy as np
+import torch
 
-from sorrel.environment import Environment
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
-from sorrel.models.pytorch import PyTorchIQN
+from sorrel.environment import Environment
+from sorrel.examples.cleanup.entities import Wall
 from sorrel.examples.cooking.agents import CookingAgent
 from sorrel.examples.cooking.entities import (
-    Stove,
     Counter,
-    Plate,
-    Trash,
     EmptyEntity,
-    Tomato
+    Plate,
+    Stove,
+    Tomato,
+    Trash,
 )
-from sorrel.examples.cleanup.entities import Wall
 from sorrel.examples.cooking.world import CookingWorld
 from sorrel.models.base_model import RandomModel
+from sorrel.models.pytorch import PyTorchIQN
 
 # ---------------------------------------------------------------------------
 # Entity list for the observation spec – mirrors the list used in the cleanup
@@ -50,8 +50,7 @@ ENTITY_LIST: List[str] = [
 
 
 class CookingEnv(Environment[CookingWorld]):
-    """Environment inspired by Overcooked.
-    """
+    """Environment inspired by Overcooked."""
 
     def setup_agents(self) -> None:
         """Create ``CookingAgent`` instances based on the provided config.
@@ -72,7 +71,19 @@ class CookingEnv(Environment[CookingWorld]):
 
         for _ in range(num_agents):
             observation_spec = self._create_observation_spec(vision)
-            action_spec = ActionSpec(["up", "down", "left", "right", "pick", "place", "cook", "serve", "wash"])
+            action_spec = ActionSpec(
+                [
+                    "up",
+                    "down",
+                    "left",
+                    "right",
+                    "pick",
+                    "place",
+                    "cook",
+                    "serve",
+                    "wash",
+                ]
+            )
 
             model_cfg = getattr(self.config.model, "iqn", None)
             if model_cfg is not None:
@@ -85,7 +96,11 @@ class CookingEnv(Environment[CookingWorld]):
                 )
             else:
                 # Fallback to a deterministic random model.
-                model = RandomModel(input_size=observation_spec.input_size, action_space=action_spec.n_actions, memory_size=1000)
+                model = RandomModel(
+                    input_size=observation_spec.input_size,
+                    action_space=action_spec.n_actions,
+                    memory_size=1000,
+                )
 
             agents.append(
                 CookingAgent(
@@ -98,13 +113,14 @@ class CookingEnv(Environment[CookingWorld]):
         self.agents = agents
 
     def _create_observation_spec(self, vision: int):
-        """Helper to construct an ``CookingObservation`` if needed.
-        """
+        """Helper to construct an ``CookingObservation`` if needed."""
         # Import lazily to avoid circular imports when the docs are built.
-        from sorrel.examples.cooking.observation_spec import CookingObservation  # type: ignore
+        from sorrel.examples.cooking.observation_spec import (
+            CookingObservation,  # type: ignore
+        )
 
         obs = CookingObservation(entity_list=ENTITY_LIST, vision_radius=vision)
-        obs.override_input_size((int(np.prod(obs.input_size)), ))
+        obs.override_input_size((int(np.prod(obs.input_size)),))
         return obs
 
     def populate_environment(self) -> None:
@@ -135,7 +151,7 @@ class CookingEnv(Environment[CookingWorld]):
             if i == 1:
                 counter.place(Tomato())
             self.world.add(counter_loc, counter)
-            
+
         # Plate to the right of stove
         plate_loc = (h // 2, w // 2 + 1, self.world.object_layer)
         self.world.add(plate_loc, Plate())
@@ -145,7 +161,11 @@ class CookingEnv(Environment[CookingWorld]):
         # Randomly place agents on any empty tile (passable and not a wall)
         empty_tiles = []
         for idx, entity in np.ndenumerate(self.world.map):
-            if isinstance(entity, EmptyEntity) and entity.passable and idx[2] == self.world.object_layer:
+            if (
+                isinstance(entity, EmptyEntity)
+                and entity.passable
+                and idx[2] == self.world.object_layer
+            ):
                 empty_tiles.append(idx)
         # Ensure we have at least as many empty tiles as agents.
         assert len(empty_tiles) >= len(self.agents), "Not enough free tiles for agents"

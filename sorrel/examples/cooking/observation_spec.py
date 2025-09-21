@@ -1,28 +1,35 @@
-'''Observation specification for the Cooking example.
+"""Observation specification for the Cooking example.
 
 This module defines a custom :class:`CookingObservation` class that inherits from
 :class:`sorrel.observation.observation_spec.OneHotObservationSpec`. It builds an
 entity map that includes all kitchen stations as well as ingredient types. The
 observation returned is a one-hot encoded visual field.
-'''
+"""
 
 import numpy as np
 
 from sorrel.entities import Entity
+from sorrel.examples.cooking.agents import CookingAgent
+from sorrel.examples.cooking.entities import IngredientEntity, Plate, StationEntity
 from sorrel.observation.observation_spec import OneHotObservationSpec
 from sorrel.utils.helpers import shift
 
-from sorrel.examples.cooking.entities import StationEntity, Plate, IngredientEntity
-from sorrel.examples.cooking.agents import CookingAgent
 
 class CookingObservation(OneHotObservationSpec):
-    """Observation spec that includes the agent's inventory as an additional one-hot channel.
+    """Observation spec that includes the agent's inventory as an additional one-hot
+    channel.
 
-    The visual field provides a one-hot encoding for each entity kind present on the grid.
-    This subclass appends a one-hot vector representing the currently held ingredient (if any).
+    The visual field provides a one-hot encoding for each entity kind present on the
+    grid. This subclass appends a one-hot vector representing the currently held
+    ingredient (if any).
     """
 
-    def __init__(self, entity_list: list[str], full_view: bool = False, vision_radius: int | None = None):
+    def __init__(
+        self,
+        entity_list: list[str],
+        full_view: bool = False,
+        vision_radius: int | None = None,
+    ):
         super().__init__(entity_list, full_view, vision_radius)
         # No extra input size adjustment needed; inventory will be concatenated to the flattened observation.
 
@@ -39,21 +46,29 @@ class CookingObservation(OneHotObservationSpec):
         assert isinstance(location, tuple)
 
         shift_dims = np.hstack(
-            (np.subtract(
-                [world.map.shape[0] // 2, world.map.shape[1] // 2], location[0:2]
-            ), [0])
+            (
+                np.subtract(
+                    [world.map.shape[0] // 2, world.map.shape[1] // 2], location[0:2]
+                ),
+                [0],
+            )
         )
 
         shifted_world = shift(world.map, shift=shift_dims, cval=Entity())
         boundaries = [
-            shifted_world.shape[0] // 2 - self.vision_radius, shifted_world.shape[1] // 2 + self.vision_radius + 1
+            shifted_world.shape[0] // 2 - self.vision_radius,
+            shifted_world.shape[1] // 2 + self.vision_radius + 1,
         ]
 
-        shifted_world = shifted_world[boundaries[0]:boundaries[1], boundaries[0]:boundaries[1], :]
+        shifted_world = shifted_world[
+            boundaries[0] : boundaries[1], boundaries[0] : boundaries[1], :
+        ]
 
         for index, entity in np.ndenumerate(shifted_world):
-  
-            if isinstance(entity, StationEntity) and isinstance(entity.held, IngredientEntity):
+
+            if isinstance(entity, StationEntity) and isinstance(
+                entity.held, IngredientEntity
+            ):
                 base_obs[:, *index[1:]] += self.entity_map[entity.held.kind]
             elif isinstance(entity, Plate):
                 for ingredient in entity.contents:
