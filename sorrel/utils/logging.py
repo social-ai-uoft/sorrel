@@ -170,7 +170,10 @@ class TensorboardLogger(Logger):
         self.writer.add_scalar("score", reward, epoch)
         self.writer.add_scalar("epsilon", epsilon, epoch)
         for key, value in kwargs.items():
-            self.writer.add_scalar(key, value, epoch)
+            if isinstance(value, dict):
+                self.writer.add_scalars(key, value, epoch)
+            else:
+                self.writer.add_scalar(key, value, epoch)
 
 
 # --------------------------- #
