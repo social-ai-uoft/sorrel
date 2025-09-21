@@ -47,30 +47,31 @@ def run_stag_hunt() -> None:
     config = {
         "experiment": {
             # number of episodes/epochs to run
-            "epochs": 10000,
+            "epochs": 100000,
             # maximum number of turns per episode
             "max_turns": 100,
             # recording period for animation (unused here)
-            "record_period": 1,
+            "record_period": 100,
+            "run_name": "staghunt_with_respawn",
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
-            "agent_vision_radius": 2,
+            "agent_vision_radius": 5,
             # epsilon decay hyperparameter for the IQN model
             "epsilon_decay": 0.0001,
             # model architecture parameters
             "layer_size": 128,
-            "epsilon": 0.5,
-            "n_frames": 3,
+            "epsilon": 1.0,
+            "n_frames": 1,
             "n_step": 3,
-            "sync_freq": 100,
+            "sync_freq": 200,
             "model_update_freq": 4,
             "batch_size": 64,
-            "memory_size": 512,
+            "memory_size": 1024,
             "LR": 0.00025,
             "TAU": 0.001,
-            "GAMMA": 0.99,
-            "n_quantiles": 8,
+            "GAMMA": 0.95,
+            "n_quantiles": 12,
         },
         "world": {
             # map generation mode
@@ -84,7 +85,7 @@ def run_stag_hunt() -> None:
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
             # intrinsic reward for collecting a resource
-            "taste_reward": 0.1,
+            "taste_reward": 10,
             # zap hits required to destroy a resource
             "destroyable_health": 3,
             # beam characteristics
@@ -118,8 +119,9 @@ def run_stag_hunt() -> None:
         logger=CombinedLogger(
             max_epochs=config["experiment"]["epochs"],
             log_dir=Path(__file__).parent
-            / f'runs/{datetime.now().strftime("%Y%m%d-%H%M%S")}',
-        )
+            / f'runs/{config["experiment"]["run_name"]}_{datetime.now().strftime("%Y%m%d-%H%M%S")}',
+        ),
+        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}'
     )
 
 
