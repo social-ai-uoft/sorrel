@@ -187,6 +187,7 @@ class iRainbowModel(DoublePyTorchModel):
         action_space: int,
         layer_size: int,
         epsilon: float,
+        epsilon_min: float,
         device: str | torch.device,
         seed: int,
         # iRainbow parameters
@@ -220,7 +221,7 @@ class iRainbowModel(DoublePyTorchModel):
         """
 
         # Initialize base ANN parameters
-        super().__init__(input_size, action_space, layer_size, epsilon, device, seed)
+        super().__init__(input_size, action_space, layer_size, epsilon, epsilon_min, device, seed)
 
         # iRainbow-specific parameters
         self.n_frames = n_frames

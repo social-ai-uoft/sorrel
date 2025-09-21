@@ -29,6 +29,7 @@ class BaseModel:
         action_space: int,
         memory_size: int,
         epsilon: float = 0.0,
+        epsilon_min: float = 0.0,
     ):
 
         self.input_size = input_size
@@ -38,6 +39,7 @@ class BaseModel:
         )
         self.memory = Buffer(capacity=memory_size, obs_shape=_obs_for_input)
         self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
 
     @abstractmethod
     def take_action(self, state) -> int:
@@ -75,6 +77,7 @@ class BaseModel:
     def epsilon_decay(self, decay_rate: float) -> None:
         """Uses the decay rate to determine the new epsilon value."""
         self.epsilon *= 1 - decay_rate
+        self.epsilon = max(self.epsilon, self.epsilon_min)
 
     def start_epoch_action(self, **kwargs):
         """Actions to perform before each epoch."""

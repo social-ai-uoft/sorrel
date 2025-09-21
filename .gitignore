@@ -146,8 +146,12 @@ data/
 sorrel/examples/*/data/
 sorrel/examples/*/runs/
 sorrel/examples/*/checkpoints/
+sorrel/examples/state_punishment/
 pyvenv.cfg
 /bin
 /share
 /treasurehunt_3r_check_withoutrespawn
 /treasurehunt_3r_check_withoutrespawn_frame1
+runs/
+sorrel/examples/treasurehunt_theta/
+sorrel/examples/treasurehunt_beta/data/

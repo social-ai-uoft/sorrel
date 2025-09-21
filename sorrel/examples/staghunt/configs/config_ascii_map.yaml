@@ -1,0 +1,43 @@
+experiment:
+  epochs: 10000
+  max_turns: 100
+  record_period: 1
+model:
+  GAMMA: 0.99
+  LR: 0.00025
+  TAU: 0.001
+  agent_vision_radius: 2
+  batch_size: 64
+  epsilon: 0.5
+  epsilon_decay: 0.0001
+  layer_size: 128
+  memory_size: 512
+  model_update_freq: 4
+  n_frames: 3
+  n_quantiles: 8
+  n_step: 3
+  sync_freq: 100
+world:
+  # Map Generation Configuration
+  generation_mode: "ascii_map"  # "random" or "ascii_map"
+  ascii_map_file: "stag_hunt_ascii_map_clean.txt"  # only used when generation_mode is "ascii_map"
+  
+  # Game mechanics (unchanged from original)
+  beam_cooldown: 3
+  beam_length: 3
+  beam_radius: 2
+  destroyable_health: 3
+  interaction_reward: 1.0
+  num_agents: 4  # Must match or be less than spawn points in map
+  payoff_matrix:
+  - - 4
+    - 0
+  - - 2
+    - 2
+  resource_density: 0.15  # Only used for random generation
+  respawn_lag: 10
+  taste_reward: 0.1
+  # agent freezing parameters
+  freeze_duration: 5  # X: number of frames agent stays frozen after interaction
+  respawn_delay: 10   # Y: number of frames before agent respawns after removal
+  # height and width are automatically determined from the ASCII map

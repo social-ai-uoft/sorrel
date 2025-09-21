@@ -14,6 +14,7 @@ details on the expected configuration keys.
 
 from __future__ import annotations
 
+import copy
 import random
 from typing import Any
 
@@ -23,8 +24,7 @@ import torch
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
-from sorrel.examples.staghunt.agents_v2 import StagHuntAgent
-
+from sorrel.examples.staghunt.agents_v2 import StagHuntAgent, StagHuntObservation
 from sorrel.examples.staghunt.entities import (
     Empty,
     HareResource,
@@ -36,7 +36,6 @@ from sorrel.examples.staghunt.entities import (
 )
 from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.examples.staghunt.agents_v2 import StagHuntObservation
 
 
 class StagHuntEnv(Environment[StagHuntWorld]):
@@ -82,10 +81,10 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             "Spawn",
             "StagResource",
             "HareResource",
-            "StagHuntAgentNorth",    # 0: north
-            "StagHuntAgentEast",     # 1: east  
-            "StagHuntAgentSouth",    # 2: south
-            "StagHuntAgentWest",     # 3: west
+            "StagHuntAgentNorth",  # 0: north
+            "StagHuntAgentEast",  # 1: east
+            "StagHuntAgentSouth",  # 2: south
+            "StagHuntAgentWest",  # 3: west
             "Sand",
             "InteractionBeam",
         ]
@@ -102,7 +101,15 @@ class StagHuntEnv(Environment[StagHuntWorld]):
 
             # action spec: eight discrete actions
             action_spec = ActionSpec(
-                ["NOOP", "FORWARD", "BACKWARD", "STEP_LEFT", "STEP_RIGHT", "TURN_LEFT", "TURN_RIGHT",] #"INTERACT"]
+                [
+                    "NOOP",
+                    "FORWARD",
+                    "BACKWARD",
+                    "STEP_LEFT",
+                    "STEP_RIGHT",
+                    "TURN_LEFT",
+                    "TURN_RIGHT",
+                ]  # "INTERACT"]
             )
             # create a simple IQN model; hyperparameters can be tuned via config
             model = PyTorchIQN(
@@ -110,6 +117,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 action_space=action_spec.n_actions,
                 layer_size=int(model_cfg.get("layer_size", 250)),
                 epsilon=float(model_cfg.get("epsilon", 0.7)),
+                epsilon_min=float(model_cfg.get("epsilon_min", 0.1)),
                 device="cpu",
                 seed=torch.random.seed(),
                 n_frames=int(model_cfg.get("n_frames", 5)),
@@ -136,14 +144,19 @@ class StagHuntEnv(Environment[StagHuntWorld]):
     def populate_environment(self) -> None:
         """Populate the gridworld with terrain, resources and agents.
 
-        Walls are placed around the border of the bottom layer.  Spawn
-        locations for agents are recorded and used to respawn players after
-        interactions.  Resources are initially populated at random based
-        on the ``resource_density`` parameter.  Agents are placed on
-        random spawn points.
+        Supports both random generation and ASCII map-based generation.
         """
         world = self.world
         world.reset_spawn_points()
+
+        if hasattr(world, "map_generator") and world.map_generator is not None:
+            self._populate_from_ascii_map()
+        else:
+            self._populate_randomly()
+
+    def _populate_randomly(self) -> None:
+        """Populate environment using random generation (original logic)."""
+        world = self.world
 
         for y, x, layer in np.ndindex(world.map.shape):
             index = (y, x, layer)
@@ -155,10 +168,15 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     world.add(index, Spawn())
                 elif (y, x, world.dynamic_layer) not in world.resource_spawn_points:
                     # Non-resource locations get Sand that cannot convert to resources
-                    world.add(index, Sand(can_convert_to_resource=False, respawn_ready=True))
+                    world.add(
+                        index, Sand(can_convert_to_resource=False, respawn_ready=True)
+                    )
                 else:
                     # Resource spawn points get Sand that can convert to resources
-                    world.add(index, Sand(can_convert_to_resource=True, respawn_ready=True))
+                    # We'll set the resource type later after resources are placed
+                    world.add(
+                        index, Sand(can_convert_to_resource=True, respawn_ready=True)
+                    )
             elif layer == world.dynamic_layer:
                 # dynamic layer: optionally place initial resources
                 if (y, x, world.dynamic_layer) not in world.agent_spawn_points:
@@ -171,24 +189,32 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             elif layer == world.beam_layer:
                 # beam layer: initially empty (attributes inherited from terrain)
                 world.add(index, Empty())
-                # else:
-                #     # spawn points correspond to empty starting cell on top
-                #     world.add(index, Empty())
 
         # randomly populate resources on the dynamic layer according to density
-        # TODO: should be compatible with a ASCII map defining initial resources
         for y, x, layer in world.resource_spawn_points:
             # dynamic layer coordinates
             dynamic = (y, x, world.dynamic_layer)
             # choose resource type uniformly at random
             if np.random.random() < 0.2:
+                resource_type = "stag"
                 world.add(
                     dynamic, StagResource(world.taste_reward, world.destroyable_health)
                 )
             else:
+                resource_type = "hare"
                 world.add(
                     dynamic, HareResource(world.taste_reward, world.destroyable_health)
                 )
+
+            # Update the Sand entity below to remember this resource type
+            terrain_loc = (y, x, world.terrain_layer)
+            if world.valid_location(terrain_loc):
+                terrain_entity = world.observe(terrain_loc)
+                if (
+                    hasattr(terrain_entity, "can_convert_to_resource")
+                    and terrain_entity.can_convert_to_resource
+                ):
+                    terrain_entity.resource_type = resource_type
 
         # choose initial agent positions uniformly from spawn points without replacement
         chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
@@ -196,6 +222,126 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             # dynamic layer coordinate for agent
             dynamic = (loc[0], loc[1], world.dynamic_layer)
             world.add(dynamic, agent)
+
+    def _populate_from_ascii_map(self) -> None:
+        """Populate environment using ASCII map layout - PRESERVES ALL ORIGINAL LOGIC."""
+        world = self.world
+        map_data = world.map_generator.parse_map()
+
+        # Validate map has sufficient spawn points
+        world.map_generator.validate_map_for_agents(map_data, len(self.agents))
+
+        # Initialize all layers with default entities first
+        for y, x, layer in np.ndindex(world.map.shape):
+            index = (y, x, layer)
+            world.add(index, copy.deepcopy(world.default_entity))
+
+        # Place walls EXACTLY where map specifies (all layers)
+        for y, x in map_data.wall_locations:
+            for layer in [world.terrain_layer, world.dynamic_layer, world.beam_layer]:
+                world.add((y, x, layer), Wall())
+
+        # Set spawn points EXACTLY where map specifies
+        world.agent_spawn_points = [
+            (y, x, world.dynamic_layer) for y, x in map_data.spawn_points
+        ]
+
+        # Create resource spawn points from map resource locations
+        world.resource_spawn_points = [
+            (y, x, world.dynamic_layer) for y, x, _ in map_data.resource_locations
+        ]
+
+        # Place terrain layer entities (Spawn/Sand) for ALL locations
+        for y, x, layer in np.ndindex(world.map.shape):
+            if layer == world.terrain_layer:
+                terrain_loc = (y, x, layer)
+                # Skip if it's a wall (walls are already placed)
+                if (y, x) in map_data.wall_locations:
+                    continue
+                # Place Spawn entity for spawn points
+                elif (y, x) in map_data.spawn_points:
+                    world.add(terrain_loc, Spawn())
+                # Place Sand entity for all other locations
+                else:
+                    # Use original Sand logic - can_convert_to_resource based on resource locations
+                    can_convert = (
+                        y,
+                        x,
+                        world.dynamic_layer,
+                    ) in world.resource_spawn_points
+
+                    # Determine resource type for this location
+                    resource_type = None
+                    if can_convert:
+                        # Find the resource type for this location
+                        for ry, rx, rtype in map_data.resource_locations:
+                            if ry == y and rx == x:
+                                resource_type = rtype
+                                break
+
+                    world.add(
+                        terrain_loc,
+                        Sand(
+                            can_convert_to_resource=can_convert,
+                            respawn_ready=True,
+                            resource_type=resource_type,
+                        ),
+                    )
+
+        # Place resources EXACTLY where map specifies
+        for y, x, resource_type in map_data.resource_locations:
+            dynamic_loc = (y, x, world.dynamic_layer)
+            if resource_type == "stag":
+                world.add(
+                    dynamic_loc,
+                    StagResource(world.taste_reward, world.destroyable_health),
+                )
+            elif resource_type == "hare":
+                world.add(
+                    dynamic_loc,
+                    HareResource(world.taste_reward, world.destroyable_health),
+                )
+            elif resource_type == "random":
+                # Use ORIGINAL random selection logic
+                if np.random.random() < 0.2:  # Same as original
+                    world.add(
+                        dynamic_loc,
+                        StagResource(world.taste_reward, world.destroyable_health),
+                    )
+                else:
+                    world.add(
+                        dynamic_loc,
+                        HareResource(world.taste_reward, world.destroyable_health),
+                    )
+
+        # Place empty entities on dynamic layer for non-resource, non-spawn locations
+        for y, x in map_data.empty_locations:
+            dynamic_loc = (y, x, world.dynamic_layer)
+            if (
+                dynamic_loc not in world.agent_spawn_points
+                and dynamic_loc not in world.resource_spawn_points
+            ):
+                world.add(dynamic_loc, Empty())
+
+        # Initialize beam layer with empty entities (preserve walls)
+        for y, x, layer in np.ndindex(world.map.shape):
+            if layer == world.beam_layer:
+                # Only place Empty if it's not a wall location
+                if (y, x) not in map_data.wall_locations:
+                    world.add((y, x, layer), Empty())
+
+        # Place agents using ORIGINAL spawn logic
+        chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
+        for loc, agent in zip(chosen_positions, self.agents):
+            world.add(loc, agent)
+
+    def take_turn(self) -> None:
+        """Performs a full step in the environment with agent state updates."""
+        # Update agent freezing and respawn states first
+        self.update_agent_states()
+
+        # Call parent take_turn method
+        super().take_turn()
 
     def override_agents(self, agents: list[Agent]) -> None:
         """Override the current agent configuration with a list of new agents and resets
@@ -205,3 +351,63 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             agents: A list of new agents
         """
         self.agents = agents
+
+    def update_agent_states(self) -> None:
+        """Update all agent freezing and respawn states."""
+        for agent in self.agents:
+            if hasattr(agent, "update_freeze_state"):
+                agent.update_freeze_state()
+
+                # Handle removing agent from world when it becomes removed
+                if (
+                    hasattr(agent, "is_removed")
+                    and agent.is_removed
+                    and hasattr(agent, "respawn_timer")
+                    and agent.respawn_timer > 0
+                    and hasattr(agent, "_removed_from_world")
+                    and not agent._removed_from_world
+                    and agent.location in self.world.map
+                ):
+                    # Remove agent from world (only once)
+                    self.world.remove(agent.location)
+                    agent._removed_from_world = True
+                    agent.location = None
+
+                # Handle respawning when timer expires
+                if (
+                    hasattr(agent, "is_removed")
+                    and agent.is_removed
+                    and hasattr(agent, "respawn_timer")
+                    and agent.respawn_timer == 0
+                ):
+                    self.respawn_agent(agent)
+
+    def respawn_agent(self, agent) -> None:
+        """Respawn an agent at a random spawn point."""
+        if not hasattr(agent, "is_removed") or not agent.is_removed:
+            return
+
+        # Find unoccupied spawn points
+        unoccupied_spawns = []
+        for spawn_point in self.world.agent_spawn_points:
+            y, x, z = spawn_point
+            # check if there's an agent at this spawn point (layer 1)
+            entity_at_spawn = self.world.observe((y, x, 1))
+            if entity_at_spawn.kind == "Empty":
+                unoccupied_spawns.append(spawn_point)
+
+        # if no unoccupied spawns, use all spawns (fallback)
+        if not unoccupied_spawns:
+            unoccupied_spawns = self.world.agent_spawn_points
+
+        # choose a random spawn point
+        new_loc = random.choice(unoccupied_spawns)
+
+        # Reset agent state
+        agent.reset()
+
+        # Reset removal flag
+        agent._removed_from_world = False
+
+        # Place agent at new location
+        self.world.add(new_loc, agent)

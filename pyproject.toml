@@ -46,6 +46,7 @@ ipython = "^8.29.0"
 pillow = "^11.0.0"
 # used in logging.py
 tensorboard = "^2.18.0"
+pygame = "^2.6.1"
 
 [tool.poetry.group.dev]
 optional = true

@@ -27,6 +27,7 @@ class PyTorchModel(nn.Module, BaseModel):
         action_space: int,
         layer_size: int,
         epsilon: float,
+        epsilon_min: float,
         device: str | torch.device,
         seed: int | None = None,
     ):
@@ -36,6 +37,7 @@ class PyTorchModel(nn.Module, BaseModel):
         self.action_space = action_space
         self.layer_size = layer_size
         self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
         self.device = device
         if seed == None:
             seed = torch.random.seed()
@@ -152,10 +154,11 @@ class DoublePyTorchModel(PyTorchModel):
         action_space: int,
         layer_size: int,
         epsilon: float,
+        epsilon_min: float,
         device: str | torch.device,
         seed: int,
     ):
-        super().__init__(input_size, action_space, layer_size, epsilon, device, seed)
+        super().__init__(input_size, action_space, layer_size, epsilon, epsilon_min, device, seed)
 
         self.models: dict[str, nn.Module] = {
             "local": nn.Module(),

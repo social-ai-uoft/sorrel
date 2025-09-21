@@ -22,17 +22,17 @@ import yaml
 from sorrel.examples.staghunt.entities import Empty
 from sorrel.examples.staghunt.env import StagHuntEnv
 from sorrel.examples.staghunt.world import StagHuntWorld
-from sorrel.utils.logging import TensorboardLogger, ConsoleLogger, Logger
+from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 
 class CombinedLogger(Logger):
     """A logger that combines console and tensorboard logging."""
-    
+
     def __init__(self, max_epochs: int, log_dir: str | Path, *args):
         super().__init__(max_epochs, *args)
         self.console_logger = ConsoleLogger(max_epochs, *args)
         self.tensorboard_logger = TensorboardLogger(max_epochs, log_dir, *args)
-    
+
     def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
         # Log to both console and tensorboard
         self.console_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
@@ -47,33 +47,37 @@ def run_stag_hunt() -> None:
     config = {
         "experiment": {
             # number of episodes/epochs to run
-            "epochs": 10000,
+            "epochs": 100000,
             # maximum number of turns per episode
             "max_turns": 100,
             # recording period for animation (unused here)
-            "record_period": 1,
+            "record_period": 100,
+            "run_name": "staghunt_with_respawn",
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
-            "agent_vision_radius": 2,
+            "agent_vision_radius": 5,
             # epsilon decay hyperparameter for the IQN model
             "epsilon_decay": 0.0001,
             # model architecture parameters
             "layer_size": 128,
-            "epsilon": 0.5,
-            "n_frames": 3,
+            "epsilon": 1.0,
+            "n_frames": 1,
             "n_step": 3,
-            "sync_freq": 100,
+            "sync_freq": 200,
             "model_update_freq": 4,
             "batch_size": 64,
-            "memory_size": 512,
+            "memory_size": 1024,
             "LR": 0.00025,
             "TAU": 0.001,
-            "GAMMA": 0.99,
-            "n_quantiles": 8,
+            "GAMMA": 0.95,
+            "n_quantiles": 12,
         },
         "world": {
-            # grid dimensions
+            # map generation mode
+            "generation_mode": "ascii_map",  # "random" or "ascii_map"
+            "ascii_map_file": "stag_hunt_ascii_map_clean.txt",  # only used when generation_mode is "ascii_map"
+            # grid dimensions (only used for random generation)
             "height": 11,
             "width": 11,
             # number of players in the game
@@ -81,7 +85,7 @@ def run_stag_hunt() -> None:
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
             # intrinsic reward for collecting a resource
-            "taste_reward": 0.1,
+            "taste_reward": 10,
             # zap hits required to destroy a resource
             "destroyable_health": 3,
             # beam characteristics
@@ -94,6 +98,9 @@ def run_stag_hunt() -> None:
             "payoff_matrix": [[4, 0], [2, 2]],
             # bonus awarded for participating in an interaction
             "interaction_reward": 1.0,
+            # agent freezing parameters
+            "freeze_duration": 5,  # X: number of frames agent stays frozen after interaction
+            "respawn_delay": 10,  # Y: number of frames before agent respawns after removal
         },
     }
 
@@ -111,8 +118,10 @@ def run_stag_hunt() -> None:
     experiment.run_experiment(
         logger=CombinedLogger(
             max_epochs=config["experiment"]["epochs"],
-            log_dir=Path(__file__).parent / f'runs/{datetime.now().strftime("%Y%m%d-%H%M%S")}',
-        )
+            log_dir=Path(__file__).parent
+            / f'runs/{config["experiment"]["run_name"]}_{datetime.now().strftime("%Y%m%d-%H%M%S")}',
+        ),
+        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}'
     )
 
 

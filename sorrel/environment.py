@@ -144,7 +144,6 @@ class Environment[W: Gridworld]:
             if animate_this_turn and renderer is not None:
                 if output_dir is None:
                     output_dir = Path(os.getcwd()) / "./data/"
-                
                 renderer.save_gif(epoch, output_dir)
 
             # end epoch action for each agent model

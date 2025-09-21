@@ -39,7 +39,7 @@ from sorrel.worlds import Gridworld
 
 class StagHuntObservation(observation_spec.OneHotObservationSpec):
     """Custom observation function for the StagHunt agent class.
-    
+
     This observation spec includes inventory and ready flag as extra scalar features,
     similar to the cleanup example's positional embedding approach.
     """
@@ -51,12 +51,15 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         vision_radius: int | None = None,
     ):
         super().__init__(entity_list, full_view, vision_radius)
-        
+
         # Calculate input size including extra features
         if self.full_view:
             # For full view, we need to know the world dimensions
             # This will be set when observe() is called
-            self.input_size = (1, len(entity_list) * 0 + 3)  # Placeholder, will be updated
+            self.input_size = (
+                1,
+                len(entity_list) * 0 + 4,
+            )  # Placeholder, will be updated
         else:
             self.input_size = (
                 1,
@@ -65,43 +68,49 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                     * (2 * self.vision_radius + 1)
                     * (2 * self.vision_radius + 1)
                 )
-                + 3,  # Extra features: inv_stag, inv_hare, ready_flag
+                + 4,  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
             )
 
-    def observe(self, world: Gridworld, location: tuple | Location | None = None) -> np.ndarray:
+    def observe(
+        self, world: Gridworld, location: tuple | Location | None = None
+    ) -> np.ndarray:
         """Observe the environment with extra scalar features.
-        
+
         Args:
             world: The world to observe
             location: The location to observe from (must be provided)
-            
+
         Returns:
             Observation array with visual field + extra features
         """
         if location is None:
             raise ValueError("Location must be provided for StagHuntObservation")
-            
+
         # Get the base visual observation
         visual_field = super().observe(world, location).flatten()
-        
+
         # Get the agent at this location to extract inventory and ready state
         agent = None
-        if hasattr(world, 'agents'):
+        if hasattr(world, "agents"):
             for a in world.agents:
                 if a.location == location:
                     agent = a
                     break
-        
+
         if agent is None:
             # If no agent found, use default values
-            extra_features = np.array([0, 0, 0], dtype=visual_field.dtype)
+            extra_features = np.array([0, 0, 0, 0], dtype=visual_field.dtype)
         else:
-            # Extract inventory and ready flag from the agent
+            # Extract inventory, ready flag, and interaction reward flag from the agent
             inv_stag = agent.inventory.get("stag", 0)
             inv_hare = agent.inventory.get("hare", 0)
             ready_flag = 1 if agent.ready else 0
-            extra_features = np.array([inv_stag, inv_hare, ready_flag], dtype=visual_field.dtype)
-        
+            interaction_reward_flag = 1 if agent.received_interaction_reward else 0
+            extra_features = np.array(
+                [inv_stag, inv_hare, ready_flag, interaction_reward_flag],
+                dtype=visual_field.dtype,
+            )
+
         return np.concatenate((visual_field, extra_features))
 
 
@@ -151,6 +160,16 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.interaction_reward = interaction_reward
         # beam cooldown tracking
         self.beam_cooldown_timer = 0
+        # freezing state tracking
+        self.is_frozen: bool = False
+        self.freeze_timer: int = 0
+        self.is_removed: bool = False
+        # pending reward from interactions (received when frozen)
+        self.pending_reward: float = 0.0
+        # flag indicating if agent received interaction reward in previous step
+        self.received_interaction_reward: bool = False
+        self.respawn_timer: int = 0
+        self._removed_from_world: bool = False
 
         # Define directional sprites
         # Note: Based on cleanup example, hero-back.png faces UP, hero.png faces DOWN
@@ -176,6 +195,28 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         if self.beam_cooldown_timer > 0:
             self.beam_cooldown_timer -= 1
 
+    def freeze_agent(self, freeze_duration: int) -> None:
+        """Freeze the agent for a specified number of frames."""
+        self.is_frozen = True
+        self.freeze_timer = freeze_duration
+
+    def update_freeze_state(self) -> None:
+        """Update the freezing state and timers."""
+        if self.is_frozen and self.freeze_timer > 0:
+            self.freeze_timer -= 1
+            if self.freeze_timer == 0:
+                self.is_frozen = False
+                self.is_removed = True
+                self._removed_from_world = False  # Reset flag for removal
+                # Set respawn timer when agent becomes removed
+                self.respawn_timer = getattr(self, "_respawn_delay", 10)
+        elif self.is_removed and self.respawn_timer > 0:
+            self.respawn_timer -= 1
+
+    def can_act(self) -> bool:
+        """Check if the agent can take actions (not frozen or removed)."""
+        return not self.is_frozen and not self.is_removed
+
     # ------------------------------------------------------------------ #
     # Agent lifecycle methods                                             #
     # ------------------------------------------------------------------ #
@@ -189,15 +230,23 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.inventory = {"stag": 0, "hare": 0}
         self.ready = False
         self.beam_cooldown_timer = 0  # Reset beam cooldown
+        self.pending_reward = 0.0  # Reset pending reward
+        self.received_interaction_reward = False  # Reset interaction reward flag
+        # Reset freezing state
+        self.is_frozen = False
+        self.freeze_timer = 0
+        self.is_removed = False
+        self.respawn_timer = 0
+        self._removed_from_world = False
         self.update_agent_kind()  # Initialize agent kind based on orientation
         # reset the underlying model (e.g., clear memory of past states)
         self.model.reset()
 
     def pov(self, world: StagHuntWorld) -> np.ndarray:
         """Return the agent's observation vector.
-        
-        This method now simply delegates to the observation spec, which handles
-        the extra features automatically.
+
+        This method now simply delegates to the observation spec, which handles the
+        extra features automatically.
         """
         return self.observation_spec.observe(world, self.location).reshape(1, -1)
 
@@ -222,8 +271,20 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         resources (taste reward) and from interacting with another agent
         (stag‑hunt payoff handled by the environment).
         """
+        # Skip action if agent is frozen or removed
+        if not self.can_act():
+            return 0.0
+
         action_name = self.action_spec.get_readable_action(action)
         reward = 0.0
+
+        # apply any pending reward from interactions
+        if self.pending_reward > 0:
+            reward += self.pending_reward
+            self.pending_reward = 0.0
+            self.received_interaction_reward = True
+        else:
+            self.received_interaction_reward = False
 
         # handle NOOP action - do nothing
         if action_name == "NOOP":
@@ -252,7 +313,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     terrain_location = (new_pos[0], new_pos[1], world.terrain_layer)
                     if world.valid_location(terrain_location):
                         terrain_entity = world.observe(terrain_location)
-                        if hasattr(terrain_entity, 'respawn_ready'):
+                        if hasattr(terrain_entity, "respawn_ready"):
                             terrain_entity.respawn_ready = False
                             terrain_entity.respawn_timer = 0
                 # move into the cell (if passable)
@@ -285,7 +346,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     terrain_location = (new_pos[0], new_pos[1], world.terrain_layer)
                     if world.valid_location(terrain_location):
                         terrain_entity = world.observe(terrain_location)
-                        if hasattr(terrain_entity, 'respawn_ready'):
+                        if hasattr(terrain_entity, "respawn_ready"):
                             terrain_entity.respawn_ready = False
                             terrain_entity.respawn_timer = 0
                 # move into the cell (if passable)
@@ -328,13 +389,13 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                         # zap the resource to decrease its health
                         entity.on_zap(world)
                         # continue checking for agents (don't break)
-                
+
                 # set cooldown timer after using beam
                 self.beam_cooldown_timer = getattr(world, "beam_cooldown", 3)
-        
+
         # update cooldown timers
         self.update_cooldown()
-        
+
         # return accumulated reward from this action
         return reward
 
@@ -347,10 +408,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # Get the tiles in front of the agent
         # Use the same orientation system as movement - directly calculate offsets
         dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
-        
+
         # Calculate right and left vectors by rotating 90 degrees
         right_dy, right_dx = -dx, dy  # 90 degrees clockwise
-        left_dy, left_dx = dx, -dy    # 90 degrees counter-clockwise
+        left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
 
         # Get beam radius from world config (default to 3 if not set)
         beam_radius = getattr(world, "beam_radius", 3)
@@ -369,7 +430,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # Side beam locations
         for i in range(beam_radius):
             # Right side
-            right_target = (y + right_dy + dy * i, x + right_dx + dx * i, world.beam_layer)
+            right_target = (
+                y + right_dy + dy * i,
+                x + right_dx + dx * i,
+                world.beam_layer,
+            )
             if world.valid_location(right_target):
                 beam_locs.append(right_target)
 
@@ -391,7 +456,6 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         Agents act until the world signals termination via ``world.is_done``.
         """
         return world.is_done
-
 
     # ------------------------------------------------------------------ #
     # Interaction logic                                                   #
@@ -441,33 +505,21 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.ready = False
         other.inventory = {"stag": 0, "hare": 0}
         other.ready = False
-        # remove agents from their current positions on the top layer
-        a_loc = self.location
-        o_loc = other.location
-        world.remove(a_loc)
-        world.remove(o_loc)
-        # respawn at random spawn points that are not occupied
-        spawn_points = world.agent_spawn_points
-        # find unoccupied spawn points
-        unoccupied_spawns = []
-        for spawn_point in spawn_points:
-            y, x, z = spawn_point
-            # check if there's an agent at this spawn point (layer 1)
-            entity_at_spawn = world.observe((y, x, 1))
-            if entity_at_spawn.kind == "Empty":
-                unoccupied_spawns.append(spawn_point)
 
-        # if not enough unoccupied spawns, use all spawns (fallback)
-        if len(unoccupied_spawns) < 2:
-            unoccupied_spawns = spawn_points
+        # Get freeze and respawn parameters from world config
+        freeze_duration = getattr(world, "freeze_duration", 5)
+        respawn_delay = getattr(world, "respawn_delay", 10)
 
-        # choose two distinct spawn points at random from unoccupied ones
-        new_a_loc, new_o_loc = random.sample(unoccupied_spawns, k=2)
-        world.add((new_a_loc[0], new_a_loc[1], 1), self)
-        world.add((new_o_loc[0], new_o_loc[1], 1), other)
-        # reset orientations
-        self.orientation = 0
-        other.orientation = 0
+        # Store respawn delay for later use
+        self._respawn_delay = respawn_delay
+        other._respawn_delay = respawn_delay
+
+        # Freeze both agents instead of immediately respawning
+        self.freeze_agent(freeze_duration)
+        other.freeze_agent(freeze_duration)
+
+        # store the other agent's reward to be given on their next turn
+        other.pending_reward += col_payoff + bonus
         # accumulate reward for both agents in world.total_reward
         world.total_reward += row_payoff + col_payoff + 2 * bonus
         # return the initiating agent's reward

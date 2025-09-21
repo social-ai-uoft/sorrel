@@ -25,10 +25,10 @@ from sorrel.agents import Agent
 from sorrel.environment import Environment
 from sorrel.examples.ingroupbias.agents import IngroupBiasAgent
 from sorrel.examples.ingroupbias.entities import (
-    Empty,
-    RedResource,
-    GreenResource,
     BlueResource,
+    Empty,
+    GreenResource,
+    RedResource,
     Sand,
     Spawn,
     Wall,
@@ -99,16 +99,26 @@ class IngroupBiasEnv(Environment[IngroupBiasWorld]):
             full_input_dim = base_size + 4  # 3 inventory + 1 ready flag
 
             # action spec: eight discrete actions
-            action_spec = ActionSpec([
-                "move_up", "move_down", "move_left", "move_right",
-                "turn_left", "turn_right", "strafe_left", "strafe_right", "interact"
-            ])
+            action_spec = ActionSpec(
+                [
+                    "move_up",
+                    "move_down",
+                    "move_left",
+                    "move_right",
+                    "turn_left",
+                    "turn_right",
+                    "strafe_left",
+                    "strafe_right",
+                    "interact",
+                ]
+            )
             # create a simple IQN model; hyperparameters can be tuned via config
             model = PyTorchIQN(
                 input_size=[full_input_dim],
                 action_space=action_spec.n_actions,
                 layer_size=int(model_cfg.get("layer_size", 128)),
                 epsilon=float(model_cfg.get("epsilon", 0.5)),
+                epsilon_min=float(model_cfg.get("epsilon_min", 0.01)),
                 device="cpu",
                 seed=torch.random.seed(),
                 n_frames=int(model_cfg.get("n_frames", 5)),
@@ -148,9 +158,11 @@ class IngroupBiasEnv(Environment[IngroupBiasWorld]):
         for y in range(2, world.height - 2):
             for x in range(2, world.width - 2):
                 spawn_points.append((y, x, world.dynamic_layer))
-        
+
         # Select random spawn points for agents
-        world.agent_spawn_points = random.sample(spawn_points, min(len(spawn_points), world.num_agents))
+        world.agent_spawn_points = random.sample(
+            spawn_points, min(len(spawn_points), world.num_agents)
+        )
 
         for y, x, layer in np.ndindex(world.map.shape):
             index = (y, x, layer)
@@ -168,7 +180,9 @@ class IngroupBiasEnv(Environment[IngroupBiasWorld]):
                 if (y, x, world.dynamic_layer) not in world.agent_spawn_points:
                     if np.random.random() < world.resource_density:
                         # choose resource type uniformly at random
-                        resource_type = np.random.choice([RedResource, GreenResource, BlueResource])
+                        resource_type = np.random.choice(
+                            [RedResource, GreenResource, BlueResource]
+                        )
                         world.add(index, resource_type())
                         world.resource_spawn_points.append((y, x, world.dynamic_layer))
                     else:

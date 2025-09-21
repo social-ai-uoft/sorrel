@@ -52,11 +52,17 @@ class Wall(Entity["StagHuntWorld"]):
 
 class Sand(Entity["StagHuntWorld"]):
     """An entity that represents a block of sand in the stag hunt environment.
-    
-    Sand entities track whether they can spawn resources and manage respawn timing.
+
+    Sand entities track whether they can spawn resources and manage respawn timing. They
+    also remember what type of resource should respawn at this location.
     """
 
-    def __init__(self, can_convert_to_resource: bool = False, respawn_ready: bool = True):
+    def __init__(
+        self,
+        can_convert_to_resource: bool = False,
+        respawn_ready: bool = True,
+        resource_type: str = None,
+    ):
         super().__init__()
         # We technically don't need to make Sand passable here since it's on a different layer from Agent
         self.passable = True
@@ -64,13 +70,14 @@ class Sand(Entity["StagHuntWorld"]):
         self.respawn_ready = respawn_ready
         self.respawn_timer = 0  # Timer for respawn lag
         self.has_transitions = True  # Enable transitions for respawn timing
+        self.resource_type = resource_type  # 'stag', 'hare', or None for random
         self.sprite = Path(__file__).parent / "./assets/sand.png"
 
     def transition(self, world: StagHuntWorld) -> None:
         """Handle respawn timing for resource spawn points.
-        
-        Sand entities that can convert to resources but are not ready will
-        count down their respawn timer until they become ready again.
+
+        Sand entities that can convert to resources but are not ready will count down
+        their respawn timer until they become ready again.
         """
         if self.can_convert_to_resource and not self.respawn_ready:
             self.respawn_timer += 1
@@ -99,21 +106,41 @@ class Empty(Entity["StagHuntWorld"]):
 
         When the world performs its regeneration step, empty cells may spawn
         either a StagResource or HareResource, but only if the terrain below
-        can convert to a resource and is ready to respawn. The probability is 
-        given by ``world.resource_density`` and the class is selected uniformly 
-        at random.  If a resource is spawned, the empty entity is replaced.
+        can convert to a resource and is ready to respawn. The probability is
+        given by ``world.resource_density`` and the class is selected based on
+        the resource type remembered by the Sand entity below.  If a resource
+        is spawned, the empty entity is replaced.
         """
         # Check the terrain layer below for resource spawn capability and readiness
         terrain_location = (self.location[0], self.location[1], world.terrain_layer)
         if world.valid_location(terrain_location):
             terrain_entity = world.observe(terrain_location)
-            if (hasattr(terrain_entity, 'can_convert_to_resource') and 
-                hasattr(terrain_entity, 'respawn_ready') and
-                terrain_entity.can_convert_to_resource and 
-                terrain_entity.respawn_ready and 
-                np.random.random() < world.resource_density):
-                # choose between stag and hare resources with equal probability
-                res_cls = StagResource if np.random.random() < 0.2 else HareResource
+            if (
+                hasattr(terrain_entity, "can_convert_to_resource")
+                and hasattr(terrain_entity, "respawn_ready")
+                and terrain_entity.can_convert_to_resource
+                and terrain_entity.respawn_ready
+                and np.random.random() < world.resource_density
+            ):
+
+                # Choose resource type based on what's remembered in the Sand entity
+                if (
+                    hasattr(terrain_entity, "resource_type")
+                    and terrain_entity.resource_type
+                ):
+                    if terrain_entity.resource_type == "stag":
+                        res_cls = StagResource
+                    elif terrain_entity.resource_type == "hare":
+                        res_cls = HareResource
+                    else:
+                        # Fallback to random selection for unknown types
+                        res_cls = (
+                            StagResource if np.random.random() < 0.1 else HareResource
+                        )
+                else:
+                    # Fallback to original random selection if no resource type is remembered
+                    res_cls = StagResource if np.random.random() < 0.1 else HareResource
+
                 world.add(
                     self.location, res_cls(world.taste_reward, world.destroyable_health)
                 )
@@ -156,11 +183,26 @@ class Resource(Entity["StagHuntWorld"]):
         """Handle a zap event on this resource.
 
         Reduces health by one.  When health reaches zero, the resource is removed and
-        replaced with an empty entity that can convert back to a resource.  No reward 
-        is awarded for destroying resources.
+        replaced with an empty entity that can convert back to a resource.  The Sand
+        entity below is marked as not ready to respawn and will remember this resource
+        type for future respawning.  No reward is awarded for destroying resources.
         """
         self.health -= 1
         if self.health <= 0:
+            # Mark the Sand entity below as not ready to respawn and remember this resource type
+            terrain_location = (self.location[0], self.location[1], world.terrain_layer)
+            if world.valid_location(terrain_location):
+                terrain_entity = world.observe(terrain_location)
+                if (
+                    hasattr(terrain_entity, "can_convert_to_resource")
+                    and terrain_entity.can_convert_to_resource
+                ):
+                    terrain_entity.respawn_ready = False
+                    terrain_entity.respawn_timer = 0
+                    terrain_entity.resource_type = (
+                        self.name
+                    )  # Remember the resource type
+
             # replace with empty cell (attributes inherited from terrain layer)
             world.add(self.location, Empty())
 

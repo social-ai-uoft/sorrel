@@ -29,6 +29,7 @@ except ImportError:  # pragma: no cover
 
 from typing import Any
 
+from sorrel.examples.staghunt.map_generator import MapBasedWorldGenerator
 from sorrel.worlds import Gridworld
 
 
@@ -76,12 +77,25 @@ class StagHuntWorld(Gridworld):
         # Determine whether config uses OmegaConf semantics
         if OmegaConf is not None and isinstance(config, DictConfig):  # type: ignore[arg-type]
             world_cfg = config.world  # type: ignore[attr-defined]
-            height = int(world_cfg.height)
-            width = int(world_cfg.width)
         else:
             world_cfg = config.get("world", {}) if isinstance(config, dict) else {}
+
+        # Check if using ASCII map generation
+        generation_mode = world_cfg.get("generation_mode", "random")
+        if generation_mode == "ascii_map":
+            map_file = world_cfg.get("ascii_map_file")
+            if not map_file:
+                raise ValueError(
+                    "ascii_map_file required when generation_mode is 'ascii_map'"
+                )
+            self.map_generator = MapBasedWorldGenerator(map_file)
+            map_data = self.map_generator.parse_map()
+            height, width = map_data.dimensions
+        else:
+            # Use existing random generation logic
             height = int(world_cfg.get("height", 11))
             width = int(world_cfg.get("width", 11))
+            self.map_generator = None
 
         # number of layers: bottom terrain, middle dynamic layer, top beam layer
         layers = 3
@@ -108,6 +122,8 @@ class StagHuntWorld(Gridworld):
         self.beam_length: int = int(get_world_param("beam_length", 3))
         self.beam_radius: int = int(get_world_param("beam_radius", 1))
         self.beam_cooldown: int = int(get_world_param("beam_cooldown", 3))
+        self.freeze_duration: int = int(get_world_param("freeze_duration", 5))
+        self.respawn_delay: int = int(get_world_param("respawn_delay", 10))
         self.payoff_matrix: list[list[int]] = [
             list(row) for row in get_world_param("payoff_matrix", [[4, 0], [2, 2]])
         ]

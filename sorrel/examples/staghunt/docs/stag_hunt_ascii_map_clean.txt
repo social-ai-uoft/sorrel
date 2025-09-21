@@ -1,0 +1,25 @@
+WWWWWWWWWWWWWWWWWWWWWWWWW
+WPPPPPPP   W W   PPPPPPPW
+WPPPP               PPPPW
+WPPPP               PPPPW
+WPPPP       2222    PPPPW
+WP                     PW
+WP     222222   222    PW
+WP 2     11    11      PW
+W  2     11  a     222  W
+W    WW     W1 11a      W
+WW    21 11 W  11a  2   W
+WWW   21  WWWWWWWWW 2   W
+W   2 aa    111  1a   WWW
+W   2       111  1a     W
+W       aa W        22  W
+W  22   2a Waa WW       W
+WP      22     W222    PW
+WP              222    PW
+WP         222         PW
+WPPPP               PPPPW
+WPPPP               PPPPW
+WPPPP               PPPPW
+WPPPPPPP      W  PPPPPPPW
+WWWWWWWWWWWWWWWWWWWWWWWWW
+
