@@ -204,8 +204,13 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 )
 
                 avg_loss = total_loss / loss_count if loss_count > 0 else 0.0
+                
+                # Get current epsilon from the first agent's model
+                current_epsilon = np.mean([self.individual_envs[k].agents[0].model.epsilon 
+                for k in range(len(self.individual_envs))]) if self.individual_envs else 0.0
+                
                 logger.record_turn(
-                    epoch, avg_loss, total_reward, epsilon=self.config.model.epsilon
+                    epoch, avg_loss, total_reward, epsilon=current_epsilon
                 )
 
             # Update epsilon for all agents
@@ -236,6 +241,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         self.use_composite_views = config.get("use_composite_views", False)
         self.use_composite_actions = config.get("use_composite_actions", False)
         self.use_multi_env_composite = config.get("use_multi_env_composite", False)
+        self.simple_foraging = config.get("simple_foraging", False)
 
         # Multi-agent coordination
         self.other_environments = []  # Will be set by main.py
@@ -347,6 +353,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_composite_views=self.use_composite_views,
                     use_composite_actions=self.use_composite_actions,
                     use_multi_env_composite=self.use_multi_env_composite,
+                    simple_foraging=self.simple_foraging,
                 )
             )
 

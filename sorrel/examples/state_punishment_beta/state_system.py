@@ -135,12 +135,18 @@ class StateSystem:
 
     def vote_increase(self) -> None:
         """Increase punishment probability."""
+        # In simple foraging mode, punishment level is fixed
+        if hasattr(self, 'simple_foraging') and self.simple_foraging:
+            return
         self.prob = min(1.0, self.prob + self.change_per_vote)
         self.vote_history.append(1)
         self.epoch_vote_up += 1
 
     def vote_decrease(self) -> None:
         """Decrease punishment probability."""
+        # In simple foraging mode, punishment level is fixed
+        if hasattr(self, 'simple_foraging') and self.simple_foraging:
+            return
         self.prob = max(0.0, self.prob - self.change_per_vote)
         self.vote_history.append(-1)
         self.epoch_vote_down += 1
@@ -167,7 +173,7 @@ class StateSystem:
         if resource_kind in self.resource_schedules:
             # Get current punishment level (0 to num_steps-1)
             current_level = min(
-                int(self.prob * (self.num_steps - 1)), self.num_steps - 1
+                round(self.prob * (self.num_steps - 1)), self.num_steps - 1
             )
 
             if self.resource_punishment_is_ambiguous:

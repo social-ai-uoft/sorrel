@@ -31,22 +31,124 @@ class CombinedLogger(Logger):
         self.tensorboard_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
 
 
+class StatePunishmentLogger(CombinedLogger):
+    """Enhanced logger for state punishment game with encounter tracking and punishment level monitoring."""
+
+    def __init__(self, max_epochs: int, log_dir: str | Path, multi_agent_env, *args):
+        super().__init__(max_epochs, log_dir, *args)
+        self.multi_agent_env = multi_agent_env
+
+    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+        # Add encounter tracking data
+        encounter_data = {}
+
+        # Record individual agent metrics
+        for i, env in enumerate(self.multi_agent_env.individual_envs):
+            for j, agent in enumerate(env.agents):
+                agent_key = f"Agent_{i}_{j}" if len(env.agents) > 1 else f"Agent_{i}"
+                
+                # Individual agent score
+                encounter_data[f"{agent_key}/individual_score"] = agent.individual_score
+                
+                # All encounters for this agent
+                if hasattr(agent, "encounters"):
+                    for entity_type, count in agent.encounters.items():
+                        encounter_data[f"{agent_key}/{entity_type}_encounters"] = count
+                else:
+                    # Initialize empty encounters if not present
+                    encounter_data[f"{agent_key}/a_encounters"] = 0
+                    encounter_data[f"{agent_key}/b_encounters"] = 0
+                    encounter_data[f"{agent_key}/c_encounters"] = 0
+                    encounter_data[f"{agent_key}/d_encounters"] = 0
+                    encounter_data[f"{agent_key}/e_encounters"] = 0
+                    encounter_data[f"{agent_key}/emptyentity_encounters"] = 0
+                    encounter_data[f"{agent_key}/wall_encounters"] = 0
+
+        # Calculate total and mean encounters across all agents
+        total_encounters = {
+            "a": 0,
+            "b": 0,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "emptyentity": 0,
+            "wall": 0,
+        }
+        total_individual_scores = 0
+        agent_count = 0
+
+        for env in self.multi_agent_env.individual_envs:
+            for agent in env.agents:
+                agent_count += 1
+                total_individual_scores += agent.individual_score
+                
+                if hasattr(agent, "encounters"):
+                    for entity_type, count in agent.encounters.items():
+                        if entity_type in total_encounters:
+                            total_encounters[entity_type] += count
+
+        # Total and mean individual scores
+        encounter_data["Total/individual_score"] = total_individual_scores
+        encounter_data["Mean/individual_score"] = (
+            total_individual_scores / agent_count if agent_count > 0 else 0
+        )
+
+        # Total and mean encounters for each entity type
+        for entity_type, count in total_encounters.items():
+            encounter_data[f"Total/{entity_type}_encounters"] = count
+            encounter_data[f"Mean/{entity_type}_encounters"] = (
+                count / agent_count if agent_count > 0 else 0
+            )
+
+        # Global punishment level metrics (shared across all agents)
+        if hasattr(self.multi_agent_env.shared_state_system, 'get_average_punishment_level'):
+            avg_punishment = self.multi_agent_env.shared_state_system.get_average_punishment_level()
+        else:
+            # Calculate average from all environments
+            punishment_levels = [env.world.state_system.prob for env in self.multi_agent_env.individual_envs]
+            avg_punishment = sum(punishment_levels) / len(punishment_levels) if punishment_levels else 0
+        
+        encounter_data["Global/average_punishment_level"] = avg_punishment
+        encounter_data["Global/current_punishment_level"] = self.multi_agent_env.shared_state_system.prob
+
+        # Merge encounter data with existing kwargs
+        kwargs.update(encounter_data)
+
+        # Log to console (without additional data to avoid the assertion error)
+        try:
+            self.console_logger.record_turn(epoch, loss, reward, epsilon)
+        except UnicodeEncodeError:
+            # Fallback to simple ASCII logging if Unicode characters can't be displayed
+            print(f"Epoch: {epoch}, Loss: {loss:.4f}, Reward: {reward:.2f}, Epsilon: {epsilon:.3f}")
+        
+        # Log to tensorboard (with all additional data)
+        self.tensorboard_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
+
+
 def create_config(
     use_composite_views: bool = False,
     use_composite_actions: bool = False,
     use_multi_env_composite: bool = False,
     num_agents: int = 3,
     epochs: int = 10000,
+    simple_foraging: bool = False,
+    fixed_punishment_level: float = 0.5,
 ) -> dict:
     """Create configuration dictionary for the experiment."""
+    # Determine run name based on mode
+    if simple_foraging:
+        run_name = f"simple_foraging_{num_agents}agents_punish{fixed_punishment_level:.1f}_norespawn"
+    else:
+        run_name = f"state_punishment_{'composite' if use_composite_views or use_composite_actions else 'simple'}_{num_agents}agents"
+    
     return {
         "experiment": {
             "epochs": epochs,
-            "max_turns": 150,
+            "max_turns": 100,
             "record_period": 100,
-            "run_name": f"state_punishment_{'composite' if use_composite_views or use_composite_actions else 'simple'}_{num_agents}agents",
+            "run_name": run_name,
             "num_agents": num_agents,
-            "initial_resources": 15,
+            "initial_resources": 32,
         },
         "model": {
             "agent_vision_radius": 5,
@@ -68,17 +170,16 @@ def create_config(
             "device": "cpu",
         },
         "world": {
-            "height": 10,
-            "width": 10,
-            "a_value": 3.0,
-            "b_value": 7.0,
-            "c_value": 2.0,
-            "d_value": -2.0,
-            "e_value": 1.0,
-            "spawn_prob": 0.05,
-            "respawn_prob": 0.02,
-            "init_punishment_prob": 0.1,
-            "punishment_magnitude": -10.0,
+            "height": 20,
+            "width": 20,
+            "a_value": 2.9, # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
+            "b_value": 3.316, 
+            "c_value": 4.59728,
+            "d_value": 8.5436224, 
+            "e_value": 20.69835699, 
+            "spawn_prob": 0.00,
+            "init_punishment_prob": 0.0,
+            "punishment_magnitude": -55.0,
             "change_per_vote": 0.1,
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
@@ -86,6 +187,8 @@ def create_config(
         "use_composite_views": use_composite_views,
         "use_composite_actions": use_composite_actions,
         "use_multi_env_composite": use_multi_env_composite,
+        "simple_foraging": simple_foraging,
+        "fixed_punishment_level": fixed_punishment_level,
     }
 
 
@@ -95,6 +198,8 @@ def main(
     use_multi_env_composite: bool = False,
     num_agents: int = 3,
     epochs: int = 10000,
+    simple_foraging: bool = False,
+    fixed_punishment_level: float = 0.5,
 ) -> None:
     """Run the state punishment experiment."""
 
@@ -105,24 +210,59 @@ def main(
         use_multi_env_composite,
         num_agents,
         epochs,
+        simple_foraging,
+        fixed_punishment_level,
     )
 
     # Create log directory
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     log_dir = (
-        Path(__file__).parent / f'runs/{config["experiment"]["run_name"]}_{timestamp}'
+        Path(__file__).parent / f'runs_v1/{config["experiment"]["run_name"]}_{timestamp}'
     )
 
-    print(f"Running State Punishment experiment...")
+    if simple_foraging:
+        print(f"Running Simple Foraging experiment...")
+        print(f"Fixed punishment level: {fixed_punishment_level}")
+        
+        # Calculate and print expected rewards for each resource type
+        print("\nExpected rewards for each resource type:")
+        print("=" * 50)
+        
+        # Get the state system to calculate punishments
+        temp_world = StatePunishmentWorld(config=config, default_entity=EmptyEntity())
+        temp_world.state_system.prob = fixed_punishment_level
+        temp_world.state_system.simple_foraging = True
+        
+        # Resource values from config
+        resource_values = {
+            "A": config["world"]["a_value"],
+            "B": config["world"]["b_value"], 
+            "C": config["world"]["c_value"],
+            "D": config["world"]["d_value"],
+            "E": config["world"]["e_value"]
+        }
+        
+        for resource, value in resource_values.items():
+            punishment = temp_world.state_system.calculate_punishment(resource)
+            net_reward = value + punishment
+            print(f"Resource {resource}: value={value:.1f}, punishment={punishment:.1f}, net_reward={net_reward:.1f}")
+        
+        print("=" * 50)
+    else:
+        print(f"Running State Punishment experiment...")
+    
     print(f"Run name: {config['experiment']['run_name']}")
     print(
         f"Epochs: {config['experiment']['epochs']}, Max turns per epoch: {config['experiment']['max_turns']}"
     )
     print(f"Number of agents: {config['experiment']['num_agents']}")
-    print(
-        f"Composite views: {use_composite_views}, Composite actions: {use_composite_actions}"
-    )
-    print(f"Multi-env composite: {use_multi_env_composite}")
+    
+    if not simple_foraging:
+        print(
+            f"Composite views: {use_composite_views}, Composite actions: {use_composite_actions}"
+        )
+        print(f"Multi-env composite: {use_multi_env_composite}")
+    
     print(f"Log directory: {log_dir}")
 
     # Create environments for each agent
@@ -135,6 +275,10 @@ def main(
 
         if shared_state_system is None:
             shared_state_system = world.state_system
+            # Set fixed punishment level for simple foraging mode
+            if simple_foraging:
+                shared_state_system.prob = fixed_punishment_level
+                shared_state_system.simple_foraging = True
         else:
             world.state_system = shared_state_system
 
@@ -152,6 +296,9 @@ def main(
 
         env = StatePunishmentEnv(world, agent_config)
         env.agents[0].agent_id = i
+        # Set simple foraging mode for the environment
+        if simple_foraging:
+            env.simple_foraging = True
         environments.append(env)
 
     # Create the multi-agent environment that coordinates all individual environments
@@ -161,10 +308,11 @@ def main(
         shared_social_harm=shared_social_harm,
     )
 
-    # Create logger
-    logger = CombinedLogger(
+    # Create enhanced logger with encounter tracking
+    logger = StatePunishmentLogger(
         max_epochs=config["experiment"]["epochs"],
         log_dir=log_dir,
+        multi_agent_env=multi_agent_env,
     )
 
     # Run the experiment using the multi-agent environment
@@ -194,6 +342,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--epochs", type=int, default=100000, help="Number of training epochs"
     )
+    parser.add_argument(
+        "--simple-foraging",
+        action="store_true",
+        help="Use simple foraging mode (movement only, fixed punishment level)",
+    )
+    parser.add_argument(
+        "--fixed-punishment-level",
+        type=float,
+        default=0.5,
+        help="Fixed punishment level for simple foraging mode (0.0-1.0)",
+    )
 
     args = parser.parse_args()
 
@@ -203,4 +362,6 @@ if __name__ == "__main__":
         use_multi_env_composite=args.multi_env_composite,
         num_agents=args.num_agents,
         epochs=args.epochs,
+        simple_foraging=args.simple_foraging,
+        fixed_punishment_level=args.fixed_punishment_level,
     )

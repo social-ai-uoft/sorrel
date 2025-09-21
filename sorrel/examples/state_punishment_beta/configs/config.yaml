@@ -31,8 +31,7 @@ world:
   coin_value: 10.0
   bone_value: -3.0
   spawn_prob: 0.05
-  respawn_prob: 0.02
-  init_punishment_prob: 0.1
+  init_punishment_prob: 0.0
   punishment_magnitude: -10.0
   change_per_vote: 0.2
   taboo_resources: ["A", "B", "C", "D", "E"]

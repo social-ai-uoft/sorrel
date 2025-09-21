@@ -314,7 +314,6 @@ def get_test_config(**overrides):
             "change_per_vote": 0.2,
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "spawn_prob": 0.05,
-            "respawn_prob": 0.02,
             "a_value": 3.0,
             "b_value": 7.0,
             "c_value": 2.0,

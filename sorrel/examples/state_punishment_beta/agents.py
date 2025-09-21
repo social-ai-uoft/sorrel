@@ -25,6 +25,7 @@ class StatePunishmentAgent(Agent):
         use_composite_views: bool = False,
         use_composite_actions: bool = False,
         use_multi_env_composite: bool = False,
+        simple_foraging: bool = False,
     ):
         """Initialize the state punishment agent.
 
@@ -41,6 +42,7 @@ class StatePunishmentAgent(Agent):
         self.use_composite_views = use_composite_views
         self.use_composite_actions = use_composite_actions
         self.use_multi_env_composite = use_multi_env_composite
+        self.simple_foraging = simple_foraging
         self.sprite = Path(__file__).parent / "./assets/hero.png"
 
         # Track encounters and rewards
@@ -257,7 +259,18 @@ class StatePunishmentAgent(Agent):
         """
         reward = 0.0
 
-        if self.use_composite_actions:
+        if self.simple_foraging:
+            # Simple foraging: full action space but only movement actions are executed
+            if self.use_composite_actions:
+                # Composite actions: extract movement component only
+                movement_action = action % 4  # 0-3 for movement
+                reward += self._execute_movement(movement_action, world)
+            else:
+                # Simple actions: only execute movement actions (0-3)
+                if action < 4:  # Movement actions only
+                    reward += self._execute_movement(action, world)
+                # All other actions (voting, noop) are ignored in simple foraging
+        elif self.use_composite_actions:
             # Composite actions: movement + voting
             movement_action = action % 4  # 0-3 for movement
             voting_action = action // 4  # 0-2 for voting (no vote, increase, decrease)
@@ -426,12 +439,15 @@ class StatePunishmentAgent(Agent):
         # Execute action and get reward
         reward = self.act(world, action)
 
+        # Update individual score
+        self.individual_score += reward
+
         # Check if done
         done = self.is_done(world)
 
         # Add to memory (flatten state for memory buffer)
         world.total_reward += reward
-        self.add_memory(state.flatten(), action, reward, done)
+        self.add_memory(state.flatten(), action, reward*10, done)
 
         return reward, done
 

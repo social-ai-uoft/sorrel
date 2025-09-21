@@ -26,7 +26,6 @@ class StatePunishmentWorld(Gridworld):
         self.d_value = config.world.get("d_value", -2.0)
         self.e_value = config.world.get("e_value", 1.0)
         self.spawn_prob = config.world.spawn_prob
-        self.respawn_prob = config.world.respawn_prob
 
         # Complex entity spawning probabilities
         self.entity_spawn_probs = config.world.get(
