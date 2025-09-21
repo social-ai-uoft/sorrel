@@ -1,0 +1,55 @@
+# Configuration file for treasurehunt_beta with evaluation
+# Copy this file and modify as needed for your experiments
+
+experiment:
+  epochs: 100000
+  max_turns: 50
+  record_period: 50
+  run_name: "treasurehunt_with_evaluation"
+  num_agents: 1
+  initial_resources: 15
+  eval_frequency: 1000  # Run evaluation every 1000 training epochs
+  eval_epochs: 10       # Run 10 evaluation epochs each time
+
+model:
+  agent_vision_radius: 2
+  epsilon: 1.0
+  epsilon_decay: 0.0001
+  epsilon_min: 0.01
+  full_view: true
+
+world:
+  height: 10
+  width: 10
+  gem_value: 2
+  apple_value: 1
+  coin_value: -1
+  bone_value: -3
+  food_value: -4
+  spawn_prob: 0.04
+
+# Alternative configurations for different experiments:
+
+# Short test run
+# experiment:
+#   epochs: 100
+#   max_turns: 20
+#   eval_frequency: 10
+#   eval_epochs: 3
+
+# Multi-agent experiment
+# experiment:
+#   num_agents: 3
+#   initial_resources: 25
+
+# Larger world
+# world:
+#   height: 15
+#   width: 15
+#   spawn_prob: 0.03
+
+# Different epsilon schedule
+# model:
+#   epsilon: 0.5
+#   epsilon_decay: 0.001
+#   epsilon_min: 0.05

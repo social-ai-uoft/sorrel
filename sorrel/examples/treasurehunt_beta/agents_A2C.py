@@ -1,4 +1,4 @@
-"""The agent for treasurehunt, a simple example for the purpose of a tutorial."""
+"""The agent for treasurehunt with A2C support, a simple example for the purpose of a tutorial."""
 
 # begin imports
 from pathlib import Path
@@ -12,60 +12,51 @@ from sorrel.examples.treasurehunt_beta.world import TreasurehuntWorld
 
 
 # begin treasurehunt agent
-class TreasurehuntAgent(Agent[TreasurehuntWorld]):
-    """A treasurehunt agent that uses the iqn model."""
+class TreasurehuntFlexAgent(Agent[TreasurehuntWorld]):
+    """A treasurehunt agent that can use both A2C and IQN models."""
 
     def __init__(self, observation_spec, action_spec, model):
         super().__init__(observation_spec, action_spec, model)
         self.sprite = Path(__file__).parent / "./assets/hero.png"
-        # Track all encounters for this epoch
-        self.encounters = {
-            "gem": 0,
-            "apple": 0,
-            "coin": 0,
-            "bone": 0,
-            "food": 0,
-            "wall": 0,
-            "emptyentity": 0,
-            "sand": 0,
-            "agent": 0,
-        }
-        # Track individual score for this epoch
-        self.individual_score = 0
+        # Set the kind attribute to match what's expected in the observation spec
+        self.kind = "TreasurehuntAgent"
 
     # end constructor
 
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
         self.model.reset()
-        # Reset encounter tracking for new epoch
-        self.encounters = {
-            "gem": 0,
-            "apple": 0,
-            "coin": 0,
-            "bone": 0,
-            "food": 0,
-            "wall": 0,
-            "emptyentity": 0,
-            "sand": 0,
-            "agent": 0,
-        }
-        # Reset individual score for new epoch
-        self.individual_score = 0
 
     def pov(self, world: TreasurehuntWorld) -> np.ndarray:
-        """Returns the state observed by the agent, from the flattened visual field."""
+        """Returns the state observed by the agent, from the visual field."""
         image = self.observation_spec.observe(world, self.location)
-        # flatten the image to get the state
-        return image.reshape(1, -1)
+        # Check if model uses IQN buffer (IQN) or A2C buffer (A2C)
+        if hasattr(self.model, 'memory') and self.model.memory.__class__.__name__ == 'Buffer':
+            # IQN model - return flattened observation for memory buffer compatibility
+            return image.reshape(1, -1)
+        else:
+            # A2C model - return unflattened observation (it expects 2D/3D input)
+            return image
 
     def get_action(self, state: np.ndarray) -> int:
-        """Gets the action from the model, using the stacked states."""
-        prev_states = self.model.memory.current_state()
-        stacked_states = np.vstack((prev_states, state))
-
-        model_input = stacked_states.reshape(1, -1)
-        action = self.model.take_action(model_input)
+        """Gets the action from the model, handling both A2C and IQN model outputs."""
+        # Check if model uses IQN buffer (IQN) or A2C buffer (A2C)
+        if hasattr(self.model, 'memory') and self.model.memory.__class__.__name__ == 'Buffer':
+            # IQN model - state is already flattened from pov method
+            prev_states = self.model.memory.current_state()
+            stacked_states = np.vstack((prev_states, state))
+            model_input = stacked_states.reshape(1, -1)
+            action = self.model.take_action(model_input)
+        else:
+            # A2C model - state is unflattened from pov method
+            action_result = self.model.take_action(state)
+            
+            # A2C returns tuple (action, log_prob, value), we need just the action
+            if isinstance(action_result, tuple) and len(action_result) == 3:
+                action = action_result[0]  # Extract just the action (first element)
+            else:
+                action = action_result
+                
         return action
 
     def act(self, world: TreasurehuntWorld, action: int) -> float:
@@ -88,15 +79,6 @@ class TreasurehuntAgent(Agent[TreasurehuntWorld]):
         target_object = world.observe(new_location)
         reward = target_object.value
 
-        # Track all encounters (everything the agent encounters)
-        entity_class_name = target_object.__class__.__name__.lower()
-        if entity_class_name in self.encounters:
-            self.encounters[entity_class_name] += 1
-        # print(self.encounters)
-
-        # Update individual score
-        self.individual_score += reward
-
         # try moving to new_location
         world.move(self, new_location)
 
@@ -105,3 +87,6 @@ class TreasurehuntAgent(Agent[TreasurehuntWorld]):
     def is_done(self, world: TreasurehuntWorld) -> bool:
         """Returns whether this Agent is done."""
         return world.is_done
+
+
+# end treasurehunt agent

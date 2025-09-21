@@ -86,7 +86,7 @@ if __name__ == "__main__":
     config = {
         "experiment": {
             "epochs": 100000,
-            "max_turns": 50,
+            "max_turns": 100,
             "record_period": 50,
             "run_name": "treasurehunt_with_respawn",  # Name for this run (will be included in log directory)
             "num_agents": 1,  # Number of agents in the environment
@@ -96,11 +96,12 @@ if __name__ == "__main__":
             "agent_vision_radius": 2,
             "epsilon": 1.0,  # Initial epsilon value for exploration
             "epsilon_decay": 0.0001,
+            "epsilon_min": 0.2,
             "full_view": True,  # Whether agents can see the entire environment
         },
         "world": {
-            "height": 10,
-            "width": 10,
+            "height": 25,
+            "width": 25,
             "gem_value": 2,
             "apple_value": 1,
             "coin_value": -1,
