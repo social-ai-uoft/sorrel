@@ -4,6 +4,7 @@ The script mirrors the structure of the other example ``main.py`` files. It
 creates a ``ChessWorld`` (8x8 board) and a ``ChessEnvironment`` with a minimal
 configuration, then runs a short experiment using the random agents.
 """
+from pathlib import Path
 
 from sorrel.examples.chess.env import ChessEnvironment
 from sorrel.examples.chess.world import ChessWorld
@@ -17,6 +18,7 @@ if __name__ == "__main__":
             "epochs": 3,
             "max_turns": 50,
             "record_period": 1,
+            "output_dir": Path(__file__).parent / "./data"
         },
         "model": {},
         "world": {},
@@ -27,4 +29,4 @@ if __name__ == "__main__":
 
     # Construct the environment and run the experiment.
     env = ChessEnvironment(world, config)
-    env.run_experiment()
+    env.run_experiment(output_dir=config["experiment"]["output_dir"])

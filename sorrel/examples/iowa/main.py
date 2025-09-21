@@ -1,3 +1,4 @@
+from pathlib import Path
 from datetime import datetime
 
 from sorrel.examples.iowa.entities import EmptyEntity
@@ -40,7 +41,7 @@ if __name__ == "__main__":
     env = GamblingEnv(world, config)
     # run the experiment with default parameters
     env.run_experiment(
-        logger=TensorboardLogger(max_epochs=config["experiment"]["epochs"], log_dir=f"./data/logs/{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}")
+        logger=TensorboardLogger(max_epochs=config["experiment"]["epochs"], log_dir=(Path(__file__).parent / f"./data/logs/{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}"))
     )
 
 # end main

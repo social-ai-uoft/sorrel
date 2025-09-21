@@ -3,6 +3,7 @@ from abc import abstractmethod
 from typing import Sequence
 
 import numpy as np
+import re
 import torch
 import torch.nn as nn
 
@@ -93,6 +94,14 @@ class PyTorchModel(nn.Module, BaseModel):
         Args:
             file_path: The full path to the model, including file extension.
         """
+
+        # Find the last / or \ character
+        pattern = re.compile(r"[\\\/]+(?!.*[\\\/])")
+        # Split into directory and file name
+        directory, filename = pattern.split(str(file_path), maxsplit=1)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
         if hasattr(self, "optimizer") and isinstance(
             self.optimizer, torch.optim.Optimizer
         ):
@@ -170,6 +179,14 @@ class DoublePyTorchModel(PyTorchModel):
         Args:
             file_path: The full path to the model, including file extension.
         """
+
+        # Find the last / or \ character
+        pattern = re.compile(r"[\\\/]+(?!.*[\\\/])")
+        # Split into directory and file name
+        directory, filename = pattern.split(str(file_path), maxsplit=1)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
         if hasattr(self, "optimizer") and isinstance(
             self.optimizer, torch.optim.Optimizer
         ):

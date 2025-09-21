@@ -1,5 +1,6 @@
 import os
 from abc import abstractmethod
+from datetime import datetime
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -112,6 +113,10 @@ class Environment[W: Gridworld]:
             output_dir: The directory to save the animations to. Defaults to "./data/" (relative to current working directory).
         """
         renderer = None
+        if output_dir is None:
+            output_dir = Path(__file__).parent / "./data/"
+            if not os.path.exists(output_dir):
+                os.mkdir(output_dir)
         if animate:
             renderer = ImageRenderer(
                 experiment_name=self.world.__class__.__name__,
@@ -142,9 +147,7 @@ class Environment[W: Gridworld]:
 
             # generate the gif if animation was done
             if animate_this_turn and renderer is not None:
-                if output_dir is None:
-                    output_dir = Path(os.getcwd()) / "./data/"
-                renderer.save_gif(epoch, output_dir)
+                renderer.save_gif(epoch, output_dir / "./gifs/")
 
             # end epoch action for each agent model
             for agent in self.agents:
@@ -171,6 +174,11 @@ class Environment[W: Gridworld]:
                 )
 
             # update epsilon
-            for agent in self.agents:
+            for i, agent in enumerate(self.agents):
                 if hasattr(self.config.model, "epsilon_decay"):
                     agent.model.epsilon_decay(self.config.model.epsilon_decay)
+                if epoch % self.config.experiment.record_period == 0:
+                    if not os.path.exists(output_dir / "./checkpoints/"):
+                        os.makedirs(output_dir / "./checkpoints")
+                    agent.model.save(output_dir / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl")
+

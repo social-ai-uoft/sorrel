@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 
 from sorrel.examples.treasurehunt.entities import EmptyEntity
 from sorrel.examples.treasurehunt.env import TreasurehuntEnv
@@ -15,6 +16,7 @@ if __name__ == "__main__":
             "epochs": 1000,
             "max_turns": 100,
             "record_period": 50,
+            "log_dir": Path(__file__).parent / f"./data/logs/{datetime.now().strftime('%Y-%m-%d %H-%M-%S')}"
         },
         "model": {
             "agent_vision_radius": 2,
@@ -31,12 +33,13 @@ if __name__ == "__main__":
     }
 
     # construct the world
-    env = TreasurehuntWorld(config=config, default_entity=EmptyEntity())
+    world = TreasurehuntWorld(config=config, default_entity=EmptyEntity())
     # construct the environment
-    experiment = TreasurehuntEnv(env, config)
+    env = TreasurehuntEnv(world, config)
     # run the experiment with default parameters
-    experiment.run_experiment(
-        logger=TensorboardLogger(max_epochs=config["experiment"]["epochs"], log_dir=f"./data/logs/{datetime.now().strftime("%Y-%m-%d %H-%M-%S")}")
+    env.run_experiment(
+        output_dir=Path(__file__).parent / "./data",
+        logger=TensorboardLogger.from_config(config)
     )
 
 # end main

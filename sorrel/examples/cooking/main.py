@@ -1,5 +1,6 @@
 import hydra
 from omegaconf import DictConfig
+from pathlib import Path
 
 from sorrel.examples.cooking.entities import EmptyEntity
 from sorrel.examples.cooking.env import CookingEnv
@@ -12,7 +13,7 @@ from sorrel.utils.logging import TensorboardLogger
 def main(config: DictConfig):
     env = CookingWorld(**config.world)
     experiment = CookingEnv(env, config)
-    experiment.run_experiment()
+    experiment.run_experiment(output_dir=Path(__file__).parent / "./data/")
 
 
 # begin main

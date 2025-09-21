@@ -146,6 +146,8 @@ class GamblingEnv(Environment[GamblingWorld]):
             logger: The logger to use. Defaults to a ConsoleLogger.
             output_dir: The directory to save the animations to. Defaults to "./data/" (relative to current working directory).
         """
+        if output_dir is None:
+            output_dir = Path(__file__).parent / "./data/"
         renderer = None
         if animate:
             renderer = ImageRenderer(
@@ -177,9 +179,7 @@ class GamblingEnv(Environment[GamblingWorld]):
 
             # generate the gif if animation was done
             if animate_this_turn and renderer is not None:
-                if output_dir is None:
-                    output_dir = Path(os.getcwd()) / "./data/"
-                renderer.save_gif(epoch, output_dir)
+                renderer.save_gif(epoch, output_dir / "./gifs/")
 
             # end epoch action for each agent model
             for agent in self.agents:
@@ -220,6 +220,6 @@ class GamblingEnv(Environment[GamblingWorld]):
                 if hasattr(self.config.model, "epsilon_decay"):
                     agent.model.epsilon_decay(self.config.model.epsilon_decay)
                 if epoch % self.config.experiment.record_period == 0:
-                    if not os.path.exists(Path(__file__).parent / "./checkpoints/"):
-                        os.mkdir(Path(__file__).parent / "./checkpoints")
-                    agent.model.save(Path(__file__).parent / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl")
+                    if not os.path.exists(output_dir / "./checkpoints/"):
+                        os.makedirs(output_dir / "./checkpoints")
+                    agent.model.save(output_dir / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl")

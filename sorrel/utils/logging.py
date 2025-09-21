@@ -90,6 +90,20 @@ class Logger:
             for epoch in range(len(self.losses)):
                 writer.writerow([value[epoch] for value in records.values()])
 
+    @classmethod
+    def from_config(cls, config: dict | Mapping):
+        """Create a logger from a configuration dictionary.
+        
+        Args:
+            config (dict | Mapping): The configuration file.
+            
+        Returns:
+            Logger: a Logger instance using the configuration file to initialize it."""
+        assert isinstance(config["experiment"]["epochs"], int)
+        return cls(max_epochs=config["experiment"]["epochs"])
+
+
+
 
 class ConsoleLogger(Logger):
     """Logs elements to the console.
@@ -162,7 +176,7 @@ class TensorboardLogger(Logger):
         """
         super().__init__(max_epochs=max_epochs, *args)
         if not os.path.exists(log_dir):
-            os.mkdir(log_dir)
+            os.makedirs(log_dir)
         self.writer = SummaryWriter(log_dir=log_dir)
 
     def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
@@ -174,6 +188,13 @@ class TensorboardLogger(Logger):
                 self.writer.add_scalars(key, value, epoch)
             else:
                 self.writer.add_scalar(key, value, epoch)
+    
+    @classmethod
+    def from_config(cls, config: dict | Mapping):
+        assert "epochs" in config["experiment"].keys()
+        assert "log_dir" in config["experiment"].keys()
+
+        return cls(max_epochs=config["experiment"]["epochs"], log_dir=config["experiment"]["log_dir"])
 
 
 # --------------------------- #
