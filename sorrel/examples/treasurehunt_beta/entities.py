@@ -96,10 +96,8 @@ class EmptyEntity(Entity[TreasurehuntWorld]):
             np.random.random() < world.spawn_prob
         ):
             # Randomly choose which resource to spawn
-            resource_type = np.random.choice([
-                "gem", "apple", "coin", "bone", "food"
-            ])
-            
+            resource_type = np.random.choice(["gem", "apple", "coin", "bone", "food"])
+
             if resource_type == "gem":
                 world.add(self.location, Gem(world.gem_value))
             elif resource_type == "apple":

@@ -94,7 +94,7 @@ class IngroupBiasWorld(Gridworld):
         # record spawn points; to be populated by the environment
         self.agent_spawn_points: list[tuple[int, int, int]] = []
         self.resource_spawn_points: list[tuple[int, int, int]] = []
-        
+
         # track agent states for freezing and respawning
         self.agent_states: dict[Any, dict[str, Any]] = {}
 
@@ -107,9 +107,11 @@ class IngroupBiasWorld(Gridworld):
         self.resource_spawn_points = []
         self.agent_states = {}
 
-    def add_agent_state(self, agent, frozen_timer: int = 0, respawn_timer: int = 0) -> None:
+    def add_agent_state(
+        self, agent, frozen_timer: int = 0, respawn_timer: int = 0
+    ) -> None:
         """Add or update agent state tracking.
-        
+
         Args:
             agent: The agent to track
             frozen_timer: Number of steps remaining in frozen state
@@ -119,23 +121,23 @@ class IngroupBiasWorld(Gridworld):
             "frozen_timer": frozen_timer,
             "respawn_timer": respawn_timer,
             "frozen": frozen_timer > 0,
-            "respawning": respawn_timer > 0
+            "respawning": respawn_timer > 0,
         }
 
     def update_agent_state(self, agent) -> None:
         """Update agent state timers and return current state.
-        
+
         Args:
             agent: The agent to update
-            
+
         Returns:
             dict: Updated agent state
         """
         if agent not in self.agent_states:
             self.add_agent_state(agent)
-            
+
         state = self.agent_states[agent]
-        
+
         if state["frozen_timer"] > 0:
             state["frozen_timer"] -= 1
             if state["frozen_timer"] == 0:
@@ -146,7 +148,7 @@ class IngroupBiasWorld(Gridworld):
             state["respawn_timer"] -= 1
             if state["respawn_timer"] == 0:
                 state["respawning"] = False
-                
+
         return state
 
     def is_agent_frozen(self, agent) -> bool:

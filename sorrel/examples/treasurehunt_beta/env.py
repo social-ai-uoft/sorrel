@@ -8,7 +8,16 @@ from sorrel.environment import Environment
 
 # imports from our example
 from sorrel.examples.treasurehunt_beta.agents import TreasurehuntAgent
-from sorrel.examples.treasurehunt_beta.entities import EmptyEntity, Sand, Wall, Gem, Apple, Coin, Bone, Food
+from sorrel.examples.treasurehunt_beta.entities import (
+    Apple,
+    Bone,
+    Coin,
+    EmptyEntity,
+    Food,
+    Gem,
+    Sand,
+    Wall,
+)
 from sorrel.examples.treasurehunt_beta.world import TreasurehuntWorld
 
 # sorrel imports
@@ -36,14 +45,28 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
         agents = []
         for _ in range(agent_num):
             # create the observation spec
-            entity_list = ["EmptyEntity", "Wall", "Sand", "Gem", "Apple", "Coin", "Bone", "Food", "TreasurehuntAgent"]
+            entity_list = [
+                "EmptyEntity",
+                "Wall",
+                "Sand",
+                "Gem",
+                "Apple",
+                "Coin",
+                "Bone",
+                "Food",
+                "TreasurehuntAgent",
+            ]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=self.config.model.full_view,
                 # note that here we require self.config to have the entry model.agent_vision_radius
                 # don't forget to pass it in as part of config when creating this experiment!
                 vision_radius=self.config.model.agent_vision_radius,
-                env_dims=(self.config.world.height, self.config.world.width) if self.config.model.full_view else None,
+                env_dims=(
+                    (self.config.world.height, self.config.world.width)
+                    if self.config.model.full_view
+                    else None
+                ),
             )
             observation_spec.override_input_size(
                 np.array(observation_spec.input_size).reshape(1, -1).tolist()
@@ -116,21 +139,25 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
             self.world.add(loc, agent)
 
         # Remove agent locations from valid spawn locations for resources
-        remaining_spawn_locations = [loc for loc in valid_spawn_locations if loc not in agent_locations]
+        remaining_spawn_locations = [
+            loc for loc in valid_spawn_locations if loc not in agent_locations
+        ]
 
         # Place initial resources
         initial_resources = self.config.experiment.get("initial_resources", 15)
         resource_locations_indices = np.random.choice(
-            len(remaining_spawn_locations), size=min(initial_resources, len(remaining_spawn_locations)), replace=False
+            len(remaining_spawn_locations),
+            size=min(initial_resources, len(remaining_spawn_locations)),
+            replace=False,
         )
-        resource_locations = [remaining_spawn_locations[i] for i in resource_locations_indices]
-        
+        resource_locations = [
+            remaining_spawn_locations[i] for i in resource_locations_indices
+        ]
+
         for loc in resource_locations:
             # Randomly choose which resource to place
-            resource_type = np.random.choice([
-                "gem", "apple", "coin", "bone", "food"
-            ])
-            
+            resource_type = np.random.choice(["gem", "apple", "coin", "bone", "food"])
+
             if resource_type == "gem":
                 self.world.add(loc, Gem(self.world.gem_value))
             elif resource_type == "apple":
@@ -141,4 +168,3 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 self.world.add(loc, Bone(self.world.bone_value))
             elif resource_type == "food":
                 self.world.add(loc, Food(self.world.food_value))
-

@@ -6,7 +6,7 @@ LSTM, and auxiliary contrastive predictive coding loss.
 
 Architecture:
 - Visual Encoder: 2D CNN with two convolutional layers
-- MLP: 2-layer fully connected network with 64 ReLU neurons each  
+- MLP: 2-layer fully connected network with 64 ReLU neurons each
 - LSTM: Long short-term memory network
 - Policy and Value heads: Linear layers outputting action probabilities and state values
 - Inventory: Vector of size 3 concatenated after convolutional layers
@@ -15,7 +15,7 @@ Architecture:
 """
 
 import os
-from typing import Sequence, Tuple, Optional
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -32,10 +32,15 @@ from sorrel.models.pytorch.pytorch_base import PyTorchModel
 # Buffer (unchanged public API)
 # ------------------------------
 class A2CBuffer(Buffer):
-    """
-    A2C-specific buffer for storing experiences with LSTM hidden states.
-    """
-    def __init__(self, capacity: int, obs_shape: Sequence[int], lstm_hidden_size: int = 256, n_frames: int = 1):
+    """A2C-specific buffer for storing experiences with LSTM hidden states."""
+
+    def __init__(
+        self,
+        capacity: int,
+        obs_shape: Sequence[int],
+        lstm_hidden_size: int = 256,
+        n_frames: int = 1,
+    ):
         super().__init__(capacity, obs_shape, n_frames)
         self.lstm_hidden_size = lstm_hidden_size
         self.hidden_states = np.zeros((capacity, lstm_hidden_size), dtype=np.float32)
@@ -43,20 +48,26 @@ class A2CBuffer(Buffer):
 
     def clear(self):
         super().clear()
-        self.hidden_states = np.zeros((self.capacity, self.lstm_hidden_size), dtype=np.float32)
-        self.cell_states = np.zeros((self.capacity, self.lstm_hidden_size), dtype=np.float32)
+        self.hidden_states = np.zeros(
+            (self.capacity, self.lstm_hidden_size), dtype=np.float32
+        )
+        self.cell_states = np.zeros(
+            (self.capacity, self.lstm_hidden_size), dtype=np.float32
+        )
 
-    def add_with_hidden(self, obs, action, reward, done, hidden_state=None, cell_state=None):
+    def add_with_hidden(
+        self, obs, action, reward, done, hidden_state=None, cell_state=None
+    ):
         self.states[self.idx] = obs
         self.actions[self.idx] = action
         self.rewards[self.idx] = reward
         self.dones[self.idx] = done
-        
+
         if hidden_state is not None:
             self.hidden_states[self.idx] = hidden_state
         if cell_state is not None:
             self.cell_states[self.idx] = cell_state
-            
+
         self.idx = (self.idx + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
@@ -66,23 +77,28 @@ class A2CBuffer(Buffer):
 # ------------------------------
 class VisualEncoder(nn.Module):
     """Visual encoder with 2D convolutional layers as described in the architecture."""
+
     def __init__(self, input_channels: int = 1, use_variant1: bool = True):
         super().__init__()
         self.use_variant1 = use_variant1
-        
+
         if use_variant1:
             # Variant 1: 16 channels, kernel/stride 8
-            self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=8, stride=8, padding=0)
+            self.conv1 = nn.Conv2d(
+                input_channels, 16, kernel_size=8, stride=8, padding=0
+            )
             in2 = 16
         else:
             # Variant 2: 6 channels, kernel/stride 1
-            self.conv1 = nn.Conv2d(input_channels, 6, kernel_size=1, stride=1, padding=0)
+            self.conv1 = nn.Conv2d(
+                input_channels, 6, kernel_size=1, stride=1, padding=0
+            )
             in2 = 6
-            
+
         # Second layer: 32 channels, k=4, s=1
         self.conv2 = nn.Conv2d(in2, 32, kernel_size=4, stride=1, padding=0)
         self.relu = nn.ReLU()
-        
+
     def forward(self, x: Tensor) -> Tensor:
         x = self.relu(self.conv1(x))
         h, w = x.shape[-2:]
@@ -98,10 +114,12 @@ class VisualEncoder(nn.Module):
 # PopArt for value normalization
 # ------------------------------
 class PopArt(nn.Module):
+    """PopArt normalization wrapper for value targets.
+
+    Produces a normalized value prediction during training; rescales weights on stats
+    updates.
     """
-    PopArt normalization wrapper for value targets.
-    Produces a normalized value prediction during training; rescales weights on stats updates.
-    """
+
     def __init__(self, input_dim: int, beta: float = 0.999):
         super().__init__()
         self.linear = nn.Linear(input_dim, 1)
@@ -116,16 +134,14 @@ class PopArt(nn.Module):
         return torch.sqrt(var)
 
     def forward(self, h: Tensor) -> Tensor:
-        """
-        Returns the *de-normalized* value estimate so external API is unchanged.
-        """
-        norm_v = self.linear(h)                       # normalized prediction
-        return norm_v * self.sigma + self.mu          # denormalized output
+        """Returns the *de-normalized* value estimate so external API is unchanged."""
+        norm_v = self.linear(h)  # normalized prediction
+        return norm_v * self.sigma + self.mu  # denormalized output
 
     @torch.no_grad()
     def update(self, targets: Tensor):
-        """
-        Update running stats from a batch of unnormalized returns.
+        """Update running stats from a batch of unnormalized returns.
+
         Also rescales the last layer weights/bias to keep outputs consistent (PopArt).
         """
         batch_mu = targets.mean()
@@ -152,6 +168,7 @@ class PopArt(nn.Module):
 # -----------------------------------
 class ActorCriticDeepMind(nn.Module):
     """Actor-critic network following the DeepMind-style architecture."""
+
     def __init__(
         self,
         input_size: Sequence[int],
@@ -162,12 +179,12 @@ class ActorCriticDeepMind(nn.Module):
         device: str | torch.device = "cpu",
     ):
         super().__init__()
-        
+
         self.input_size = input_size
         self.action_space = action_space
         self.lstm_hidden_size = lstm_hidden_size
         self.device = device
-        
+
         # Visual encoder (for image inputs) or linear fallback for vector obs
         if len(input_size) == 3:  # (C, H, W)
             input_channels = input_size[0]
@@ -180,9 +197,9 @@ class ActorCriticDeepMind(nn.Module):
             visual_flat = int(np.prod(input_size))
             self.visual_encoder = nn.Linear(visual_flat, 256)
             visual_flat = 256
-            
+
         mlp_input_size = visual_flat
-        
+
         # 2-layer MLP 64-64
         self.mlp = nn.Sequential(
             nn.Linear(mlp_input_size, mlp_hidden_size),
@@ -190,7 +207,7 @@ class ActorCriticDeepMind(nn.Module):
             nn.Linear(mlp_hidden_size, mlp_hidden_size),
             nn.ReLU(),
         )
-        
+
         # LSTM
         self.lstm = nn.LSTM(mlp_hidden_size, lstm_hidden_size, batch_first=True)
 
@@ -216,9 +233,7 @@ class ActorCriticDeepMind(nn.Module):
 
     # ---------- helpers ----------
     def _encode_step(self, state: Tensor) -> Tensor:
-        """
-        Encodes a single step to features fed into LSTM (no time dimension).
-        """
+        """Encodes a single step to features fed into LSTM (no time dimension)."""
         if len(self.input_size) == 3:  # image
             feats = self.visual_encoder(state)
             feats = feats.view(state.shape[0], -1)
@@ -228,40 +243,40 @@ class ActorCriticDeepMind(nn.Module):
         return feats
 
     def encode_sequence(self, states: Tensor) -> Tensor:
-        """
-        Encode a full episode/chunk into LSTM hidden states for CPC.
+        """Encode a full episode/chunk into LSTM hidden states for CPC.
+
         states: [T, C, H, W] or [T, D]
         returns: [T, H] LSTM hidden sequence
         """
         T = states.shape[0]
         if len(self.input_size) == 3:
-            feats = self.visual_encoder(states)          # [T, C', H', W']
+            feats = self.visual_encoder(states)  # [T, C', H', W']
             feats = feats.view(T, -1)
         else:
-            feats = self.visual_encoder(states)          # [T, 256]
-        feats = self.mlp(feats)                          # [T, M]
-        feats = feats.unsqueeze(0)                       # [1, T, M]
-        h_seq, _ = self.lstm(feats)                      # [1, T, H]
-        return h_seq.squeeze(0)                          # [T, H]
+            feats = self.visual_encoder(states)  # [T, 256]
+        feats = self.mlp(feats)  # [T, M]
+        feats = feats.unsqueeze(0)  # [1, T, M]
+        h_seq, _ = self.lstm(feats)  # [1, T, H]
+        return h_seq.squeeze(0)  # [T, H]
 
     # ---------- forward paths used by A2C ----------
     def forward(self, state: Tensor, hidden: Optional[Tuple[Tensor, Tensor]] = None):
-        """
-        Returns (action_probs, state_value, new_hidden, cpc_features)
+        """Returns (action_probs, state_value, new_hidden, cpc_features)
+
         - action_probs kept for API compatibility
         - state_value is de-normalized (PopArt)
         - cpc_features: projected context vector (for logging; CPC loss computed elsewhere)
         """
         batch = state.shape[0]
-        feats = self._encode_step(state).unsqueeze(1)    # [B, 1, M]
+        feats = self._encode_step(state).unsqueeze(1)  # [B, 1, M]
         lstm_out, new_hidden = self.lstm(feats, hidden)  # [B, 1, H]
-        h = lstm_out.squeeze(1)                          # [B, H]
+        h = lstm_out.squeeze(1)  # [B, H]
 
-        logits = self.policy_logits_head(h)              # [B, A]
-        action_probs = F.softmax(logits, dim=-1)         # keep same output type as before
+        logits = self.policy_logits_head(h)  # [B, A]
+        action_probs = F.softmax(logits, dim=-1)  # keep same output type as before
 
-        v_h = self.value_head(h)                         # [B, 256]
-        state_value = self.popart(v_h)                   # de-normalized value
+        v_h = self.value_head(h)  # [B, 256]
+        state_value = self.popart(v_h)  # de-normalized value
 
         # simple CPC feature (for compatibility; not used for loss)
         cpc_features = self.cpc_ln(h)
@@ -269,26 +284,35 @@ class ActorCriticDeepMind(nn.Module):
         return action_probs, state_value, new_hidden, cpc_features
 
     def act(self, state: np.ndarray, hidden: Optional[Tuple[Tensor, Tensor]] = None):
-        """
-        Returns (action, action_log_prob, state_value, new_hidden)
-        """
+        """Returns (action, action_log_prob, state_value, new_hidden)"""
         state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device)
         if len(state_tensor.shape) == len(self.input_size):
             state_tensor = state_tensor.unsqueeze(0)
 
         with torch.no_grad():
             # Use forward() for compatibility
-            action_probs, state_value, new_hidden, _ = self.forward(state_tensor, hidden)
+            action_probs, state_value, new_hidden, _ = self.forward(
+                state_tensor, hidden
+            )
             dist = Categorical(probs=action_probs)
             action = dist.sample()
             action_logprob = dist.log_prob(action)
 
-        return action.detach(), action_logprob.detach(), state_value.detach(), new_hidden
+        return (
+            action.detach(),
+            action_logprob.detach(),
+            state_value.detach(),
+            new_hidden,
+        )
 
-    def evaluate(self, state: Tensor, action: Tensor, hidden: Optional[Tuple[Tensor, Tensor]] = None):
-        """
-        Returns (action_log_prob, estimated_state_value, distribution_entropy, new_hidden, cpc_features)
-        """
+    def evaluate(
+        self,
+        state: Tensor,
+        action: Tensor,
+        hidden: Optional[Tuple[Tensor, Tensor]] = None,
+    ):
+        """Returns (action_log_prob, estimated_state_value, distribution_entropy,
+        new_hidden, cpc_features)"""
         # Run one-step encode + LSTM as in forward, but keep logits for numerics
         feats = self._encode_step(state).unsqueeze(1)
         lstm_out, new_hidden = self.lstm(feats, hidden)
@@ -308,17 +332,17 @@ class ActorCriticDeepMind(nn.Module):
 
     # ---------- CPC InfoNCE ----------
     def cpc_infonce(self, states: Tensor, K: int = 3) -> Tensor:
-        """
-        CPC/InfoNCE over a single episode (or contiguous chunk).
+        """CPC/InfoNCE over a single episode (or contiguous chunk).
+
         states: [T, ...]
         Predict z_{t+k} from c_t; negatives are other positions in the same chunk.
         """
-        h_seq = self.encode_sequence(states)             # [T, H]
+        h_seq = self.encode_sequence(states)  # [T, H]
         h_seq = self.cpc_ln(h_seq)
 
         # Projections + L2 normalize
-        c = F.normalize(self.ctx_proj(h_seq), dim=-1)     # [T, H]
-        z = F.normalize(self.fut_proj(h_seq), dim=-1)     # [T, H]
+        c = F.normalize(self.ctx_proj(h_seq), dim=-1)  # [T, H]
+        z = F.normalize(self.fut_proj(h_seq), dim=-1)  # [T, H]
 
         T = c.size(0)
         loss = 0.0
@@ -326,11 +350,11 @@ class ActorCriticDeepMind(nn.Module):
         for k in range(1, K + 1):
             if T - k <= 1:
                 continue
-            c_t  = c[:-k]                                 # [T-k, H]
-            z_tk = z[+k:]                                 # [T-k, H]
+            c_t = c[:-k]  # [T-k, H]
+            z_tk = z[+k:]  # [T-k, H]
 
             # logits against all candidate futures at this k
-            logits = (c_t @ z_tk.T) / self.cpc_tau        # [T-k, T-k]
+            logits = (c_t @ z_tk.T) / self.cpc_tau  # [T-k, T-k]
             targets = torch.arange(T - k, device=logits.device)
             loss_k = F.cross_entropy(logits, targets)
             loss += loss_k
@@ -344,6 +368,7 @@ class ActorCriticDeepMind(nn.Module):
 # -----------------------------------
 class A2C_DeepMind(PyTorchModel):
     """A2C DeepMind implementation with CPC (InfoNCE) and PopArt."""
+
     def __init__(
         self,
         input_size: Sequence[int],
@@ -368,8 +393,7 @@ class A2C_DeepMind(PyTorchModel):
         self.cpc_coef = cpc_coef
 
         self.policy = ActorCriticDeepMind(
-            input_size, action_space, lstm_hidden_size, layer_size,
-            use_variant1, device
+            input_size, action_space, lstm_hidden_size, layer_size, use_variant1, device
         ).to(device)
 
         self.optimizer = torch.optim.RMSprop(
@@ -423,8 +447,8 @@ class A2C_DeepMind(PyTorchModel):
 
     # ----- training -----
     def _compute_returns(self) -> torch.Tensor:
-        rewards = self.memory.rewards[:self.memory.size]
-        dones = self.memory.dones[:self.memory.size]
+        rewards = self.memory.rewards[: self.memory.size]
+        dones = self.memory.dones[: self.memory.size]
         returns = []
         G = 0.0
         for r, d in zip(reversed(rewards), reversed(dones)):
@@ -440,8 +464,12 @@ class A2C_DeepMind(PyTorchModel):
 
         # Build tensors
         T = self.memory.size
-        states = torch.tensor(self.memory.states[:T], dtype=torch.float32, device=self.device)
-        actions = torch.tensor(self.memory.actions[:T], dtype=torch.long, device=self.device)
+        states = torch.tensor(
+            self.memory.states[:T], dtype=torch.float32, device=self.device
+        )
+        actions = torch.tensor(
+            self.memory.actions[:T], dtype=torch.long, device=self.device
+        )
         returns = self._compute_returns()  # unnormalized (PopArt will handle scale)
 
         # Update PopArt stats BEFORE computing value loss so network tracks normalized targets internally
@@ -469,7 +497,9 @@ class A2C_DeepMind(PyTorchModel):
         else:
             cpc_loss = torch.tensor(0.0, device=self.device)
 
-        total_loss = policy_loss + 0.5 * value_loss + entropy_loss + self.cpc_coef * cpc_loss
+        total_loss = (
+            policy_loss + 0.5 * value_loss + entropy_loss + self.cpc_coef * cpc_loss
+        )
 
         self.optimizer.zero_grad()
         total_loss.backward()

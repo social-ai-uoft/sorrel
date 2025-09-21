@@ -22,17 +22,17 @@ import yaml
 from sorrel.examples.staghunt.entities import Empty
 from sorrel.examples.staghunt.env import StagHuntEnv
 from sorrel.examples.staghunt.world import StagHuntWorld
-from sorrel.utils.logging import TensorboardLogger, ConsoleLogger, Logger
+from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 
 class CombinedLogger(Logger):
     """A logger that combines console and tensorboard logging."""
-    
+
     def __init__(self, max_epochs: int, log_dir: str | Path, *args):
         super().__init__(max_epochs, *args)
         self.console_logger = ConsoleLogger(max_epochs, *args)
         self.tensorboard_logger = TensorboardLogger(max_epochs, log_dir, *args)
-    
+
     def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
         # Log to both console and tensorboard
         self.console_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
@@ -99,7 +99,7 @@ def run_stag_hunt() -> None:
             "interaction_reward": 1.0,
             # agent freezing parameters
             "freeze_duration": 5,  # X: number of frames agent stays frozen after interaction
-            "respawn_delay": 10,   # Y: number of frames before agent respawns after removal
+            "respawn_delay": 10,  # Y: number of frames before agent respawns after removal
         },
     }
 
@@ -117,7 +117,8 @@ def run_stag_hunt() -> None:
     experiment.run_experiment(
         logger=CombinedLogger(
             max_epochs=config["experiment"]["epochs"],
-            log_dir=Path(__file__).parent / f'runs/{datetime.now().strftime("%Y%m%d-%H%M%S")}',
+            log_dir=Path(__file__).parent
+            / f'runs/{datetime.now().strftime("%Y%m%d-%H%M%S")}',
         )
     )
 

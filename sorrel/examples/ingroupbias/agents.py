@@ -23,11 +23,11 @@ import numpy as np
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.examples.ingroupbias.entities import (
-    Empty,
-    RedResource,
-    GreenResource,
     BlueResource,
+    Empty,
+    GreenResource,
     InteractionBeam,
+    RedResource,
 )
 from sorrel.examples.ingroupbias.world import IngroupBiasWorld
 from sorrel.location import Location, Vector
@@ -179,7 +179,9 @@ class IngroupBiasAgent(Agent[IngroupBiasWorld]):
             if world.valid_location(new_pos):
                 # pick up resource if present
                 target_entity = world.observe(new_pos)
-                if isinstance(target_entity, (RedResource, GreenResource, BlueResource)):
+                if isinstance(
+                    target_entity, (RedResource, GreenResource, BlueResource)
+                ):
                     # collect resource: add to inventory and mark ready
                     self.inventory[target_entity.name] += 1
                     self.ready = True
@@ -204,7 +206,9 @@ class IngroupBiasAgent(Agent[IngroupBiasWorld]):
             if world.valid_location(new_pos):
                 # pick up resource if present
                 target_entity = world.observe(new_pos)
-                if isinstance(target_entity, (RedResource, GreenResource, BlueResource)):
+                if isinstance(
+                    target_entity, (RedResource, GreenResource, BlueResource)
+                ):
                     # collect resource: add to inventory and mark ready
                     self.inventory[target_entity.name] += 1
                     self.ready = True
@@ -266,7 +270,10 @@ class IngroupBiasAgent(Agent[IngroupBiasWorld]):
             if world.valid_location(target):
                 # Check if there's a wall on the terrain layer
                 terrain_target = (target[0], target[1], world.terrain_layer)
-                if world.valid_location(terrain_target) and world.map[terrain_target].passable:
+                if (
+                    world.valid_location(terrain_target)
+                    and world.map[terrain_target].passable
+                ):
                     world.add(target, InteractionBeam())
 
     def is_done(self, world: IngroupBiasWorld) -> bool:
@@ -298,8 +305,12 @@ class IngroupBiasAgent(Agent[IngroupBiasWorld]):
             The reward received by the initiating agent.
         """
         # compute dot product of inventories
-        inventory1 = np.array([self.inventory["red"], self.inventory["green"], self.inventory["blue"]])
-        inventory2 = np.array([other.inventory["red"], other.inventory["green"], other.inventory["blue"]])
+        inventory1 = np.array(
+            [self.inventory["red"], self.inventory["green"], self.inventory["blue"]]
+        )
+        inventory2 = np.array(
+            [other.inventory["red"], other.inventory["green"], other.inventory["blue"]]
+        )
         reward = np.dot(inventory1, inventory2)
 
         # clear inventories and ready flags

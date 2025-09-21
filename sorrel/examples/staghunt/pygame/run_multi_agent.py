@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""
-Multi-agent launcher for Stag Hunt Pygame.
+"""Multi-agent launcher for Stag Hunt Pygame.
+
 This script provides an easy way to run the game with different agent configurations.
 """
 
@@ -10,12 +10,12 @@ from pathlib import Path
 # Add the parent directory to the path to import sorrel modules
 sys.path.append(str(Path(__file__).parent.parent.parent.parent.parent))
 
-from staghunt_ascii_pygame import StagHuntASCIIPygame
+from sorrel.examples.staghunt.pygame.staghunt_ascii_pygame import StagHuntASCIIPygame
 
 
 def main():
     """Main function with different multi-agent configurations."""
-    
+
     print("Stag Hunt Multi-Agent Pygame Launcher")
     print("=" * 40)
     print("1. Single Agent (1 player)")
@@ -24,9 +24,11 @@ def main():
     print("4. Four Agents (4 players, turn-based)")
     print("5. Custom Configuration")
     print()
-    
-    choice = input("Select number of agents (1-5, or press Enter for single agent): ").strip()
-    
+
+    choice = input(
+        "Select number of agents (1-5, or press Enter for single agent): "
+    ).strip()
+
     if choice == "2":
         num_agents = 2
         tile_size = 32
@@ -66,13 +68,13 @@ def main():
         tile_size = 32
         fps = 10
         turn_duration = 30
-    
+
     print(f"\nStarting Stag Hunt with {num_agents} agent(s)...")
     print(f"Tile size: {tile_size}px, FPS: {fps}")
     if num_agents > 1:
         print(f"Turn duration: {turn_duration} frames")
     print()
-    
+
     # Configuration
     config = {
         "world": {
@@ -94,9 +96,9 @@ def main():
             "tile_size": tile_size,
             "fps": fps,
             "turn_duration": turn_duration,
-        }
+        },
     }
-    
+
     # Create and run the game
     game = StagHuntASCIIPygame(config)
     game.run()

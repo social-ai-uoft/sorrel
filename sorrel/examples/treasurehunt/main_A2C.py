@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Main script for Treasurehunt with A2C and IQN model options.
 
-This script allows you to choose between A2C_DeepMind and IQN models
-for the treasurehunt environment with appropriate configurations.
+This script allows you to choose between A2C_DeepMind and IQN models for the
+treasurehunt environment with appropriate configurations.
 """
 
 import argparse
+
 from omegaconf import DictConfig, OmegaConf
 
 from sorrel.examples.treasurehunt.entities import EmptyEntity
@@ -20,27 +21,24 @@ if __name__ == "__main__":
         description="Run Treasurehunt experiment with A2C or IQN model"
     )
     parser.add_argument(
-        "--model", 
-        type=str, 
-        choices=["a2c", "iqn"], 
+        "--model",
+        type=str,
+        choices=["a2c", "iqn"],
         default="a2c",
-        help="Model type to use: 'a2c' or 'iqn' (default: a2c)"
+        help="Model type to use: 'a2c' or 'iqn' (default: a2c)",
     )
     parser.add_argument(
-        "--epochs", 
-        type=int, 
-        default=10,
-        help="Number of epochs to run (default: 10)"
+        "--epochs", type=int, default=10, help="Number of epochs to run (default: 10)"
     )
     parser.add_argument(
-        "--max_turns", 
-        type=int, 
+        "--max_turns",
+        type=int,
         default=100,
-        help="Maximum turns per epoch (default: 100)"
+        help="Maximum turns per epoch (default: 100)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Get configuration based on model type
     if args.model.lower() == "a2c":
         config = {
@@ -105,7 +103,7 @@ if __name__ == "__main__":
 
     # Convert config to OmegaConf format
     config = OmegaConf.create(config)
-    
+
     print(f"Running Treasurehunt experiment with {args.model.upper()} model...")
     print(f"Epochs: {args.epochs}, Max turns per epoch: {args.max_turns}")
     print(f"World size: {config.world.height}x{config.world.width}")

@@ -160,7 +160,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         inv_hare = self.inventory.get("hare", 0)
         ready_flag = 1 if self.ready else 0
         interaction_reward_flag = 1 if self.received_interaction_reward else 0
-        extra = np.array([inv_stag, inv_hare, ready_flag, interaction_reward_flag], dtype=flat.dtype)
+        extra = np.array(
+            [inv_stag, inv_hare, ready_flag, interaction_reward_flag], dtype=flat.dtype
+        )
         return np.concatenate([flat, extra]).reshape(1, -1)
 
     def get_action(self, state: np.ndarray) -> int:
@@ -186,7 +188,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         """
         action_name = self.action_spec.get_readable_action(action)
         reward = 0.0
-        
+
         # apply any pending reward from interactions
         if self.pending_reward > 0:
             reward += self.pending_reward
@@ -222,7 +224,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     terrain_location = (new_pos[0], new_pos[1], world.terrain_layer)
                     if world.valid_location(terrain_location):
                         terrain_entity = world.observe(terrain_location)
-                        if hasattr(terrain_entity, 'respawn_ready'):
+                        if hasattr(terrain_entity, "respawn_ready"):
                             terrain_entity.respawn_ready = False
                             terrain_entity.respawn_timer = 0
                 # move into the cell (if passable)
@@ -255,7 +257,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     terrain_location = (new_pos[0], new_pos[1], world.terrain_layer)
                     if world.valid_location(terrain_location):
                         terrain_entity = world.observe(terrain_location)
-                        if hasattr(terrain_entity, 'respawn_ready'):
+                        if hasattr(terrain_entity, "respawn_ready"):
                             terrain_entity.respawn_ready = False
                             terrain_entity.respawn_timer = 0
                 # move into the cell (if passable)
@@ -298,13 +300,13 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                         # zap the resource to decrease its health
                         entity.on_zap(world)
                         # continue checking for agents (don't break)
-                
+
                 # set cooldown timer after using beam
                 self.beam_cooldown_timer = getattr(world, "beam_cooldown", 3)
-        
+
         # update cooldown timers
         self.update_cooldown()
-        
+
         # return accumulated reward from this action
         return reward
 
@@ -317,10 +319,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # Get the tiles in front of the agent
         # Use the same orientation system as movement - directly calculate offsets
         dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
-        
+
         # Calculate right and left vectors by rotating 90 degrees
         right_dy, right_dx = -dx, dy  # 90 degrees clockwise
-        left_dy, left_dx = dx, -dy    # 90 degrees counter-clockwise
+        left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
 
         # Get beam radius from world config (default to 3 if not set)
         beam_radius = getattr(world, "beam_radius", 3)
@@ -339,7 +341,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # Side beam locations
         for i in range(beam_radius):
             # Right side
-            right_target = (y + right_dy + dy * i, x + right_dx + dx * i, world.beam_layer)
+            right_target = (
+                y + right_dy + dy * i,
+                x + right_dx + dx * i,
+                world.beam_layer,
+            )
             if world.valid_location(right_target):
                 beam_locs.append(right_target)
 
@@ -361,7 +367,6 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         Agents act until the world signals termination via ``world.is_done``.
         """
         return world.is_done
-
 
     # ------------------------------------------------------------------ #
     # Interaction logic                                                   #

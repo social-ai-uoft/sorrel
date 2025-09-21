@@ -24,7 +24,7 @@ entity_list = [
     "Wall",
     "Spawn",
     "RedResource",
-    "GreenResource", 
+    "GreenResource",
     "BlueResource",
     "IngroupBiasAgent",
     "Sand",
@@ -58,9 +58,9 @@ class Sand(Entity["IngroupBiasWorld"]):
 class Empty(Entity["IngroupBiasWorld"]):
     """An empty traversable cell.
 
-    Empty cells hold no resources and allow agents to move through. In the
-    regeneration step, empty cells can spawn new resources with probability
-    determined by the world's resource_density hyperparameter.
+    Empty cells hold no resources and allow agents to move through. In the regeneration
+    step, empty cells can spawn new resources with probability determined by the world's
+    resource_density hyperparameter.
     """
 
     def __init__(self) -> None:
@@ -72,9 +72,9 @@ class Empty(Entity["IngroupBiasWorld"]):
     def transition(self, world: IngroupBiasWorld) -> None:
         """Randomly spawn a resource on this cell during regeneration.
 
-        When the world performs its regeneration step, empty cells may spawn
-        a resource of any color. The probability is given by world.resource_density
-        and the color is selected uniformly at random.
+        When the world performs its regeneration step, empty cells may spawn a resource
+        of any color. The probability is given by world.resource_density and the color
+        is selected uniformly at random.
         """
         if np.random.random() < world.resource_density:
             # choose between red, green, and blue resources with equal probability
@@ -99,8 +99,8 @@ class Spawn(Entity["IngroupBiasWorld"]):
 class Resource(Entity["IngroupBiasWorld"]):
     """Base class for resources.
 
-    Resources are passable and deliver a small intrinsic reward when collected.
-    They represent the three color types in the ingroup bias game.
+    Resources are passable and deliver a small intrinsic reward when collected. They
+    represent the three color types in the ingroup bias game.
     """
 
     name: str  # overridden in subclasses

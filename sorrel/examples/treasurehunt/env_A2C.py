@@ -31,13 +31,13 @@ class TreasurehuntFlexEnv(Environment[TreasurehuntWorld]):
     def setup_agents(self):
         """Create the agents for this experiment and assign them to self.agents.
 
-        Requires self.config.model.agent_vision_radius to be defined.
-        Model type is determined by self.config.model.type.
+        Requires self.config.model.agent_vision_radius to be defined. Model type is
+        determined by self.config.model.type.
         """
         agent_num = 2
         agents = []
         model_type = self.config.model.get("type", "a2c").lower()
-        
+
         for i in range(agent_num):
             # create the observation spec
             entity_list = ["EmptyEntity", "Wall", "Sand", "Gem", "TreasurehuntAgent"]
@@ -68,7 +68,7 @@ class TreasurehuntFlexEnv(Environment[TreasurehuntWorld]):
                     entropy_coef=self.config.model.get("entropy_coef", 0.003),
                     cpc_coef=self.config.model.get("cpc_coef", 0.1),
                     max_turns=self.config.experiment.get("max_turns", 100),
-                    seed=42 + i
+                    seed=42 + i,
                 )
             elif model_type == "iqn":
                 # Use original observation spec for IQN
@@ -94,7 +94,9 @@ class TreasurehuntFlexEnv(Environment[TreasurehuntWorld]):
                     n_quantiles=self.config.model.get("n_quantiles", 12),
                 )
             else:
-                raise ValueError(f"Unknown model type: {model_type}. Choose 'a2c' or 'iqn'.")
+                raise ValueError(
+                    f"Unknown model type: {model_type}. Choose 'a2c' or 'iqn'."
+                )
 
             agents.append(
                 TreasurehuntFlexAgent(

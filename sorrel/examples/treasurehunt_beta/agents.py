@@ -21,14 +21,14 @@ class TreasurehuntAgent(Agent[TreasurehuntWorld]):
         # Track all encounters for this epoch
         self.encounters = {
             "gem": 0,
-            "apple": 0, 
+            "apple": 0,
             "coin": 0,
             "bone": 0,
             "food": 0,
             "wall": 0,
             "empty": 0,
             "sand": 0,
-            "agent": 0
+            "agent": 0,
         }
         # Track individual score for this epoch
         self.individual_score = 0
@@ -41,14 +41,14 @@ class TreasurehuntAgent(Agent[TreasurehuntWorld]):
         # Reset encounter tracking for new epoch
         self.encounters = {
             "gem": 0,
-            "apple": 0, 
+            "apple": 0,
             "coin": 0,
             "bone": 0,
             "food": 0,
             "wall": 0,
             "empty": 0,
             "sand": 0,
-            "agent": 0
+            "agent": 0,
         }
         # Reset individual score for new epoch
         self.individual_score = 0
