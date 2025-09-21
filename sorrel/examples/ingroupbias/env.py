@@ -118,6 +118,7 @@ class IngroupBiasEnv(Environment[IngroupBiasWorld]):
                 action_space=action_spec.n_actions,
                 layer_size=int(model_cfg.get("layer_size", 128)),
                 epsilon=float(model_cfg.get("epsilon", 0.5)),
+                epsilon_min=float(model_cfg.get("epsilon_min", 0.01)),
                 device="cpu",
                 seed=torch.random.seed(),
                 n_frames=int(model_cfg.get("n_frames", 5)),
