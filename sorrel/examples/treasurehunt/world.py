@@ -21,7 +21,11 @@ class TreasurehuntWorld(Gridworld):
             config.world.height, config.world.width, layers, default_entity
         )
 
-        self.gem_value = config.world.gem_value
+        self.values = {
+            "gem": config.world.gem_value,
+            "food": config.world.food_value,
+            "bone": config.world.bone_value
+        } 
         self.spawn_prob = config.world.spawn_prob
 
 

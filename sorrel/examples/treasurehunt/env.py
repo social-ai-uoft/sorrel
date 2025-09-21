@@ -36,7 +36,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
         agents = []
         for _ in range(agent_num):
             # create the observation spec
-            entity_list = ["EmptyEntity", "Wall", "Sand", "Gem", "TreasurehuntAgent"]
+            entity_list = ["EmptyEntity", "Wall", "Sand", "Gem", "Bone", "Food", "TreasurehuntAgent"]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=False,
@@ -56,7 +56,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 input_size=observation_spec.input_size,
                 action_space=action_spec.n_actions,
                 layer_size=250,
-                epsilon=0.7,
+                epsilon=0.6,
                 device="cpu",
                 seed=torch.random.seed(),
                 n_frames=5,
