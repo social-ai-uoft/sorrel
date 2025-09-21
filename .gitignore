@@ -150,3 +150,6 @@ sorrel/examples/state_punishment/
 pyvenv.cfg
 /bin
 /share
+runs/
+sorrel/examples/treasurehunt_theta/
+sorrel/examples/treasurehunt_beta/data/
