@@ -192,7 +192,7 @@ if __name__ == "__main__":
         "--num-agents", type=int, default=3, help="Number of agents in the environment"
     )
     parser.add_argument(
-        "--epochs", type=int, default=10000, help="Number of training epochs"
+        "--epochs", type=int, default=100000, help="Number of training epochs"
     )
 
     args = parser.parse_args()
