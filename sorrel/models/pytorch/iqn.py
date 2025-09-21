@@ -178,7 +178,20 @@ class IQN(nn.Module):
 
 class iRainbowModel(DoublePyTorchModel):
     """A combination of IQN with Rainbow, which itself combines priority experience
-    replay, dueling DDQN, distributional DQN, noisy DQN, and multi-step return."""
+    replay, dueling DDQN, distributional DQN, noisy DQN, and multi-step return.
+    
+    Attributes:
+        input_size (Sequence[int]): The shape of the state input.
+        action_space (int): The number of actions/the size of the output head.
+        layer_size (int): The size of the hidden player.
+        epsilon (float): The initial epsilon value for the epsilon-greedy action.
+        device (str | torch.device): Device used for the compute.
+        n_frames (int): The number of frames to stack for each state input.
+        batch_size (int): The size of the training batch.
+        memory_size (int): The size of the replay memory.
+        sync_freq (int): How often to update the target network.
+        
+        """
 
     def __init__(
         # Base ANN parameters
@@ -191,15 +204,15 @@ class iRainbowModel(DoublePyTorchModel):
         seed: int,
         # iRainbow parameters
         n_frames: int,
-        n_step: int,
-        sync_freq: int,
-        model_update_freq: int,
-        batch_size: int,
-        memory_size: int,
-        LR: float,
-        TAU: float,
-        GAMMA: float,
-        n_quantiles: int,
+        n_step: int = 3,
+        sync_freq: int = 200,
+        model_update_freq: int = 4,
+        batch_size: int = 64,
+        memory_size: int = 1024,
+        LR: float = 0.001,
+        TAU: float = 0.001,
+        GAMMA: float = 0.99,
+        n_quantiles: int = 12,
     ):
         """Initialize an iRainbow model.
 
@@ -211,7 +224,7 @@ class iRainbowModel(DoublePyTorchModel):
             device (str | torch.device): Device used for the compute.
             seed (int): Random seed value for replication.
             n_frames (int): Number of timesteps for the state input.
-            batch_size (int): The zize of the training batch.
+            batch_size (int): The size of the training batch.
             memory_size (int): The size of the replay memory.
             GAMMA (float): Discount factor
             LR (float): Learning rate

@@ -19,11 +19,18 @@ if __name__ == "__main__":
         "model": {
             "agent_vision_radius": 2,
             "epsilon_decay": 0.0005,
+            # "load_weights": "2025-09-21-13:14:51" # Use a saved model checkpoint
+            "parameters": {
+                "layer_size": 250,
+                "epsilon": 0.5,
+                "device": "cpu",
+                "n_frames": 5
+            }
         },
         "world": {
             "height": 20,
             "width": 20,
-            "spawn_prob": 0.003,
+            "spawn_prob": 0.01,
         },
     }
 

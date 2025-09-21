@@ -39,7 +39,7 @@ class GamblingEnv(Environment[GamblingWorld]):
         """
         agent_num = 2
         agents = []
-        for _ in range(agent_num):
+        for i in range(agent_num):
             # create the observation spec
             entity_list = [
                 "EmptyEntity", 
@@ -69,21 +69,14 @@ class GamblingEnv(Environment[GamblingWorld]):
             model = PyTorchIQN(
                 input_size=observation_spec.input_size,
                 action_space=action_spec.n_actions,
-                layer_size=250,
-                epsilon=0.6,
-                device="cpu",
                 seed=torch.random.seed(),
-                n_frames=5,
-                n_step=3,
-                sync_freq=200,
-                model_update_freq=4,
-                batch_size=64,
-                memory_size=1024,
-                LR=0.00025,
-                TAU=0.001,
-                GAMMA=0.99,
-                n_quantiles=12,
+                **self.config.model.parameters,
             )
+
+            if hasattr(self.config.model, "load_weights"):
+                model.load(
+                    file_path=Path(__file__).parent / f"./checkpoints/{self.config.model.load_weights}-agent-{i}.pkl"
+                )
 
             agents.append(
                 GamblingAgent(

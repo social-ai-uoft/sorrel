@@ -62,7 +62,7 @@ class Deck(Entity[GamblingWorld]):
                     value += -2.5
             case _:
                 value = 0
-        return (value + 0.25)
+        return (value + 0.1)
 
     def transition(self, world):
         # Randomly update value on each turn
