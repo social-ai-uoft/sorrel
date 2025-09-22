@@ -16,8 +16,118 @@ from sorrel.utils.logging import Logger
 from sorrel.utils.visualization import ImageRenderer
 
 from .agents import StatePunishmentAgent
-from .entities import A, B, C, D, E, EmptyEntity, Wall
+from .entities import A, B, C, D, E, EmptyEntity, Sand, Wall
 from .world import StatePunishmentWorld
+
+
+class MultiWorldImageRenderer:
+    """Custom image renderer for multi-world environments that combines all worlds into a 2x3 grid."""
+    
+    def __init__(self, experiment_name: str, record_period: int, num_turns: int, individual_envs: List):
+        """Initialize the multi-world image renderer.
+        
+        Args:
+            experiment_name: Name of the experiment
+            record_period: How often to create an animation
+            num_turns: Number of turns per game
+            individual_envs: List of individual environments to render
+        """
+        self.experiment_name = experiment_name
+        self.record_period = record_period
+        self.num_turns = num_turns
+        self.individual_envs = individual_envs
+        self.frames = []
+    
+    def clear(self):
+        """Zero out the frames."""
+        del self.frames[:]
+    
+    def add_image(self, individual_envs: List) -> None:
+        """Add a combined image of all worlds to the frames.
+        
+        Args:
+            individual_envs: List of individual environments to render
+        """
+        from sorrel.utils.visualization import render_sprite, image_from_array
+        from PIL import Image
+        
+        # Render each individual world
+        world_images = []
+        for env in individual_envs:
+            full_sprite = render_sprite(env.world)
+            world_img = image_from_array(full_sprite)
+            world_images.append(world_img)
+        
+        # Create a 2x3 grid layout
+        # Calculate grid dimensions
+        num_worlds = len(world_images)
+        if num_worlds <= 3:
+            rows, cols = 1, num_worlds
+        elif num_worlds <= 6:
+            rows, cols = 2, 3
+        else:
+            rows, cols = 3, 3
+        
+        # Get dimensions of individual images
+        if world_images:
+            img_width, img_height = world_images[0].size
+        else:
+            return
+        
+        # Create combined image
+        combined_width = cols * img_width
+        combined_height = rows * img_height
+        combined_img = Image.new('RGB', (combined_width, combined_height), (255, 255, 255))
+        
+        # Place each world image in the grid
+        for i, world_img in enumerate(world_images):
+            if i >= rows * cols:
+                break
+                
+            row = i // cols
+            col = i % cols
+            
+            x = col * img_width
+            y = row * img_height
+            
+            combined_img.paste(world_img, (x, y))
+        
+        # Add labels for each world
+        from PIL import ImageDraw, ImageFont
+        draw = ImageDraw.Draw(combined_img)
+        
+        # Try to use a default font, fallback to basic if not available
+        try:
+            font = ImageFont.truetype("arial.ttf", 16)
+        except:
+            font = ImageFont.load_default()
+        
+        # Add world labels
+        for i, world_img in enumerate(world_images):
+            if i >= rows * cols:
+                break
+                
+            row = i // cols
+            col = i % cols
+            
+            x = col * img_width + 5
+            y = row * img_height + 5
+            
+            draw.text((x, y), f"World {i+1}", fill=(0, 0, 0), font=font)
+        
+        self.frames.append(combined_img)
+    
+    def save_gif(self, epoch: int, folder: Path) -> None:
+        """Save a gif to disk.
+        
+        Args:
+            epoch: The epoch number
+            folder: The destination folder
+        """
+        from sorrel.utils.visualization import animate_gif
+        animate_gif(self.frames, f"{self.experiment_name}_epoch{epoch}", folder)
+        # Clear frames
+        self.clear()
 
 
 class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
@@ -41,8 +151,11 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         self.shared_state_system = shared_state_system
         self.shared_social_harm = shared_social_harm
 
-        # Initialize with the first environment's world and config
-        super().__init__(individual_envs[0].world, individual_envs[0].config)
+        # Set up the world and config without calling super().__init__()
+        # to avoid double population issues
+        self.world = individual_envs[0].world
+        self.config = individual_envs[0].config
+        self.turn = 0
 
         # Set up multi-agent coordination for all individual environments
         for i, env in enumerate(self.individual_envs):
@@ -134,10 +247,11 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         """Run the multi-agent experiment with coordination."""
         renderer = None
         if animate:
-            renderer = ImageRenderer(
+            renderer = MultiWorldImageRenderer(
                 experiment_name=self.world.__class__.__name__,
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
+                individual_envs=self.individual_envs,
             )
 
         for epoch in range(self.config.experiment.epochs + 1):
@@ -158,7 +272,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             while not self.turn >= self.config.experiment.max_turns:
                 # Render if needed
                 if animate_this_epoch and renderer is not None:
-                    renderer.add_image(self.world)
+                    renderer.add_image(self.individual_envs)
 
                 # Take turn in this environment (which coordinates with others)
                 self.take_turn()
@@ -242,6 +356,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         self.use_composite_actions = config.get("use_composite_actions", False)
         self.use_multi_env_composite = config.get("use_multi_env_composite", False)
         self.simple_foraging = config.get("simple_foraging", False)
+        self.use_random_policy = config.get("use_random_policy", False)
 
         # Multi-agent coordination
         self.other_environments = []  # Will be set by main.py
@@ -257,9 +372,10 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         for i in range(agent_num):
             # Create the observation spec with separate entity types for each agent
-            entity_list = ["EmptyEntity", "Wall", "A", "B", "C", "D", "E"] + [
-                f"Agent{i}" for i in range(agent_num)
-            ]
+            entity_list = ["EmptyEntity", "Wall", "Sand", "A", "B", "C", "D", "E", 'StatePunishmentAgent'] 
+            # + [
+            #     f"Agent{i}" for i in range(agent_num)
+            # ]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=self.config.model.full_view,
@@ -272,7 +388,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
             )
 
             # Give each agent different entity representations
-            self._create_agent_specific_representations(observation_spec, i, agent_num)
+            # self._create_agent_specific_representations(observation_spec, i, agent_num)
 
             # Don't override input size - let the observation spec handle it naturally
 
@@ -292,7 +408,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     "down_decrease",
                     "left_decrease",
                     "right_decrease",
-                    "noop",
+                    # "noop",
                 ]
             else:
                 # Simple actions: 4 movements + 2 voting + noop = 7 actions
@@ -301,9 +417,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     "down",
                     "left",
                     "right",
-                    "vote_increase",
-                    "vote_decrease",
-                    "noop",
+                    # "vote_increase",
+                    # "vote_decrease",
+                    # "noop",
                 ]
 
             action_spec = ActionSpec(action_names)
@@ -354,12 +470,13 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_composite_actions=self.use_composite_actions,
                     use_multi_env_composite=self.use_multi_env_composite,
                     simple_foraging=self.simple_foraging,
+                    use_random_policy=self.use_random_policy,
                 )
             )
 
         # Set unique entity types for each agent
-        for i, agent in enumerate(agents):
-            agent.kind = f"Agent{i}"
+        # for i, agent in enumerate(agents):
+        #     agent.kind = f"Agent{i}"
 
         self.agents = agents
 
@@ -373,7 +490,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         base_entity_map = observation_spec.entity_map.copy()
 
         # Create agent-specific entity list with separate agent types
-        entity_list = ["EmptyEntity", "Wall", "A", "B", "C", "D", "E"] + [
+        entity_list = ["EmptyEntity", "Wall", "Sand", "A", "B", "C", "D", "E"] + [
             f"Agent{i}" for i in range(total_agents)
         ]
         num_classes = len(entity_list)
@@ -390,8 +507,8 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 agent_num = int(entity_name.replace("Agent", ""))
                 agent_entity_map[entity_name] = np.zeros(num_classes)
                 agent_entity_map[entity_name][
-                    7 + agent_num
-                ] = 1.0  # Position 7+ for agents
+                    8 + agent_num
+                ] = 1.0  # Position 8+ for agents (after EmptyEntity, Wall, Sand, A, B, C, D, E)
             else:
                 # Other entities keep their standard representations
                 agent_entity_map[entity_name] = base_entity_map[entity_name].copy()
@@ -404,12 +521,16 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         resources, then randomly spawning the agents."""
         valid_spawn_locations = []
 
-        # Create walls around the edges
+        # Create walls around the edges and sand layer
         for index in np.ndindex(self.world.map.shape):
             y, x, z = index
             if y in [0, self.world.height - 1] or x in [0, self.world.width - 1]:
+                # Add walls around the edge of the world
                 self.world.add(index, Wall())
-            else:
+            elif z == 0:  # if location is on the bottom layer, put sand there
+                self.world.add(index, Sand())
+            elif z == 1:  # if location is on the top layer, indicate that it's possible for an agent to spawn there
+                # valid spawn location
                 valid_spawn_locations.append(index)
 
         # Spawn agents

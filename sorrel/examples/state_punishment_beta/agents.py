@@ -1,7 +1,13 @@
 """Agents for the state punishment game."""
 
 from pathlib import Path
-from typing import List, Optional, Tuple, override
+from typing import List, Optional, Tuple
+try:
+    from typing import override
+except ImportError:
+    # For Python < 3.12, define override as a no-op decorator
+    def override(func):
+        return func
 
 import numpy as np
 import torch
@@ -26,6 +32,7 @@ class StatePunishmentAgent(Agent):
         use_composite_actions: bool = False,
         use_multi_env_composite: bool = False,
         simple_foraging: bool = False,
+        use_random_policy: bool = False,
     ):
         """Initialize the state punishment agent.
 
@@ -36,6 +43,9 @@ class StatePunishmentAgent(Agent):
             agent_id: Unique identifier for this agent
             use_composite_views: Whether to use composite state observations
             use_composite_actions: Whether to use composite actions (movement + voting)
+            use_multi_env_composite: Whether to use multi-environment composite state
+            simple_foraging: Whether to use simple foraging mode
+            use_random_policy: Whether to use random policy instead of trained model
         """
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
@@ -43,6 +53,7 @@ class StatePunishmentAgent(Agent):
         self.use_composite_actions = use_composite_actions
         self.use_multi_env_composite = use_multi_env_composite
         self.simple_foraging = simple_foraging
+        self.use_random_policy = use_random_policy
         self.sprite = Path(__file__).parent / "./assets/hero.png"
 
         # Track encounters and rewards
@@ -59,6 +70,10 @@ class StatePunishmentAgent(Agent):
 
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
+        # If using random policy, return a random action
+        if self.use_random_policy:
+            return np.random.randint(0, self.action_spec.n_actions)
+        
         if self.use_multi_env_composite and self.composite_envs:
             # Use multi-environment composite state
             composite_state = self.generate_multi_env_composite_state()
@@ -91,7 +106,7 @@ class StatePunishmentAgent(Agent):
         # Add extra features: punishment level, social harm, and random noise
         punishment_level = world.state_system.prob
         social_harm = world.get_social_harm(self.agent_id)
-        random_noise = np.random.random()
+        random_noise = np.random.random() * 0
 
         extra_features = np.array(
             [punishment_level, social_harm, random_noise], dtype=visual_field.dtype
@@ -304,6 +319,9 @@ class StatePunishmentAgent(Agent):
         social_harm = world.get_social_harm(self.agent_id)
         reward += social_harm
 
+        # # debug
+        # if action == 1:
+        #     reward = 10
         return reward
 
     def _execute_movement(self, movement_action: int, world) -> float:
@@ -447,7 +465,7 @@ class StatePunishmentAgent(Agent):
 
         # Add to memory (flatten state for memory buffer)
         world.total_reward += reward
-        self.add_memory(state.flatten(), action, reward*10, done)
+        self.add_memory(state.flatten(), action, reward, done)
 
         return reward, done
 

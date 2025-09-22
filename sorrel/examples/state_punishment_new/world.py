@@ -1,15 +1,14 @@
-"""World for the state punishment game."""
+"""World for the state punishment new game."""
 
 from omegaconf import DictConfig, OmegaConf
 
 from sorrel.worlds import Gridworld
 
 from .entities import A, B, C, D, E, EmptyEntity, Sand, Wall
-from .state_system import StateSystem
 
 
-class StatePunishmentWorld(Gridworld):
-    """World for the state punishment game."""
+class StatePunishmentNewWorld(Gridworld):
+    """World for the state punishment new game."""
 
     def __init__(self, config: dict | DictConfig, default_entity):
         layers = 2
@@ -23,11 +22,11 @@ class StatePunishmentWorld(Gridworld):
         self.config = config
 
         # World configuration
-        self.a_value = config.world.get("a_value", 3.0)
-        self.b_value = config.world.get("b_value", 7.0)
-        self.c_value = config.world.get("c_value", 2.0)
-        self.d_value = config.world.get("d_value", -2.0)
-        self.e_value = config.world.get("e_value", 1.0)
+        self.a_value = config.world.get("a_value", 2.9)
+        self.b_value = config.world.get("b_value", 3.316)
+        self.c_value = config.world.get("c_value", 4.59728)
+        self.d_value = config.world.get("d_value", 8.5436224)
+        self.e_value = config.world.get("e_value", 20.699)
         self.spawn_prob = config.world.spawn_prob
 
         # Complex entity spawning probabilities
@@ -38,23 +37,12 @@ class StatePunishmentWorld(Gridworld):
         # Entity classes mapping
         self.entity_classes = {"A": A, "B": B, "C": C, "D": D, "E": E}
 
-        # Initialize state system
-        self.state_system = StateSystem(
-            init_prob=config.world.init_punishment_prob,
-            magnitude=config.world.punishment_magnitude,
-            change_per_vote=config.world.change_per_vote,
-            taboo_resources=config.world.taboo_resources,
-        )
-
         # Social harm tracking (shared across all agents)
         self.social_harm = {i: 0.0 for i in range(config.experiment.num_agents)}
 
-        # Punishment level tracking for logging
-        self.punishment_level_history = []
-
     def update_social_harm(self, agent_id: int, entity) -> None:
         """Update social harm for all agents when a resource is collected."""
-        harm = self.state_system.get_social_harm_from_entity(entity)
+        harm = entity.social_harm if hasattr(entity, "social_harm") else 0.0
         # Social harm affects all agents when any agent collects a taboo resource
         for aid in self.social_harm:
             if aid != agent_id:
@@ -69,19 +57,7 @@ class StatePunishmentWorld(Gridworld):
     def reset(self) -> None:
         """Reset the world state."""
         self.create_world()
-        self.state_system.reset()
         self.social_harm = {i: 0.0 for i in self.social_harm.keys()}
-        self.punishment_level_history = []
-
-    def record_punishment_level(self) -> None:
-        """Record current punishment level for epoch averaging."""
-        self.punishment_level_history.append(self.state_system.prob)
-
-    def get_average_punishment_level(self) -> float:
-        """Get average punishment level for the current epoch."""
-        if not self.punishment_level_history:
-            return self.state_system.prob
-        return sum(self.punishment_level_history) / len(self.punishment_level_history)
 
     def spawn_entity(self, location) -> None:
         """Spawn an entity at the given location using complex probability
@@ -102,19 +78,19 @@ class StatePunishmentWorld(Gridworld):
 
         # Create entity with appropriate value and social harm
         if entity_type == "A":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("A", 0.5)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("A", 2.17)
             entity = entity_class(self.a_value, social_harm)
         elif entity_type == "B":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("B", 1.0)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("B", 2.86)
             entity = entity_class(self.b_value, social_harm)
         elif entity_type == "C":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("C", 0.3)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("C", 4.995)
             entity = entity_class(self.c_value, social_harm)
         elif entity_type == "D":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("D", 1.5)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("D", 11.573)
             entity = entity_class(self.d_value, social_harm)
         elif entity_type == "E":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("E", 0.1)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("E", 31.831)
             entity = entity_class(self.e_value, social_harm)
         else:
             entity = entity_class()

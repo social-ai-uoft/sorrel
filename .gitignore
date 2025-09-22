@@ -145,6 +145,7 @@ logs/
 data/
 sorrel/examples/*/data/
 sorrel/examples/*/runs/
+sorrel/examples/*/runs_v1/
 sorrel/examples/*/checkpoints/
 sorrel/examples/state_punishment/
 pyvenv.cfg
@@ -156,3 +157,4 @@ runs/
 sorrel/examples/treasurehunt_theta/
 sorrel/examples/treasurehunt_beta/data/
 sorrel/examples/state_punishment_beta/runs_v1/
+sorrel/examples/state_punishment_beta_copy/

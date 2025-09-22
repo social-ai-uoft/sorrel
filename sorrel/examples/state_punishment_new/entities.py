@@ -1,29 +1,10 @@
-"""Entities for the state punishment game."""
+"""Entities for the state punishment new game."""
 
 from pathlib import Path
 
 import numpy as np
 
 from sorrel.entities import Entity
-
-
-class EmptyEntity(Entity):
-    """Empty entity representing empty space."""
-
-    def __init__(self):
-        super().__init__()
-        self.kind = "EmptyEntity"
-        self.passable = True
-        self.value = 0
-        self.social_harm = 0
-        self.sprite = Path(__file__).parent / "./assets/empty.png"
-        self.has_transitions = True
-
-    def transition(self, world):
-        """Randomly spawn resources in empty locations."""
-        if hasattr(world, "spawn_prob") and np.random.random() < world.spawn_prob:
-            # Use the world's spawn_entity method to create a new resource
-            world.spawn_entity(self.location)
 
 
 class Wall(Entity):
@@ -50,10 +31,29 @@ class Sand(Entity):
         self.sprite = Path(__file__).parent / "./assets/sand.png"
 
 
+class EmptyEntity(Entity):
+    """Empty entity representing empty space."""
+
+    def __init__(self):
+        super().__init__()
+        self.kind = "EmptyEntity"
+        self.passable = True
+        self.value = 0
+        self.social_harm = 0
+        self.sprite = Path(__file__).parent / "./assets/empty.png"
+        self.has_transitions = True
+
+    def transition(self, world):
+        """Randomly spawn resources in empty locations."""
+        if hasattr(world, "spawn_prob") and np.random.random() < world.spawn_prob:
+            # Use the world's spawn_entity method to create a new resource
+            world.spawn_entity(self.location)
+
+
 class A(Entity):
     """Resource A with configurable value and social harm."""
 
-    def __init__(self, value: float = 3.0, social_harm: float = 0.5):
+    def __init__(self, value: float = 2.9, social_harm: float = 2.17):
         super().__init__()
         self.kind = "A"
         self.passable = True
@@ -65,7 +65,7 @@ class A(Entity):
 class B(Entity):
     """Resource B with configurable value and social harm."""
 
-    def __init__(self, value: float = 7.0, social_harm: float = 1.0):
+    def __init__(self, value: float = 3.316, social_harm: float = 2.86):
         super().__init__()
         self.kind = "B"
         self.passable = True
@@ -77,7 +77,7 @@ class B(Entity):
 class C(Entity):
     """Resource C with configurable value and social harm."""
 
-    def __init__(self, value: float = 2.0, social_harm: float = 0.3):
+    def __init__(self, value: float = 4.59728, social_harm: float = 4.995):
         super().__init__()
         self.kind = "C"
         self.passable = True
@@ -89,7 +89,7 @@ class C(Entity):
 class D(Entity):
     """Resource D with configurable value and social harm."""
 
-    def __init__(self, value: float = -2.0, social_harm: float = 1.5):
+    def __init__(self, value: float = 8.5436224, social_harm: float = 11.573):
         super().__init__()
         self.kind = "D"
         self.passable = True
@@ -101,7 +101,7 @@ class D(Entity):
 class E(Entity):
     """Resource E with configurable value and social harm."""
 
-    def __init__(self, value: float = 1.0, social_harm: float = 0.1):
+    def __init__(self, value: float = 20.699, social_harm: float = 31.831):
         super().__init__()
         self.kind = "E"
         self.passable = True

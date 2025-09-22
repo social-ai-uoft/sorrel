@@ -95,7 +95,7 @@ if __name__ == "__main__":
         "model": {
             "agent_vision_radius": 4,
             "epsilon": 1,  # Initial epsilon value for exploration
-            'epsilon_min': 0.01,
+            "epsilon_min": 0.01,
             "epsilon_decay": 0.001,
             "full_view": True,  # Whether agents can see the entire environment
         },
