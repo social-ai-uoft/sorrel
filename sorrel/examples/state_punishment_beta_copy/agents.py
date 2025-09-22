@@ -178,7 +178,7 @@ class StatePunishmentAgent(Agent):
 
         # Apply punishment if it's a taboo resource
         if hasattr(target_object, "kind") and state_system is not None:
-            reward += state_system.calculate_punishment(target_object.kind)
+            reward -= state_system.calculate_punishment(target_object.kind)
 
             # Update social harm for all other agents
             if hasattr(target_object, "social_harm") and social_harm_dict is not None:

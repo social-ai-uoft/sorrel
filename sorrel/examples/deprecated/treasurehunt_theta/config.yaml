@@ -1,0 +1,17 @@
+experiment:
+  epochs: 10000
+  max_turns: 100
+  record_period: 50
+  name: "treasurehunt_theta_default"
+  num_agents: 2  # Number of agents
+
+model:
+  agent_vision_radius: 2
+  epsilon_decay: 0.0001
+
+world:
+  height: 10
+  width: 10
+  respawn_prob: 0.0  # Resource respawn probability (0.0 = no respawn)
+  # Three resource types with values 15, 5, -5
+  # Equal probability (1/3 each) for spawning

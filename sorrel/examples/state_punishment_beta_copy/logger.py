@@ -17,7 +17,7 @@ class StatePunishmentLogger:
         
         # Initialize console and tensorboard loggers
         self.console_logger = ConsoleLogger(max_epochs)
-        self.tensorboard_logger = TensorboardLogger(log_dir, experiment_name)
+        self.tensorboard_logger = TensorboardLogger(max_epochs, log_dir)
         
         # Store reference to multi-agent environment for encounter tracking
         self.multi_agent_env = None

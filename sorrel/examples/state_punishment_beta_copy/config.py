@@ -13,7 +13,7 @@ def create_config(
     use_random_policy: bool = False,
     fixed_punishment_level: float = 0.2,
     map_size: int = 10,
-    num_resources: int = 20,
+    num_resources: int = 8,
     learning_rate: float = 0.00025,
     batch_size: int = 64,
     memory_size: int = 1024,
@@ -24,21 +24,37 @@ def create_config(
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
     
-    # Social harm config
-    social_harm_config = {
-        "A": 2.16666667,
-        "B": 2.86,
-        "C": 4.99546667,
-        "D": 11.572704,
-        "E": 31.83059499,
-    }
+    # Social harm config - set to 0 for all entities in simple foraging mode
+    if simple_foraging:
+        social_harm_config = {
+            "A": 0.0,
+            "B": 0.0,
+            "C": 0.0,
+            "D": 0.0,
+            "E": 0.0,
+        }
+    else:
+        social_harm_config = {
+            "A": 2.16666667,
+            "B": 2.86,
+            "C": 4.99546667,
+            "D": 11.572704,
+            "E": 31.83059499,
+        }
+    
+    # Generate dynamic run name based on experiment parameters
+    if simple_foraging:
+        run_name = f"simple_foraging_{num_agents}agents_punish{fixed_punishment_level:.1f}"
+    else:
+        mode = "composite" if (use_composite_views or use_composite_actions) else "simple"
+        run_name = f"state_punishment_{mode}_{num_agents}agents"
     
     return {
         "experiment": {
             "epochs": epochs,
             "max_turns": 100,
             "record_period": 100,
-            "run_name": "state_punishment_experiment",
+            "run_name": run_name,
             "num_agents": num_agents,
             "initial_resources": num_resources,
             "use_composite_views": use_composite_views,
@@ -95,7 +111,7 @@ def print_expected_rewards(config: Dict[str, Any], fixed_punishment_level: float
         fixed_punishment_level = config["experiment"]["fixed_punishment_level"]
     
     print("=" * 50)
-    print("EXPECTED REWARDS (Value + Punishment = Net Reward)")
+    print("EXPECTED REWARDS (Value - Punishment = Net Reward)")
     print("=" * 50)
     
     # Get the state system to calculate punishments
@@ -120,6 +136,6 @@ def print_expected_rewards(config: Dict[str, Any], fixed_punishment_level: float
     
     for resource, value in resource_values.items():
         punishment = temp_world.state_system.calculate_punishment(resource)
-        net_reward = value + punishment
+        net_reward = value - punishment
         print(f"Resource {resource}: value={value:.1f}, punishment={punishment:.1f}, net_reward={net_reward:.1f}")
     print("=" * 50 + "\n")
