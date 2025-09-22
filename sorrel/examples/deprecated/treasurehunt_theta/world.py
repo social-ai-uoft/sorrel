@@ -1,4 +1,5 @@
-"""The environment for treasurehunt_theta, a modified treasurehunt with three resource types."""
+"""The environment for treasurehunt_theta, a modified treasurehunt with three resource
+types."""
 
 # begin imports
 
@@ -22,7 +23,7 @@ class TreasurehuntThetaWorld(Gridworld):
         )
 
         # Set spawn probability from config (default 0.0 for no respawn)
-        self.spawn_prob = config.world.get('respawn_prob', 0.0)
+        self.spawn_prob = config.world.get("respawn_prob", 0.0)
 
 
 # end treasurehunt_theta

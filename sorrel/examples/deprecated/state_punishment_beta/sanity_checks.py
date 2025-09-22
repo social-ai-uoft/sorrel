@@ -16,8 +16,8 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.examples.state_punishment_beta.agents import StatePunishmentAgent
-from sorrel.examples.state_punishment_beta.entities import (
+from sorrel.examples.deprecated.state_punishment_beta.agents import StatePunishmentAgent
+from sorrel.examples.deprecated.state_punishment_beta.entities import (
     A,
     B,
     C,
@@ -26,9 +26,9 @@ from sorrel.examples.state_punishment_beta.entities import (
     EmptyEntity,
     Wall,
 )
-from sorrel.examples.state_punishment_beta.env import StatePunishmentEnv
-from sorrel.examples.state_punishment_beta.state_system import StateSystem
-from sorrel.examples.state_punishment_beta.world import StatePunishmentWorld
+from sorrel.examples.deprecated.state_punishment_beta.env import StatePunishmentEnv
+from sorrel.examples.deprecated.state_punishment_beta.state_system import StateSystem
+from sorrel.examples.deprecated.state_punishment_beta.world import StatePunishmentWorld
 from sorrel.models.pytorch import PyTorchIQN
 
 

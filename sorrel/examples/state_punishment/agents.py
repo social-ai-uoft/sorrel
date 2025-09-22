@@ -2,12 +2,14 @@
 
 from pathlib import Path
 from typing import List, Optional, Tuple
+
 try:
     from typing import override
 except ImportError:
     # For Python < 3.12, define override as a no-op decorator
     def override(func):
         return func
+
 
 import numpy as np
 import torch
@@ -68,7 +70,7 @@ class StatePunishmentAgent(Agent):
         # If using random policy, return a random action
         if self.use_random_policy:
             return np.random.randint(0, self.action_spec.n_actions)
-        
+
         # Use the provided state (composite views are handled by environment)
         prev_states = self.model.memory.current_state()
         stacked_states = np.vstack((prev_states, state))
@@ -95,7 +97,9 @@ class StatePunishmentAgent(Agent):
         ).reshape(1, -1)
         return np.concatenate([visual_field, extra_features], axis=1)
 
-    def _add_scalars_to_composite_state(self, composite_state, state_system, social_harm_dict) -> np.ndarray:
+    def _add_scalars_to_composite_state(
+        self, composite_state, state_system, social_harm_dict
+    ) -> np.ndarray:
         """Add agent-specific scalar features to composite state."""
         # Add extra features: punishment level, social harm, and random noise
         punishment_level = state_system.prob
@@ -105,13 +109,14 @@ class StatePunishmentAgent(Agent):
         extra_features = np.array(
             [punishment_level, social_harm, random_noise], dtype=composite_state.dtype
         ).reshape(1, -1)
-        
+
         return np.concatenate([composite_state, extra_features], axis=1)
 
     # Note: Complex composite view generation methods removed - now handled by environment
 
-
-    def act(self, world, action: int, state_system=None, social_harm_dict=None) -> float:
+    def act(
+        self, world, action: int, state_system=None, social_harm_dict=None
+    ) -> float:
         """Act on the environment, returning the reward.
 
         Args:
@@ -125,21 +130,25 @@ class StatePunishmentAgent(Agent):
         """
         return self._execute_action(action, world, state_system, social_harm_dict)
 
-    def _execute_action(self, action: int, world, state_system=None, social_harm_dict=None) -> float:
+    def _execute_action(
+        self, action: int, world, state_system=None, social_harm_dict=None
+    ) -> float:
         """Execute the given action and return reward."""
         reward = 0.0
 
         # Determine movement and voting actions based on mode
         if self.use_composite_actions:
             movement_action = action % 4  # 0-3 for movement
-            voting_action = action // 4   # 0-2 for voting
+            voting_action = action // 4  # 0-2 for voting
         else:
             movement_action = action if action < 4 else -1  # Only movement if < 4
             voting_action = action - 4 if action >= 4 else 0  # Voting starts at 4
 
         # Execute movement (if valid and not simple foraging with non-movement action)
         if movement_action >= 0 and not (self.simple_foraging and action >= 4):
-            reward += self._execute_movement(movement_action, world, state_system, social_harm_dict)
+            reward += self._execute_movement(
+                movement_action, world, state_system, social_harm_dict
+            )
 
         # Execute voting (if valid and not simple foraging)
         if voting_action > 0 and not self.simple_foraging:
@@ -154,18 +163,33 @@ class StatePunishmentAgent(Agent):
 
         return reward
 
-    def _execute_movement(self, movement_action: int, world, state_system=None, social_harm_dict=None) -> float:
+    def _execute_movement(
+        self, movement_action: int, world, state_system=None, social_harm_dict=None
+    ) -> float:
         """Execute movement action and return reward."""
         if movement_action >= 4:  # Invalid movement
             return 0.0
 
         # Calculate new location based on movement
-        directions = [(-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0)]  # Up, Down, Left, Right
+        directions = [
+            (-1, 0, 0),
+            (1, 0, 0),
+            (0, -1, 0),
+            (0, 1, 0),
+        ]  # Up, Down, Left, Right
         dx, dy, dz = directions[movement_action]
-        new_location = (self.location[0] + dx, self.location[1] + dy, self.location[2] + dz)
+        new_location = (
+            self.location[0] + dx,
+            self.location[1] + dy,
+            self.location[2] + dz,
+        )
 
         # Check if new location is valid (within bounds)
-        if not (0 <= new_location[0] < world.height and 0 <= new_location[1] < world.width and 0 <= new_location[2] < world.layers):
+        if not (
+            0 <= new_location[0] < world.height
+            and 0 <= new_location[1] < world.width
+            and 0 <= new_location[2] < world.layers
+        ):
             return 0.0
 
         # Get the object at the new location
@@ -174,7 +198,9 @@ class StatePunishmentAgent(Agent):
 
         # Track encounters
         entity_class_name = target_object.__class__.__name__.lower()
-        self.encounters[entity_class_name] = self.encounters.get(entity_class_name, 0) + 1
+        self.encounters[entity_class_name] = (
+            self.encounters.get(entity_class_name, 0) + 1
+        )
 
         # Apply punishment if it's a taboo resource
         if hasattr(target_object, "kind") and state_system is not None:

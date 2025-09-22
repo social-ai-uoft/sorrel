@@ -7,9 +7,13 @@ from sorrel.action.action_spec import ActionSpec
 from sorrel.environment import Environment
 
 # imports from our example
-from sorrel.examples.treasurehunt_theta.agents import TreasurehuntThetaAgent
-from sorrel.examples.treasurehunt_theta.entities import EmptyEntity, Sand, Wall
-from sorrel.examples.treasurehunt_theta.world import TreasurehuntThetaWorld
+from sorrel.examples.deprecated.treasurehunt_theta.agents import TreasurehuntThetaAgent
+from sorrel.examples.deprecated.treasurehunt_theta.entities import (
+    EmptyEntity,
+    Sand,
+    Wall,
+)
+from sorrel.examples.deprecated.treasurehunt_theta.world import TreasurehuntThetaWorld
 
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
@@ -32,11 +36,19 @@ class TreasurehuntThetaEnv(Environment[TreasurehuntThetaWorld]):
 
         Requires self.config.model.agent_vision_radius to be defined.
         """
-        agent_num = self.config.experiment.get('num_agents', 2)
+        agent_num = self.config.experiment.get("num_agents", 2)
         agents = []
         for _ in range(agent_num):
             # create the observation spec
-            entity_list = ["EmptyEntity", "Wall", "Sand", "HighValueResource", "MediumValueResource", "LowValueResource", "TreasurehuntThetaAgent"]
+            entity_list = [
+                "EmptyEntity",
+                "Wall",
+                "Sand",
+                "HighValueResource",
+                "MediumValueResource",
+                "LowValueResource",
+                "TreasurehuntThetaAgent",
+            ]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=False,
@@ -82,38 +94,39 @@ class TreasurehuntThetaEnv(Environment[TreasurehuntThetaWorld]):
 
         self.agents = agents
 
-    def _populate_resources(self, high_value_p=0.02, medium_value_p=0.03, low_value_p=0.03):
-        """
-        Populates the game board with initial resources.
-        
+    def _populate_resources(
+        self, high_value_p=0.02, medium_value_p=0.03, low_value_p=0.03
+    ):
+        """Populates the game board with initial resources.
+
         Args:
             high_value_p: Probability of placing high-value resource (value 15)
-            medium_value_p: Probability of placing medium-value resource (value 5)  
+            medium_value_p: Probability of placing medium-value resource (value 5)
             low_value_p: Probability of placing low-value resource (value -5)
         """
         # Import here to avoid circular imports
         from sorrel.examples.treasurehunt_theta.entities import (
-            HighValueResource, 
-            MediumValueResource, 
-            LowValueResource
+            HighValueResource,
+            LowValueResource,
+            MediumValueResource,
         )
-        
+
         for i in range(self.world.height):
             for j in range(self.world.width):
                 # Skip border positions (walls)
                 if i in [0, self.world.height - 1] or j in [0, self.world.width - 1]:
                     continue
-                    
+
                 obj = np.random.choice(
                     [0, 1, 2, 3],
                     p=[
                         high_value_p,
-                        medium_value_p, 
+                        medium_value_p,
                         low_value_p,
                         1 - high_value_p - medium_value_p - low_value_p,
                     ],
                 )
-                
+
                 # Place resources on the top layer (z=1)
                 if obj == 0:
                     self.world.add((i, j, 1), HighValueResource())
@@ -124,8 +137,8 @@ class TreasurehuntThetaEnv(Environment[TreasurehuntThetaWorld]):
                 # obj == 3 means empty space, no action needed
 
     def populate_environment(self):
-        """Populate the treasurehunt_theta world by creating walls, placing initial resources,
-        then randomly spawning the agents.
+        """Populate the treasurehunt_theta world by creating walls, placing initial
+        resources, then randomly spawning the agents.
 
         Note that self.world.map is already created with the specified dimensions, and
         every space is filled with EmptyEntity, as part of super().__init__() when this
@@ -147,10 +160,12 @@ class TreasurehuntThetaEnv(Environment[TreasurehuntThetaWorld]):
         valid_spawn_locations = []
         for index in np.ndindex(self.world.map.shape):
             y, x, z = index
-            if (z == 1 and  # top layer
-                y not in [0, self.world.height - 1] and  # not on border
-                x not in [0, self.world.width - 1] and  # not on border
-                self.world.observe(index).__class__.__name__ == 'EmptyEntity'):  # empty space
+            if (
+                z == 1  # top layer
+                and y not in [0, self.world.height - 1]  # not on border
+                and x not in [0, self.world.width - 1]  # not on border
+                and self.world.observe(index).__class__.__name__ == "EmptyEntity"
+            ):  # empty space
                 valid_spawn_locations.append(index)
 
         # spawn the agents

@@ -2,14 +2,16 @@
 """Test script to demonstrate multi-world animation with 2x3 grid layout."""
 
 from pathlib import Path
+
 from sorrel.examples.state_punishment.entities import EmptyEntity
 from sorrel.examples.state_punishment.env import MultiAgentStatePunishmentEnv
 from sorrel.examples.state_punishment.world import StatePunishmentWorld
 from sorrel.utils.logging import ConsoleLogger
 
+
 def test_multi_world_animation(num_agents=3):
     """Test the multi-world animation with a short run."""
-    
+
     # Configuration for testing
     config = {
         "experiment": {
@@ -53,8 +55,13 @@ def test_multi_world_animation(num_agents=3):
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
             "entity_social_harm": {
-                "A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0,
-                "EmptyEntity": 0.0, "Wall": 0.0
+                "A": 0.0,
+                "B": 0.0,
+                "C": 0.0,
+                "D": 0.0,
+                "E": 0.0,
+                "EmptyEntity": 0.0,
+                "Wall": 0.0,
             },
         },
         "use_composite_views": False,
@@ -63,9 +70,9 @@ def test_multi_world_animation(num_agents=3):
         "simple_foraging": True,
         "use_random_policy": True,  # Use random policy for testing
     }
-    
+
     print(f"Creating multi-agent environment with {num_agents} agents...")
-    
+
     # Create environments for each agent
     environments = []
     shared_state_system = None
@@ -89,10 +96,13 @@ def test_multi_world_animation(num_agents=3):
 
         # Create a modified config for this specific agent environment
         agent_config = dict(config)
-        agent_config["experiment"]["num_agents"] = 1  # Each environment has only one agent
+        agent_config["experiment"][
+            "num_agents"
+        ] = 1  # Each environment has only one agent
         agent_config["model"]["n_frames"] = 1  # Single frame per observation
 
         from sorrel.examples.state_punishment.env import StatePunishmentEnv
+
         env = StatePunishmentEnv(world, agent_config)
         env.agents[0].agent_id = i
         env.simple_foraging = True
@@ -117,25 +127,25 @@ def test_multi_world_animation(num_agents=3):
     print(f"Number of agents: {num_agents}")
     print(f"Animation will be saved to: {output_dir}")
     print(f"The animation will show all {num_agents} worlds in a grid layout.")
-    
+
     # Run the experiment
     multi_agent_env.run_experiment(
-        animate=True,
-        logging=True,
-        logger=logger,
-        output_dir=output_dir
+        animate=True, logging=True, logger=logger, output_dir=output_dir
     )
-    
+
     print("Test completed! Check the test_animations folder for the generated GIFs.")
-    print(f"Each GIF should show all {num_agents} worlds combined in a single animation.")
+    print(
+        f"Each GIF should show all {num_agents} worlds combined in a single animation."
+    )
+
 
 if __name__ == "__main__":
     # Test with different numbers of agents
     print("Testing with 3 agents...")
     test_multi_world_animation(num_agents=3)
-    
+
     print("\nTesting with 5 agents...")
     test_multi_world_animation(num_agents=5)
-    
+
     print("\nTesting with 6 agents...")
     test_multi_world_animation(num_agents=6)

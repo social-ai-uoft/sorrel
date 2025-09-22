@@ -21,11 +21,18 @@ from .world import StatePunishmentWorld
 
 
 class MultiWorldImageRenderer:
-    """Custom image renderer for multi-world environments that combines all worlds into a 2x3 grid."""
-    
-    def __init__(self, experiment_name: str, record_period: int, num_turns: int, individual_envs: List):
+    """Custom image renderer for multi-world environments that combines all worlds into
+    a 2x3 grid."""
+
+    def __init__(
+        self,
+        experiment_name: str,
+        record_period: int,
+        num_turns: int,
+        individual_envs: List,
+    ):
         """Initialize the multi-world image renderer.
-        
+
         Args:
             experiment_name: Name of the experiment
             record_period: How often to create an animation
@@ -37,84 +44,88 @@ class MultiWorldImageRenderer:
         self.num_turns = num_turns
         self.individual_envs = individual_envs
         self.frames = []
-    
+
     def clear(self):
         """Zero out the frames."""
         del self.frames[:]
-    
+
     def add_image(self, individual_envs: List, punishment_level: float = None) -> None:
         """Add a combined image of all worlds to the frames.
-        
+
         Args:
             individual_envs: List of individual environments to render
             punishment_level: Current punishment level to display
         """
-        from sorrel.utils.visualization import render_sprite, image_from_array
         from PIL import Image
-        
+
+        from sorrel.utils.visualization import image_from_array, render_sprite
+
         # Render each individual world
         world_images = []
         for env in individual_envs:
             full_sprite = render_sprite(env.world)
             world_img = image_from_array(full_sprite)
             world_images.append(world_img)
-        
+
         # Create a 2x3 grid layout (always 2 rows, 3 columns)
         # Calculate grid dimensions
         num_worlds = len(world_images)
         rows, cols = 2, 3  # Always use 2x3 grid for consistency
-        
+
         # Get dimensions of individual images
         if world_images:
             img_width, img_height = world_images[0].size
         else:
             return
-        
+
         # Create combined image
         combined_width = cols * img_width
         combined_height = rows * img_height
-        combined_img = Image.new('RGB', (combined_width, combined_height), (255, 255, 255))
-        
+        combined_img = Image.new(
+            "RGB", (combined_width, combined_height), (255, 255, 255)
+        )
+
         # Place each world image in the grid
         for i, world_img in enumerate(world_images):
             if i >= rows * cols:
                 break
-                
+
             row = i // cols
             col = i % cols
-            
+
             x = col * img_width
             y = row * img_height
-            
+
             combined_img.paste(world_img, (x, y))
-        
+
         # Fill empty slots with blank spaces (for 3 agents: 3 worlds + 3 empty slots)
         # This ensures consistent 2x3 grid layout
-        
+
         # Add labels for each world
         from PIL import ImageDraw, ImageFont
+
         draw = ImageDraw.Draw(combined_img)
-        
+
         # Try to use a default font, fallback to basic if not available
         try:
             font = ImageFont.truetype("arial.ttf", 16)
         except:
             font = ImageFont.load_default()
-        
+
         # Add world labels (only for actual worlds, not empty slots)
         for i, world_img in enumerate(world_images):
             if i >= rows * cols:
                 break
-                
+
             row = i // cols
             col = i % cols
-            
+
             x = col * img_width + 5
             y = row * img_height + 5
-            
+
             # World label
             draw.text((x, y), f"World {i+1}", fill=(0, 0, 0), font=font)
-        
+
         # Add global punishment level in bottom right corner
         if punishment_level is not None:
             punishment_text = f"Punishment Level: {punishment_level:.3f}"
@@ -122,17 +133,18 @@ class MultiWorldImageRenderer:
             text_x = combined_width - 200  # Leave some margin from right edge
             text_y = combined_height - 30  # Leave some margin from bottom edge
             draw.text((text_x, text_y), punishment_text, fill=(255, 0, 0), font=font)
-        
+
         self.frames.append(combined_img)
-    
+
     def save_gif(self, epoch: int, folder: Path) -> None:
         """Save a gif to disk.
-        
+
         Args:
             epoch: The epoch number
             folder: The destination folder
         """
         from sorrel.utils.visualization import animate_gif
+
         animate_gif(self.frames, f"{self.experiment_name}_epoch{epoch}", folder)
         # Clear frames
         self.clear()
@@ -201,39 +213,52 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         # Check if any environment uses composite views
         use_composite = any(env.use_composite_views for env in self.individual_envs)
-        
+
         if use_composite:
             # Generate composite observations for all agents
-            composite_observations = self._generate_composite_observations(all_agents, all_envs)
-        
+            composite_observations = self._generate_composite_observations(
+                all_agents, all_envs
+            )
+
         # Process each agent
         for i, (agent, env) in enumerate(zip(all_agents, all_envs)):
             if use_composite and env.use_composite_views:
                 # Use composite observation and add agent-specific scalars
                 state = agent._add_scalars_to_composite_state(
-                    composite_observations[i], self.shared_state_system, self.shared_social_harm
+                    composite_observations[i],
+                    self.shared_state_system,
+                    self.shared_social_harm,
                 )
             else:
                 # Use single agent view
-                state = agent.generate_single_view(env.world, self.shared_state_system, self.shared_social_harm)
-            
+                state = agent.generate_single_view(
+                    env.world, self.shared_state_system, self.shared_social_harm
+                )
+
             # Execute agent transition
             self._execute_agent_transition(agent, env, state)
 
     def _generate_composite_observations(self, all_agents, all_envs):
         """Generate composite observations for all agents."""
         composite_observations = []
-        
+
         for i, (agent, env) in enumerate(zip(all_agents, all_envs)):
             if not env.use_composite_views:
                 # Single view for this agent
-                composite_observations.append(agent.generate_single_view(env.world, self.shared_state_system, self.shared_social_harm))
+                composite_observations.append(
+                    agent.generate_single_view(
+                        env.world, self.shared_state_system, self.shared_social_harm
+                    )
+                )
                 continue
-                
+
             # Generate composite view by collecting observations from all agents
-            all_views = [self._get_agent_observation_without_scalars(a, e.world) for a, e in zip(all_agents, all_envs)]
+            all_views = [
+                self._get_agent_observation_without_scalars(a, e.world)
+                for a, e in zip(all_agents, all_envs)
+            ]
             composite_observations.append(np.concatenate(all_views, axis=1))
-        
+
         return composite_observations
 
     def _get_agent_observation_without_scalars(self, agent, world):
@@ -241,23 +266,25 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         # Get only the visual field observation (no scalar features)
         image = agent.observation_spec.observe(world, agent.location)
         visual_field = image.reshape(1, -1)
-        
+
         return visual_field
 
     def _execute_agent_transition(self, agent, env, state):
         """Execute agent transition with the given state."""
         # Get action from model
         action = agent.get_action(state)
-        
+
         # Execute action with shared state system and social harm
-        reward = agent.act(env.world, action, self.shared_state_system, self.shared_social_harm)
-        
+        reward = agent.act(
+            env.world, action, self.shared_state_system, self.shared_social_harm
+        )
+
         # Update individual score
         agent.individual_score += reward
-        
+
         # Check if done
         done = agent.is_done(env.world)
-        
+
         # Add to memory
         env.world.total_reward += reward
         agent.add_memory(state.flatten(), action, reward, done)
@@ -269,12 +296,11 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         self.world.is_done = False
         # Reset shared social harm centrally
         self.shared_social_harm = {i: 0.0 for i in range(len(self.individual_envs))}
-        
+
         for env in self.individual_envs:
             env.reset()
             for agent in env.agents:
                 agent.reset()
-
 
     @override
     def run_experiment(
@@ -314,7 +340,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 if animate_this_epoch and renderer is not None:
                     # Get current punishment level from shared state system
                     current_punishment = self.shared_state_system.prob
-                    renderer.add_image(self.individual_envs, punishment_level=current_punishment)
+                    renderer.add_image(
+                        self.individual_envs, punishment_level=current_punishment
+                    )
 
                 # Take turn in this environment (which coordinates with others)
                 self.take_turn()
@@ -360,11 +388,19 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 )
 
                 avg_loss = total_loss / loss_count if loss_count > 0 else 0.0
-                
+
                 # Get current epsilon from the first agent's model
-                current_epsilon = np.mean([self.individual_envs[k].agents[0].model.epsilon 
-                for k in range(len(self.individual_envs))]) if self.individual_envs else 0.0
-                
+                current_epsilon = (
+                    np.mean(
+                        [
+                            self.individual_envs[k].agents[0].model.epsilon
+                            for k in range(len(self.individual_envs))
+                        ]
+                    )
+                    if self.individual_envs
+                    else 0.0
+                )
+
                 logger.record_turn(
                     epoch, avg_loss, total_reward, epsilon=current_epsilon
                 )
@@ -411,7 +447,17 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         for i in range(agent_num):
             # Create the observation spec with separate entity types for each agent
-            entity_list = ["EmptyEntity", "Wall", "Sand", "A", "B", "C", "D", "E", "StatePunishmentAgent"]
+            entity_list = [
+                "EmptyEntity",
+                "Wall",
+                "Sand",
+                "A",
+                "B",
+                "C",
+                "D",
+                "E",
+                "StatePunishmentAgent",
+            ]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=self.config.model.full_view,
@@ -422,7 +468,6 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     else None
                 ),
             )
-
 
             # Don't override input size - let the observation spec handle it naturally
 
@@ -509,7 +554,6 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         self.agents = agents
 
-
     def populate_environment(self):
         """Populate the state punishment world by creating walls, placing initial
         resources, then randomly spawning the agents."""
@@ -523,7 +567,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 self.world.add(index, Wall())
             elif z == 0:  # if location is on the bottom layer, put sand there
                 self.world.add(index, Sand())
-            elif z == 1:  # if location is on the top layer, indicate that it's possible for an agent to spawn there
+            elif (
+                z == 1
+            ):  # if location is on the top layer, indicate that it's possible for an agent to spawn there
                 # valid spawn location
                 valid_spawn_locations.append(index)
 
@@ -555,9 +601,6 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         for loc in resource_locations:
             # Use complex entity spawning
             self.world.spawn_entity(loc)
-
-
-
 
     def get_metrics(self) -> dict:
         """Get current metrics for logging."""

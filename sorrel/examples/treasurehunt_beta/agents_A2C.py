@@ -1,4 +1,5 @@
-"""The agent for treasurehunt with A2C support, a simple example for the purpose of a tutorial."""
+"""The agent for treasurehunt with A2C support, a simple example for the purpose of a
+tutorial."""
 
 # begin imports
 from pathlib import Path
@@ -31,7 +32,10 @@ class TreasurehuntFlexAgent(Agent[TreasurehuntWorld]):
         """Returns the state observed by the agent, from the visual field."""
         image = self.observation_spec.observe(world, self.location)
         # Check if model uses IQN buffer (IQN) or A2C buffer (A2C)
-        if hasattr(self.model, 'memory') and self.model.memory.__class__.__name__ == 'Buffer':
+        if (
+            hasattr(self.model, "memory")
+            and self.model.memory.__class__.__name__ == "Buffer"
+        ):
             # IQN model - return flattened observation for memory buffer compatibility
             return image.reshape(1, -1)
         else:
@@ -41,7 +45,10 @@ class TreasurehuntFlexAgent(Agent[TreasurehuntWorld]):
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, handling both A2C and IQN model outputs."""
         # Check if model uses IQN buffer (IQN) or A2C buffer (A2C)
-        if hasattr(self.model, 'memory') and self.model.memory.__class__.__name__ == 'Buffer':
+        if (
+            hasattr(self.model, "memory")
+            and self.model.memory.__class__.__name__ == "Buffer"
+        ):
             # IQN model - state is already flattened from pov method
             prev_states = self.model.memory.current_state()
             stacked_states = np.vstack((prev_states, state))
@@ -50,13 +57,13 @@ class TreasurehuntFlexAgent(Agent[TreasurehuntWorld]):
         else:
             # A2C model - state is unflattened from pov method
             action_result = self.model.take_action(state)
-            
+
             # A2C returns tuple (action, log_prob, value), we need just the action
             if isinstance(action_result, tuple) and len(action_result) == 3:
                 action = action_result[0]  # Extract just the action (first element)
             else:
                 action = action_result
-                
+
         return action
 
     def act(self, world: TreasurehuntWorld, action: int) -> float:

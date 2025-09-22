@@ -136,7 +136,7 @@ class StateSystem:
     def vote_increase(self) -> None:
         """Increase punishment probability."""
         # In simple foraging mode, punishment level is fixed
-        if hasattr(self, 'simple_foraging') and self.simple_foraging:
+        if hasattr(self, "simple_foraging") and self.simple_foraging:
             return
         self.prob = min(1.0, self.prob + self.change_per_vote)
         self.vote_history.append(1)
@@ -145,7 +145,7 @@ class StateSystem:
     def vote_decrease(self) -> None:
         """Decrease punishment probability."""
         # In simple foraging mode, punishment level is fixed
-        if hasattr(self, 'simple_foraging') and self.simple_foraging:
+        if hasattr(self, "simple_foraging") and self.simple_foraging:
             return
         self.prob = max(0.0, self.prob - self.change_per_vote)
         self.vote_history.append(-1)

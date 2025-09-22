@@ -40,8 +40,8 @@ from sorrel.worlds import Gridworld
 class StagHuntObservation(observation_spec.OneHotObservationSpec):
     """Custom observation function for the StagHunt agent class.
 
-    This observation spec includes inventory, ready flag, and position embedding as extra features,
-    similar to the cleanup example's positional embedding approach.
+    This observation spec includes inventory, ready flag, and position embedding as
+    extra features, similar to the cleanup example's positional embedding approach.
     """
 
     def __init__(
@@ -60,7 +60,9 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             # This will be set when observe() is called
             self.input_size = (
                 1,
-                len(entity_list) * 0 + 4 + (4 * self.embedding_size),  # Extra features + position embedding
+                len(entity_list) * 0
+                + 4
+                + 2,  # Extra features + absolute position embedding (x, y)
             )  # Placeholder, will be updated
         else:
             self.input_size = (
@@ -71,7 +73,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                     * (2 * self.vision_radius + 1)
                 )
                 + 4  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
-                + (4 * self.embedding_size),  # Position embedding: 2 * embedding_size for x, 2 * embedding_size for y
+                + 2,  # Absolute position embedding: x, y coordinates
             )
 
     def observe(
@@ -94,29 +96,33 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
 
         # Calculate expected size for a perfect square observation
         expected_side_length = 2 * self.vision_radius + 1
-        expected_visual_size = len(self.entity_list) * expected_side_length * expected_side_length
-        
+        expected_visual_size = (
+            len(self.entity_list) * expected_side_length * expected_side_length
+        )
+
         # Pad visual field to expected size if it's smaller (due to world boundaries)
         if visual_field.shape[0] < expected_visual_size:
             # Pad with wall representations
             padded_visual = np.zeros(expected_visual_size, dtype=visual_field.dtype)
-            padded_visual[:visual_field.shape[0]] = visual_field
-            
+            padded_visual[: visual_field.shape[0]] = visual_field
+
             # Fill the remaining space with wall representations
             # Each entity gets a one-hot encoding, so we need to set the wall bit
-            wall_entity_index = self.entity_list.index("Wall") if "Wall" in self.entity_list else 0
+            wall_entity_index = (
+                self.entity_list.index("Wall") if "Wall" in self.entity_list else 0
+            )
             remaining_size = expected_visual_size - visual_field.shape[0]
-            
+
             # Calculate how many cells we need to pad
             cells_to_pad = remaining_size // len(self.entity_list)
-            
+
             # Fill each padded cell with wall representation
             for i in range(cells_to_pad):
                 start_idx = visual_field.shape[0] + i * len(self.entity_list)
                 end_idx = start_idx + len(self.entity_list)
                 if end_idx <= expected_visual_size:
                     padded_visual[start_idx + wall_entity_index] = 1.0
-            
+
             visual_field = padded_visual
         elif visual_field.shape[0] > expected_visual_size:
             # This shouldn't happen, but truncate if it does
@@ -144,9 +150,9 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 dtype=visual_field.dtype,
             )
 
-        # Generate position embedding
-        pos_code = embedding.positional_embedding(
-            location, world, (self.embedding_size, self.embedding_size)
+        # Generate absolute position embedding
+        pos_code = embedding.absolute_position_embedding(
+            location, world, normalize=True
         )
 
         return np.concatenate((visual_field, extra_features, pos_code))
@@ -295,11 +301,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         model returns an integer index into the action specification.
         """
         prev_states = self.model.memory.current_state()
-        
+
         # Ensure state has the same shape as individual states in prev_states
         if state.ndim == 2 and state.shape[0] == 1:
             state = state.flatten()  # Convert from (1, features) to (features,)
-        
+
         # Use only current state if memory is empty, otherwise stack with previous states
         if prev_states.shape[0] == 0:
             model_input = state.reshape(1, -1)
@@ -307,13 +313,15 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             # Normal case: stack previous states with current state
             stacked_states = np.vstack((prev_states, state))
             model_input = stacked_states.reshape(1, -1)
-        
+
         action = self.model.take_action(model_input)
         return action
 
-    def add_memory(self, state: np.ndarray, action: int, reward: float, done: bool) -> None:
+    def add_memory(
+        self, state: np.ndarray, action: int, reward: float, done: bool
+    ) -> None:
         """Add an experience to the agent's memory buffer.
-        
+
         Args:
             state (np.ndarray): the state to be added.
             action (int): the action taken by the agent.
@@ -323,7 +331,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # Ensure state is 1D
         if state.ndim == 2 and state.shape[0] == 1:
             state = state.flatten()
-        
+
         self.model.memory.add(state, action, reward, done)
 
     def act(self, world: StagHuntWorld, action: int) -> float:

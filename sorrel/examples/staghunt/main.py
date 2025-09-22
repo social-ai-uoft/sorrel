@@ -122,7 +122,7 @@ def run_stag_hunt() -> None:
             log_dir=Path(__file__).parent
             / f'runs/{config["experiment"]["run_name"]}_{datetime.now().strftime("%Y%m%d-%H%M%S")}',
         ),
-        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}'
+        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}',
     )
 
 
