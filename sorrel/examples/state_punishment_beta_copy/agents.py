@@ -145,9 +145,12 @@ class StatePunishmentAgent(Agent):
         if voting_action > 0 and not self.simple_foraging:
             reward += self._execute_voting(voting_action, world, state_system)
 
-        # Add social harm
+        # Add social harm and reset it to 0
         if social_harm_dict is not None:
-            reward += social_harm_dict.get(self.agent_id, 0.0)
+            social_harm_value = social_harm_dict.get(self.agent_id, 0.0)
+            reward -= social_harm_value
+            # Reset social harm to 0 after applying it
+            social_harm_dict[self.agent_id] = 0.0
 
         return reward
 

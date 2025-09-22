@@ -102,19 +102,19 @@ class StatePunishmentWorld(Gridworld):
 
         # Create entity with appropriate value and social harm
         if entity_type == "A":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("A", 0.5)
+            social_harm = self.config.world.get("social_harm", {}).get("A", 0.5)
             entity = entity_class(self.a_value, social_harm)
         elif entity_type == "B":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("B", 1.0)
+            social_harm = self.config.world.get("social_harm", {}).get("B", 1.0)
             entity = entity_class(self.b_value, social_harm)
         elif entity_type == "C":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("C", 0.3)
+            social_harm = self.config.world.get("social_harm", {}).get("C", 0.3)
             entity = entity_class(self.c_value, social_harm)
         elif entity_type == "D":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("D", 1.5)
+            social_harm = self.config.world.get("social_harm", {}).get("D", 1.5)
             entity = entity_class(self.d_value, social_harm)
         elif entity_type == "E":
-            social_harm = self.config.world.get("entity_social_harm", {}).get("E", 0.1)
+            social_harm = self.config.world.get("social_harm", {}).get("E", 0.1)
             entity = entity_class(self.e_value, social_harm)
         else:
             entity = entity_class()

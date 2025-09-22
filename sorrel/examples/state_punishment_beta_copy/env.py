@@ -42,11 +42,12 @@ class MultiWorldImageRenderer:
         """Zero out the frames."""
         del self.frames[:]
     
-    def add_image(self, individual_envs: List) -> None:
+    def add_image(self, individual_envs: List, punishment_level: float = None) -> None:
         """Add a combined image of all worlds to the frames.
         
         Args:
             individual_envs: List of individual environments to render
+            punishment_level: Current punishment level to display
         """
         from sorrel.utils.visualization import render_sprite, image_from_array
         from PIL import Image
@@ -58,15 +59,10 @@ class MultiWorldImageRenderer:
             world_img = image_from_array(full_sprite)
             world_images.append(world_img)
         
-        # Create a 2x3 grid layout
+        # Create a 2x3 grid layout (always 2 rows, 3 columns)
         # Calculate grid dimensions
         num_worlds = len(world_images)
-        if num_worlds <= 3:
-            rows, cols = 1, num_worlds
-        elif num_worlds <= 6:
-            rows, cols = 2, 3
-        else:
-            rows, cols = 3, 3
+        rows, cols = 2, 3  # Always use 2x3 grid for consistency
         
         # Get dimensions of individual images
         if world_images:
@@ -92,6 +88,9 @@ class MultiWorldImageRenderer:
             
             combined_img.paste(world_img, (x, y))
         
+        # Fill empty slots with blank spaces (for 3 agents: 3 worlds + 3 empty slots)
+        # This ensures consistent 2x3 grid layout
+        
         # Add labels for each world
         from PIL import ImageDraw, ImageFont
         draw = ImageDraw.Draw(combined_img)
@@ -102,7 +101,7 @@ class MultiWorldImageRenderer:
         except:
             font = ImageFont.load_default()
         
-        # Add world labels
+        # Add world labels (only for actual worlds, not empty slots)
         for i, world_img in enumerate(world_images):
             if i >= rows * cols:
                 break
@@ -113,7 +112,16 @@ class MultiWorldImageRenderer:
             x = col * img_width + 5
             y = row * img_height + 5
             
+            # World label
             draw.text((x, y), f"World {i+1}", fill=(0, 0, 0), font=font)
+        
+        # Add global punishment level in bottom right corner
+        if punishment_level is not None:
+            punishment_text = f"Punishment Level: {punishment_level:.3f}"
+            # Calculate position for bottom right corner
+            text_x = combined_width - 200  # Leave some margin from right edge
+            text_y = combined_height - 30  # Leave some margin from bottom edge
+            draw.text((text_x, text_y), punishment_text, fill=(255, 0, 0), font=font)
         
         self.frames.append(combined_img)
     
@@ -304,7 +312,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             while not self.turn >= self.config.experiment.max_turns:
                 # Render if needed
                 if animate_this_epoch and renderer is not None:
-                    renderer.add_image(self.individual_envs)
+                    # Get current punishment level from shared state system
+                    current_punishment = self.shared_state_system.prob
+                    renderer.add_image(self.individual_envs, punishment_level=current_punishment)
 
                 # Take turn in this environment (which coordinates with others)
                 self.take_turn()
@@ -401,9 +411,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         for i in range(agent_num):
             # Create the observation spec with separate entity types for each agent
-            entity_list = ["EmptyEntity", "Wall", "Sand", "A", "B", "C", "D", "E"] + [
-                f"Agent{i}" for i in range(agent_num)
-            ]
+            entity_list = ["EmptyEntity", "Wall", "Sand", "A", "B", "C", "D", "E", "StatePunishmentAgent"]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=self.config.model.full_view,

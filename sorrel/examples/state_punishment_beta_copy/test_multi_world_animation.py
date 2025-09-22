@@ -7,7 +7,7 @@ from sorrel.examples.state_punishment_beta_copy.env import MultiAgentStatePunish
 from sorrel.examples.state_punishment_beta_copy.world import StatePunishmentWorld
 from sorrel.utils.logging import ConsoleLogger
 
-def test_multi_world_animation():
+def test_multi_world_animation(num_agents=3):
     """Test the multi-world animation with a short run."""
     
     # Configuration for testing
@@ -16,7 +16,7 @@ def test_multi_world_animation():
             "epochs": 2,  # Just 2 epochs for testing
             "max_turns": 10,  # Short episodes
             "record_period": 1,  # Record every epoch
-            "num_agents": 3,  # 3 agents = 3 worlds
+            "num_agents": num_agents,  # Variable number of agents
             "initial_resources": 5,
         },
         "model": {
@@ -64,14 +64,14 @@ def test_multi_world_animation():
         "use_random_policy": True,  # Use random policy for testing
     }
     
-    print("Creating multi-agent environment with 3 agents...")
+    print(f"Creating multi-agent environment with {num_agents} agents...")
     
     # Create environments for each agent
     environments = []
     shared_state_system = None
     shared_social_harm = None
 
-    for i in range(3):  # 3 agents
+    for i in range(num_agents):  # Use the parameter
         world = StatePunishmentWorld(config=config, default_entity=EmptyEntity())
 
         if shared_state_system is None:
@@ -109,13 +109,14 @@ def test_multi_world_animation():
     # Create logger
     logger = ConsoleLogger(max_epochs=config["experiment"]["epochs"])
 
-    # Set output directory
-    output_dir = Path("./test_animations")
+    # Set output directory with agent count
+    output_dir = Path(f"./test_animations_{num_agents}agents")
     output_dir.mkdir(exist_ok=True)
 
     print(f"Running test with multi-world animation...")
+    print(f"Number of agents: {num_agents}")
     print(f"Animation will be saved to: {output_dir}")
-    print("The animation will show all 3 worlds in a 2x3 grid layout.")
+    print(f"The animation will show all {num_agents} worlds in a grid layout.")
     
     # Run the experiment
     multi_agent_env.run_experiment(
@@ -126,7 +127,15 @@ def test_multi_world_animation():
     )
     
     print("Test completed! Check the test_animations folder for the generated GIFs.")
-    print("Each GIF should show all 3 worlds combined in a single animation.")
+    print(f"Each GIF should show all {num_agents} worlds combined in a single animation.")
 
 if __name__ == "__main__":
-    test_multi_world_animation()
+    # Test with different numbers of agents
+    print("Testing with 3 agents...")
+    test_multi_world_animation(num_agents=3)
+    
+    print("\nTesting with 5 agents...")
+    test_multi_world_animation(num_agents=5)
+    
+    print("\nTesting with 6 agents...")
+    test_multi_world_animation(num_agents=6)
