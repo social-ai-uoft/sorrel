@@ -145,6 +145,7 @@ logs/
 data/
 sorrel/examples/*/data/
 sorrel/examples/*/runs/
+sorrel/examples/*/runs_v1/
 sorrel/examples/*/checkpoints/
 sorrel/examples/state_punishment/
 pyvenv.cfg
