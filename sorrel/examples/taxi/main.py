@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import hydra
 from omegaconf import DictConfig
 
@@ -14,6 +16,7 @@ if __name__ == "__main__":
             "epochs": 10000,
             "max_turns": 100,
             "record_period": 100,
+            "output_dir": Path(__file__).parent / "./data/",
         },
         "model": {
             "epsilon_decay": 0.0001,

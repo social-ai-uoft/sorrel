@@ -27,20 +27,20 @@ class TaxiAgent(Agent[TaxiWorld]):
         # flatten the image to get the state
         # return image.reshape(1, -1)
 
-        enc_state = TaxiAgent.encode_state(
+        enc_state = self.encode_state(
             self.location[0] - 1,
             self.location[1] - 1,
             self.world.passenger_loc,
             self.world.destination_loc,
         )
-        vec = [TaxiAgent.to_one_hot(enc_state)]
+        vec = [self.to_one_hot(enc_state)]
         vec = np.array(vec).reshape(1, -1)
         return vec
 
-    def encode_state(row: int, col: int, passenger: int, destination: int) -> int:
+    def encode_state(self, row: int, col: int, passenger: int, destination: int) -> int:
         return ((row * 5 + col) * 5 + passenger) * 4 + destination
 
-    def to_one_hot(state: int, n_states: int = 500) -> np.ndarray:
+    def to_one_hot(self, state: int, n_states: int = 500) -> np.ndarray:
         one_hot = np.zeros(n_states, dtype=np.float32)
         one_hot[state] = 1.0
         return one_hot
@@ -52,13 +52,13 @@ class TaxiAgent(Agent[TaxiWorld]):
         # print(self.location[0])  # Y
         # print(self.location[1])  # X
 
-        enc_state = TaxiAgent.encode_state(
+        enc_state = self.encode_state(
             self.location[0] - 1,
             self.location[1] - 1,
             self.world.passenger_loc,
             self.world.destination_loc,
         )
-        vec = [TaxiAgent.to_one_hot(enc_state)]
+        vec = [self.to_one_hot(enc_state)]
         vec = np.array(vec).reshape(1, -1)
         # print(vec)
         # print(vec.shape)
