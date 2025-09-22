@@ -5,9 +5,9 @@ from pathlib import Path
 
 import numpy as np
 
-from sorrel.examples.treasurehunt_theta.entities import EmptyEntity
-from sorrel.examples.treasurehunt_theta.env import TreasurehuntThetaEnv
-from sorrel.examples.treasurehunt_theta.world import TreasurehuntThetaWorld
+from sorrel.examples.deprecated.treasurehunt_theta.entities import EmptyEntity
+from sorrel.examples.deprecated.treasurehunt_theta.env import TreasurehuntThetaEnv
+from sorrel.examples.deprecated.treasurehunt_theta.world import TreasurehuntThetaWorld
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 
@@ -84,7 +84,7 @@ class EncounterLogger(EvaluationLogger):
         super().__init__(max_epochs, log_dir, *args)
         self.experiment = experiment
 
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+    def record_turn(self, epoch, loss, reward, epsilon=0.0, **kwargs):
         # Add encounter tracking data
         encounter_data = {}
 

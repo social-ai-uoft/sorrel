@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 try:
-    from typing import override
+    from typing import override  # type: ignore
 except ImportError:
     # For Python < 3.12, define override as a no-op decorator
     def override(func):

@@ -5,16 +5,23 @@
 import random
 
 import numpy as np
-from agentarium.primitives import Entity, GridworldEnv
-from examples.state_punishment.agents import Agent, color_map
-from examples.state_punishment.entities import Coin, EmptyObject, Gem, Wall
+
+from sorrel.entities import Entity
+from sorrel.examples.deprecated.state_punishment.agents import Agent, color_map
+from sorrel.examples.deprecated.state_punishment.entities import (
+    Coin,
+    EmptyObject,
+    Gem,
+    Wall,
+)
+from sorrel.worlds import Gridworld
 
 # --------------------------------- #
 # endregion: Imports                #
 # --------------------------------- #
 
 
-class state_punishment(GridworldEnv):
+class state_punishment(Gridworld):
     def __init__(self, cfg, agents, entities):
         self.cfg = cfg
         self.channels = cfg.env.channels
@@ -84,7 +91,7 @@ class state_punishment(GridworldEnv):
         )
         locs = [candidate_agent_locs[i] for i in agent_loc_index]
         for loc, agent in zip(locs, self.agents):
-            self.add(loc, agent)
+            self.add(loc, agent)  # type: ignore
 
         # Place initially spawned entities in the environment
         candidate_locs = [
@@ -109,8 +116,10 @@ class state_punishment(GridworldEnv):
         Parameters:
             location: (tuple) The position to spawn an object into.
         """
-        if self.world[location].kind == "EmptyObject":
-            object = np.random.choice(self.entities, p=self.item_choice_prob)
+        if self.observe(location).kind == "EmptyObject":
+            object = random.choices(self.entities, weights=self.item_choice_prob, k=1)[
+                0
+            ]
             self.add(location, object)
 
     def get_entities_for_transition(self):
@@ -120,17 +129,17 @@ class state_punishment(GridworldEnv):
                 entities.append(x)
         return entities
 
-    def is_valid_location(self, location):
-        """Checks whether a location is valid."""
-        if (
-            location[0] < 0
-            or location[0] >= self.x
-            or location[1] < 0
-            or location[1] >= self.y
-        ):
-            return False
-        else:
-            return True
+    # def is_valid_location(self, location): # Never called
+    #     """Checks whether a location is valid."""
+    #     if (
+    #         location[0] < 0
+    #         or location[0] >= self.x
+    #         or location[1] < 0
+    #         or location[1] >= self.y
+    #     ):
+    #         return False
+    #     else:
+    #         return True
 
     def has_instance(self, class_type, location):
         """Checks whether a location has an instance of a class."""

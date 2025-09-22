@@ -2,12 +2,13 @@
 # region: Imports #
 # --------------- #
 
+from typing import Optional
+
+from sorrel.entities import Entity
+from sorrel.examples.deprecated.state_punishment.agents import Agent, color_map
+
 # Import gem packages
-from agentarium.config import Cfg
-from agentarium.models.iqn import iRainbowModel
-from examples.trucks.agents import Agent
-from examples.trucks.entities import Entity, Truck
-from examples.trucks.utils import color_map
+from sorrel.models.pytorch.iqn import iRainbowModel
 
 # --------------- #
 # endregion       #
@@ -19,13 +20,13 @@ MODELS = {"iRainbowModel": iRainbowModel}
 
 AGENTS = {"agent": Agent}
 
-ENTITIES = {"truck": Truck}
+ENTITIES = {"truck": Entity}
 
 
 # --------------------------- #
 # region: object creators     #
 # --------------------------- #
-def create_models(cfg: Cfg) -> list[iRainbowModel]:
+def create_models(cfg) -> list[iRainbowModel]:
     """Create a list of models used for the agents.
 
     Returns:
@@ -44,7 +45,7 @@ def create_models(cfg: Cfg) -> list[iRainbowModel]:
     return models
 
 
-def create_agents(cfg: Cfg, models: list) -> list[Agent]:
+def create_agents(cfg, models: list) -> list:
     """Create a list of agents used for the task.
 
     Parameters:
@@ -56,9 +57,11 @@ def create_agents(cfg: Cfg, models: list) -> list[Agent]:
     agents = []
     model_num = 0
     colors = color_map(cfg.env.channels)
+    agent_model: Optional[iRainbowModel] = None
     for agent_type in vars(cfg.agent):
+        has_model = None
         AGENT_TYPE = AGENTS[agent_type]
-        for _ in range(vars(vars(cfg.agent)[agent_type])["num"]):
+        for i in range(vars(vars(cfg.agent)[agent_type])["num"]):
 
             # fetch for model in models
             agent_model_name = vars(vars(cfg.agent)[agent_type])["model"]
@@ -77,11 +80,7 @@ def create_agents(cfg: Cfg, models: list) -> list[Agent]:
                     f"Model {agent_model_name} not found, please make sure it is defined in the config file."
                 )
             agents.append(
-                AGENT_TYPE(
-                    appearance=colors["Agent"],
-                    model=agent_model,
-                    cfg=vars(cfg.agent)[agent_type],
-                )
+                AGENT_TYPE(model=agent_model, cfg=vars(cfg.agent)[agent_type], ixs=i)
             )
 
         model_num += 1
@@ -89,7 +88,7 @@ def create_agents(cfg: Cfg, models: list) -> list[Agent]:
     return agents
 
 
-def create_entities(cfg: Cfg) -> list[Entity]:
+def create_entities(cfg) -> list[Entity]:
     """Create a list of entities used for the task.
 
     Returns:
@@ -101,7 +100,7 @@ def create_entities(cfg: Cfg) -> list[Entity]:
         ENTITY_TYPE = ENTITIES[entity_type]
         for entity in vars(cfg.entity)[entity_type]:
             appearance = colors[vars(entity)["cuisine"]]
-            entities.append(ENTITY_TYPE(appearance=appearance, cfg=entity))
+            entities.append(ENTITY_TYPE)
     return entities
 
 

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import numpy as np
 
-from sorrel.examples.treasurehunt_theta.entities import EmptyEntity
-from sorrel.examples.treasurehunt_theta.env import TreasurehuntThetaEnv
-from sorrel.examples.treasurehunt_theta.world import TreasurehuntThetaWorld
+from sorrel.examples.deprecated.treasurehunt_theta.entities import EmptyEntity
+from sorrel.examples.deprecated.treasurehunt_theta.env import TreasurehuntThetaEnv
+from sorrel.examples.deprecated.treasurehunt_theta.world import TreasurehuntThetaWorld
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 

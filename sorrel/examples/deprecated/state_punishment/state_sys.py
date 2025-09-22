@@ -2,8 +2,11 @@ import random
 from copy import deepcopy
 
 import numpy as np
-import pandas as pd
-from examples.state_punishment.utils import add_extra_info, inspect_the_env
+
+# import pandas as pd
+from sorrel.examples.deprecated.state_punishment.utils import (  # , inspect_the_env
+    add_extra_info,
+)
 
 
 def generate_exponential_function(intercept: float, base: float):
@@ -159,16 +162,16 @@ class state_sys:
 
 class Monitor:
     def __init__(self, max_duration_between_checks, resource_to_monitor, env_size):
-        self.record = pd.DataFrame(
-            columns=[
-                "type",
-                "location",
-                "over",
-                "being_checked",
-                "timepoint",
-                "check_index",
-            ]
-        )
+        # self.record = pd.DataFrame(
+        #     columns=[
+        #         "type",
+        #         "location",
+        #         "over",
+        #         "being_checked",
+        #         "timepoint",
+        #         "check_index",
+        #     ]
+        # )
         self.max_duration_between_checks = (
             max_duration_between_checks  # duration between two checks
         )
@@ -183,14 +186,14 @@ class Monitor:
         self.size_of_env = env_size  # size of the environment
         self.check_time_record = []
         self.time_record = []
-        self.signal_detection_record = pd.DataFrame(
-            columns=[
-                "location",
-                "punished_agent",
-                "current_time",
-                "last_check_time",
-            ]
-        )
+        # self.signal_detection_record = pd.DataFrame(
+        #     columns=[
+        #         "location",
+        #         "punished_agent",
+        #         "current_time",
+        #         "last_check_time",
+        #     ]
+        # )
 
     def clear_mem(self, time):
         self.record = self.record[
@@ -232,9 +235,9 @@ class Monitor:
 
     def collect_new_state_info(self, env, types, turn, done):
         """Get the info of the new state."""
-        df = inspect_the_env(env, types)
-        df = add_extra_info(df, turn, done)
-        return df
+        # df = inspect_the_env(env, types)
+        # df = add_extra_info(df, turn, done)
+        # return df
 
     def update(self, new_rows):
         """Add a new line of record to the dataframe."""
@@ -245,7 +248,7 @@ class Monitor:
             new_rows["being_checked"] = False
             # new_rows['check_index']
         # self.record[len(self.record)] = new_rows
-        self.record = pd.concat([self.record, new_rows], ignore_index=True)
+        # self.record = pd.concat([self.record, new_rows], ignore_index=True)
         self.check_time_record.append(self.check_time)
         self.time_record.append(self.wait_time)
 
@@ -308,9 +311,9 @@ class Monitor:
                                         self.time,
                                         self.time - self.check_time,
                                     ]
-                                    self.signal_detection_record.iloc[
-                                        len(self.signal_detection_record)
-                                    ] = new_row
+                                    # self.signal_detection_record.iloc[
+                                    #     len(self.signal_detection_record)
+                                    # ] = np.array(new_row)
 
                         # randomly decide the transgressor #TODO if one agent is in multiple regions of suspect
                         # judge = random.choice(suspects)

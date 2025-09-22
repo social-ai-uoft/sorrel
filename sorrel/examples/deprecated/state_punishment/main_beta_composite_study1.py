@@ -4,7 +4,7 @@ import os
 import sys
 from datetime import datetime
 
-import pandas as pd
+# import pandas as pd
 
 # ------------------------ #
 # region: path nonsense    #
@@ -25,13 +25,12 @@ from copy import deepcopy
 
 import numpy as np
 import torch
-from agentarium.logging_utils import GameLogger
-from agentarium.primitives import Entity
-from examples.state_punishment.agents import Agent
-from examples.state_punishment.env import state_punishment
-from examples.state_punishment.state_sys import state_sys
-from examples.state_punishment.utils import (
-    build_transgression_and_punishment_record,
+
+from sorrel.entities import Entity
+from sorrel.examples.deprecated.state_punishment.agents import Agent
+from sorrel.examples.deprecated.state_punishment.env import state_punishment
+from sorrel.examples.deprecated.state_punishment.state_sys import state_sys
+from sorrel.examples.deprecated.state_punishment.utils import (  # build_transgression_and_punishment_record,
     calculate_d_prime,
     calculate_sdt_metrics_np,
     create_agents,
@@ -44,6 +43,7 @@ from examples.state_punishment.utils import (
     safe_get_size,
     save_config_backup,
 )
+from sorrel.utils.logging import ConsoleLogger as GameLogger
 
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
@@ -89,9 +89,9 @@ def run(cfg, **kwargs):
     game_vars = GameLogger(cfg.experiment.epochs)
 
     # container for agent transgression and punishment record
-    transgression_punishment_record = pd.DataFrame(
-        columns=["agent", "transgression", "punished", "time"]
-    )
+    # transgression_punishment_record = pd.DataFrame(
+    #     columns=["agent", "transgression", "punished", "time"]
+    # )
 
     # load weights
     if cfg.load_weights:
@@ -166,7 +166,7 @@ def run(cfg, **kwargs):
         #     agent.reset()
         random.shuffle(agents)
 
-        done = 0
+        done = False
         turn = 0
         losses = [0 for _ in range(len(agents))]
         game_points = [0 for _ in range(len(agents))]
@@ -194,7 +194,7 @@ def run(cfg, **kwargs):
                 agent.model.start_epoch_action(**locals())
 
             for agent in agents:
-                agent.reward = 0
+                agent.reward = 0  # type: ignore
 
             for env in envs:
                 entities = env.get_entities_for_transition()
@@ -243,10 +243,10 @@ def run(cfg, **kwargs):
                     vote_acts.append(-1)
 
                 if turn >= cfg.experiment.max_turns or done_:
-                    done = 1
+                    done = True
                     # agent.add_final_memory(next_state)
 
-                agent.last_memory_idx = agent.model.memory.idx
+                agent.last_memory_idx = agent.model.memory.idx  # type: ignore
                 agent.add_memory(state, action, reward, done)
 
                 game_points[agent.ixs] += float(reward)
@@ -257,7 +257,7 @@ def run(cfg, **kwargs):
             consensus = abs(sum(vote_acts)) == len(vote_acts)
             consensus_reward = cfg.consensus_reward * consensus
             for agent in agents:
-                agent.model.memory.rewards[agent.last_memory_idx] += consensus_reward
+                agent.model.memory.rewards[agent.last_memory_idx] += consensus_reward  # type: ignore
 
         # At the end of each epoch, train as long as the batch size is large enough.
         if cfg.train:
@@ -268,11 +268,13 @@ def run(cfg, **kwargs):
 
         # Add the game variables to the game object
         game_vars.record_turn(
-            epoch, turn, losses, [round(val, 2) for val in game_points]
+            epoch,
+            loss=float(np.mean(losses)),
+            reward=float(np.mean([round(val, 2) for val in game_points])),
         )
 
         # Print the variables to the console
-        game_vars.pretty_print()
+        # game_vars.pretty_print()
         if epoch % 50 == 0:
             print(cfg.exp_name)
 
@@ -317,61 +319,61 @@ def run(cfg, **kwargs):
         within_epoch_punishment_level.append(state_entity.prob_record)
 
         # Add scalars to Tensorboard (multiple agents)
-        if cfg.log:
-            # Iterate through all agents
-            for _, agent in enumerate(agents):
-                i = agent.ixs
-                # Use agent-specific tags for logging
-                writer.add_scalar(f"Agent_{i}/Loss", losses[i], epoch)
-                writer.add_scalar(f"Agent_{i}/Reward", game_points[i], epoch)
-                writer.add_scalar(f"Agent_{i}/Epsilon", agent.model.epsilon, epoch)
-                writer.add_scalar(
-                    f"Agent_{i}/vote_for_punishment",
-                    punishment_increase_record[i],
-                    epoch,
-                )
-                writer.add_scalar(
-                    f"Agent_{i}/vote_against_punishment",
-                    punishment_decrease_record[i],
-                    epoch,
-                )
-                # Log encounters for each agent
-                writer.add_scalars(
-                    f"Agent_{i}/Encounters",
-                    {
-                        entity_name: agent.encounters[entity_name]
-                        for entity_name in cfg.env.entity_names
-                    },
-                    epoch,
-                )
-                writer.add_scalars(
-                    f"Agent_{i}/Actions",
-                    {
-                        f"action_{k}": action_record[agent.ixs][k]
-                        for k in range(cfg.model.iqn.parameters.action_size)
-                    },
-                    epoch,
-                )
+        # if cfg.log:
+        #     # Iterate through all agents
+        #     for _, agent in enumerate(agents):
+        #         i = agent.ixs
+        #         # Use agent-specific tags for logging
+        #         writer.add_scalar(f"Agent_{i}/Loss", losses[i], epoch)
+        #         writer.add_scalar(f"Agent_{i}/Reward", game_points[i], epoch)
+        #         writer.add_scalar(f"Agent_{i}/Epsilon", agent.model.epsilon, epoch)
+        #         writer.add_scalar(
+        #             f"Agent_{i}/vote_for_punishment",
+        #             punishment_increase_record[i],
+        #             epoch,
+        #         )
+        #         writer.add_scalar(
+        #             f"Agent_{i}/vote_against_punishment",
+        #             punishment_decrease_record[i],
+        #             epoch,
+        #         )
+        #         # Log encounters for each agent
+        #         writer.add_scalars(
+        #             f"Agent_{i}/Encounters",
+        #             {
+        #                 entity_name: agent.encounters[entity_name]
+        #                 for entity_name in cfg.env.entity_names
+        #             },
+        #             epoch,
+        #         )
+        #         writer.add_scalars(
+        #             f"Agent_{i}/Actions",
+        #             {
+        #                 f"action_{k}": action_record[agent.ixs][k]
+        #                 for k in range(cfg.model.iqn.parameters.action_size)
+        #             },
+        #             epoch,
+        #         )
 
-            writer.add_scalar(
-                f"state_punishment_level_avg", np.mean(state_entity.prob_record), epoch
-            )
-            writer.add_scalar(f"state_punishment_level_end", state_entity.prob, epoch)
-            writer.add_scalar(
-                f"state_punishment_level_init", state_entity.init_prob, epoch
-            )
-            writer.add_scalar(f"transgressions", sum_transgressions, epoch)
-            writer.add_scalars(
-                f"punishment_prob_each_resource", punishment_prob_dict, epoch
-            )
+        #     writer.add_scalar(
+        #         f"state_punishment_level_avg", np.mean(state_entity.prob_record), epoch
+        #     )
+        #     writer.add_scalar(f"state_punishment_level_end", state_entity.prob, epoch)
+        #     writer.add_scalar(
+        #         f"state_punishment_level_init", state_entity.init_prob, epoch
+        #     )
+        #     writer.add_scalar(f"transgressions", sum_transgressions, epoch)
+        #     writer.add_scalars(
+        #         f"punishment_prob_each_resource", punishment_prob_dict, epoch
+        #     )
 
-            np.savetxt(
-                "within_epoch_level_change_onevoter_iqn.csv",
-                np.mean(within_epoch_punishment_level, axis=0),
-                delimiter=",",
-                header="value",
-                comments="",
-            )
+        #     np.savetxt(
+        #         "within_epoch_level_change_onevoter_iqn.csv",
+        #         np.mean(within_epoch_punishment_level, axis=0),
+        #         delimiter=",",
+        #         header="value",
+        #         comments="",
+        #     )
 
         # Special action: update epsilon
         for agent in agents:
@@ -397,8 +399,8 @@ def run(cfg, **kwargs):
 
     # Close the tensorboard log
 
-    if cfg.log:
-        writer.close()
+    # if cfg.log:
+    #     writer.close()
 
     # # save punishment record
     # transgression_punishment_record.to_csv(f'data/{cfg.exp_name}_transgression_record.csv')
@@ -420,7 +422,7 @@ def main():
     run(
         cfg,
         # load_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/iRainbowModel_20241111-13111731350843.pkl',
-        save_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
+        # save_weights=f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl',
     )
 
 

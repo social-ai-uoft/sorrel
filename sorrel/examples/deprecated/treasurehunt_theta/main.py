@@ -2,9 +2,10 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
-from sorrel.examples.treasurehunt_theta.entities import EmptyEntity
-from sorrel.examples.treasurehunt_theta.env import TreasurehuntThetaEnv
-from sorrel.examples.treasurehunt_theta.world import TreasurehuntThetaWorld
+from sorrel.examples.deprecated.treasurehunt_theta.agents import TreasurehuntThetaAgent
+from sorrel.examples.deprecated.treasurehunt_theta.entities import EmptyEntity
+from sorrel.examples.deprecated.treasurehunt_theta.env import TreasurehuntThetaEnv
+from sorrel.examples.deprecated.treasurehunt_theta.world import TreasurehuntThetaWorld
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 
@@ -27,13 +28,13 @@ class CombinedLogger(Logger):
 class EncounterLogger(CombinedLogger):
     """A logger that tracks encounters per agent."""
 
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+    def record_turn(self, epoch, loss, reward, epsilon=0.0, **kwargs):
         # Add encounter tracking data
         encounter_data = {}
 
         # Record turn for each agent individually with hierarchical tags
         for i, agent in enumerate(experiment.agents):
-            if hasattr(agent, "encounters"):
+            if isinstance(agent, TreasurehuntThetaAgent):
                 # Individual agent score
                 encounter_data[f"Agent_{i}/individual_score"] = agent.individual_score
 
@@ -54,7 +55,7 @@ class EncounterLogger(CombinedLogger):
         total_individual_scores = 0
 
         for agent in experiment.agents:
-            if hasattr(agent, "encounters"):
+            if isinstance(agent, TreasurehuntThetaAgent):
                 total_individual_scores += agent.individual_score
                 for entity_type, count in agent.encounters.items():
                     if entity_type in total_encounters:

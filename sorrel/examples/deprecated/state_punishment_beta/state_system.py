@@ -2,7 +2,7 @@
 game."""
 
 from copy import deepcopy
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -27,7 +27,7 @@ def generate_exponential_function(intercept: float, base: float):
 
 
 def compile_punishment_vals(
-    num_resources=5, num_steps=10, exponentialness=0.12, intercept_increase_speed=2
+    num_resources=5, num_steps=10, exponentialness=0.12, intercept_increase_speed=2.0
 ):
     """Generates a set of punishment values based on an exponential function.
 
@@ -68,7 +68,7 @@ class StateSystem:
         init_prob: float = 0.1,
         magnitude: float = -10.0,
         change_per_vote: float = 0.2,
-        taboo_resources: List[str] = None,
+        taboo_resources: Optional[List[str]] = None,
         num_resources: int = 5,
         num_steps: int = 10,
         exponentialness: float = 0.12,

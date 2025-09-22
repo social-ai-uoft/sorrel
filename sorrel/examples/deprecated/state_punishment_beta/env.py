@@ -10,14 +10,22 @@ from numpy import ndenumerate
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
+from sorrel.examples.deprecated.state_punishment_beta.agents import StatePunishmentAgent
+from sorrel.examples.deprecated.state_punishment_beta.entities import (
+    A,
+    B,
+    C,
+    D,
+    E,
+    EmptyEntity,
+    Sand,
+    Wall,
+)
+from sorrel.examples.deprecated.state_punishment_beta.world import StatePunishmentWorld
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.observation.observation_spec import OneHotObservationSpec
 from sorrel.utils.logging import Logger
 from sorrel.utils.visualization import ImageRenderer
-
-from .agents import StatePunishmentAgent
-from .entities import A, B, C, D, E, EmptyEntity, Sand, Wall
-from .world import StatePunishmentWorld
 
 
 class MultiWorldImageRenderer:

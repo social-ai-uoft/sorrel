@@ -7,9 +7,13 @@ from sorrel.action.action_spec import ActionSpec
 from sorrel.environment import Environment
 
 # imports from our example
-from sorrel.examples.treasurehunt_theta.agents import TreasurehuntThetaAgent
-from sorrel.examples.treasurehunt_theta.entities import EmptyEntity, Sand, Wall
-from sorrel.examples.treasurehunt_theta.world import TreasurehuntThetaWorld
+from sorrel.examples.deprecated.treasurehunt_theta.agents import TreasurehuntThetaAgent
+from sorrel.examples.deprecated.treasurehunt_theta.entities import (
+    EmptyEntity,
+    Sand,
+    Wall,
+)
+from sorrel.examples.deprecated.treasurehunt_theta.world import TreasurehuntThetaWorld
 
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
@@ -101,7 +105,7 @@ class TreasurehuntThetaEnv(Environment[TreasurehuntThetaWorld]):
             low_value_p: Probability of placing low-value resource (value -5)
         """
         # Import here to avoid circular imports
-        from sorrel.examples.treasurehunt_theta.entities import (
+        from sorrel.examples.deprecated.treasurehunt_theta.entities import (
             HighValueResource,
             LowValueResource,
             MediumValueResource,

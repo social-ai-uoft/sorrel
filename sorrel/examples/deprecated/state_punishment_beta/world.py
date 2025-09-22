@@ -2,10 +2,18 @@
 
 from omegaconf import DictConfig, OmegaConf
 
+from sorrel.examples.deprecated.state_punishment_beta.entities import (
+    A,
+    B,
+    C,
+    D,
+    E,
+    EmptyEntity,
+    Sand,
+    Wall,
+)
+from sorrel.examples.deprecated.state_punishment_beta.state_system import StateSystem
 from sorrel.worlds import Gridworld
-
-from .entities import A, B, C, D, E, EmptyEntity, Sand, Wall
-from .state_system import StateSystem
 
 
 class StatePunishmentWorld(Gridworld):

@@ -3,13 +3,14 @@
 import argparse
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
-from sorrel.examples.state_punishment_beta.entities import EmptyEntity
-from sorrel.examples.state_punishment_beta.env import (
+from sorrel.examples.deprecated.state_punishment_beta.entities import EmptyEntity
+from sorrel.examples.deprecated.state_punishment_beta.env import (
     MultiAgentStatePunishmentEnv,
     StatePunishmentEnv,
 )
-from sorrel.examples.state_punishment_beta.world import StatePunishmentWorld
+from sorrel.examples.deprecated.state_punishment_beta.world import StatePunishmentWorld
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 
@@ -41,7 +42,7 @@ class StatePunishmentLogger(CombinedLogger):
         super().__init__(max_epochs, log_dir, *args)
         self.multi_agent_env = multi_agent_env
 
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+    def record_turn(self, epoch, loss, reward, epsilon=0.0, **kwargs):
         # Add encounter tracking data
         encounter_data = {}
 
@@ -182,7 +183,7 @@ def create_config(
     epochs: int = 10000,
     simple_foraging: bool = False,
     fixed_punishment_level: float = 0.5,
-    social_harm_values: dict = None,
+    social_harm_values: Optional[dict] = None,
     use_random_policy: bool = False,
 ) -> dict:
     """Create configuration dictionary for the experiment."""
@@ -285,7 +286,7 @@ def main(
     epochs: int = 10000,
     simple_foraging: bool = False,
     fixed_punishment_level: float = 0.5,
-    social_harm_values: dict = None,
+    social_harm_values: Optional[dict] = None,
     use_random_policy: bool = False,
 ) -> None:
     """Run the state punishment experiment."""

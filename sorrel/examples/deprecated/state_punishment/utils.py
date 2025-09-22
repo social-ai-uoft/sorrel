@@ -3,17 +3,31 @@ import gc
 import os
 import shutil
 import sys
+from typing import Optional
 
-import imageio
+# import imageio
 import numpy as np
-import pandas as pd
+
+# import pandas as pd
 import torch
 import yaml
-from agentarium.models.dqn import iRainbowModel_dqn
-from agentarium.models.iqn import iRainbowModel
-from examples.state_punishment.agents import Agent, color_map
-from examples.state_punishment.entities import A, B, Bone, C, Coin, D, E, Gem, Wall
 from PIL import Image
+
+from sorrel.examples.deprecated.state_punishment.agents import Agent, color_map
+from sorrel.examples.deprecated.state_punishment.entities import (
+    A,
+    B,
+    Bone,
+    C,
+    Coin,
+    D,
+    E,
+    Gem,
+    Wall,
+)
+from sorrel.models.base_model import BaseModel
+from sorrel.models.pytorch import PyTorchIQN as iRainbowModel
+from sorrel.models.pytorch import PyTorchIQN as iRainbowModel_dqn
 
 DEVICES = ["cpu", "cuda"]
 MODELS = {"iRainbowModel": {"iqn": iRainbowModel, "dqn": iRainbowModel_dqn}}
@@ -86,6 +100,7 @@ def create_agents(cfg, models):
         model.ixs = ixs_m
     agents = []
     model_num = 0
+    agent_model: Optional[BaseModel] = None
     if len(models) != cfg.agent.agent.num:
         raise ValueError(
             "Please make sure the number of models match the number of agents."
@@ -93,7 +108,7 @@ def create_agents(cfg, models):
     for agent_type in vars(cfg.agent):
         AGENT_TYPE = AGENTS[agent_type]
         for ixs in range(vars(vars(cfg.agent)[agent_type])["num"]):
-
+            has_model = False
             # fetch for model in models
             agent_model_name = vars(vars(cfg.agent)[agent_type])["model"]
             for ixs_m, model in enumerate(models):  # modify to make sure correspondence
@@ -169,8 +184,8 @@ class Cfg:
                 setattr(self, key, Cfg(val) if isinstance(val, dict) else val)
 
 
-def make_animations(images):
-    imageio.mimsave("movie.mp4", images)
+# def make_animations(images): # Never used
+#     imageio.mimsave("movie.mp4", images)
 
 
 def create_gif_from_arrays(image_arrays, output_path, duration=100, loop=0):
@@ -231,33 +246,33 @@ def save_config_backup(config_file_path, backup_dir):
     print(f"Config file backed up to: {backup_file_path}")
 
 
-def inspect_the_env(env, types=None, locs=None):
-    """Inspect the environment and get all the item identities on the locations of
-    interest, if locations are provided.
+# def inspect_the_env(env, types=None, locs=None):
+#     """Inspect the environment and get all the item identities on the locations of
+#     interest, if locations are provided.
 
-    If locations are not provided, get the items of interest.
-    """
-    # if types is None and locs is None:
-    #     raise ValueError('Both types and locs are None!')
-    if types is not None:
-        if isinstance(types, str):
-            types = [types]
-        types = [val.lower() for val in types]
-    res = pd.DataFrame(columns=["type", "location"])
-    for index, _ in np.ndenumerate(env.world[:, :, 0]):
-        H, W = index  # Get the coordinates
-        item_type = env.world[H, W, 0].type
-        item_loc = (H, W)
-        # print([item_type, item_loc])
-        res.loc[len(res)] = [item_type, item_loc]
-    # clean the data based on the specified types and locs
-    if types is not None:
-        res_filtered = res[res.type.isin(types)]
-    elif locs is not None:
-        res_filtered = res[res.location.isin(locs)]
-    else:
-        res_filtered = res[~res.type.isin(["wall"])]
-    return res_filtered
+#     If locations are not provided, get the items of interest.
+#     """
+#     # if types is None and locs is None:
+#     #     raise ValueError('Both types and locs are None!')
+#     if types is not None:
+#         if isinstance(types, str):
+#             types = [types]
+#         types = [val.lower() for val in types]
+#     res = pd.DataFrame(columns=["type", "location"])
+#     for index, _ in np.ndenumerate(env.world[:, :, 0]):
+#         H, W = index  # Get the coordinates
+#         item_type = env.world[H, W, 0].type
+#         item_loc = (H, W)
+#         # print([item_type, item_loc])
+#         res.loc[len(res)] = [item_type, item_loc]
+#     # clean the data based on the specified types and locs
+#     if types is not None:
+#         res_filtered = res[res.type.isin(types)]
+#     elif locs is not None:
+#         res_filtered = res[res.location.isin(locs)]
+#     else:
+#         res_filtered = res[~res.type.isin(["wall"])]
+#     return res_filtered
 
 
 def add_extra_info(df, timepoint, done):
@@ -267,27 +282,27 @@ def add_extra_info(df, timepoint, done):
     return df
 
 
-def build_transgression_and_punishment_record(agents):
-    """Write each agent's record of transgressions and punishment record into the same
-    file."""
-    df = {"agent": [], "transgression": [], "punished": [], "time": []}
+# def build_transgression_and_punishment_record(agents):
+#     """Write each agent's record of transgressions and punishment record into the same
+#     file."""
+#     df = {"agent": [], "transgression": [], "punished": [], "time": []}
 
-    for agent in agents:
+#     for agent in agents:
 
-        length = len(agent.transgression_record)
-        agent_ixs_data = [agent.ixs] * length
-        agent_transgression_data = agent.transgression_record
-        agent_being_punished_data = agent.punishment_record
-        agent_time_data = [i for i in range(length)]
+#         length = len(agent.transgression_record)
+#         agent_ixs_data = [agent.ixs] * length
+#         agent_transgression_data = agent.transgression_record
+#         agent_being_punished_data = agent.punishment_record
+#         agent_time_data = [i for i in range(length)]
 
-        df["agent"].extend(agent_ixs_data)
-        df["transgression"].extend(agent_transgression_data)
-        df["punished"].extend(agent_being_punished_data)
-        df["time"].extend(agent_time_data)
+#         df["agent"].extend(agent_ixs_data)
+#         df["transgression"].extend(agent_transgression_data)
+#         df["punished"].extend(agent_being_punished_data)
+#         df["time"].extend(agent_time_data)
 
-    df = pd.DataFrame(df)
+#     df = pd.DataFrame(df)
 
-    return df
+#     return df
 
 
 def calculate_sdt_metrics_np(signal_array, response_array):

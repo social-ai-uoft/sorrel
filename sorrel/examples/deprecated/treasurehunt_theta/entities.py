@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.entities import Entity
-from sorrel.examples.treasurehunt_theta.world import TreasurehuntThetaWorld
+from sorrel.examples.deprecated.treasurehunt_theta.world import TreasurehuntThetaWorld
 
 # end imports
 

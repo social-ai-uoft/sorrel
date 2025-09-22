@@ -1,12 +1,13 @@
 import random
 from ast import literal_eval as make_tuple
-from typing import Optional
+from typing import Iterable, Optional
 
 import numpy as np
 import torch
-from agentarium.primitives import GridworldEnv
-from agentarium.visual_field import visual_field
-from examples.state_punishment.entities import EmptyObject, Wall
+
+from sorrel.examples.deprecated.state_punishment.entities import EmptyObject, Wall
+from sorrel.observation.visual_field import visual_field
+from sorrel.worlds import Gridworld
 
 # from examples.trucks.utils import color_map
 
@@ -30,7 +31,7 @@ class Agent:
         self.health = (
             cfg.agent.agent.health
         )  # for the agents, this is how hungry they are
-        self.location = None
+        self.location: Optional[tuple] = None
         self.action_space = [0, 1, 2, 3]
         self.vision = cfg.agent.agent.vision
         self.ixs = ixs
@@ -49,7 +50,7 @@ class Agent:
         self.init_rnn_state = None
         self.encounters = {entity_name: 0 for entity_name in cfg.env.entity_names}
 
-    def init_replay(self, env: GridworldEnv, state_mode: str) -> None:
+    def init_replay(self, env: Gridworld, state_mode: str) -> None:
         """Fill in blank images for the LSTM."""
         if state_mode == "simple":
             state = np.zeros_like(
@@ -76,7 +77,7 @@ class Agent:
         self.model.memory.add(state, 0, 0.0, float(True))
 
     def current_state(
-        self, state_sys, env: GridworldEnv, envs, state_mode="simple"
+        self, state_sys, env: Gridworld, envs, state_mode="simple"
     ) -> np.ndarray:
         if state_mode:
             state = self.generate_composite_state(envs)
@@ -87,7 +88,7 @@ class Agent:
         # state = np.concatenate([state, np.array([to_be_punished*255])])
         state = np.concatenate([state, np.array([random.random() * 255])])
         # append whether anyone has committed a crime or not by showing the cached harm in the society
-        state = np.concatenate([state, np.array([env.cache["harm"][self.ixs] * 255])])
+        state = np.concatenate([state, np.array([env.cache["harm"][self.ixs] * 255])])  # type: ignore
 
         if self.num_frames > 1:
             prev_states = self.model.memory.current_state(
@@ -99,16 +100,16 @@ class Agent:
 
         return current_state
 
-    def pov(self, env: GridworldEnv) -> np.ndarray:
+    def pov(self, env: Gridworld) -> np.ndarray:
         """Defines the agent's observation function."""
 
         # If the environment is a full MDP, get the whole world image
-        if env.full_mdp:
-            image = visual_field(env.world, color_map, channels=env.channels)
+        if self.cfg.env.full_mdp:
+            image = visual_field(env, color_map(self.cfg.channels), vision=None)
         # Otherwise, use the agent observation function
         else:
             image = visual_field(
-                env.world, color_map, self.location, self.vision, env.channels
+                env, color_map(self.cfg.channels), self.vision, self.location
             )
 
         current_state = image.flatten()
@@ -122,6 +123,8 @@ class Agent:
         if self.ixs == 0:
             vote_is_valid = True
 
+        assert isinstance(self.location, tuple)
+        new_location = self.location
         if mode == "simple":
             if action == 0:  # UP
                 self.sprite = (
@@ -180,7 +183,7 @@ class Agent:
                         np.clip(state_sys.level, 0, state_sys.max_level)
                     )
 
-        elif mode == "composite":
+        else:
             if action % 4 == 0:  # UP
                 self.sprite = (
                     f"{self.cfg.root}/examples/state_punishment/assets/hero-back.png"
@@ -261,7 +264,10 @@ class Agent:
 
         model_input = torch.from_numpy(
             self.current_state(
-                state_sys=state_sys, env=env, envs=envs, state_mode=state_is_composite
+                state_sys=state_sys,
+                env=env,
+                envs=envs,
+                state_mode="composite" if state_is_composite else "simple",
             )
         ).view(1, -1)
 
@@ -361,13 +367,14 @@ class Agent:
             ]
 
             # assign harm value to each individual world
-            if state_is_composite:
-                for env_ixs, env_ in enumerate(envs):
-                    env_.cache["harm"][env_ixs] = cache_harm[env_ixs]
-            else:
-                # env.cache['harm'] = cache_harm
-                for env_ixs, env_ in enumerate(envs):
-                    env_.cache["harm"][env_ixs] = cache_harm[env_ixs]
+            if isinstance(envs, Iterable):
+                if state_is_composite:
+                    for env_ixs, env_ in enumerate(envs):
+                        env_.cache["harm"][env_ixs] = cache_harm[env_ixs]
+                else:
+                    # env.cache['harm'] = cache_harm
+                    for env_ixs, env_ in enumerate(envs):
+                        env_.cache["harm"][env_ixs] = cache_harm[env_ixs]
 
         # Add to the encounter record
         if str(target_object) in self.encounters.keys():
@@ -391,10 +398,10 @@ class Agent:
         if mode == "ambiguous":
             self.to_be_punished = {"gem": 0, "bone": 0, "coin": 0}
 
-        if not is_eval:
+        if True:  # not is_eval:
             return state, action, reward, next_state, False
         else:
-            return state, action, reward, next_state, False, action_values
+            ...  # return state, action, reward, next_state, False, action_values
 
     def generate_composite_state(self, envs):
         """Generate the stacked states."""
@@ -473,7 +480,7 @@ class Agent:
 
     #     return state, action, reward, next_state, False
 
-    def reset(self, env: GridworldEnv, state_mode="simple") -> None:
+    def reset(self, env: Gridworld, state_mode="simple") -> None:
         self.init_replay(env, state_mode)
         self.encounters = {entity_name: 0 for entity_name in self.cfg.env.entity_names}
 
