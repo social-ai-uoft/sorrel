@@ -2,17 +2,17 @@ experiment:
   epochs: 20000
   max_turns: 100
   record_period: 100
-  run_name: staghunt_with_respawn_12radius
+  run_name: staghunt_with_respawn_8radius
 model:
-  GAMMA: 0.98
+  GAMMA: 0.95
   LR: 0.00025
   TAU: 0.001
-  agent_vision_radius: 15
+  agent_vision_radius: 8
   batch_size: 64
   epsilon: 1.0
   epsilon_decay: 0.002
   epsilon_min: 0.05
-  layer_size: 128
+  layer_size: 250
   memory_size: 1024
   model_update_freq: 4
   n_frames: 1
