@@ -91,10 +91,12 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         for _ in range(n_agents):
             # observation spec: uses partial view with specified vision radius
             vision_radius = int(model_cfg.get("agent_vision_radius", 5))
+            embedding_size = int(model_cfg.get("embedding_size", 3))
             observation_spec = StagHuntObservation(
                 entity_list,
                 full_view=False,
                 vision_radius=vision_radius,
+                embedding_size=embedding_size,
             )
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size

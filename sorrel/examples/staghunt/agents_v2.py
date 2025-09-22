@@ -33,14 +33,14 @@ from sorrel.examples.staghunt.entities import (
 from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.location import Location, Vector
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.observation import observation_spec
+from sorrel.observation import embedding, observation_spec
 from sorrel.worlds import Gridworld
 
 
 class StagHuntObservation(observation_spec.OneHotObservationSpec):
     """Custom observation function for the StagHunt agent class.
 
-    This observation spec includes inventory and ready flag as extra scalar features,
+    This observation spec includes inventory, ready flag, and position embedding as extra features,
     similar to the cleanup example's positional embedding approach.
     """
 
@@ -49,16 +49,18 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         entity_list: list[str],
         full_view: bool = False,
         vision_radius: int | None = None,
+        embedding_size: int = 3,
     ):
         super().__init__(entity_list, full_view, vision_radius)
+        self.embedding_size = embedding_size
 
-        # Calculate input size including extra features
+        # Calculate input size including extra features and position embedding
         if self.full_view:
             # For full view, we need to know the world dimensions
             # This will be set when observe() is called
             self.input_size = (
                 1,
-                len(entity_list) * 0 + 4,
+                len(entity_list) * 0 + 4 + (4 * self.embedding_size),  # Extra features + position embedding
             )  # Placeholder, will be updated
         else:
             self.input_size = (
@@ -68,20 +70,21 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                     * (2 * self.vision_radius + 1)
                     * (2 * self.vision_radius + 1)
                 )
-                + 4,  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
+                + 4  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
+                + (4 * self.embedding_size),  # Position embedding: 2 * embedding_size for x, 2 * embedding_size for y
             )
 
     def observe(
         self, world: Gridworld, location: tuple | Location | None = None
     ) -> np.ndarray:
-        """Observe the environment with extra scalar features.
+        """Observe the environment with extra scalar features and position embedding.
 
         Args:
             world: The world to observe
             location: The location to observe from (must be provided)
 
         Returns:
-            Observation array with visual field + extra features, padded to consistent size
+            Observation array with visual field + extra features + position embedding, padded to consistent size
         """
         if location is None:
             raise ValueError("Location must be provided for StagHuntObservation")
@@ -141,7 +144,12 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 dtype=visual_field.dtype,
             )
 
-        return np.concatenate((visual_field, extra_features))
+        # Generate position embedding
+        pos_code = embedding.positional_embedding(
+            location, world, (self.embedding_size, self.embedding_size)
+        )
+
+        return np.concatenate((visual_field, extra_features, pos_code))
 
 
 class StagHuntAgent(Agent[StagHuntWorld]):
