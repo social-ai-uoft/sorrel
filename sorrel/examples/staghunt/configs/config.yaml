@@ -1,22 +1,24 @@
 experiment:
-  epochs: 10000
+  epochs: 20000
   max_turns: 100
-  record_period: 1
+  record_period: 100
+  run_name: staghunt_with_respawn_12radius
 model:
-  GAMMA: 0.99
+  GAMMA: 0.98
   LR: 0.00025
   TAU: 0.001
-  agent_vision_radius: 2
+  agent_vision_radius: 15
   batch_size: 64
-  epsilon: 0.5
-  epsilon_decay: 0.0001
+  epsilon: 1.0
+  epsilon_decay: 0.002
+  epsilon_min: 0.05
   layer_size: 128
-  memory_size: 512
+  memory_size: 1024
   model_update_freq: 4
-  n_frames: 3
-  n_quantiles: 8
+  n_frames: 1
+  n_quantiles: 12
   n_step: 3
-  sync_freq: 100
+  sync_freq: 200
 world:
   ascii_map_file: stag_hunt_ascii_map_clean.txt
   beam_cooldown: 3
@@ -36,5 +38,5 @@ world:
   resource_density: 0.15
   respawn_delay: 10
   respawn_lag: 10
-  taste_reward: 0.1
+  taste_reward: 10
   width: 11

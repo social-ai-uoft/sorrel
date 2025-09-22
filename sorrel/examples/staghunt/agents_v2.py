@@ -81,13 +81,43 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             location: The location to observe from (must be provided)
 
         Returns:
-            Observation array with visual field + extra features
+            Observation array with visual field + extra features, padded to consistent size
         """
         if location is None:
             raise ValueError("Location must be provided for StagHuntObservation")
 
         # Get the base visual observation
         visual_field = super().observe(world, location).flatten()
+
+        # Calculate expected size for a perfect square observation
+        expected_side_length = 2 * self.vision_radius + 1
+        expected_visual_size = len(self.entity_list) * expected_side_length * expected_side_length
+        
+        # Pad visual field to expected size if it's smaller (due to world boundaries)
+        if visual_field.shape[0] < expected_visual_size:
+            # Pad with wall representations
+            padded_visual = np.zeros(expected_visual_size, dtype=visual_field.dtype)
+            padded_visual[:visual_field.shape[0]] = visual_field
+            
+            # Fill the remaining space with wall representations
+            # Each entity gets a one-hot encoding, so we need to set the wall bit
+            wall_entity_index = self.entity_list.index("Wall") if "Wall" in self.entity_list else 0
+            remaining_size = expected_visual_size - visual_field.shape[0]
+            
+            # Calculate how many cells we need to pad
+            cells_to_pad = remaining_size // len(self.entity_list)
+            
+            # Fill each padded cell with wall representation
+            for i in range(cells_to_pad):
+                start_idx = visual_field.shape[0] + i * len(self.entity_list)
+                end_idx = start_idx + len(self.entity_list)
+                if end_idx <= expected_visual_size:
+                    padded_visual[start_idx + wall_entity_index] = 1.0
+            
+            visual_field = padded_visual
+        elif visual_field.shape[0] > expected_visual_size:
+            # This shouldn't happen, but truncate if it does
+            visual_field = visual_field[:expected_visual_size]
 
         # Get the agent at this location to extract inventory and ready state
         agent = None
@@ -257,10 +287,36 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         model returns an integer index into the action specification.
         """
         prev_states = self.model.memory.current_state()
-        stacked_states = np.vstack((prev_states, state))
-        model_input = stacked_states.reshape(1, -1)
+        
+        # Ensure state has the same shape as individual states in prev_states
+        if state.ndim == 2 and state.shape[0] == 1:
+            state = state.flatten()  # Convert from (1, features) to (features,)
+        
+        # Use only current state if memory is empty, otherwise stack with previous states
+        if prev_states.shape[0] == 0:
+            model_input = state.reshape(1, -1)
+        else:
+            # Normal case: stack previous states with current state
+            stacked_states = np.vstack((prev_states, state))
+            model_input = stacked_states.reshape(1, -1)
+        
         action = self.model.take_action(model_input)
         return action
+
+    def add_memory(self, state: np.ndarray, action: int, reward: float, done: bool) -> None:
+        """Add an experience to the agent's memory buffer.
+        
+        Args:
+            state (np.ndarray): the state to be added.
+            action (int): the action taken by the agent.
+            reward (float): the reward received by the agent.
+            done (bool): whether the episode terminated after this experience.
+        """
+        # Ensure state is 1D
+        if state.ndim == 2 and state.shape[0] == 1:
+            state = state.flatten()
+        
+        self.model.memory.add(state, action, reward, done)
 
     def act(self, world: StagHuntWorld, action: int) -> float:
         """Execute the chosen action in the environment and return the reward.

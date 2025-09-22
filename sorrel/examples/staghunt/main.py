@@ -47,18 +47,19 @@ def run_stag_hunt() -> None:
     config = {
         "experiment": {
             # number of episodes/epochs to run
-            "epochs": 100000,
+            "epochs": 20000,
             # maximum number of turns per episode
             "max_turns": 100,
             # recording period for animation (unused here)
             "record_period": 100,
-            "run_name": "staghunt_with_respawn",
+            "run_name": "staghunt_with_respawn_12radius",
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
-            "agent_vision_radius": 5,
+            "agent_vision_radius": 15,
             # epsilon decay hyperparameter for the IQN model
-            "epsilon_decay": 0.0001,
+            "epsilon_decay": 0.002,
+            "epsilon_min": 0.05,
             # model architecture parameters
             "layer_size": 128,
             "epsilon": 1.0,
@@ -70,7 +71,7 @@ def run_stag_hunt() -> None:
             "memory_size": 1024,
             "LR": 0.00025,
             "TAU": 0.001,
-            "GAMMA": 0.95,
+            "GAMMA": 0.98,
             "n_quantiles": 12,
         },
         "world": {
