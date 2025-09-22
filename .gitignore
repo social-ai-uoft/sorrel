@@ -156,3 +156,4 @@ pyvenv.cfg
 runs/
 sorrel/examples/treasurehunt_theta/
 sorrel/examples/treasurehunt_beta/data/
+sorrel/examples/state_punishment_beta_copy/
