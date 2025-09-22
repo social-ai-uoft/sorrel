@@ -221,3 +221,97 @@ def test_embeddings(
 
     plt.tight_layout()
     plt.show()
+
+
+def absolute_position_embedding(
+    location: tuple | Location, world: Gridworld, normalize: bool = True
+) -> np.ndarray:
+    """Get absolute position embedding for a location within an environment.
+
+    This creates a simple absolute position encoding using normalized x, y coordinates.
+    Unlike the sinusoidal positional embedding, this provides direct access to
+    absolute coordinates which can be more interpretable for some tasks.
+
+    Args:
+        location: (tuple | Location) The location to be embedded.
+        world: (Gridworld) The gridworld environment within which embeddings should be computed.
+        normalize: (bool) Whether to normalize coordinates to [0, 1] range. Defaults to True.
+
+    Returns:
+        np.ndarray: The absolute position embedding for the given location, with shape (2,).
+        If normalize=True: [x/world_width, y/world_height]
+        If normalize=False: [x, y]
+    """
+    x, y = location[0:2]
+
+    if normalize:
+        # Normalize coordinates to [0, 1] range
+        world_height, world_width = world.map.shape[0:2]
+        x_norm = x / world_width
+        y_norm = y / world_height
+        return np.array([x_norm, y_norm], dtype=np.float32)
+    else:
+        # Return raw coordinates
+        return np.array([x, y], dtype=np.float32)
+
+
+def absolute_position_embedding_2d(
+    world: Gridworld, normalize: bool = True
+) -> np.ndarray:
+    """Create absolute position embeddings for all locations in a grid.
+
+    Args:
+        world: (Gridworld) The gridworld environment.
+        normalize: (bool) Whether to normalize coordinates to [0, 1] range. Defaults to True.
+
+    Returns:
+        np.ndarray: Position embeddings for all grid locations with shape (height, width, 2).
+    """
+    height, width = world.map.shape[0:2]
+    embeddings = np.zeros((height, width, 2), dtype=np.float32)
+
+    for x in range(width):
+        for y in range(height):
+            if normalize:
+                x_norm = x / width
+                y_norm = y / height
+                embeddings[y, x] = [x_norm, y_norm]
+            else:
+                embeddings[y, x] = [x, y]
+
+    return embeddings
+
+
+def absolute_position_embedding_with_scale(
+    location: tuple | Location,
+    world: Gridworld,
+    scale: tuple[float, float] = (1.0, 1.0),
+    offset: tuple[float, float] = (0.0, 0.0),
+) -> np.ndarray:
+    """Get absolute position embedding with custom scaling and offset.
+
+    This allows for more flexible position encoding with custom scaling factors
+    and offsets, which can be useful for different coordinate systems or
+    when you want to center coordinates around a specific point.
+
+    Args:
+        location: (tuple | Location) The location to be embedded.
+        world: (Gridworld) The gridworld environment.
+        scale: (tuple[float, float]) Scaling factors for x and y coordinates. Defaults to (1.0, 1.0).
+        offset: (tuple[float, float]) Offset values for x and y coordinates. Defaults to (0.0, 0.0).
+
+    Returns:
+        np.ndarray: The scaled and offset position embedding with shape (2,).
+    """
+    x, y = location[0:2]
+    world_height, world_width = world.map.shape[0:2]
+
+    # Normalize coordinates to [0, 1] range
+    x_norm = x / world_width
+    y_norm = y / world_height
+
+    # Apply scaling and offset
+    x_scaled = x_norm * scale[0] + offset[0]
+    y_scaled = y_norm * scale[1] + offset[1]
+
+    return np.array([x_scaled, y_scaled], dtype=np.float32)

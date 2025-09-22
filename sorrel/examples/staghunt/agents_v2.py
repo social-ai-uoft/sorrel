@@ -62,7 +62,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 1,
                 len(entity_list) * 0
                 + 4
-                + (4 * self.embedding_size),  # Extra features + position embedding
+                + 2,  # Extra features + absolute position embedding (x, y)
             )  # Placeholder, will be updated
         else:
             self.input_size = (
@@ -73,9 +73,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                     * (2 * self.vision_radius + 1)
                 )
                 + 4  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
-                + (
-                    4 * self.embedding_size
-                ),  # Position embedding: 2 * embedding_size for x, 2 * embedding_size for y
+                + 2,  # Absolute position embedding: x, y coordinates
             )
 
     def observe(
@@ -152,9 +150,9 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 dtype=visual_field.dtype,
             )
 
-        # Generate position embedding
-        pos_code = embedding.positional_embedding(
-            location, world, (self.embedding_size, self.embedding_size)
+        # Generate absolute position embedding
+        pos_code = embedding.absolute_position_embedding(
+            location, world, normalize=True
         )
 
         return np.concatenate((visual_field, extra_features, pos_code))

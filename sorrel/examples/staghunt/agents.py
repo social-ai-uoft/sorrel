@@ -35,6 +35,7 @@ from sorrel.examples.staghunt.entities import (
 from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.location import Location, Vector
 from sorrel.models.pytorch import PyTorchIQN
+from sorrel.observation import embedding
 from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.worlds import Gridworld
 
@@ -163,7 +164,13 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         extra = np.array(
             [inv_stag, inv_hare, ready_flag, interaction_reward_flag], dtype=flat.dtype
         )
-        return np.concatenate([flat, extra]).reshape(1, -1)
+
+        # Add absolute position embedding
+        pos_code = embedding.absolute_position_embedding(
+            self.location, world, normalize=True
+        )
+
+        return np.concatenate([flat, extra, pos_code]).reshape(1, -1)
 
     def get_action(self, state: np.ndarray) -> int:
         """Select an action using the underlying model.
