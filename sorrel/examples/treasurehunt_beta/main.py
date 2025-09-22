@@ -88,25 +88,26 @@ if __name__ == "__main__":
             "epochs": 100000,
             "max_turns": 100,
             "record_period": 100,
-            "run_name": "treasurehunt_5r_check_withrespawn_frame1_eps1_gamma0.95_2agents",  # Name for this run (will be included in log directory)
-            "num_agents": 2,  # Number of agents in the environment
-            "initial_resources": 50,  # Number of initial resources to place
+            "run_name": "treasurehunt_5r_recheck_w10_vis_full_withoutrespawn_frame1_eps1_gamma0.95_1agents",  # Name for this run (will be included in log directory)
+            "num_agents": 1,  # Number of agents in the environment
+            "initial_resources": 8,  # Number of initial resources to place
         },
         "model": {
-            "agent_vision_radius": 5,
+            "agent_vision_radius": 4,
             "epsilon": 1,  # Initial epsilon value for exploration
+            'epsilon_min': 0.01,
             "epsilon_decay": 0.001,
-            "full_view": False,  # Whether agents can see the entire environment
+            "full_view": True,  # Whether agents can see the entire environment
         },
         "world": {
-            "height": 25,
-            "width": 25,
+            "height": 10,
+            "width": 10,
             "gem_value": 1.16315789, # 1.16315789,  0.61578947, -0.48124632, -2.57052564, -9.98226639 
             "apple_value": 0.61578947,
             "coin_value": -0.48124632,
             "bone_value": -2.57052564,
             "food_value": -9.98226639,
-            "spawn_prob": 0.005,
+            "spawn_prob": 0.000,
         },
     }
 
