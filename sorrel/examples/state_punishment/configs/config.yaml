@@ -1,0 +1,41 @@
+experiment:
+  name: state_punishment_beta
+  epochs: 10000
+  max_turns: 100
+  record_period: 50
+  num_agents: 3
+  initial_resources: 15
+
+model:
+  agent_vision_radius: 2
+  epsilon: 1.0
+  epsilon_decay: 0.0001
+  full_view: true
+  layer_size: 128
+  n_frames: 3
+  n_step: 3
+  sync_freq: 100
+  model_update_freq: 4
+  batch_size: 64
+  memory_size: 512
+  LR: 0.00025
+  TAU: 0.001
+  GAMMA: 0.99
+  n_quantiles: 8
+  device: cpu
+
+world:
+  height: 10
+  width: 10
+  gem_value: 5.0
+  coin_value: 10.0
+  bone_value: -3.0
+  spawn_prob: 0.05
+  init_punishment_prob: 0.0
+  punishment_magnitude: -10.0
+  change_per_vote: 0.2
+  taboo_resources: ["A", "B", "C", "D", "E"]
+
+# Feature flags
+use_composite_views: false
+use_composite_actions: false
