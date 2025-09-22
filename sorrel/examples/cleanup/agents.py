@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.agents import Agent
+from sorrel.agents import MovingAgent
 from sorrel.entities import Entity
 from sorrel.examples.cleanup.entities import Apple, AppleTree, EmptyEntity
 from sorrel.examples.cleanup.world import CleanupWorld
@@ -61,7 +61,7 @@ class CleanupObservation(observation_spec.OneHotObservationSpec):
         return np.concatenate((visual_field, pos_code))
 
 
-class CleanupAgent(Agent[CleanupWorld]):
+class CleanupAgent(MovingAgent[CleanupWorld]):
     """A Cleanup agent that uses the IQN model."""
 
     def __init__(
@@ -71,10 +71,7 @@ class CleanupAgent(Agent[CleanupWorld]):
         model: BaseModel,
     ):
         super().__init__(observation_spec, action_spec=action_spec, model=model)
-
         self.direction = 2  # 90 degree rotation: default at 180 degrees (facing down)
-        self.sprite = Path(__file__).parent / "./assets/hero.png"
-
         self.encounters = {}
 
     def pov(self, world: CleanupWorld) -> np.ndarray:
@@ -153,26 +150,13 @@ class CleanupAgent(Agent[CleanupWorld]):
         action_name = self.action_spec.get_readable_action(action)
 
         # Attempt to move
-        new_location = self.location
-        if action_name == "up":
-            self.direction = 0
-            self.sprite = Path(__file__).parent / "./assets/hero-back.png"
-            new_location = (self.location[0] - 1, self.location[1], self.location[2])
-        if action_name == "down":
-            self.direction = 2
-            self.sprite = Path(__file__).parent / "./assets/hero.png"
-            new_location = (self.location[0] + 1, self.location[1], self.location[2])
-        if action_name == "left":
-            self.direction = 3
-            self.sprite = Path(__file__).parent / "./assets/hero-left.png"
-            new_location = (self.location[0], self.location[1] - 1, self.location[2])
-        if action_name == "right":
-            self.direction = 1
-            self.sprite = Path(__file__).parent / "./assets/hero-right.png"
-            new_location = (self.location[0], self.location[1] + 1, self.location[2])
+        new_location = self.location  # By default, don't move
+        if action_name in ["up", "right", "down", "left"]:
+            new_location = self.movement(action)
 
         # Attempt to spawn beam
-        self.spawn_beam(world, action_name)
+        if action_name in ["clean", "zap"]:
+            self.spawn_beam(world, action_name)
 
         # get reward obtained from object at new_location
         target_objects = world.observe_all_layers(new_location)
