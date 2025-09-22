@@ -9,12 +9,12 @@ import numpy as np
 
 from sorrel.agents import Agent
 from sorrel.examples.chess.action_spec import ChessActionSpec
-from sorrel.examples.chess.observation_spec import ChessOneHotObservationSpec
-from sorrel.examples.chess.world import ChessWorld
+from sorrel.examples.chess.observation_spec import ChessObservationSpec
+from sorrel.examples.chess.world import Chessboard
 from sorrel.models.base_model import BaseModel, RandomModel
 
 
-class RandomChessAgent(Agent[ChessWorld]):
+class RandomChessAgent(Agent[Chessboard]):
     """A minimal chess agent.
 
     The agent observes the full board and selects a random legal move (if any)
@@ -23,7 +23,7 @@ class RandomChessAgent(Agent[ChessWorld]):
 
     def __init__(
         self,
-        observation_spec: ChessOneHotObservationSpec,
+        observation_spec: ChessObservationSpec,
         action_spec: ChessActionSpec,
         model: BaseModel,
         colour: str,
@@ -36,7 +36,7 @@ class RandomChessAgent(Agent[ChessWorld]):
     def reset(self) -> None:
         self.model.reset()
 
-    def pov(self, world: ChessWorld) -> np.ndarray:
+    def pov(self, world: Chessboard) -> np.ndarray:
         image = self.observation_spec.observe(
             world, None
         )  # full view does not need a location
@@ -47,7 +47,7 @@ class RandomChessAgent(Agent[ChessWorld]):
         # dummy integer because the ``Agent`` base class expects an action.
         return 0
 
-    def act(self, world: ChessWorld, action: int) -> float:
+    def act(self, world: Chessboard, action: int) -> float:
 
         legal = world.legal_moves(self.colour)
         if not legal:
@@ -60,7 +60,7 @@ class RandomChessAgent(Agent[ChessWorld]):
         reward = world.apply_move(start, end)
         return reward
 
-    def is_done(self, world: ChessWorld) -> bool:
+    def is_done(self, world: Chessboard) -> bool:
         """The episode ends when the environment signals ``is_done``.
 
         ``Environment`` sets ``world.is_done`` after ``max_turns`` or on
@@ -71,7 +71,7 @@ class RandomChessAgent(Agent[ChessWorld]):
 
 
 # Helper to build a ready-to-use agent (mirrors other examples)
-def make_random_chess_agent(colour: str, world: ChessWorld) -> RandomChessAgent:
+def make_random_chess_agent(colour: str, world: Chessboard) -> RandomChessAgent:
     """Factory returning a ``RandomChessAgent`` with a placeholder model.
 
     Args:
@@ -91,7 +91,7 @@ def make_random_chess_agent(colour: str, world: ChessWorld) -> RandomChessAgent:
         "Queen",
         "King",
     ]
-    observation_spec = ChessOneHotObservationSpec(
+    observation_spec = ChessObservationSpec(
         entity_list,
         full_view=True,
         env_dims=(world.height, world.width, world.layers),

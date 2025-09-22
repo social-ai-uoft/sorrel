@@ -1,10 +1,9 @@
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from sorrel.examples.iowa.entities import EmptyEntity
 from sorrel.examples.iowa.env import GamblingEnv
 from sorrel.examples.iowa.world import GamblingWorld
-
 from sorrel.utils.logging import TensorboardLogger
 
 # begin main
@@ -25,8 +24,8 @@ if __name__ == "__main__":
                 "layer_size": 250,
                 "epsilon": 0.5,
                 "device": "cpu",
-                "n_frames": 5
-            }
+                "n_frames": 5,
+            },
         },
         "world": {
             "height": 20,
@@ -41,7 +40,13 @@ if __name__ == "__main__":
     env = GamblingEnv(world, config)
     # run the experiment with default parameters
     env.run_experiment(
-        logger=TensorboardLogger(max_epochs=config["experiment"]["epochs"], log_dir=(Path(__file__).parent / f"./data/logs/{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}"))
+        logger=TensorboardLogger(
+            max_epochs=config["experiment"]["epochs"],
+            log_dir=(
+                Path(__file__).parent
+                / f"./data/logs/{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}"
+            ),
+        )
     )
 
 # end main

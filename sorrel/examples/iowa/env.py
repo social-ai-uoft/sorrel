@@ -1,9 +1,10 @@
 # begin imports
 # general imports
+import os
 from datetime import datetime
 from pathlib import Path
+
 import numpy as np
-import os
 import torch
 
 from sorrel.action.action_spec import ActionSpec
@@ -17,7 +18,7 @@ from sorrel.examples.iowa.world import GamblingWorld
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.observation.observation_spec import OneHotObservationSpec
-from sorrel.utils.logging import Logger, ConsoleLogger
+from sorrel.utils.logging import ConsoleLogger, Logger
 from sorrel.utils.visualization import ImageRenderer
 
 # end imports
@@ -42,14 +43,14 @@ class GamblingEnv(Environment[GamblingWorld]):
         for i in range(agent_num):
             # create the observation spec
             entity_list = [
-                "EmptyEntity", 
-                "Wall", 
-                "Sand", 
+                "EmptyEntity",
+                "Wall",
+                "Sand",
                 "DeckA",
                 "DeckB",
                 "DeckC",
                 "DeckD",
-                "GamblingAgent"
+                "GamblingAgent",
             ]
             observation_spec = OneHotObservationSpec(
                 entity_list,
@@ -75,7 +76,8 @@ class GamblingEnv(Environment[GamblingWorld]):
 
             if hasattr(self.config.model, "load_weights"):
                 model.load(
-                    file_path=Path(__file__).parent / f"./checkpoints/{self.config.model.load_weights}-agent-{i}.pkl"
+                    file_path=Path(__file__).parent
+                    / f"./checkpoints/{self.config.model.load_weights}-agent-{i}.pkl"
                 )
 
             agents.append(
@@ -86,7 +88,7 @@ class GamblingEnv(Environment[GamblingWorld]):
                 )
             )
 
-        self.agents: list[GamblingAgent] = agents #type: ignore
+        self.agents: list[GamblingAgent] = agents  # type: ignore
 
     def populate_environment(self):
         """Populate the gambling world by creating walls, then randomly spawning the
@@ -191,17 +193,11 @@ class GamblingEnv(Environment[GamblingWorld]):
             #     models = [agent.model for agent in self.agents]
             #     total_loss = sum(pool.map(lambda model: model.train_step(), models))
             total_loss = 0
-            encounters = {
-                "DeckA": 0,
-                "DeckB": 0,
-                "DeckC": 0,
-                "DeckD": 0
-            }
+            encounters = {"DeckA": 0, "DeckB": 0, "DeckC": 0, "DeckD": 0}
             for agent in self.agents:
                 total_loss = agent.model.train_step()
                 for key in encounters.keys():
                     encounters[key] += agent.encounters[key]
-
 
             # Log the information
             if logging:
@@ -212,7 +208,7 @@ class GamblingEnv(Environment[GamblingWorld]):
                     total_loss,
                     self.world.total_reward,
                     self.agents[0].model.epsilon,
-                    encounters=encounters
+                    encounters=encounters,
                 )
 
             # update epsilon
@@ -222,4 +218,7 @@ class GamblingEnv(Environment[GamblingWorld]):
                 if epoch % self.config.experiment.record_period == 0:
                     if not os.path.exists(output_dir / "./checkpoints/"):
                         os.makedirs(output_dir / "./checkpoints")
-                    agent.model.save(output_dir / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl")
+                    agent.model.save(
+                        output_dir
+                        / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
+                    )

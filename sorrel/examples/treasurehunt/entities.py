@@ -39,22 +39,20 @@ class Gem(Entity[TreasurehuntWorld]):
         self.value = value
         self.sprite = Path(__file__).parent / "./assets/gem.png"
 
-class Food(Entity[TreasurehuntWorld]):
+
+class Food(Gem):
     """An entity that represents food in the treasurehunt environment."""
 
     def __init__(self, value):
-        super().__init__()
-        self.passable = True  # Agents can move onto Gems
-        self.value = value
+        super().__init__(value)
         self.sprite = Path(__file__).parent / "./assets/food.png"
 
-class Bone(Entity[TreasurehuntWorld]):
+
+class Bone(Gem):
     """An entity that represents a bone in the treasurehunt environment."""
 
     def __init__(self, value):
-        super().__init__()
-        self.passable = True  # Agents can move onto Gems
-        self.value = value
+        super().__init__(value)
         self.sprite = Path(__file__).parent / "./assets/bone.png"
 
 
@@ -73,5 +71,14 @@ class EmptyEntity(Entity[TreasurehuntWorld]):
         if (  # NOTE: If the spawn prob is too high, the environment gets overrun
             np.random.random() < world.spawn_prob
         ):
-            entity: Entity = np.random.choice(np.array([Gem(world.values["gem"]), Food(world.values["food"]), Bone(world.values["bone"])], dtype=object))
+            entity: Entity = np.random.choice(
+                np.array(
+                    [
+                        Gem(world.values["gem"]),
+                        Food(world.values["food"]),
+                        Bone(world.values["bone"]),
+                    ],
+                    dtype=object,
+                )
+            )
             world.add(self.location, entity)

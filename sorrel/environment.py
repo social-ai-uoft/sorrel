@@ -114,12 +114,16 @@ class Environment[W: Gridworld]:
         """
         renderer = None
         if output_dir is None:
-            output_dir = Path(__file__).parent / "./data/"
-            if not os.path.exists(output_dir):
-                os.mkdir(output_dir)
+            if hasattr(self.config.experiment, "output_dir"):
+                output_dir = Path(self.config.experiment.output_dir)
+            else:
+                output_dir = Path(__file__).parent / "./data/"
+            assert isinstance(output_dir, Path)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
         if animate:
             renderer = ImageRenderer(
-                experiment_name=self.world.__class__.__name__,
+                experiment_name=self.__class__.__name__,
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
             )
@@ -178,7 +182,7 @@ class Environment[W: Gridworld]:
                 if hasattr(self.config.model, "epsilon_decay"):
                     agent.model.epsilon_decay(self.config.model.epsilon_decay)
                 if epoch % self.config.experiment.record_period == 0:
-                    if not os.path.exists(output_dir / "./checkpoints/"):
-                        os.makedirs(output_dir / "./checkpoints")
-                    agent.model.save(output_dir / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl")
-
+                    agent.model.save(
+                        output_dir
+                        / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
+                    )

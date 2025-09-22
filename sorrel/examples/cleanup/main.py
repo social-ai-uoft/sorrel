@@ -1,7 +1,8 @@
 # for configs
+from pathlib import Path
+
 import hydra
 from omegaconf import DictConfig
-from pathlib import Path
 
 # sorrel imports
 from sorrel.examples.cleanup.entities import EmptyEntity

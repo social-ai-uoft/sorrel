@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.agents import Agent
+from sorrel.agents import MovingAgent
 from sorrel.examples.cooking.entities import (
     Counter,
     EmptyEntity,
@@ -22,13 +22,14 @@ from sorrel.examples.cooking.entities import (
     Stove,
     Trash,
 )
+from sorrel.examples.cooking.world import CookingWorld
 from sorrel.location import Location, Vector
 from sorrel.models.base_model import BaseModel
 from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.worlds import Gridworld
 
 
-class CookingAgent(Agent):
+class CookingAgent(MovingAgent[CookingWorld]):
     """A minimal Cooking Chef agent.
 
     The agent holds an inventory list (max size 1 for simplicity) and can
@@ -99,32 +100,8 @@ class CookingAgent(Agent):
         action_name = self.action_spec.get_readable_action(action)
         reward = 0.0
         # Movement actions
-        if action_name in {"up", "down", "left", "right"}:
-            new_location = self.location
-            if action_name == "up":
-                new_location = (
-                    self.location[0] - 1,
-                    self.location[1],
-                    self.location[2],
-                )
-            elif action_name == "down":
-                new_location = (
-                    self.location[0] + 1,
-                    self.location[1],
-                    self.location[2],
-                )
-            elif action_name == "left":
-                new_location = (
-                    self.location[0],
-                    self.location[1] - 1,
-                    self.location[2],
-                )
-            elif action_name == "right":
-                new_location = (
-                    self.location[0],
-                    self.location[1] + 1,
-                    self.location[2],
-                )
+        if action_name in ["up", "down", "left", "right"]:
+            new_location = self.movement(action)
             world.move(self, new_location)
             return reward
 

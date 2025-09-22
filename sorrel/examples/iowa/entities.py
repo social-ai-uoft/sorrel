@@ -29,6 +29,7 @@ class Sand(Entity[GamblingWorld]):
         self.passable = True
         self.sprite = Path(__file__).parent / "./assets/sand.png"
 
+
 class Deck(Entity[GamblingWorld]):
     """An entity that represents a deck in the gambling environment."""
 
@@ -39,34 +40,35 @@ class Deck(Entity[GamblingWorld]):
         self.name = name
         self.has_transitions = True
         self.sprite = Path(__file__).parent / f"./assets/deck-{name}.png"
-        self.kind = f"Deck{name.upper()}" # Different decks should be considered different entities
+        self.kind = f"Deck{name.upper()}"  # Different decks should be considered different entities
 
     def draw(self):
         p_loss = np.random.random()
         match self.name:
-            case "a": # Bad deck, small loss
+            case "a":  # Bad deck, small loss
                 value = 1
                 if p_loss < 0.5:
                     value += -2.5
-            case "b": # Bad deck, large loss
+            case "b":  # Bad deck, large loss
                 value = 1
                 if p_loss < 0.1:
                     value += -12.5
-            case "c": # Good deck, small loss
+            case "c":  # Good deck, small loss
                 value = 0.5
                 if p_loss < 0.5:
                     value += -0.5
-            case "d": # Good deck, large loss
+            case "d":  # Good deck, large loss
                 value = 0.5
                 if p_loss < 0.1:
                     value += -2.5
             case _:
                 value = 0
-        return (value + 0.1)
+        return value + 0.1
 
     def transition(self, world):
         # Randomly update value on each turn
         self.value = self.draw()
+
 
 class EmptyEntity(Entity[GamblingWorld]):
     """An entity that represents an empty space in the gambling environment."""
@@ -83,8 +85,7 @@ class EmptyEntity(Entity[GamblingWorld]):
         if (  # NOTE: If the spawn prob is too high, the environment gets overrun
             np.random.random() < world.spawn_prob
         ):
-            entity: Entity = np.random.choice(np.array(
-                [Deck("a"), Deck("b"), Deck("c"), Deck("d")],
-                dtype=object
-            ))
+            entity: Entity = np.random.choice(
+                np.array([Deck("a"), Deck("b"), Deck("c"), Deck("d")], dtype=object)
+            )
             world.add(self.location, entity)

@@ -12,7 +12,7 @@ import numpy as np
 from sorrel.observation.observation_spec import OneHotObservationSpec
 
 
-class ChessOneHotObservationSpec(OneHotObservationSpec):
+class ChessObservationSpec(OneHotObservationSpec):
     """One-hot observation spec with an extra colour layer.
 
     The base class encodes each entity kind as a separate one-hot channel.

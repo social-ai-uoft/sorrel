@@ -1,1 +1,1 @@
-from sorrel.agents.agent import Agent
+from sorrel.agents.agent import Agent, MovingAgent

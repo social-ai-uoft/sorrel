@@ -1,9 +1,11 @@
-"""Here is a list of provided basic entities that will likely be needed in most
-gridworld environments.
+"""Here is a list of provided basic entities that can be used in any gridworld
+environment.
 
 Note that all of these entities do not override the default
 :meth:`.Entity.transition()`, which does nothing.
 """
+
+from pathlib import Path
 
 from sorrel.entities.entity import Entity
 
@@ -17,6 +19,7 @@ class Wall(Entity):
     def __init__(self):
         super().__init__()
         self.value = -1  # Walls penalize contact
+        self.sprite = Path(__file__).parent / "./assets/wall.png"
 
 
 class EmptyEntity(Entity):
@@ -27,7 +30,8 @@ class EmptyEntity(Entity):
 
     def __init__(self):
         super().__init__()
-        self.passable = True  # Agents can enter EmptySpaces
+        self.passable = True
+        self.sprite = Path(__file__).parent / "./assets/empty.png"
 
 
 class Gem(Entity):
@@ -36,7 +40,8 @@ class Gem(Entity):
     By default, Gems are passable.
     """
 
-    def __init__(self, gem_value: float | int):
+    def __init__(self, value: float | int):
         super().__init__()
-        self.passable = True  # Agents can move onto Gems
-        self.value = gem_value
+        self.passable = True
+        self.value = value
+        self.sprite = Path(__file__).parent / "./assets/gem.png"

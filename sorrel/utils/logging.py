@@ -4,6 +4,8 @@
 
 import csv
 import os
+from datetime import datetime
+from pathlib import Path
 from typing import Mapping
 
 import numpy as np
@@ -93,16 +95,15 @@ class Logger:
     @classmethod
     def from_config(cls, config: dict | Mapping):
         """Create a logger from a configuration dictionary.
-        
+
         Args:
             config (dict | Mapping): The configuration file.
-            
+
         Returns:
-            Logger: a Logger instance using the configuration file to initialize it."""
+            Logger: a Logger instance using the configuration file to initialize it.
+        """
         assert isinstance(config["experiment"]["epochs"], int)
         return cls(max_epochs=config["experiment"]["epochs"])
-
-
 
 
 class ConsoleLogger(Logger):
@@ -188,13 +189,26 @@ class TensorboardLogger(Logger):
                 self.writer.add_scalars(key, value, epoch)
             else:
                 self.writer.add_scalar(key, value, epoch)
-    
+
     @classmethod
     def from_config(cls, config: dict | Mapping):
         assert "epochs" in config["experiment"].keys()
-        assert "log_dir" in config["experiment"].keys()
+        assert ("log_dir" in config["experiment"].keys()) or (
+            "output_dir" in config["experiment"].keys()
+        )
 
-        return cls(max_epochs=config["experiment"]["epochs"], log_dir=config["experiment"]["log_dir"])
+        if not "log_dir" in config["experiment"].keys():
+            log_dir = (
+                Path(config["experiment"]["output_dir"])
+                / f"./logs/{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}"
+            )
+        else:
+            log_dir = config["experiment"]["log_dir"]
+
+        return cls(
+            max_epochs=config["experiment"]["epochs"],
+            log_dir=log_dir,
+        )
 
 
 # --------------------------- #

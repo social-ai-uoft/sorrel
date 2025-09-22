@@ -1,9 +1,9 @@
 import os
+import re
 from abc import abstractmethod
 from typing import Sequence
 
 import numpy as np
-import re
 import torch
 import torch.nn as nn
 

@@ -9,17 +9,17 @@ from __future__ import annotations
 from sorrel.environment import Environment
 from sorrel.examples.chess.agents import make_random_chess_agent
 from sorrel.examples.chess.entities import Bishop, King, Knight, Pawn, Queen, Rook
-from sorrel.examples.chess.world import ChessWorld
+from sorrel.examples.chess.world import Chessboard
 
 
-class ChessEnvironment(Environment[ChessWorld]):
+class ChessEnvironment(Environment[Chessboard]):
     """The experiment for the Chess example.
 
     Sets up a full chessboard for play between white and black, which are
     controlled by two ``RandomChessAgent`` agents.
     """
 
-    def __init__(self, world: ChessWorld, config: dict) -> None:
+    def __init__(self, world: Chessboard, config: dict) -> None:
         super().__init__(world, config)
 
     # ---------------------------------------------------------------------

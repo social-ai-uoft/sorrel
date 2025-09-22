@@ -5,37 +5,27 @@ from pathlib import Path
 
 import numpy as np
 
-from sorrel.agents import Agent
+from sorrel.agents import MovingAgent
 from sorrel.examples.iowa.world import GamblingWorld
 
 # end imports
 
 
 # begin treasurehunt agent
-class GamblingAgent(Agent[GamblingWorld]):
+class GamblingAgent(MovingAgent[GamblingWorld]):
     """An agent that uses the iqn model."""
 
     def __init__(self, observation_spec, action_spec, model):
         super().__init__(observation_spec, action_spec, model)
         self.sprite = Path(__file__).parent / "./assets/hero.png"
-        self.encounters = {
-            "DeckA": 0,
-            "DeckB": 0,
-            "DeckC": 0,
-            "DeckD": 0
-        }
+        self.encounters = {"DeckA": 0, "DeckB": 0, "DeckC": 0, "DeckD": 0}
 
     # end constructor
 
     def reset(self) -> None:
         """Resets the agent by fill in blank images for the memory buffer."""
         self.model.reset()
-        self.encounters = {
-            "DeckA": 0,
-            "DeckB": 0,
-            "DeckC": 0,
-            "DeckD": 0
-        }
+        self.encounters = {"DeckA": 0, "DeckB": 0, "DeckC": 0, "DeckD": 0}
 
     def pov(self, world: GamblingWorld) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
@@ -55,18 +45,8 @@ class GamblingAgent(Agent[GamblingWorld]):
     def act(self, world: GamblingWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
 
-        # Translate the model output to an action string
-        action_name = self.action_spec.get_readable_action(action)
-
-        new_location = self.location
-        if action_name == "up":
-            new_location = (self.location[0] - 1, self.location[1], self.location[2])
-        if action_name == "down":
-            new_location = (self.location[0] + 1, self.location[1], self.location[2])
-        if action_name == "left":
-            new_location = (self.location[0], self.location[1] - 1, self.location[2])
-        if action_name == "right":
-            new_location = (self.location[0], self.location[1] + 1, self.location[2])
+        # Attempt move
+        new_location = self.movement(action)
 
         # get reward obtained from object at new_location
         target_object = world.observe(new_location)

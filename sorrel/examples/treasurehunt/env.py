@@ -36,7 +36,15 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
         agents = []
         for _ in range(agent_num):
             # create the observation spec
-            entity_list = ["EmptyEntity", "Wall", "Sand", "Gem", "Bone", "Food", "TreasurehuntAgent"]
+            entity_list = [
+                "EmptyEntity",
+                "Wall",
+                "Sand",
+                "Gem",
+                "Bone",
+                "Food",
+                "TreasurehuntAgent",
+            ]
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=False,

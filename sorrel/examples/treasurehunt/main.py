@@ -4,7 +4,6 @@ from pathlib import Path
 from sorrel.examples.treasurehunt.entities import EmptyEntity
 from sorrel.examples.treasurehunt.env import TreasurehuntEnv
 from sorrel.examples.treasurehunt.world import TreasurehuntWorld
-
 from sorrel.utils.logging import TensorboardLogger
 
 # begin main
@@ -16,7 +15,8 @@ if __name__ == "__main__":
             "epochs": 1000,
             "max_turns": 100,
             "record_period": 50,
-            "log_dir": Path(__file__).parent / f"./data/logs/{datetime.now().strftime('%Y-%m-%d %H-%M-%S')}"
+            "log_dir": Path(__file__).parent
+            / f"./data/logs/{datetime.now().strftime('%Y-%m-%d %H-%M-%S')}",
         },
         "model": {
             "agent_vision_radius": 2,
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     # run the experiment with default parameters
     env.run_experiment(
         output_dir=Path(__file__).parent / "./data",
-        logger=TensorboardLogger.from_config(config)
+        logger=TensorboardLogger.from_config(config),
     )
 
 # end main

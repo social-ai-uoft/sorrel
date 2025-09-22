@@ -126,14 +126,8 @@ class CookingEnv(Environment[CookingWorld]):
     def populate_environment(self) -> None:
         """Place static entities and agents on the grid.
 
-        A minimal layout is created:
-
-        - Walls around the perimeter.
-        - One ``Stove`` at the centre.
-        - One ``Counter`` next to the stove.
-        - One ``Plate`` opposite the stove.
-        - One ``Trash`` in a corner.
-        - Agents are placed on empty tiles selected randomly.
+        A minimal layout is created with some counter space, stove, plate, trash, and
+        random agent placements.
         """
         h, w = self.world.height, self.world.width
         # Border walls
@@ -145,7 +139,7 @@ class CookingEnv(Environment[CookingWorld]):
         stove_loc = (h // 2, w // 2, self.world.object_layer)
         self.world.add(stove_loc, Stove())
         # Counter to the left of stove
-        for i in range(1, h // 2 - 1):
+        for i in range(1, h // 2):
             counter_loc = (h // 2, w // 2 - i, self.world.object_layer)
             counter = Counter()
             if i == 1:
@@ -169,13 +163,11 @@ class CookingEnv(Environment[CookingWorld]):
                 empty_tiles.append(idx)
         # Ensure we have at least as many empty tiles as agents.
         assert len(empty_tiles) >= len(self.agents), "Not enough free tiles for agents"
-        # Simple deterministic placement for reproducibility.
-        for agent, loc in zip(self.agents, empty_tiles[: len(self.agents)]):
+        # Randomly place agents on the board.
+        agent_locations_indices = np.random.choice(
+            len(empty_tiles), size=len(self.agents), replace=False
+        )
+        agent_locations = [empty_tiles[i] for i in agent_locations_indices]
+        for loc, agent in zip(agent_locations, self.agents):
+            loc = tuple(loc)
             self.world.add(loc, agent)
-
-    def take_turn(self) -> None:
-        """Override to update dynamic entities after the standard turn logic."""
-        super().take_turn()
-        # Update any stations that have per-turn behaviour (e.g., stove timers).
-        if hasattr(self.world, "update_dynamic_entities"):
-            self.world.update_dynamic_entities()

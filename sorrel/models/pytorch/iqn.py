@@ -179,7 +179,7 @@ class IQN(nn.Module):
 class iRainbowModel(DoublePyTorchModel):
     """A combination of IQN with Rainbow, which itself combines priority experience
     replay, dueling DDQN, distributional DQN, noisy DQN, and multi-step return.
-    
+
     Attributes:
         input_size (Sequence[int]): The shape of the state input.
         action_space (int): The number of actions/the size of the output head.
@@ -190,8 +190,7 @@ class iRainbowModel(DoublePyTorchModel):
         batch_size (int): The size of the training batch.
         memory_size (int): The size of the replay memory.
         sync_freq (int): How often to update the target network.
-        
-        """
+    """
 
     def __init__(
         # Base ANN parameters

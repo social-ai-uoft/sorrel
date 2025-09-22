@@ -19,7 +19,7 @@ from sorrel.location import Location
 from sorrel.worlds.gridworld import Gridworld
 
 
-class ChessWorld(Gridworld):
+class Chessboard(Gridworld):
     """A simple 8x8 chess board.
 
     The board is a single-layer grid (height=8, width=8, layers=1). Empty squares are
@@ -29,6 +29,8 @@ class ChessWorld(Gridworld):
     def __init__(self, default_entity: Entity | None = None):
         default_entity = default_entity or entities.EmptySquare()
         super().__init__(height=8, width=8, layers=1, default_entity=default_entity)
+        # Track the most recent move for en passant logic
+        self.last_move: tuple[Location, Location] | None = None
 
     def observe_algebraic(self, loc: str) -> Entity:
         return self.observe(ChessActionSpec.algebraic(loc))
@@ -59,6 +61,9 @@ class ChessWorld(Gridworld):
         Return the reward if a piece is taken.
         """
 
+        # Save previous move for en passant detection
+        prev_last_move = getattr(self, "last_move", None)
+
         entity = self.observe(start)
         target = self.observe(end)
         reward = target.value
@@ -68,6 +73,34 @@ class ChessWorld(Gridworld):
         # Mark the piece as having moved (required for castling rules)
         if isinstance(entity, entities.ChessPiece):
             entity.has_moved = True
+        # Handle en passant capture
+        if (
+            isinstance(entity, entities.Pawn)
+            and target.kind == "EmptySquare"
+            and abs(start[1] - end[1]) == 1
+        ):
+            # Capturing pawn moved diagonally to empty square
+            captured_pos = (start[0], end[1], 0)
+            captured_piece = self.observe(captured_pos)
+            if (
+                isinstance(captured_piece, entities.Pawn)
+                and captured_piece.colour != entity.colour
+                and prev_last_move is not None
+            ):
+                pm_start, pm_end = prev_last_move
+                # Verify the captured pawn was the one that moved two squares last turn
+                if pm_end == captured_pos and abs(pm_end[0] - pm_start[0]) == 2:
+                    # Remove the captured pawn and give its value as reward
+                    self.remove(captured_pos)
+                    reward = captured_piece.value
+        # Handle pawn promotion
+        if isinstance(entity, entities.Pawn):
+            promotion_row = 0 if entity.colour == "white" else 7
+            if end[0] == promotion_row:
+                # Replace pawn with a queen of same colour
+                queen = entities.Queen(entity.colour)
+                # Overwrite the pawn at the promotion square
+                self.add(end, queen)
         # Handle castling: if the king moved two squares horizontally, also move the rook
         if isinstance(entity, entities.King) and abs(end[1] - start[1]) == 2:
             row = start[0]
@@ -83,6 +116,8 @@ class ChessWorld(Gridworld):
                 self.move(rook, rook_end)
                 if hasattr(rook, "has_moved"):
                     rook.has_moved = True
+        # Record this move as the last move
+        self.last_move = (start, end)
         return reward
 
     def _opponent(self, colour: str) -> str:
@@ -97,6 +132,13 @@ class ChessWorld(Gridworld):
         This checks pawn captures, knight jumps, king adjacency, and sliding attacks for
         rooks, bishops and queens.  It stops scanning a direction when a piece blocks
         the line of sight.
+
+        Args:
+            pos (Location | tuple): The location of the square.
+            attacker_colour (str): White or black to attack.
+
+        Returns:
+            bool: Whether a square on the board is being attacked by a given player.
         """
         row, col, _ = pos
         for r in range(self.height):

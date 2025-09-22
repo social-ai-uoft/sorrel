@@ -7,13 +7,6 @@ to update dynamic stations (e.g., stove timers) each turn.
 from __future__ import annotations
 
 from sorrel.examples.cleanup.entities import EmptyEntity, Wall
-from sorrel.examples.cooking.entities import (
-    Counter,
-    IngredientEntity,
-    Plate,
-    Stove,
-    Trash,
-)
 from sorrel.worlds.gridworld import Gridworld
 
 
@@ -33,10 +26,3 @@ class CookingWorld(Gridworld):
         )
         # The base Gridworld already creates a full map of EmptyEntity instances.
         self.max_turns = 50
-
-    def update_dynamic_entities(self) -> None:
-        """Update entities that have per-turn behaviour (e.g., stoves)."""
-        # Find all stove instances and call their transition method.
-        for stove in self.get_entities_of_kind("Stove"):
-            if isinstance(stove, Stove):
-                stove.transition(self)

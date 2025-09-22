@@ -1,6 +1,7 @@
+from pathlib import Path
+
 import hydra
 from omegaconf import DictConfig
-from pathlib import Path
 
 from sorrel.examples.cooking.entities import EmptyEntity
 from sorrel.examples.cooking.env import CookingEnv

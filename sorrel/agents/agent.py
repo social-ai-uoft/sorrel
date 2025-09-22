@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from pathlib import Path
 
 import numpy as np
 
@@ -44,6 +45,7 @@ class Agent[W: Gridworld](Entity[W]):
         self.observation_spec = observation_spec
         self.action_spec = action_spec
         self.model = model
+        self.sprite = Path(__file__).parent / "./assets/hero.png"
         self._location = location
 
         super().__init__()
@@ -139,3 +141,50 @@ class Agent[W: Gridworld](Entity[W]):
 
         world.total_reward += reward
         self.add_memory(state, action, reward, done)
+
+
+class MovingAgent[W: Gridworld](Agent):
+    """An agent that implements methods for moving up, down, right, left."""
+
+    sprite_directions = [
+        Path(__file__).parent / "./assets/hero-back.png",  # Up
+        Path(__file__).parent / "./assets/hero.png",  # Down
+        Path(__file__).parent / "./assets/hero-left.png",  # Left
+        Path(__file__).parent / "./assets/hero-right.png",  # Right
+    ]
+
+    def movement(self, action: int) -> tuple[int, int, int]:
+        """Attempt to move with the specified action to a new location.
+
+        Args:
+            action (int): The action coded as an integer.
+
+        Returns:
+            tuple[int, int, int]: The new location.
+        """
+        # Translate the model output to an action string
+        action_name = self.action_spec.get_readable_action(action)
+        self.sprite = self.sprite_directions[action]
+        new_location = self.location
+        if action_name == "up":
+            new_location = (self.location[0] - 1, self.location[1], self.location[2])
+        if action_name == "down":
+            new_location = (self.location[0] + 1, self.location[1], self.location[2])
+        if action_name == "left":
+            new_location = (self.location[0], self.location[1] - 1, self.location[2])
+        if action_name == "right":
+            new_location = (self.location[0], self.location[1] + 1, self.location[2])
+
+        return new_location
+
+    def act(self, world: W, action: int):
+        # get attempted location
+        new_location = self.movement(action)
+        # get reward obtained from object at new_location
+        target_object = world.observe(new_location)
+        reward = target_object.value
+        # try moving to new_location
+        world.move(self, new_location)
+
+        # return reward
+        return reward
