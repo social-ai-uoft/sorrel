@@ -105,7 +105,7 @@ class TreasurehuntThetaEnv(Environment[TreasurehuntThetaWorld]):
             low_value_p: Probability of placing low-value resource (value -5)
         """
         # Import here to avoid circular imports
-        from sorrel.examples.treasurehunt_theta.entities import (
+        from sorrel.examples.deprecated.treasurehunt_theta.entities import (
             HighValueResource,
             LowValueResource,
             MediumValueResource,
