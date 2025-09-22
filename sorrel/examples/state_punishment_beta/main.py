@@ -124,6 +124,36 @@ class StatePunishmentLogger(CombinedLogger):
         # Log to tensorboard (with all additional data)
         self.tensorboard_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
 
+# 2.16666667,  2.86      ,  4.99546667, 11.572704  , 31.83059499
+def create_social_harm_config(
+    a_harm: float = 2.16666667,
+    b_harm: float = 2.86,
+    c_harm: float = 4.99546667,
+    d_harm: float = 11.572704,
+    e_harm: float = 31.83059499,
+) -> dict:
+    """Create a social harm configuration dictionary.
+    
+    Args:
+        a_harm: Social harm for entity A
+        b_harm: Social harm for entity B
+        c_harm: Social harm for entity C
+        d_harm: Social harm for entity D
+        e_harm: Social harm for entity E
+        
+    Returns:
+        Dictionary with social harm values for all entities
+    """
+    return {
+        "A": a_harm,
+        "B": b_harm,
+        "C": c_harm,
+        "D": d_harm,
+        "E": e_harm,
+        "EmptyEntity": 0.0,
+        "Wall": 0.0
+    }
+
 
 def create_config(
     use_composite_views: bool = False,
@@ -133,13 +163,41 @@ def create_config(
     epochs: int = 10000,
     simple_foraging: bool = False,
     fixed_punishment_level: float = 0.5,
+    social_harm_values: dict = None,
+    use_random_policy: bool = False,
 ) -> dict:
     """Create configuration dictionary for the experiment."""
     # Determine run name based on mode
     if simple_foraging:
-        run_name = f"simple_foraging_{num_agents}agents_punish{fixed_punishment_level:.1f}_norespawn"
+        run_name = f"simple_foraging_4actions_uniform_id_full_{num_agents}agents_punish{fixed_punishment_level:.1f}_norespawn"
     else:
         run_name = f"state_punishment_{'composite' if use_composite_views or use_composite_actions else 'simple'}_{num_agents}agents"
+    
+    # Default social harm values
+    default_social_harm = {
+        "A": 0.5,
+        "B": 1.0,
+        "C": 0.3,
+        "D": 1.5,
+        "E": 0.1,
+        "EmptyEntity": 0.0,
+        "Wall": 0.0
+    }
+    
+    # In simple foraging mode, social harm should be 0 for all entities
+    if simple_foraging:
+        entity_social_harm = {
+            "A": 0.0,
+            "B": 0.0,
+            "C": 0.0,
+            "D": 0.0,
+            "E": 0.0,
+            "EmptyEntity": 0.0,
+            "Wall": 0.0
+        }
+    else:
+        # Use provided social harm values or defaults
+        entity_social_harm = social_harm_values if social_harm_values is not None else default_social_harm
     
     return {
         "experiment": {
@@ -152,11 +210,11 @@ def create_config(
         },
         "model": {
             "agent_vision_radius": 5,
-            "epsilon": 0.9,
-            "epsilon_min": 0.1,
-            "epsilon_decay": 0.0001,
+            "epsilon": 1,
+            "epsilon_min": 0.05,
+            "epsilon_decay": 0.001,
             "full_view": True,
-            "layer_size": 128,
+            "layer_size": 250,
             "n_frames": 1,
             "n_step": 3,
             "sync_freq": 200,
@@ -183,12 +241,16 @@ def create_config(
             "change_per_vote": 0.1,
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
+            # Social harm values for each entity type
+            # Note: In simple_foraging mode, all social harm values are set to 0.0
+            "entity_social_harm": entity_social_harm,
         },
         "use_composite_views": use_composite_views,
         "use_composite_actions": use_composite_actions,
         "use_multi_env_composite": use_multi_env_composite,
         "simple_foraging": simple_foraging,
         "fixed_punishment_level": fixed_punishment_level,
+        "use_random_policy": use_random_policy,
     }
 
 
@@ -200,6 +262,8 @@ def main(
     epochs: int = 10000,
     simple_foraging: bool = False,
     fixed_punishment_level: float = 0.5,
+    social_harm_values: dict = None,
+    use_random_policy: bool = False,
 ) -> None:
     """Run the state punishment experiment."""
 
@@ -212,6 +276,8 @@ def main(
         epochs,
         simple_foraging,
         fixed_punishment_level,
+        social_harm_values,
+        use_random_policy,
     )
 
     # Create log directory
@@ -223,6 +289,7 @@ def main(
     if simple_foraging:
         print(f"Running Simple Foraging experiment...")
         print(f"Fixed punishment level: {fixed_punishment_level}")
+        print("Social harm: DISABLED (set to 0 for all entities)")
         
         # Calculate and print expected rewards for each resource type
         print("\nExpected rewards for each resource type:")
@@ -250,6 +317,12 @@ def main(
         print("=" * 50)
     else:
         print(f"Running State Punishment experiment...")
+    
+    # Show random policy status
+    if use_random_policy:
+        print("Policy: RANDOM (no learning, random actions)")
+    else:
+        print("Policy: TRAINED MODEL (learning enabled)")
     
     print(f"Run name: {config['experiment']['run_name']}")
     print(
@@ -299,6 +372,9 @@ def main(
         # Set simple foraging mode for the environment
         if simple_foraging:
             env.simple_foraging = True
+        # Set random policy mode for the environment
+        if use_random_policy:
+            env.use_random_policy = True
         environments.append(env)
 
     # Create the multi-agent environment that coordinates all individual environments
@@ -315,8 +391,10 @@ def main(
         multi_agent_env=multi_agent_env,
     )
 
+    # anim directory
+    anim_dir = Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}'
     # Run the experiment using the multi-agent environment
-    multi_agent_env.run_experiment(logger=logger)
+    multi_agent_env.run_experiment(logger=logger, output_dir=anim_dir)
 
 
 if __name__ == "__main__":
@@ -345,7 +423,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--simple-foraging",
         action="store_true",
-        help="Use simple foraging mode (movement only, fixed punishment level)",
+        help="Use simple foraging mode (movement only, fixed punishment level, social harm disabled)",
     )
     parser.add_argument(
         "--fixed-punishment-level",
@@ -353,8 +431,46 @@ if __name__ == "__main__":
         default=0.5,
         help="Fixed punishment level for simple foraging mode (0.0-1.0)",
     )
+    parser.add_argument(
+        "--a-social-harm",
+        type=float,
+        default=0.5,
+        help="Social harm value for entity A (ignored in simple foraging mode)",
+    )
+    parser.add_argument(
+        "--b-social-harm",
+        type=float,
+        default=1.0,
+        help="Social harm value for entity B (ignored in simple foraging mode)",
+    )
+    parser.add_argument(
+        "--c-social-harm",
+        type=float,
+        default=0.3,
+        help="Social harm value for entity C (ignored in simple foraging mode)",
+    )
+    parser.add_argument(
+        "--d-social-harm",
+        type=float,
+        default=1.5,
+        help="Social harm value for entity D (ignored in simple foraging mode)",
+    )
+    parser.add_argument(
+        "--e-social-harm",
+        type=float,
+        default=0.1,
+        help="Social harm value for entity E (ignored in simple foraging mode)",
+    )
+    parser.add_argument(
+        "--random-policy",
+        action="store_true",
+        help="Use random policy instead of trained model (for testing)",
+    )
 
     args = parser.parse_args()
+
+    # Create social harm configuration from command line arguments
+    social_harm_config = create_social_harm_config()
 
     main(
         use_composite_views=args.composite_views,
@@ -364,4 +480,6 @@ if __name__ == "__main__":
         epochs=args.epochs,
         simple_foraging=args.simple_foraging,
         fixed_punishment_level=args.fixed_punishment_level,
+        social_harm_values=social_harm_config,
+        use_random_policy=args.random_policy,
     )

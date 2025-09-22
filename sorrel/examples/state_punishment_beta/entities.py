@@ -38,6 +38,18 @@ class Wall(Entity):
         self.sprite = Path(__file__).parent / "./assets/wall.png"
 
 
+class Sand(Entity):
+    """Sand entity representing the ground layer."""
+
+    def __init__(self):
+        super().__init__()
+        self.kind = "Sand"
+        self.passable = True
+        self.value = 0
+        self.social_harm = 0
+        self.sprite = Path(__file__).parent / "./assets/sand.png"
+
+
 class A(Entity):
     """Resource A with configurable value and social harm."""
 

@@ -4,7 +4,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from sorrel.worlds import Gridworld
 
-from .entities import A, B, C, D, E, EmptyEntity, Wall
+from .entities import A, B, C, D, E, EmptyEntity, Sand, Wall
 from .state_system import StateSystem
 
 
@@ -12,12 +12,15 @@ class StatePunishmentWorld(Gridworld):
     """World for the state punishment game."""
 
     def __init__(self, config: dict | DictConfig, default_entity):
-        layers = 1
+        layers = 2
         if type(config) != DictConfig:
             config = OmegaConf.create(config)
         super().__init__(
             config.world.height, config.world.width, layers, default_entity
         )
+
+        # Store config for later use
+        self.config = config
 
         # World configuration
         self.a_value = config.world.get("a_value", 3.0)
@@ -97,17 +100,22 @@ class StatePunishmentWorld(Gridworld):
         entity_type = np.random.choice(entity_types, p=normalized_probs)
         entity_class = self.entity_classes[entity_type]
 
-        # Create entity with appropriate value
+        # Create entity with appropriate value and social harm
         if entity_type == "A":
-            entity = entity_class(self.a_value)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("A", 0.5)
+            entity = entity_class(self.a_value, social_harm)
         elif entity_type == "B":
-            entity = entity_class(self.b_value)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("B", 1.0)
+            entity = entity_class(self.b_value, social_harm)
         elif entity_type == "C":
-            entity = entity_class(self.c_value)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("C", 0.3)
+            entity = entity_class(self.c_value, social_harm)
         elif entity_type == "D":
-            entity = entity_class(self.d_value)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("D", 1.5)
+            entity = entity_class(self.d_value, social_harm)
         elif entity_type == "E":
-            entity = entity_class(self.e_value)
+            social_harm = self.config.world.get("entity_social_harm", {}).get("E", 0.1)
+            entity = entity_class(self.e_value, social_harm)
         else:
             entity = entity_class()
 
