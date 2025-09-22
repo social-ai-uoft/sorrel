@@ -1,4 +1,5 @@
-"""The agent for treasurehunt_theta, a modified treasurehunt with three resource types."""
+"""The agent for treasurehunt_theta, a modified treasurehunt with three resource
+types."""
 
 # begin imports
 from pathlib import Path
@@ -26,7 +27,7 @@ class TreasurehuntThetaAgent(Agent[TreasurehuntThetaWorld]):
             "wall": 0,
             "emptyentity": 0,
             "sand": 0,
-            "agent": 0
+            "agent": 0,
         }
         # Track individual score for this epoch
         self.individual_score = 0
@@ -44,7 +45,7 @@ class TreasurehuntThetaAgent(Agent[TreasurehuntThetaWorld]):
             "wall": 0,
             "emptyentity": 0,
             "sand": 0,
-            "agent": 0
+            "agent": 0,
         }
         # Reset individual score for new epoch
         self.individual_score = 0

@@ -3,12 +3,14 @@
 import os
 import sys
 from datetime import datetime
+
 import pandas as pd
+
 # ------------------------ #
 # region: path nonsense    #
 # Determine appropriate paths for imports and storage
 # root = os.path.abspath("~/Documents/GitHub/agentarium")  # Change the wd as needed.
-root = os.path.abspath(".") 
+root = os.path.abspath(".")
 # print(root)
 # # Make sure the transformers directory is in PYTHONPATH
 if root not in sys.path:
@@ -16,27 +18,34 @@ if root not in sys.path:
 # endregion                #
 # ------------------------ #
 
+import gc
 import random
+from collections import defaultdict
+from copy import deepcopy
 
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-
-
+import numpy as np
+import torch
 from agentarium.logging_utils import GameLogger
 from agentarium.primitives import Entity
 from examples.state_punishment.agents import Agent
 from examples.state_punishment.env import state_punishment
 from examples.state_punishment.state_sys import state_sys
-from examples.state_punishment.utils import (create_agents, create_entities, create_models,
-                                init_log, load_config, save_config_backup,
-                                build_transgression_and_punishment_record,
-                                calculate_sdt_metrics_np, calculate_d_prime,
-                                safe_get_size, print_top_largest_vars,
-                                print_top_largest_tensors)
-from copy import deepcopy
-import numpy as np
-import torch
-import gc
-from collections import defaultdict
+from examples.state_punishment.utils import (
+    build_transgression_and_punishment_record,
+    calculate_d_prime,
+    calculate_sdt_metrics_np,
+    create_agents,
+    create_entities,
+    create_models,
+    init_log,
+    load_config,
+    print_top_largest_tensors,
+    print_top_largest_vars,
+    safe_get_size,
+    save_config_backup,
+)
+
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 
 # endregion                #
@@ -45,17 +54,17 @@ from collections import defaultdict
 
 def run(cfg, **kwargs):
 
-    # set seed 
+    # set seed
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
     torch.cuda.manual_seed_all(cfg.seed)
 
-    cfg.exp_name = cfg.exp_name + f'_seed{cfg.seed}'
+    cfg.exp_name = cfg.exp_name + f"_seed{cfg.seed}"
 
     # check load weights or not
-    if 's1' not in cfg.exp_name:
-        assert cfg.load_weights, ValueError('incorrect configurations')
+    if "s1" not in cfg.exp_name:
+        assert cfg.load_weights, ValueError("incorrect configurations")
 
     # Initialize the environment and get the agents
     models = create_models(cfg)
@@ -63,12 +72,10 @@ def run(cfg, **kwargs):
     for a in agents:
         print(a.appearance)
     entities: list[Entity] = create_entities(cfg)
-    
+
     envs = []
     for i in range(len(agents)):
-        envs.append(
-            state_punishment(cfg, [agents[i]], deepcopy(entities))
-        )
+        envs.append(state_punishment(cfg, [agents[i]], deepcopy(entities)))
 
     # Set up tensorboard logging
     if cfg.log:
@@ -82,7 +89,9 @@ def run(cfg, **kwargs):
     game_vars = GameLogger(cfg.experiment.epochs)
 
     # container for agent transgression and punishment record
-    transgression_punishment_record = pd.DataFrame(columns=['agent', 'transgression', 'punished', 'time'])
+    transgression_punishment_record = pd.DataFrame(
+        columns=["agent", "transgression", "punished", "time"]
+    )
 
     # load weights
     if cfg.load_weights:
@@ -90,32 +99,44 @@ def run(cfg, **kwargs):
         #     assert 's1' not in cfg.exp_name, ValueError('incorrect configurations')
         for count, agent in enumerate(agents):
             agent.model.load(
-                f'{root}/examples/state_punishment/models/checkpoints/Study1_experiment_cond_v3_one_voter_stacked_view_simple_actions_memory_issue_solved_3agents_respawn_0.04_s1_r1_seed3_agent{agent.ixs}_iRainbowModel.pkl')
+                f"{root}/examples/state_punishment/models/checkpoints/Study1_experiment_cond_v3_one_voter_stacked_view_simple_actions_memory_issue_solved_3agents_respawn_0.04_s1_r1_seed3_agent{agent.ixs}_iRainbowModel.pkl"
+            )
 
     # If a path to a model is specified in the run, load those weights
     if "load_weights" in kwargs:
         for agent in agents:
             agent.model.load(file_path=kwargs.get("load_weights"))
 
+    fixed_prob_dict = {
+        "Gem": cfg.state_sys.prob_list.Gem,
+        "Coin": cfg.state_sys.prob_list.Coin,
+        "Bone": cfg.state_sys.prob_list.Bone,
+    }
 
-    fixed_prob_dict = {'Gem': cfg.state_sys.prob_list.Gem,
-                        'Coin': cfg.state_sys.prob_list.Coin,
-                        'Bone': cfg.state_sys.prob_list.Bone}
-    
     # check action space size
-    if cfg.action_mode == 'composite':
-        assert cfg.model.iqn.parameters.action_size == 8, ValueError('Number of actions should be 8 when the action mode is compound')
-    elif cfg.action_mode == 'simple':
-        assert cfg.model.iqn.parameters.action_size == 6, ValueError('Number of actions should be 6 when the action mode is simple')
-    
+    if cfg.action_mode == "composite":
+        assert cfg.model.iqn.parameters.action_size == 8, ValueError(
+            "Number of actions should be 8 when the action mode is compound"
+        )
+    elif cfg.action_mode == "simple":
+        assert cfg.model.iqn.parameters.action_size == 6, ValueError(
+            "Number of actions should be 6 when the action mode is simple"
+        )
+
     # conditions
     if cfg.state_sys.resource_punishment_is_ambiguous:
-        assert '_experiment_cond' in cfg.exp_name, ValueError('The exp name should contain [_experiment_cond]')
+        assert "_experiment_cond" in cfg.exp_name, ValueError(
+            "The exp name should contain [_experiment_cond]"
+        )
     else:
         if cfg.state_sys.only_punish_taboo:
-            assert "only_taboo" in cfg.exp_name, ValueError("The exp name should contain 'control_only_taboo'")
+            assert "only_taboo" in cfg.exp_name, ValueError(
+                "The exp name should contain 'control_only_taboo'"
+            )
         else:
-            assert 'fixed_punishment' in cfg.exp_name, ValueError("The exp name should contain 'fixed punishment'")
+            assert "fixed_punishment" in cfg.exp_name, ValueError(
+                "The exp name should contain 'fixed punishment'"
+            )
 
     # track the within-epoch punishment level dynamics
     within_epoch_punishment_level = []
@@ -126,21 +147,21 @@ def run(cfg, **kwargs):
 
         # initialize state system
         state_entity = state_sys(
-            cfg.state_sys.init_prob, 
+            cfg.state_sys.init_prob,
             fixed_prob_dict,
-            cfg.state_sys.magnitude, 
+            cfg.state_sys.magnitude,
             cfg.state_sys.taboo,
             cfg.state_sys.resource_punishment_is_ambiguous,
             cfg.state_sys.potential_taboo,
             cfg.state_sys.only_punish_taboo,
-            cfg = cfg
-            )
+            cfg=cfg,
+        )
 
         state_mode = cfg.state_mode
         # Reset the environment at the start of each epoch
         for env in envs:
             env.reset(state_mode=state_mode)
-            env.cache['harm'] = [0 for _ in range(len(agents))]
+            env.cache["harm"] = [0 for _ in range(len(agents))]
         # for agent in env.agents:
         #     agent.reset()
         random.shuffle(agents)
@@ -157,7 +178,10 @@ def run(cfg, **kwargs):
         # Container for data within epoch
         punishment_increase_record = [0 for _ in range(len(agents))]
         punishment_decrease_record = [0 for _ in range(len(agents))]
-        action_record = [[0 for _ in range(cfg.model.iqn.parameters.action_size)] for _ in range(len(agents))]
+        action_record = [
+            [0 for _ in range(cfg.model.iqn.parameters.action_size)]
+            for _ in range(len(agents))
+        ]
 
         while not done:
 
@@ -182,19 +206,21 @@ def run(cfg, **kwargs):
             vote_acts = []
             for ixs, agent in enumerate(agents):
                 (state, action, reward, next_state, done_) = agent.transition(
-                    envs[agent.ixs], 
-                    state_entity, 
-                    'certain', 
+                    envs[agent.ixs],
+                    state_entity,
+                    "certain",
                     action_mode=cfg.action_mode,
-                    state_is_composite=state_mode=='composite',
-                    envs=envs
-                    )
-                
+                    state_is_composite=state_mode == "composite",
+                    envs=envs,
+                )
+
                 # random condition baseline
                 if cfg.random:
-                    assert 'random' in cfg.exp_name, ValueError('the random condition does not match the exp name')
-                    action = random.randint(0, cfg.model.iqn.parameters.action_size-1)
-                    
+                    assert "random" in cfg.exp_name, ValueError(
+                        "the random condition does not match the exp name"
+                    )
+                    action = random.randint(0, cfg.model.iqn.parameters.action_size - 1)
+
                 # record actions
                 action_record[agent.ixs][action] += 1
 
@@ -203,7 +229,7 @@ def run(cfg, **kwargs):
                 if action == 4:
                     punishment_increase_record[agent.ixs] += 1
                 elif action == 5:
-                    punishment_decrease_record[agent.ixs] += 1 
+                    punishment_decrease_record[agent.ixs] += 1
 
                 # if add direct cost of voting
                 if action >= 4:
@@ -215,7 +241,6 @@ def run(cfg, **kwargs):
                     vote_acts.append(1)
                 elif action == 5:
                     vote_acts.append(-1)
-               
 
                 if turn >= cfg.experiment.max_turns or done_:
                     done = 1
@@ -223,12 +248,11 @@ def run(cfg, **kwargs):
 
                 agent.last_memory_idx = agent.model.memory.idx
                 agent.add_memory(state, action, reward, done)
-                
 
                 game_points[agent.ixs] += float(reward)
 
                 agent.model.end_epoch_action(**locals())
-            
+
             # reward consensus in voting
             consensus = abs(sum(vote_acts)) == len(vote_acts)
             consensus_reward = cfg.consensus_reward * consensus
@@ -243,7 +267,9 @@ def run(cfg, **kwargs):
                 losses[agent.ixs] += loss
 
         # Add the game variables to the game object
-        game_vars.record_turn(epoch, turn, losses, [round(val, 2) for val in game_points])
+        game_vars.record_turn(
+            epoch, turn, losses, [round(val, 2) for val in game_points]
+        )
 
         # Print the variables to the console
         game_vars.pretty_print()
@@ -256,7 +282,7 @@ def run(cfg, **kwargs):
         # assert len(combined_punishment_marker_lst) == len(combined_transgression_marker_lst), \
         # ValueError('There should be the same number of transgression records and punishment records')
         # hits, misses, false_alarms, correct_rejections = calculate_sdt_metrics_np(
-        #     combined_transgression_marker_lst, 
+        #     combined_transgression_marker_lst,
         #     combined_punishment_marker_lst
         #     )
         # d_prime = calculate_d_prime(hits, misses, false_alarms, correct_rejections)
@@ -265,11 +291,27 @@ def run(cfg, **kwargs):
         punishment_prob_dict = defaultdict(float)
         for resource in cfg.state_sys.resources:
             punishment_prob_dict[resource] = np.sum(
-                [val for agent in agents for val in agent.punishment_record[resource]]) / \
-                (np.sum([val for agent in agents for val in agent.transgression_record[resource]])+1e-6)
+                [val for agent in agents for val in agent.punishment_record[resource]]
+            ) / (
+                np.sum(
+                    [
+                        val
+                        for agent in agents
+                        for val in agent.transgression_record[resource]
+                    ]
+                )
+                + 1e-6
+            )
 
         # calculate the sum of transgressions
-        sum_transgressions = np.sum([val for agent in agents for resource in cfg.state_sys.resources for val in agent.transgression_record[resource]])
+        sum_transgressions = np.sum(
+            [
+                val
+                for agent in agents
+                for resource in cfg.state_sys.resources
+                for val in agent.transgression_record[resource]
+            ]
+        )
 
         # update the within-epoch punishment level dynamics
         within_epoch_punishment_level.append(state_entity.prob_record)
@@ -283,34 +325,58 @@ def run(cfg, **kwargs):
                 writer.add_scalar(f"Agent_{i}/Loss", losses[i], epoch)
                 writer.add_scalar(f"Agent_{i}/Reward", game_points[i], epoch)
                 writer.add_scalar(f"Agent_{i}/Epsilon", agent.model.epsilon, epoch)
-                writer.add_scalar(f"Agent_{i}/vote_for_punishment", punishment_increase_record[i], epoch)
-                writer.add_scalar(f"Agent_{i}/vote_against_punishment", punishment_decrease_record[i], epoch)
+                writer.add_scalar(
+                    f"Agent_{i}/vote_for_punishment",
+                    punishment_increase_record[i],
+                    epoch,
+                )
+                writer.add_scalar(
+                    f"Agent_{i}/vote_against_punishment",
+                    punishment_decrease_record[i],
+                    epoch,
+                )
                 # Log encounters for each agent
                 writer.add_scalars(
                     f"Agent_{i}/Encounters",
-                    {entity_name: agent.encounters[entity_name] for entity_name in cfg.env.entity_names},
+                    {
+                        entity_name: agent.encounters[entity_name]
+                        for entity_name in cfg.env.entity_names
+                    },
                     epoch,
                 )
                 writer.add_scalars(
-                    f'Agent_{i}/Actions',
-                    {f'action_{k}': action_record[agent.ixs][k] for k in range(cfg.model.iqn.parameters.action_size)},
-                    epoch
+                    f"Agent_{i}/Actions",
+                    {
+                        f"action_{k}": action_record[agent.ixs][k]
+                        for k in range(cfg.model.iqn.parameters.action_size)
+                    },
+                    epoch,
                 )
-            
-            writer.add_scalar(f'state_punishment_level_avg', np.mean(state_entity.prob_record), epoch)
-            writer.add_scalar(f'state_punishment_level_end', state_entity.prob, epoch)
-            writer.add_scalar(f'state_punishment_level_init', state_entity.init_prob, epoch)
-            writer.add_scalar(f'transgressions', sum_transgressions, epoch)
-            writer.add_scalars(f'punishment_prob_each_resource', punishment_prob_dict, epoch)
 
-            np.savetxt("within_epoch_level_change_onevoter_iqn.csv", np.mean(within_epoch_punishment_level, axis=0), delimiter=",", header="value", comments="")
+            writer.add_scalar(
+                f"state_punishment_level_avg", np.mean(state_entity.prob_record), epoch
+            )
+            writer.add_scalar(f"state_punishment_level_end", state_entity.prob, epoch)
+            writer.add_scalar(
+                f"state_punishment_level_init", state_entity.init_prob, epoch
+            )
+            writer.add_scalar(f"transgressions", sum_transgressions, epoch)
+            writer.add_scalars(
+                f"punishment_prob_each_resource", punishment_prob_dict, epoch
+            )
 
+            np.savetxt(
+                "within_epoch_level_change_onevoter_iqn.csv",
+                np.mean(within_epoch_punishment_level, axis=0),
+                delimiter=",",
+                header="value",
+                comments="",
+            )
 
         # Special action: update epsilon
         for agent in agents:
             new_epsilon = agent.model.epsilon - cfg.experiment.epsilon_decay
             agent.model.epsilon = max(new_epsilon, 0.01)
-
 
         if (epoch % 1000 == 0) or (epoch == cfg.experiment.epochs - 1):
             # If a file path has been specified, save the weights to the specified path
@@ -320,15 +386,14 @@ def run(cfg, **kwargs):
                     # agent.model.save(file_path=
                     #                 f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}_{datetime.now().strftime("%Y%m%d-%H%m%s")}.pkl'
                     #                 )
-                    agent.model.save(file_path=
-                                    f'{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl'
-                                    )
-                    
+                    agent.model.save(
+                        file_path=f"{cfg.root}/examples/state_punishment/models/checkpoints/{cfg.exp_name}_agent{a_ixs}_{cfg.model.iqn.type}.pkl"
+                    )
+
         # epoch_transgression_df = build_transgression_and_punishment_record(agents)
         # transgression_punishment_record = pd.concat([transgression_punishment_record, epoch_transgression_df], ignore_index=True)
         for agent in agents:
             agent.reset_record()
-
 
     # Close the tensorboard log
 
@@ -338,6 +403,7 @@ def run(cfg, **kwargs):
     # # save punishment record
     # transgression_punishment_record.to_csv(f'data/{cfg.exp_name}_transgression_record.csv')
 
+
 def main():
     import argparse
 
@@ -345,10 +411,10 @@ def main():
     parser.add_argument(
         "--config", help="path to config file", default="./configs/config.yaml"
     )
-    
+
     print(os.path.abspath("."))
     args = parser.parse_args()
-    save_config_backup(args.config, 'examples/state_punishment/configs/records')
+    save_config_backup(args.config, "examples/state_punishment/configs/records")
     cfg = load_config(args)
     init_log(cfg)
     run(

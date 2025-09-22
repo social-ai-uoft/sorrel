@@ -2,12 +2,14 @@
 
 from pathlib import Path
 from typing import List, Optional, Tuple
+
 try:
     from typing import override
 except ImportError:
     # For Python < 3.12, define override as a no-op decorator
     def override(func):
         return func
+
 
 import numpy as np
 import torch
@@ -73,7 +75,7 @@ class StatePunishmentAgent(Agent):
         # If using random policy, return a random action
         if self.use_random_policy:
             return np.random.randint(0, self.action_spec.n_actions)
-        
+
         if self.use_multi_env_composite and self.composite_envs:
             # Use multi-environment composite state
             composite_state = self.generate_multi_env_composite_state()
@@ -143,12 +145,12 @@ class StatePunishmentAgent(Agent):
         # Concatenate all views
         composite_view = np.concatenate(all_views[:max_views], axis=1)
         return composite_view
-    
+
     def generate_multi_env_composite_state(self, world=None) -> np.ndarray:
-        """
-        Generate composite state from multiple environments.
-        This creates a stacked state representation where the agent observes
-        what it would see if it were in each environment at its current location.
+        """Generate composite state from multiple environments.
+
+        This creates a stacked state representation where the agent observes what it
+        would see if it were in each environment at its current location.
         """
         if not self.composite_envs:
             # Fallback to single environment if no composite envs available
@@ -157,12 +159,17 @@ class StatePunishmentAgent(Agent):
                 single_view = self.generate_single_view(world)
             else:
                 # Create a zero state of the expected size
-                single_view_size = self.observation_spec.input_size[0] * self.observation_spec.input_size[1] * self.observation_spec.input_size[2] + 3
+                single_view_size = (
+                    self.observation_spec.input_size[0]
+                    * self.observation_spec.input_size[1]
+                    * self.observation_spec.input_size[2]
+                    + 3
+                )
                 single_view = np.zeros((1, single_view_size))
             # Create a composite state by repeating the single view
             composite_state = np.concatenate([single_view] * self.state_stack_size)
             return composite_state
-        
+
         env_states = []
         for env in self.composite_envs:
             if env is not None and hasattr(env, "world"):

@@ -324,8 +324,10 @@ class A2C_DeepMind(PyTorchModel):
         max_turns: int = 1000,
         seed: int | None = None,
     ):
-        super().__init__(input_size, action_space, layer_size, epsilon, 0.0, device, seed)
-        
+        super().__init__(
+            input_size, action_space, layer_size, epsilon, 0.0, device, seed
+        )
+
         # A2C-specific parameters
         self.lstm_hidden_size = lstm_hidden_size
         self.gamma = gamma

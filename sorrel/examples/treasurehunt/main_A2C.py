@@ -8,22 +8,23 @@ treasurehunt environment with appropriate configurations.
 import argparse
 from datetime import datetime
 from pathlib import Path
+
 from omegaconf import DictConfig, OmegaConf
 
 from sorrel.examples.treasurehunt.entities import EmptyEntity
 from sorrel.examples.treasurehunt.env_A2C import TreasurehuntFlexEnv
 from sorrel.examples.treasurehunt.world import TreasurehuntWorld
-from sorrel.utils.logging import TensorboardLogger, ConsoleLogger, Logger
+from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 
 class CombinedLogger(Logger):
     """A logger that combines console and tensorboard logging."""
-    
+
     def __init__(self, max_epochs: int, log_dir: str | Path, *args):
         super().__init__(max_epochs, *args)
         self.console_logger = ConsoleLogger(max_epochs, *args)
         self.tensorboard_logger = TensorboardLogger(max_epochs, log_dir, *args)
-    
+
     def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
         # Log to both console and tensorboard
         self.console_logger.record_turn(epoch, loss, reward, epsilon)
@@ -35,43 +36,58 @@ class EncounterLogger(CombinedLogger):
     def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
         # Add encounter tracking data
         encounter_data = {}
-        
+
         # Record turn for each agent individually with hierarchical tags
         for i, agent in enumerate(experiment.agents):
-            if hasattr(agent, 'encounters'):
+            if hasattr(agent, "encounters"):
                 # Individual agent score
                 encounter_data[f"Agent_{i}/individual_score"] = agent.individual_score
-                
+
                 # All encounters for this agent
                 for entity_type, count in agent.encounters.items():
                     encounter_data[f"Agent_{i}/{entity_type}_encounters"] = count
-        
+
         # Also record total and mean encounters across all agents
-        total_encounters = {"gem": 0, "apple": 0, "coin": 0, "bone": 0, "food": 0, "wall": 0, "empty": 0, "sand": 0, "agent": 0}
+        total_encounters = {
+            "gem": 0,
+            "apple": 0,
+            "coin": 0,
+            "bone": 0,
+            "food": 0,
+            "wall": 0,
+            "empty": 0,
+            "sand": 0,
+            "agent": 0,
+        }
         total_individual_scores = 0
-        
+
         for agent in experiment.agents:
-            if hasattr(agent, 'encounters'):
+            if hasattr(agent, "encounters"):
                 total_individual_scores += agent.individual_score
                 for entity_type, count in agent.encounters.items():
                     if entity_type in total_encounters:
                         total_encounters[entity_type] += count
-        
+
         # Total and mean individual scores
         encounter_data["Total/individual_score"] = total_individual_scores
         num_agents = len(experiment.agents)
-        encounter_data["Mean/individual_score"] = total_individual_scores / num_agents if num_agents > 0 else 0
-        
+        encounter_data["Mean/individual_score"] = (
+            total_individual_scores / num_agents if num_agents > 0 else 0
+        )
+
         # Total and mean encounters for each entity type
         for entity_type, count in total_encounters.items():
             encounter_data[f"Total/{entity_type}_encounters"] = count
-            encounter_data[f"Mean/{entity_type}_encounters"] = count / num_agents if num_agents > 0 else 0
-        
+            encounter_data[f"Mean/{entity_type}_encounters"] = (
+                count / num_agents if num_agents > 0 else 0
+            )
+
         # Merge encounter data with existing kwargs
         kwargs.update(encounter_data)
-        
+
         # Call parent record_turn
         super().record_turn(epoch, loss, reward, epsilon, **kwargs)
+
 
 # begin main
 if __name__ == "__main__":
@@ -165,11 +181,11 @@ if __name__ == "__main__":
 
     # Convert config to OmegaConf format
     config = OmegaConf.create(config)
-    
+
     # Create log directory with run name and timestamp
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_dir = Path(__file__).parent / f'runs/{config.experiment.run_name}_{timestamp}'
-    
+    log_dir = Path(__file__).parent / f"runs/{config.experiment.run_name}_{timestamp}"
+
     print(f"Running Treasurehunt experiment with {args.model.upper()} model...")
     print(f"Run name: {config.experiment.run_name}")
     print(f"Epochs: {args.epochs}, Max turns per epoch: {args.max_turns}")
@@ -180,15 +196,15 @@ if __name__ == "__main__":
     env = TreasurehuntWorld(config=config, default_entity=EmptyEntity())
     # construct the environment
     experiment = TreasurehuntFlexEnv(env, config)
-    
-    output_dir = Path(__file__).parent / f'data/{config.experiment.run_name}'
+
+    output_dir = Path(__file__).parent / f"data/{config.experiment.run_name}"
     # run the experiment with combined logger
     experiment.run_experiment(
         logger=EncounterLogger(
             max_epochs=config.experiment.epochs,
             log_dir=log_dir,
         ),
-        output_dir=output_dir
+        output_dir=output_dir,
     )
 
 # end main

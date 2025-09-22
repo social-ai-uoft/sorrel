@@ -21,11 +21,18 @@ from .world import StatePunishmentWorld
 
 
 class MultiWorldImageRenderer:
-    """Custom image renderer for multi-world environments that combines all worlds into a 2x3 grid."""
-    
-    def __init__(self, experiment_name: str, record_period: int, num_turns: int, individual_envs: List):
+    """Custom image renderer for multi-world environments that combines all worlds into
+    a 2x3 grid."""
+
+    def __init__(
+        self,
+        experiment_name: str,
+        record_period: int,
+        num_turns: int,
+        individual_envs: List,
+    ):
         """Initialize the multi-world image renderer.
-        
+
         Args:
             experiment_name: Name of the experiment
             record_period: How often to create an animation
@@ -37,27 +44,28 @@ class MultiWorldImageRenderer:
         self.num_turns = num_turns
         self.individual_envs = individual_envs
         self.frames = []
-    
+
     def clear(self):
         """Zero out the frames."""
         del self.frames[:]
-    
+
     def add_image(self, individual_envs: List) -> None:
         """Add a combined image of all worlds to the frames.
-        
+
         Args:
             individual_envs: List of individual environments to render
         """
-        from sorrel.utils.visualization import render_sprite, image_from_array
         from PIL import Image
-        
+
+        from sorrel.utils.visualization import image_from_array, render_sprite
+
         # Render each individual world
         world_images = []
         for env in individual_envs:
             full_sprite = render_sprite(env.world)
             world_img = image_from_array(full_sprite)
             world_images.append(world_img)
-        
+
         # Create a 2x3 grid layout
         # Calculate grid dimensions
         num_worlds = len(world_images)
@@ -67,64 +75,68 @@ class MultiWorldImageRenderer:
             rows, cols = 2, 3
         else:
             rows, cols = 3, 3
-        
+
         # Get dimensions of individual images
         if world_images:
             img_width, img_height = world_images[0].size
         else:
             return
-        
+
         # Create combined image
         combined_width = cols * img_width
         combined_height = rows * img_height
-        combined_img = Image.new('RGB', (combined_width, combined_height), (255, 255, 255))
-        
+        combined_img = Image.new(
+            "RGB", (combined_width, combined_height), (255, 255, 255)
+        )
+
         # Place each world image in the grid
         for i, world_img in enumerate(world_images):
             if i >= rows * cols:
                 break
-                
+
             row = i // cols
             col = i % cols
-            
+
             x = col * img_width
             y = row * img_height
-            
+
             combined_img.paste(world_img, (x, y))
-        
+
         # Add labels for each world
         from PIL import ImageDraw, ImageFont
+
         draw = ImageDraw.Draw(combined_img)
-        
+
         # Try to use a default font, fallback to basic if not available
         try:
             font = ImageFont.truetype("arial.ttf", 16)
         except:
             font = ImageFont.load_default()
-        
+
         # Add world labels
         for i, world_img in enumerate(world_images):
             if i >= rows * cols:
                 break
-                
+
             row = i // cols
             col = i % cols
-            
+
             x = col * img_width + 5
             y = row * img_height + 5
-            
+
             draw.text((x, y), f"World {i+1}", fill=(0, 0, 0), font=font)
-        
+
         self.frames.append(combined_img)
-    
+
     def save_gif(self, epoch: int, folder: Path) -> None:
         """Save a gif to disk.
-        
+
         Args:
             epoch: The epoch number
             folder: The destination folder
         """
         from sorrel.utils.visualization import animate_gif
+
         animate_gif(self.frames, f"{self.experiment_name}_epoch{epoch}", folder)
         # Clear frames
         self.clear()
@@ -318,11 +330,19 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 )
 
                 avg_loss = total_loss / loss_count if loss_count > 0 else 0.0
-                
+
                 # Get current epsilon from the first agent's model
-                current_epsilon = np.mean([self.individual_envs[k].agents[0].model.epsilon 
-                for k in range(len(self.individual_envs))]) if self.individual_envs else 0.0
-                
+                current_epsilon = (
+                    np.mean(
+                        [
+                            self.individual_envs[k].agents[0].model.epsilon
+                            for k in range(len(self.individual_envs))
+                        ]
+                    )
+                    if self.individual_envs
+                    else 0.0
+                )
+
                 logger.record_turn(
                     epoch, avg_loss, total_reward, epsilon=current_epsilon
                 )
@@ -372,7 +392,17 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         for i in range(agent_num):
             # Create the observation spec with separate entity types for each agent
-            entity_list = ["EmptyEntity", "Wall", "Sand", "A", "B", "C", "D", "E", 'StatePunishmentAgent'] 
+            entity_list = [
+                "EmptyEntity",
+                "Wall",
+                "Sand",
+                "A",
+                "B",
+                "C",
+                "D",
+                "E",
+                "StatePunishmentAgent",
+            ]
             # + [
             #     f"Agent{i}" for i in range(agent_num)
             # ]
@@ -529,7 +559,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 self.world.add(index, Wall())
             elif z == 0:  # if location is on the bottom layer, put sand there
                 self.world.add(index, Sand())
-            elif z == 1:  # if location is on the top layer, indicate that it's possible for an agent to spawn there
+            elif (
+                z == 1
+            ):  # if location is on the top layer, indicate that it's possible for an agent to spawn there
                 # valid spawn location
                 valid_spawn_locations.append(index)
 

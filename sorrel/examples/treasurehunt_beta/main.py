@@ -102,7 +102,7 @@ if __name__ == "__main__":
         "world": {
             "height": 10,
             "width": 10,
-            "gem_value": 1.16315789, # 1.16315789,  0.61578947, -0.48124632, -2.57052564, -9.98226639 
+            "gem_value": 1.16315789,  # 1.16315789,  0.61578947, -0.48124632, -2.57052564, -9.98226639
             "apple_value": 0.61578947,
             "coin_value": -0.48124632,
             "bone_value": -2.57052564,
@@ -113,7 +113,9 @@ if __name__ == "__main__":
 
     # Create log directory with run name and timestamp
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_dir = Path(__file__).parent / f'runs/{config["experiment"]["run_name"]}_{timestamp}'
+    log_dir = (
+        Path(__file__).parent / f'runs/{config["experiment"]["run_name"]}_{timestamp}'
+    )
     anim_dir = Path(__file__).parent / f'data/{config["experiment"]["run_name"]}'
 
     print(f"Running Treasurehunt experiment...")
@@ -140,7 +142,7 @@ if __name__ == "__main__":
             max_epochs=config["experiment"]["epochs"],
             log_dir=log_dir,
         ),
-        output_dir=anim_dir
+        output_dir=anim_dir,
     )
 
 # end main

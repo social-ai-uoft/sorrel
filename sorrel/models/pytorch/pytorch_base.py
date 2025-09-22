@@ -158,7 +158,9 @@ class DoublePyTorchModel(PyTorchModel):
         device: str | torch.device,
         seed: int,
     ):
-        super().__init__(input_size, action_space, layer_size, epsilon, epsilon_min, device, seed)
+        super().__init__(
+            input_size, action_space, layer_size, epsilon, epsilon_min, device, seed
+        )
 
         self.models: dict[str, nn.Module] = {
             "local": nn.Module(),
