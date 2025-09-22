@@ -46,9 +46,9 @@ class TagEnv(Environment[Gridworld]):
                 full_view=False,
                 vision_radius=self.config.agent.vision_radius,
             )
-            observation_spec.override_input_size(
-                np.array(observation_spec.input_size).reshape(1, -1).tolist()
-            )
+            # Add one more input for self.it
+            input_size = (int(np.prod(observation_spec.input_size) + 1), 1)
+            observation_spec.override_input_size(input_size)
 
             # create the action spec
             action_spec = ActionSpec(["up", "down", "left", "right"])

@@ -153,7 +153,7 @@ class GamblingEnv(Environment[GamblingWorld]):
         renderer = None
         if animate:
             renderer = ImageRenderer(
-                experiment_name=self.world.__class__.__name__,
+                experiment_name=self.__class__.__name__,
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
             )

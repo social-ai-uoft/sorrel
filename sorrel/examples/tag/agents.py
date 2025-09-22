@@ -57,6 +57,10 @@ class TagAgent(MovingAgent[Gridworld]):
     def pov(self, world: Gridworld) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
         image = self.observation_spec.observe(world, self.location)
+        # Add whether the agent is it
+        image = np.concatenate(
+            (image.reshape(-1, 1).squeeze(), np.array([self.it], dtype=int))
+        )
         # flatten the image to get the state
         return image.reshape(1, -1)
 
