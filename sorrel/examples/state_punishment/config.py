@@ -21,18 +21,20 @@ def create_config(
     exploration_rate: float = 0.9,
     exploration_decay: float = 0.001,
     exploration_min: float = 0.05,
+    no_collective_harm: bool = True,
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
     # Social harm config - set to 0 for all entities in simple foraging mode
     if simple_foraging:
-        social_harm_config = {
-            "A": 0.0,
-            "B": 0.0,
-            "C": 0.0,
-            "D": 0.0,
-            "E": 0.0,
-        }
+        if no_collective_harm:
+            social_harm_config = {
+                "A": 0.0,
+                "B": 0.0,
+                "C": 0.0,
+                "D": 0.0,
+                "E": 0.0,
+            }
     else:
         social_harm_config = {
             "A": 2.16666667,
@@ -46,14 +48,15 @@ def create_config(
     map_size = map_size
     vision_radius = 4
     respawn_prob = 0.005  # 0.005
+    collective_harm_tag = "no_collective_harm" if no_collective_harm else "collective_harm"
 
     # Generate dynamic run name based on experiment parameters
     if simple_foraging:
         run_name = (
-            f"simple_foraging_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}_{num_agents}agents_punish{fixed_punishment_level:.1f}"
+            f"{collective_harm_tag}_simple_foraging_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}_{num_agents}agents_punish{fixed_punishment_level:.1f}"
         )
     else:
-        run_name = f"state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents"
+        run_name = f"{collective_harm_tag}_state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents"
 
     return {
         "experiment": {

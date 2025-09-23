@@ -54,6 +54,10 @@ def parse_arguments():
         "--fixed_punishment", type=float, default=0.2, help="Fixed punishment level"
     )
 
+    parser.add_argument(
+        "--no_collective_harm", action="store_true", help="no collective harm"
+    )
+
     # Model parameters
     # parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
@@ -106,6 +110,7 @@ def run_experiment(args):
         # learning_rate=args.learning_rate,
         batch_size=args.batch_size,
         memory_size=args.memory_size,
+        no_collective_harm=args.no_collective_harm,
     )
 
     # Print expected rewards
