@@ -1,13 +1,17 @@
 from typing import Sequence
+
 import numpy as np
+
 from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.worlds.gridworld import Gridworld
 
 
 class TaxiObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
-    """Observation specification for the taxi environment. For taxi agents whose observations
-    are represented as one-hot encodings."""
-    
+    """Observation specification for the taxi environment.
+
+    For taxi agents whose observations are represented as one-hot encodings.
+    """
+
     def __init__(
         self,
         passenger_loc: int,
@@ -15,7 +19,7 @@ class TaxiObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
         entity_list: list[str] = [""],
         full_view: bool = True,
         vision_radius: int | None = None,
-        env_dims: Sequence[int] | None = None
+        env_dims: Sequence[int] | None = None,
     ):
         super().__init__(entity_list, full_view, vision_radius, env_dims)
 
@@ -35,8 +39,8 @@ class TaxiObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
         world: Gridworld,
         location: tuple | None = None,
     ) -> np.ndarray:
-        """Returns an observation in the form of a one-hot encoding including the 
-        taxi's location, passenger location, and destination location."""
+        """Returns an observation in the form of a one-hot encoding including the taxi's
+        location, passenger location, and destination location."""
 
         if location is None:
             raise ValueError("Location must be provided for TaxiObservationSpec.")
