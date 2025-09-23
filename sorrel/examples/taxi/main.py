@@ -1,8 +1,5 @@
 from pathlib import Path
 
-import hydra
-from omegaconf import DictConfig
-
 # sorrel imports
 from sorrel.examples.taxi.entities import EmptyEntity
 from sorrel.examples.taxi.env import TaxiEnv

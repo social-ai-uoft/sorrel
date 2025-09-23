@@ -40,8 +40,9 @@ class PassengerPoint(Entity[TaxiWorld]):
     def __init__(self, point_id: int):
         super().__init__()
         self.passable = True
-        # self.sprite = Path(__file__).parent / ("./assets/passenger_point" + str(point_id) + ".png")
-        self.sprite = Path(__file__).parent / "./assets/road.png"
+        self.sprite = Path(__file__).parent / (
+            "./assets/passenger_point" + str(point_id) + ".png"
+        )
 
 
 class Passenger(Entity[TaxiWorld]):
