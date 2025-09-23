@@ -33,7 +33,13 @@ class StatePunishmentLogger:
         encounter_data = {}
 
         if self.multi_agent_env is not None:
-            # Track encounters for each agent
+            # Initialize total and mean counters
+            total_encounters = {}
+            mean_encounters = {}
+            
+            # Track encounters and scores for each agent
+            total_individual_scores = 0
+            
             for i, env in enumerate(self.multi_agent_env.individual_envs):
                 agent = env.agents[0]
                 agent_count = len(agent.encounters)
@@ -41,11 +47,27 @@ class StatePunishmentLogger:
                 # Individual agent encounter data
                 for entity_type, count in agent.encounters.items():
                     encounter_data[f"Agent_{i}/{entity_type}_encounters"] = count
-
-                # encounter_data[f"Total/total_{entity_type}_encounters"] += count
-                # encounter_data[f"Mean/mean_{entity_type}_encounters"] += count
+                    
+                    # Initialize if first time seeing this entity type
+                    if entity_type not in total_encounters:
+                        total_encounters[entity_type] = 0
+                        mean_encounters[entity_type] = 0
+                    
+                    total_encounters[entity_type] += count
+                    mean_encounters[entity_type] += count
+                
+                # Individual agent score
+                encounter_data[f"Agent_{i}/individual_score"] = agent.individual_score
+                total_individual_scores += agent.individual_score
             
-            # encounter_data[f'Mean/mean_{entity_type}_encounters'] /= len(self.multi_agent_env.individual_envs)
+            # Add totals and means to encounter_data
+            for entity_type in total_encounters:
+                encounter_data[f"Total/total_{entity_type}_encounters"] = total_encounters[entity_type]
+                encounter_data[f"Mean/mean_{entity_type}_encounters"] = mean_encounters[entity_type] / len(self.multi_agent_env.individual_envs)
+            
+            # Add total and mean individual scores
+            encounter_data["Total/total_individual_score"] = total_individual_scores
+            encounter_data["Mean/mean_individual_score"] = total_individual_scores / len(self.multi_agent_env.individual_envs)
 
             # Global punishment level metrics (shared across all agents)
             if hasattr(

@@ -73,7 +73,7 @@ def parse_arguments():
 
 def save_config(config, config_dir, run_folder):
     """Save the configuration to a YAML file."""
-    config_dir.mkdir(parents=True, exist_ok=True)
+    # config_dir already includes the run_folder subdirectory, so no need to create it again
     config_file = config_dir / f"{run_folder}.yaml"
 
     # Convert config to a serializable format
@@ -125,12 +125,13 @@ def run_experiment(args):
     # Create directories relative to the state_punishment folder
     log_dir = Path(__file__).parent / "runs" / run_folder
     anim_dir = Path(__file__).parent / "data" / run_folder
-    config_dir = Path(__file__).parent / "configs" / run_folder
+    config_dir = Path(__file__).parent / "configs"
     experiment_name = args.experiment_name or f"{base_run_name}_{args.num_agents}agents"
 
     # Create the directories if they don't exist
     log_dir.mkdir(parents=True, exist_ok=True)
     anim_dir.mkdir(parents=True, exist_ok=True)
+    config_dir.mkdir(parents=True, exist_ok=True)
 
     # Save the configuration
     config_file = save_config(config, config_dir, run_folder)
