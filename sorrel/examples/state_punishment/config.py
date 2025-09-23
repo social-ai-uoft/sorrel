@@ -35,6 +35,14 @@ def create_config(
                 "D": 0.0,
                 "E": 0.0,
             }
+        else:
+            social_harm_config = {
+                "A": 2.16666667,
+                "B": 2.86,
+                "C": 4.99546667,
+                "D": 11.572704,
+                "E": 31.83059499,
+            }
     else:
         social_harm_config = {
             "A": 2.16666667,
@@ -62,7 +70,7 @@ def create_config(
         "experiment": {
             "epochs": epochs,
             "max_turns": 100,
-            "record_period": 100,
+            "record_period": 2000,
             "run_name": run_name,
             "num_agents": num_agents,
             "initial_resources": num_resources,
