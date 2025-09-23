@@ -39,6 +39,9 @@ class StatePunishmentLogger:
             
             # Track encounters and scores for each agent
             total_individual_scores = 0
+            sigma_weights_ff1 = []
+            sigma_weights_advantage = []
+            sigma_weights_value = []
             
             for i, env in enumerate(self.multi_agent_env.individual_envs):
                 agent = env.agents[0]
@@ -59,6 +62,23 @@ class StatePunishmentLogger:
                 # Individual agent score
                 encounter_data[f"Agent_{i}/individual_score"] = agent.individual_score
                 total_individual_scores += agent.individual_score
+                
+                # Access sigma_weight from PyTorchIQN model
+                if hasattr(agent.model, 'qnetwork_local') and hasattr(agent.model.qnetwork_local, 'ff_1'):
+                    # Get sigma_weight from the first NoisyLinear layer (ff_1)
+                    sigma_weight_ff1 = agent.model.qnetwork_local.ff_1.sigma_weight.mean().item()
+                    encounter_data[f"Agent_{i}/sigma_weight_ff1"] = sigma_weight_ff1
+                    sigma_weights_ff1.append(sigma_weight_ff1)
+                    
+                    # Get sigma_weight from advantage layer
+                    sigma_weight_adv = agent.model.qnetwork_local.advantage.sigma_weight.mean().item()
+                    encounter_data[f"Agent_{i}/sigma_weight_advantage"] = sigma_weight_adv
+                    sigma_weights_advantage.append(sigma_weight_adv)
+                    
+                    # Get sigma_weight from value layer
+                    sigma_weight_val = agent.model.qnetwork_local.value.sigma_weight.mean().item()
+                    encounter_data[f"Agent_{i}/sigma_weight_value"] = sigma_weight_val
+                    sigma_weights_value.append(sigma_weight_val)
             
             # Add totals and means to encounter_data
             for entity_type in total_encounters:
@@ -68,6 +88,14 @@ class StatePunishmentLogger:
             # Add total and mean individual scores
             encounter_data["Total/total_individual_score"] = total_individual_scores
             encounter_data["Mean/mean_individual_score"] = total_individual_scores / len(self.multi_agent_env.individual_envs)
+            
+            # Add mean sigma weights across all agents
+            if sigma_weights_ff1:
+                encounter_data["Mean/mean_sigma_weight_ff1"] = sum(sigma_weights_ff1) / len(sigma_weights_ff1)
+            if sigma_weights_advantage:
+                encounter_data["Mean/mean_sigma_weight_advantage"] = sum(sigma_weights_advantage) / len(sigma_weights_advantage)
+            if sigma_weights_value:
+                encounter_data["Mean/mean_sigma_weight_value"] = sum(sigma_weights_value) / len(sigma_weights_value)
 
             # Global punishment level metrics (shared across all agents)
             if hasattr(
