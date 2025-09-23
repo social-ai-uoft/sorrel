@@ -156,7 +156,7 @@ def run_experiment(args):
     print("-" * 50)
 
     multi_agent_env.run_experiment(
-        animate=False,  # Enable animations
+        animate=True,  # Enable animations
         logging=True,
         logger=logger,
         output_dir=anim_dir,

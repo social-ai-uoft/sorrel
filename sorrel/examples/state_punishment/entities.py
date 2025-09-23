@@ -33,7 +33,7 @@ class Wall(Entity):
         super().__init__()
         self.kind = "Wall"
         self.passable = False
-        self.value = 0
+        self.value = -1
         self.social_harm = 0
         self.sprite = Path(__file__).parent / "./assets/wall.png"
 

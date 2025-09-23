@@ -42,16 +42,18 @@ def create_config(
             "E": 31.83059499,
         }
 
+    # flexible parameters
+    map_size = map_size
+    vision_radius = 4
+    respawn_prob = 0.005  # 0.005
+
     # Generate dynamic run name based on experiment parameters
     if simple_foraging:
         run_name = (
-            f"simple_foraging_{num_agents}agents_punish{fixed_punishment_level:.1f}"
+            f"simple_foraging_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}_{num_agents}agents_punish{fixed_punishment_level:.1f}"
         )
     else:
-        mode = (
-            "composite" if (use_composite_views or use_composite_actions) else "simple"
-        )
-        run_name = f"state_punishment_{mode}_{num_agents}agents"
+        run_name = f"state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents"
 
     return {
         "experiment": {
@@ -71,9 +73,8 @@ def create_config(
         "world": {
             "height": map_size,
             "width": map_size,
-            "layers": 1,
             "num_resources": num_resources,
-            "spawn_prob": 0.0,
+            "spawn_prob": respawn_prob,
             "a_value": 2.9,  # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
             "b_value": 3.316,
             "c_value": 4.59728,
@@ -87,11 +88,11 @@ def create_config(
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
         },
         "model": {
-            "agent_vision_radius": 5,
+            "agent_vision_radius": vision_radius,
             "epsilon": exploration_rate,
             "epsilon_min": exploration_min,
             "epsilon_decay": exploration_decay,
-            "full_view": True,
+            "full_view": False,
             "layer_size": 250,
             "n_frames": 1,
             "n_step": 3,

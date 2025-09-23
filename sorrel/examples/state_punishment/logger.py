@@ -41,10 +41,11 @@ class StatePunishmentLogger:
                 # Individual agent encounter data
                 for entity_type, count in agent.encounters.items():
                     encounter_data[f"Agent_{i}/{entity_type}_encounters"] = count
-                    encounter_data[f"Agent_{i}/total_encounters"] = agent_count
-                    encounter_data[f"Agent_{i}/mean_{entity_type}_encounters"] = (
-                        count / agent_count if agent_count > 0 else 0
-                    )
+
+                # encounter_data[f"Total/total_{entity_type}_encounters"] += count
+                # encounter_data[f"Mean/mean_{entity_type}_encounters"] += count
+            
+            # encounter_data[f'Mean/mean_{entity_type}_encounters'] /= len(self.multi_agent_env.individual_envs)
 
             # Global punishment level metrics (shared across all agents)
             if hasattr(
