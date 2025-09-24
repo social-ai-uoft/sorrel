@@ -8,17 +8,16 @@ from sorrel.environment import Environment
 from sorrel.examples.taxi.agents import TaxiAgent
 from sorrel.examples.taxi.entities import (
     Destination,
-    EmptyEntity,
     Passenger,
     PassengerPoint,
     Road,
     Wall,
 )
+from sorrel.examples.taxi.observation_spec import TaxiObservationSpec
 from sorrel.examples.taxi.world import TaxiWorld
 
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.observation.observation_spec import OneHotObservationSpec
 
 
 class TaxiEnv(Environment[TaxiWorld]):
@@ -44,17 +43,14 @@ class TaxiEnv(Environment[TaxiWorld]):
                 "Passenger",
                 "Destination",
             ]
-            observation_spec = OneHotObservationSpec(
+            observation_spec = TaxiObservationSpec(
+                0,
+                0,
                 entity_list,
                 full_view=True,
                 env_dims=(self.world.height, self.world.width),
             )
-            observation_spec.override_input_size(
-                np.array(observation_spec.input_size).reshape(1, -1).tolist()
-            )
-
-            # print(observation_spec.input_size)
-            # raise Exception("Debugging")
+            observation_spec.override_input_size((500,))
 
             # create the action spec
             action_spec = ActionSpec(
@@ -63,8 +59,7 @@ class TaxiEnv(Environment[TaxiWorld]):
 
             # create the model
             model = PyTorchIQN(
-                # input_size=observation_spec.input_size,
-                input_size=(500,),
+                input_size=observation_spec.input_size,
                 action_space=action_spec.n_actions,
                 layer_size=250,
                 epsilon=0.8,
@@ -76,12 +71,10 @@ class TaxiEnv(Environment[TaxiWorld]):
                 model_update_freq=4,
                 batch_size=64,
                 memory_size=1024,
-                # LR=0.00025,
                 LR=0.001,
                 TAU=0.001,
                 GAMMA=0.99,
                 n_quantiles=12,
-                # n_quantiles=64,
             )
 
             agents.append(
@@ -144,7 +137,13 @@ class TaxiEnv(Environment[TaxiWorld]):
         ]
 
         self.world.add(tuple(passenger_destination_locations[0]), Passenger())
-        self.world.passenger_loc = passenger_destination_location_indices[0]
         self.world.add(tuple(passenger_destination_locations[1]), Destination())
-        self.world.destination_loc = passenger_destination_location_indices[1]
-        # print("Passenger location index:", self.world.passenger_loc, "destination location index: ", self.world.destination_loc)
+
+        for agent in self.agents:
+            if isinstance(agent.observation_spec, TaxiObservationSpec):
+                agent.observation_spec.passenger_loc = (
+                    passenger_destination_location_indices[0]
+                )
+                agent.observation_spec.destination_loc = (
+                    passenger_destination_location_indices[1]
+                )
