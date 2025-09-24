@@ -156,3 +156,5 @@ runs/
 sorrel/examples/treasurehunt_theta/
 sorrel/examples/treasurehunt_beta/data/
 sorrel/examples/*/configs/
+sorrel/examples/*/analysis/res/
+sorrel/examples/*/runs*/
