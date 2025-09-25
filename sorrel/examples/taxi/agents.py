@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.agents import Agent
-from sorrel.examples.taxi.entities import Destination, Passenger
+from sorrel.examples.taxi.entities import Destination, Passenger, Wall
 from sorrel.examples.taxi.observation_spec import TaxiObservationSpec
 from sorrel.examples.taxi.world import TaxiWorld
 
@@ -74,6 +74,11 @@ class TaxiAgent(Agent[TaxiWorld]):
             reward += self.pickup(world, action)
         if action_name == "dropoff":
             reward += self.dropoff(world, action)
+
+        target_object = world.observe(new_location)
+
+        if isinstance(target_object, Wall):
+            reward -= 2
 
         world.move(self, new_location)
 

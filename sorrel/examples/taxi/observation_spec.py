@@ -16,20 +16,22 @@ class TaxiObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
         self,
         passenger_loc: int,
         destination_loc: int,
+        env_dims: Sequence[int],
         entity_list: list[str] = [""],
         full_view: bool = True,
         vision_radius: int | None = None,
-        env_dims: Sequence[int] | None = None,
     ):
         super().__init__(entity_list, full_view, vision_radius, env_dims)
+
+        self.map_size = env_dims[0] - 2
 
         self.passenger_loc = passenger_loc
         self.destination_loc = destination_loc
 
     def encode_state(self, row: int, col: int, passenger: int, destination: int) -> int:
-        return ((row * 5 + col) * 5 + passenger) * 4 + destination
+        return ((row * self.map_size + col) * 5 + passenger) * 4 + destination
 
-    def to_one_hot(self, state: int, n_states: int = 500) -> np.ndarray:
+    def to_one_hot(self, state: int, n_states: int) -> np.ndarray:
         one_hot = np.zeros(n_states, dtype=np.float32)
         one_hot[state] = 1.0
         return one_hot
@@ -51,6 +53,6 @@ class TaxiObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
             self.passenger_loc,
             self.destination_loc,
         )
-        vec = [self.to_one_hot(enc_state)]
+        vec = [self.to_one_hot(enc_state, n_states=self.input_size[0])]
         vec = np.array(vec).reshape(1, -1)
         return vec
