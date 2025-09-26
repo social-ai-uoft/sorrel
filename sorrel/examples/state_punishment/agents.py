@@ -88,9 +88,9 @@ class StatePunishmentAgent(Agent):
         visual_field = image.reshape(1, -1)
 
         # Add extra features: punishment level, social harm, and random noise
-        punishment_level = state_system.prob
-        social_harm = social_harm_dict.get(self.agent_id, 0.0)
-        random_noise = np.random.random()
+        punishment_level = state_system.prob #* 0
+        social_harm = social_harm_dict.get(self.agent_id, 0.0) #+ np.random.random() * 10 - 5
+        random_noise = np.random.random() 
 
         extra_features = np.array(
             [punishment_level, social_harm, random_noise], dtype=visual_field.dtype
@@ -204,6 +204,7 @@ class StatePunishmentAgent(Agent):
 
         # Apply punishment if it's a taboo resource
         if hasattr(target_object, "kind") and state_system is not None:
+
             reward -= state_system.calculate_punishment(target_object.kind)
 
             # Update social harm for all other agents

@@ -119,11 +119,11 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f"{base_run_name}_{timestamp}"
+    run_folder = f"extended_random_exploration_{base_run_name}_{timestamp}"
 
     # Both tensorboard logs and animations go to the same timestamped folder
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs" / run_folder
+    log_dir = Path(__file__).parent / "runs_p48_a3_probabilistic" / run_folder
     anim_dir = Path(__file__).parent / "data" / run_folder
     config_dir = Path(__file__).parent / "configs"
     experiment_name = args.experiment_name or f"{base_run_name}_{args.num_agents}agents"

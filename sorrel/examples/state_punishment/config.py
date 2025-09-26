@@ -19,7 +19,8 @@ def create_config(
     memory_size: int = 1024,
     target_update_frequency: int = 200,
     exploration_rate: float = 0.9,
-    exploration_decay: float = 0.001,
+    exploration_decay: float = 0.00001, 
+    # 0.001
     exploration_min: float = 0.05,
     no_collective_harm: bool = True,
 ) -> Dict[str, Any]:
@@ -37,19 +38,19 @@ def create_config(
             }
         else:
             social_harm_config = {
-                "A": 2.16666667,
-                "B": 2.86,
-                "C": 4.99546667,
-                "D": 11.572704,
-                "E": 31.83059499,
+                "A": 0, # 2.16666667
+                "B": 0, # 2.86
+                "C": 1.2, # 4.99546667
+                "D": 3.5, # 11.572704
+                "E": 7.5, # 31.83059499
             }
     else:
         social_harm_config = {
-            "A": 2.16666667,
-            "B": 2.86,
-            "C": 4.99546667,
-            "D": 11.572704,
-            "E": 31.83059499,
+            "A": 0, # 2.16666667
+            "B": 0, # 2.86
+            "C": 1.2, # 4.99546667
+            "D": 3.5, # 11.572704
+            "E": 7.5, # 31.83059499
         }
 
     # flexible parameters
@@ -61,10 +62,10 @@ def create_config(
     # Generate dynamic run name based on experiment parameters
     if simple_foraging:
         run_name = (
-            f"{collective_harm_tag}_simple_foraging_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}_{num_agents}agents_punish{fixed_punishment_level:.1f}"
+            f"probabilistic_{collective_harm_tag}_simple_foraging_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}_{num_agents}agents_punish{fixed_punishment_level:.1f}"
         )
     else:
-        run_name = f"{collective_harm_tag}_state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents"
+        run_name = f"probabilistic_{collective_harm_tag}_state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents"
 
     return {
         "experiment": {
@@ -93,7 +94,7 @@ def create_config(
             "e_value": 20.69835699,
             "social_harm": social_harm_config,
             "init_punishment_prob": 0.0,
-            "punishment_magnitude": 55.0,
+            "punishment_magnitude": 48.0,
             "change_per_vote": 0.1,
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
