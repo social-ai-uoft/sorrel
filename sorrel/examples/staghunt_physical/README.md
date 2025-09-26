@@ -1,0 +1,1 @@
+This game is adapted from the game Stag Hunt Arena in https://github.com/google-deepmind/meltingpot

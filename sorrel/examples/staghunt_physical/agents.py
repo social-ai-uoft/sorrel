@@ -1,4 +1,4 @@
-"""Agent implementation for the stag hunt environment with custom observation spec.
+"""Agent implementation for the stag hunt environment.
 
 This module defines :class:`StagHuntAgent`, a subclass of
 ``sorrel.agents.Agent`` that encapsulates the behaviour of players in the
@@ -10,8 +10,10 @@ another ready agent.  The agent obtains small taste rewards upon
 collecting resources and larger payoffs via the interaction matrix when
 engaging another player.
 
-This version includes a custom observation spec that handles inventory
-and ready flag as extra scalar observations, similar to the cleanup example.
+The logic for resolving the interaction, computing payoffs and
+respawning players is delegated to the environment via the
+``handle_interaction`` method; this agent simply decides when to fire
+the beam.
 """
 
 from __future__ import annotations
@@ -33,142 +35,18 @@ from sorrel.examples.staghunt.entities import (
 from sorrel.examples.staghunt.world import StagHuntWorld
 from sorrel.location import Location, Vector
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.observation import embedding, observation_spec
+from sorrel.observation import embedding
+from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.worlds import Gridworld
 
 
-class StagHuntObservation(observation_spec.OneHotObservationSpec):
-    """Custom observation function for the StagHunt agent class.
-
-    This observation spec includes inventory, ready flag, and position embedding as
-    extra features, similar to the cleanup example's positional embedding approach.
-    """
-
-    def __init__(
-        self,
-        entity_list: list[str],
-        full_view: bool = False,
-        vision_radius: int | None = None,
-        embedding_size: int = 3,
-    ):
-        super().__init__(entity_list, full_view, vision_radius)
-        self.embedding_size = embedding_size
-
-        # Calculate input size including extra features and position embedding
-        if self.full_view:
-            # For full view, we need to know the world dimensions
-            # This will be set when observe() is called
-            self.input_size = (
-                1,
-                len(entity_list) * 0
-                + 4
-                + (4 * self.embedding_size)
-                # + 2,  # Extra features + absolute position embedding (x, y)
-            )  # Placeholder, will be updated
-        else:
-            self.input_size = (
-                1,
-                (
-                    len(entity_list)
-                    * (2 * self.vision_radius + 1)
-                    * (2 * self.vision_radius + 1)
-                )
-                + 4  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
-                + (4 * self.embedding_size)
-                # + 2,  # Absolute position embedding: x, y coordinates
-            )
-
-    def observe(
-        self, world: Gridworld, location: tuple | Location | None = None
-    ) -> np.ndarray:
-        """Observe the environment with extra scalar features and position embedding.
-
-        Args:
-            world: The world to observe
-            location: The location to observe from (must be provided)
-
-        Returns:
-            Observation array with visual field + extra features + position embedding, padded to consistent size
-        """
-        if location is None:
-            raise ValueError("Location must be provided for StagHuntObservation")
-
-        # Get the base visual observation
-        visual_field = super().observe(world, location).flatten()
-
-        # Calculate expected size for a perfect square observation
-        expected_side_length = 2 * self.vision_radius + 1
-        expected_visual_size = (
-            len(self.entity_list) * expected_side_length * expected_side_length
-        )
-
-        # Pad visual field to expected size if it's smaller (due to world boundaries)
-        if visual_field.shape[0] < expected_visual_size:
-            # Pad with wall representations
-            padded_visual = np.zeros(expected_visual_size, dtype=visual_field.dtype)
-            padded_visual[: visual_field.shape[0]] = visual_field
-
-            # Fill the remaining space with wall representations
-            # Each entity gets a one-hot encoding, so we need to set the wall bit
-            wall_entity_index = (
-                self.entity_list.index("Wall") if "Wall" in self.entity_list else 0
-            )
-            remaining_size = expected_visual_size - visual_field.shape[0]
-
-            # Calculate how many cells we need to pad
-            cells_to_pad = remaining_size // len(self.entity_list)
-
-            # Fill each padded cell with wall representation
-            for i in range(cells_to_pad):
-                start_idx = visual_field.shape[0] + i * len(self.entity_list)
-                end_idx = start_idx + len(self.entity_list)
-                if end_idx <= expected_visual_size:
-                    padded_visual[start_idx + wall_entity_index] = 1.0
-
-            visual_field = padded_visual
-        elif visual_field.shape[0] > expected_visual_size:
-            # This shouldn't happen, but truncate if it does
-            visual_field = visual_field[:expected_visual_size]
-
-        # Get the agent at this location to extract inventory and ready state
-        agent = None
-        if hasattr(world, "agents"):
-            for a in world.agents:
-                if a.location == location:
-                    agent = a
-                    break
-
-        if agent is None:
-            # If no agent found, use default values
-            extra_features = np.array([0, 0, 0, 0], dtype=visual_field.dtype)
-        else:
-            # Extract inventory, ready flag, and interaction reward flag from the agent
-            inv_stag = agent.inventory.get("stag", 0)
-            inv_hare = agent.inventory.get("hare", 0)
-            ready_flag = 1 if agent.ready else 0
-            interaction_reward_flag = 1 if agent.received_interaction_reward else 0
-            extra_features = np.array(
-                [inv_stag, inv_hare, ready_flag, interaction_reward_flag],
-                dtype=visual_field.dtype,
-            )
-
-        # Generate absolute position embedding
-        # pos_code = embedding.absolute_position_embedding(
-        #     location, world, normalize=True
-        # )
-        pos_code = embedding.positional_embedding(
-            location, world, (self.embedding_size, self.embedding_size)
-        )
-        return np.concatenate((visual_field, extra_features, pos_code))
-
-
 class StagHuntAgent(Agent[StagHuntWorld]):
-    """An agent that plays the stag hunt with custom observation spec.
+    """An agent that plays the stag hunt.
 
     Parameters
     ----------
-    observation_spec : StagHuntObservation
-        Custom observation specification that includes inventory and ready flag.
+    observation_spec : ObservationSpec
+        Specification of the agent's observation space.
     action_spec : ActionSpec
         Specification of the agent's discrete action space.  The
         ``actions`` list passed into the spec should define readable
@@ -189,7 +67,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
     def __init__(
         self,
-        observation_spec: StagHuntObservation,
+        observation_spec: ObservationSpec,
         action_spec: ActionSpec,
         model: PyTorchIQN,
         interaction_reward: float = 1.0,
@@ -208,16 +86,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.interaction_reward = interaction_reward
         # beam cooldown tracking
         self.beam_cooldown_timer = 0
-        # freezing state tracking
-        self.is_frozen: bool = False
-        self.freeze_timer: int = 0
-        self.is_removed: bool = False
         # pending reward from interactions (received when frozen)
         self.pending_reward: float = 0.0
         # flag indicating if agent received interaction reward in previous step
         self.received_interaction_reward: bool = False
-        self.respawn_timer: int = 0
-        self._removed_from_world: bool = False
 
         # Define directional sprites
         # Note: Based on cleanup example, hero-back.png faces UP, hero.png faces DOWN
@@ -243,28 +115,6 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         if self.beam_cooldown_timer > 0:
             self.beam_cooldown_timer -= 1
 
-    def freeze_agent(self, freeze_duration: int) -> None:
-        """Freeze the agent for a specified number of frames."""
-        self.is_frozen = True
-        self.freeze_timer = freeze_duration
-
-    def update_freeze_state(self) -> None:
-        """Update the freezing state and timers."""
-        if self.is_frozen and self.freeze_timer > 0:
-            self.freeze_timer -= 1
-            if self.freeze_timer == 0:
-                self.is_frozen = False
-                self.is_removed = True
-                self._removed_from_world = False  # Reset flag for removal
-                # Set respawn timer when agent becomes removed
-                self.respawn_timer = getattr(self, "_respawn_delay", 10)
-        elif self.is_removed and self.respawn_timer > 0:
-            self.respawn_timer -= 1
-
-    def can_act(self) -> bool:
-        """Check if the agent can take actions (not frozen or removed)."""
-        return not self.is_frozen and not self.is_removed
-
     # ------------------------------------------------------------------ #
     # Agent lifecycle methods                                             #
     # ------------------------------------------------------------------ #
@@ -280,12 +130,6 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.beam_cooldown_timer = 0  # Reset beam cooldown
         self.pending_reward = 0.0  # Reset pending reward
         self.received_interaction_reward = False  # Reset interaction reward flag
-        # Reset freezing state
-        self.is_frozen = False
-        self.freeze_timer = 0
-        self.is_removed = False
-        self.respawn_timer = 0
-        self._removed_from_world = False
         self.update_agent_kind()  # Initialize agent kind based on orientation
         # reset the underlying model (e.g., clear memory of past states)
         self.model.reset()
@@ -293,10 +137,40 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     def pov(self, world: StagHuntWorld) -> np.ndarray:
         """Return the agent's observation vector.
 
-        This method now simply delegates to the observation spec, which handles the
-        extra features automatically.
+        The base observation is a one‑hot encoding of the cells within the
+        agent's vision radius, provided by the observation specification.  We
+        augment this flattened visual field with three additional values:
+
+        1. The number of stag resources currently held in the agent's
+           inventory.
+        2. The number of hare resources currently held in the agent's
+           inventory.
+        3. A binary flag indicating whether the agent is ready to shoot
+           (i.e. has at least one resource in inventory).
+
+        These extra features allow the model to condition its behaviour on
+        internal state, reproducing the ``InventoryObserver`` and
+        ``ReadyToShootObservation`` channels described in the design spec.
         """
-        return self.observation_spec.observe(world, self.location).reshape(1, -1)
+        # observe returns an array of shape (channels, H, W)
+        obs = self.observation_spec.observe(world, self.location)
+        # flatten to a vector for the model input
+        flat = obs.reshape(-1)
+        # append inventory counts, ready flag, and interaction reward flag
+        inv_stag = self.inventory.get("stag", 0)
+        inv_hare = self.inventory.get("hare", 0)
+        ready_flag = 1 if self.ready else 0
+        interaction_reward_flag = 1 if self.received_interaction_reward else 0
+        extra = np.array(
+            [inv_stag, inv_hare, ready_flag, interaction_reward_flag], dtype=flat.dtype
+        )
+
+        # Add absolute position embedding
+        pos_code = embedding.absolute_position_embedding(
+            self.location, world, normalize=True
+        )
+
+        return np.concatenate([flat, extra, pos_code]).reshape(1, -1)
 
     def get_action(self, state: np.ndarray) -> int:
         """Select an action using the underlying model.
@@ -305,38 +179,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         model returns an integer index into the action specification.
         """
         prev_states = self.model.memory.current_state()
-
-        # Ensure state has the same shape as individual states in prev_states
-        if state.ndim == 2 and state.shape[0] == 1:
-            state = state.flatten()  # Convert from (1, features) to (features,)
-
-        # Use only current state if memory is empty, otherwise stack with previous states
-        if prev_states.shape[0] == 0:
-            model_input = state.reshape(1, -1)
-        else:
-            # Normal case: stack previous states with current state
-            stacked_states = np.vstack((prev_states, state))
-            model_input = stacked_states.reshape(1, -1)
-
+        stacked_states = np.vstack((prev_states, state))
+        model_input = stacked_states.reshape(1, -1)
         action = self.model.take_action(model_input)
         return action
-
-    def add_memory(
-        self, state: np.ndarray, action: int, reward: float, done: bool
-    ) -> None:
-        """Add an experience to the agent's memory buffer.
-
-        Args:
-            state (np.ndarray): the state to be added.
-            action (int): the action taken by the agent.
-            reward (float): the reward received by the agent.
-            done (bool): whether the episode terminated after this experience.
-        """
-        # Ensure state is 1D
-        if state.ndim == 2 and state.shape[0] == 1:
-            state = state.flatten()
-
-        self.model.memory.add(state, action, reward, done)
 
     def act(self, world: StagHuntWorld, action: int) -> float:
         """Execute the chosen action in the environment and return the reward.
@@ -347,10 +193,6 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         resources (taste reward) and from interacting with another agent
         (stag‑hunt payoff handled by the environment).
         """
-        # Skip action if agent is frozen or removed
-        if not self.can_act():
-            return 0.0
-
         action_name = self.action_spec.get_readable_action(action)
         reward = 0.0
 
@@ -581,19 +423,33 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.ready = False
         other.inventory = {"stag": 0, "hare": 0}
         other.ready = False
+        # remove agents from their current positions on the top layer
+        a_loc = self.location
+        o_loc = other.location
+        world.remove(a_loc)
+        world.remove(o_loc)
+        # respawn at random spawn points that are not occupied
+        spawn_points = world.agent_spawn_points
+        # find unoccupied spawn points
+        unoccupied_spawns = []
+        for spawn_point in spawn_points:
+            y, x, z = spawn_point
+            # check if there's an agent at this spawn point (layer 1)
+            entity_at_spawn = world.observe((y, x, 1))
+            if entity_at_spawn.kind == "Empty":
+                unoccupied_spawns.append(spawn_point)
 
-        # Get freeze and respawn parameters from world config
-        freeze_duration = getattr(world, "freeze_duration", 5)
-        respawn_delay = getattr(world, "respawn_delay", 10)
+        # if not enough unoccupied spawns, use all spawns (fallback)
+        if len(unoccupied_spawns) < 2:
+            unoccupied_spawns = spawn_points
 
-        # Store respawn delay for later use
-        self._respawn_delay = respawn_delay
-        other._respawn_delay = respawn_delay
-
-        # Freeze both agents instead of immediately respawning
-        self.freeze_agent(freeze_duration)
-        other.freeze_agent(freeze_duration)
-
+        # choose two distinct spawn points at random from unoccupied ones
+        new_a_loc, new_o_loc = random.sample(unoccupied_spawns, k=2)
+        world.add((new_a_loc[0], new_a_loc[1], 1), self)
+        world.add((new_o_loc[0], new_o_loc[1], 1), other)
+        # reset orientations
+        self.orientation = 0
+        other.orientation = 0
         # store the other agent's reward to be given on their next turn
         other.pending_reward += col_payoff + bonus
         # accumulate reward for both agents in world.total_reward
