@@ -12,7 +12,7 @@ if __name__ == "__main__":
         "experiment": {
             "epochs": 25000,
             "max_turns": 100,
-            "record_period": 100,
+            "record_period": 1000,
             "output_dir": Path(__file__).parent / "./data/",
         },
         "model": {
@@ -27,6 +27,6 @@ if __name__ == "__main__":
     # construct the world
     env = TaxiWorld(config=config, default_entity=EmptyEntity())
     # construct the environment
-    experiment = TaxiEnv(env, config)
+    experiment = TaxiEnv(env, config, stop_if_done=True)
     # run the experiment with default parameters
     experiment.run_experiment()

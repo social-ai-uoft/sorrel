@@ -20,6 +20,7 @@ class Environment[W: Gridworld]:
     Attributes:
         world: The world that the experiment includes.
         config: The configurations for the experiment.
+        stop_if_done: Whether to end the epoch if the world is done. Defaults to False.
 
             .. note::
                 Some default methods provided by this class, such as `run_experiment`, require certain config parameters to be defined.
@@ -29,8 +30,11 @@ class Environment[W: Gridworld]:
     world: W
     config: DictConfig
     agents: list[Agent]
+    stop_if_done: bool
 
-    def __init__(self, world: W, config: DictConfig | dict | list) -> None:
+    def __init__(
+        self, world: W, config: DictConfig | dict | list, stop_if_done: bool = False
+    ) -> None:
 
         if isinstance(config, DictConfig):
             self.config = config
@@ -43,6 +47,7 @@ class Environment[W: Gridworld]:
         self.world = world
         self.turn = 0
         self.world.create_world()
+        self.stop_if_done = stop_if_done
 
         self.setup_agents()
         self.populate_environment()
@@ -146,6 +151,9 @@ class Environment[W: Gridworld]:
                 if animate_this_turn and renderer is not None:
                     renderer.add_image(self.world)
                 self.take_turn()
+
+                if self.world.is_done and self.stop_if_done:
+                    break
 
             self.world.is_done = True
 

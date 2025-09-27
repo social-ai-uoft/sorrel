@@ -23,9 +23,9 @@ from sorrel.models.pytorch import PyTorchIQN
 class TaxiEnv(Environment[TaxiWorld]):
     """A simple taxi environment."""
 
-    def __init__(self, world: TaxiWorld, config: dict) -> None:
+    def __init__(self, world: TaxiWorld, config: dict, stop_if_done: bool) -> None:
         self.world = world
-        super().__init__(world, config)
+        super().__init__(world, config, stop_if_done=stop_if_done)
 
     def setup_agents(self):
         """Create the agents for this experiment and assign them to self.agents."""
@@ -64,7 +64,7 @@ class TaxiEnv(Environment[TaxiWorld]):
                 input_size=observation_spec.input_size,
                 action_space=action_spec.n_actions,
                 layer_size=250,
-                epsilon=0.8,
+                epsilon=0.85,
                 device="cpu",
                 seed=torch.random.seed(),
                 n_frames=1,
@@ -84,7 +84,6 @@ class TaxiEnv(Environment[TaxiWorld]):
                     observation_spec=observation_spec,
                     action_spec=action_spec,
                     model=model,
-                    world=self.world,
                 )
             )
 
