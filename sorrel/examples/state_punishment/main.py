@@ -123,7 +123,7 @@ def run_experiment(args):
 
     # Both tensorboard logs and animations go to the same timestamped folder
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_p48_a3_probabilistic" / run_folder
+    log_dir = Path(__file__).parent / "runs_p48_a3" / run_folder
     anim_dir = Path(__file__).parent / "data" / run_folder
     config_dir = Path(__file__).parent / "configs"
     experiment_name = args.experiment_name or f"{base_run_name}_{args.num_agents}agents"

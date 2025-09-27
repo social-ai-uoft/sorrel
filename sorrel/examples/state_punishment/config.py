@@ -65,7 +65,7 @@ def create_config(
             f"probabilistic_{collective_harm_tag}_simple_foraging_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}_{num_agents}agents_punish{fixed_punishment_level:.1f}"
         )
     else:
-        run_name = f"probabilistic_{collective_harm_tag}_state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents"
+        run_name = f"unknown_punishment_extended_{collective_harm_tag}_state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents"
 
     return {
         "experiment": {

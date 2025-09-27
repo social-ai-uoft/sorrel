@@ -188,13 +188,13 @@ class StateSystem:
                         current_level
                     ]
 
-            # punishment_value = self.magnitude * punishment_prob
+            punishment_value = self.magnitude * punishment_prob
             # probabilistic punishment
-            if random.random() < punishment_prob:
-                punishment_value = self.magnitude
-            else:
-                punishment_value = 0.0
-                
+            #if random.random() < punishment_prob:
+            #    punishment_value = self.magnitude
+            #else:
+            #    punishment_value = 0.0
+
             self.punishment_history.append(punishment_value)
 
             # Record punishment
