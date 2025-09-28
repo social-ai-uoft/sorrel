@@ -62,6 +62,7 @@ def parse_arguments():
     # parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
     parser.add_argument("--memory_size", type=int, default=1024, help="Memory size")
+    parser.add_argument("--save_models_every", type=int, default=1000, help="Save models every X epochs")
 
     # Logging
     parser.add_argument(
@@ -111,6 +112,7 @@ def run_experiment(args):
         batch_size=args.batch_size,
         memory_size=args.memory_size,
         no_collective_harm=args.no_collective_harm,
+        save_models_every=args.save_models_every,
     )
 
     # Print expected rewards

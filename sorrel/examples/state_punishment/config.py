@@ -23,6 +23,7 @@ def create_config(
     # 0.001
     exploration_min: float = 0.05,
     no_collective_harm: bool = True,
+    save_models_every: int = 1000,
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -81,6 +82,7 @@ def create_config(
             "simple_foraging": simple_foraging,
             "use_random_policy": use_random_policy,
             "fixed_punishment_level": fixed_punishment_level,
+            "save_models_every": save_models_every,
         },
         "world": {
             "height": map_size,

@@ -410,6 +410,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 for agent in env.agents:
                     agent.model.epsilon_decay(self.config.model.epsilon_decay)
 
+            # Save models every X epochs
+            if epoch > 0 and epoch % self.config.experiment.save_models_every == 0:
+                self._save_models(epoch)
+
             # Print progress
             if epoch % 100 == 0:
                 avg_punishment = (
@@ -424,6 +428,36 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 print(
                     f"  Total reward: {sum(env.world.total_reward for env in self.individual_envs):.2f}"
                 )
+
+        # Save final models at the end of training
+        self._save_models(self.config.experiment.epochs)
+
+    def _save_models(self, epoch: int) -> None:
+        """Save all agent models to the models directory.
+        
+        Args:
+            epoch: Current epoch number (for logging purposes)
+        """
+        from pathlib import Path
+        
+        # Create models directory if it doesn't exist
+        models_dir = Path(__file__).parent / "models"
+        models_dir.mkdir(exist_ok=True)
+        
+        # Get experiment name from config
+        experiment_name = self.config.experiment.get("run_name", "experiment")
+        
+        # Save each agent's model (overwrite previous versions)
+        for env_idx, env in enumerate(self.individual_envs):
+            for agent_idx, agent in enumerate(env.agents):
+                # Create filename with experiment name, environment, and agent info (no epoch)
+                model_filename = f"{experiment_name}_env_{env_idx}_agent_{agent_idx}.pth"
+                model_path = models_dir / model_filename
+                
+                # Save the model (overwrites previous version)
+                agent.model.save(model_path)
+                
+        print(f"Saved models for epoch {epoch} to {models_dir.absolute()}")
 
 
 class StatePunishmentEnv(Environment[StatePunishmentWorld]):
