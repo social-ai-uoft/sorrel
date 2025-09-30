@@ -23,9 +23,9 @@ from sorrel.models.pytorch import PyTorchIQN
 class TaxiEnv(Environment[TaxiWorld]):
     """A simple taxi environment."""
 
-    def __init__(self, world: TaxiWorld, config: dict) -> None:
+    def __init__(self, world: TaxiWorld, config: dict, stop_if_done: bool) -> None:
         self.world = world
-        super().__init__(world, config)
+        super().__init__(world, config, stop_if_done=stop_if_done)
 
     def setup_agents(self):
         """Create the agents for this experiment and assign them to self.agents."""
@@ -46,11 +46,13 @@ class TaxiEnv(Environment[TaxiWorld]):
             observation_spec = TaxiObservationSpec(
                 0,
                 0,
-                entity_list,
-                full_view=True,
                 env_dims=(self.world.height, self.world.width),
+                entity_list=entity_list,
+                full_view=True,
             )
-            observation_spec.override_input_size((500,))
+            observation_spec.override_input_size(
+                ((self.world.height - 2) * (self.world.height - 2) * 4 * 5,)
+            )
 
             # create the action spec
             action_spec = ActionSpec(
@@ -62,7 +64,7 @@ class TaxiEnv(Environment[TaxiWorld]):
                 input_size=observation_spec.input_size,
                 action_space=action_spec.n_actions,
                 layer_size=250,
-                epsilon=0.8,
+                epsilon=0.85,
                 device="cpu",
                 seed=torch.random.seed(),
                 n_frames=1,
@@ -82,7 +84,6 @@ class TaxiEnv(Environment[TaxiWorld]):
                     observation_spec=observation_spec,
                     action_spec=action_spec,
                     model=model,
-                    world=self.world,
                 )
             )
 
@@ -93,9 +94,17 @@ class TaxiEnv(Environment[TaxiWorld]):
         passenger_points = [
             [1, 1, 1],
             [1, 4, 1],
-            [5, 2, 1],
-            [5, 5, 1],
+            [7, 2, 1],
+            [7, 5, 1],
         ]  # fixed passenger points defined here [y, x, z]
+        wall_locations = [
+            [7, 4],
+            [6, 4],
+            [4, 2],
+            [4, 3],
+            [4, 4],
+            [3, 4],
+        ]
 
         for index in np.ndindex(self.world.map.shape):
             y, x, z = index
@@ -115,9 +124,12 @@ class TaxiEnv(Environment[TaxiWorld]):
                     self.world.add(index, Road())
             elif (
                 z == 2
-            ):  # if location is on the top layer, indicate that it's possible for an agent to spawn there
-                # valid spawn location
-                valid_spawn_locations.append(index)
+            ):  # if location is on the top layer, indicate that it's possible for an agent to spawn there unless wall is constructed
+                if [y, x] in wall_locations:
+                    self.world.add(index, Wall())
+                else:
+                    # valid spawn location
+                    valid_spawn_locations.append(index)
 
         # spawn the agents
         # using np.random.choice, we choose indices in valid_spawn_locations

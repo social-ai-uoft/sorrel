@@ -10,23 +10,23 @@ if __name__ == "__main__":
     # object configurations
     config = {
         "experiment": {
-            "epochs": 10000,
+            "epochs": 25000,
             "max_turns": 100,
-            "record_period": 100,
+            "record_period": 1000,
             "output_dir": Path(__file__).parent / "./data/",
         },
         "model": {
-            "epsilon_decay": 0.0001,
+            "epsilon_decay": 0.00005,
         },
         "world": {
-            "height": 7,
-            "width": 7,
+            "height": 9,
+            "width": 9,
         },
     }
 
     # construct the world
     env = TaxiWorld(config=config, default_entity=EmptyEntity())
     # construct the environment
-    experiment = TaxiEnv(env, config)
+    experiment = TaxiEnv(env, config, stop_if_done=True)
     # run the experiment with default parameters
     experiment.run_experiment()

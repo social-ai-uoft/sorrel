@@ -17,12 +17,14 @@ class ObservationSpec[T: (np.ndarray, str), W]():
         vision_radius: The radius of the agent's vision if full_view is False, 0 if full_view is True.
         full_view: A boolean that determines whether the agent can see the entire environment.
         input_size: An int or sequence of ints that indicates the size of the observation.
+        fill_entity_kind: if the agent's vision is out of bounds, fill the space with appearances of this entity. Defaults to "Wall".
     """
 
     entity_map: dict[str, T]
     vision_radius: int
     full_view: bool
     input_size: Sequence[int]
+    fill_entity_kind: str
 
     def __init__(
         self,
@@ -30,6 +32,7 @@ class ObservationSpec[T: (np.ndarray, str), W]():
         full_view: bool,
         vision_radius: int | None = None,
         env_dims: Sequence[int] | None = None,
+        fill_entity_kind: str = "Wall",
     ):
         r"""Initialize the :py:class:`ObservationSpec` object. This function uses
         generate_map() to create an entity map for the ObservationSpec based on
@@ -49,6 +52,7 @@ class ObservationSpec[T: (np.ndarray, str), W]():
         self.vision_radius = vision_radius if vision_radius else 0
         self.entity_map = self.generate_map(entity_list)
         self.input_size = (1,)
+        self.fill_entity_kind = fill_entity_kind
 
     @abstractmethod
     def generate_map(self, entity_list: list[str]) -> dict[str, T]:
@@ -115,6 +119,7 @@ class OneHotObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
         vision_radius: The radius of the agent's vision if full_view is False, 0 if full_view is True.
         full_view: A boolean that determines whether the agent can see the entire environment.
         input_size: An int or sequence of ints that indicates the size of the observation.
+        fill_entity_kind: if the agent's vision is out of bounds, fill the space with appearances of this entity. Defaults to "Wall".
     """
 
     def __init__(
@@ -123,8 +128,11 @@ class OneHotObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
         full_view: bool,
         vision_radius: int | None = None,
         env_dims: Sequence[int] | None = None,
+        fill_entity_kind: str = "Wall",
     ):
-        super().__init__(entity_list, full_view, vision_radius, env_dims)
+        super().__init__(
+            entity_list, full_view, vision_radius, env_dims, fill_entity_kind
+        )
         # By default, input_size is (channels, x, y)
         if self.full_view:
             assert isinstance(env_dims, Sequence)  # safeguarded in super().__init__()
@@ -190,6 +198,7 @@ class OneHotObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
             entity_map=self.entity_map,
             vision=self.vision_radius if not self.full_view else None,
             location=location,
+            fill_entity_kind=self.fill_entity_kind,
         )
 
 
@@ -202,6 +211,7 @@ class AsciiObservationSpec(ObservationSpec[str, Gridworld]):
         vision_radius: The radius of the agent's vision if full_view is False, 0 if full_view is True.
         full_view: A boolean that determines whether the agent can see the entire environment.
         input_size: An int or sequence of ints that indicates the size of the observation.
+        fill_entity_kind: if the agent's vision is out of bounds, fill the space with appearances of this entity. Defaults to "Wall".
     """
 
     def __init__(
@@ -210,8 +220,11 @@ class AsciiObservationSpec(ObservationSpec[str, Gridworld]):
         full_view: bool,
         vision_radius: int | None = None,
         env_dims: Sequence[int] | None = None,
+        fill_entity_kind: str = "Wall",
     ):
-        super().__init__(entity_list, full_view, vision_radius, env_dims)
+        super().__init__(
+            entity_list, full_view, vision_radius, env_dims, fill_entity_kind
+        )
         if self.full_view:
             assert isinstance(env_dims, Sequence)  # safeguarded in super().__init__()
             self.input_size = env_dims
@@ -306,6 +319,7 @@ class AsciiObservationSpec(ObservationSpec[str, Gridworld]):
             entity_map=self.entity_map,
             vision=self.vision_radius if not self.full_view else None,
             location=location,
+            fill_entity_kind=self.fill_entity_kind,
         )
 
     def observe_string(self, world: Gridworld, location: tuple | None = None) -> str:

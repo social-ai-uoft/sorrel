@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.agents import Agent
-from sorrel.examples.taxi.entities import Destination, Passenger
+from sorrel.examples.taxi.entities import Destination, Passenger, Wall
 from sorrel.examples.taxi.observation_spec import TaxiObservationSpec
 from sorrel.examples.taxi.world import TaxiWorld
 
@@ -11,17 +11,13 @@ from sorrel.examples.taxi.world import TaxiWorld
 class TaxiAgent(Agent[TaxiWorld]):
     """A simple taxi agent."""
 
-    def __init__(
-        self, observation_spec: TaxiObservationSpec, action_spec, model, world
-    ):
+    def __init__(self, observation_spec: TaxiObservationSpec, action_spec, model):
         super().__init__(observation_spec, action_spec, model)
         self.sprite = Path(__file__).parent / "./assets/taxi.png"
         self.is_carrying = False
-        self.world = world
 
     def reset(self):
         self.is_carrying = False
-        self.world.is_done = False
         self.model.reset()
 
     def pov(self, world: TaxiWorld) -> np.ndarray:
@@ -30,9 +26,6 @@ class TaxiAgent(Agent[TaxiWorld]):
         return one_hot
 
     def get_action(self, state: np.ndarray) -> int:
-        if self.is_done(self.world):
-            return 1
-
         prev_states = self.model.memory.current_state()
         stacked_states = np.vstack((prev_states, state))
 
@@ -48,9 +41,6 @@ class TaxiAgent(Agent[TaxiWorld]):
 
     def act(self, world: TaxiWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
-
-        if self.is_done(world):
-            return 0
 
         # Translate the model output to an action string
         action_name = self.action_spec.get_readable_action(action)
@@ -74,6 +64,11 @@ class TaxiAgent(Agent[TaxiWorld]):
             reward += self.pickup(world, action)
         if action_name == "dropoff":
             reward += self.dropoff(world, action)
+
+        target_object = world.observe(new_location)
+
+        if isinstance(target_object, Wall):
+            reward -= 2
 
         world.move(self, new_location)
 
