@@ -368,7 +368,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     and agent.respawn_timer > 0
                     and hasattr(agent, "_removed_from_world")
                     and not agent._removed_from_world
-                    and agent.location in self.world.map
+                    and agent.location is not None
                 ):
                     # Remove agent from world (only once)
                     self.world.remove(agent.location)

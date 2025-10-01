@@ -869,6 +869,7 @@ class StagHuntASCIIPygame:
             )
             self.screen.blit(score_text, (10, ui_y + 10))
 
+        turn_y = ui_y + 10
         # Turn count - make it VERY prominent and always visible
         if self.turn_based and len(self.agents) > 1:
             # Draw turn count at the top right for maximum visibility
@@ -882,7 +883,7 @@ class StagHuntASCIIPygame:
             # Position at top right of screen
             turn_rect = turn_text.get_rect()
             turn_x = self.screen_width - turn_rect.width - 10
-            turn_y = ui_y + 10
+            # turn_y = ui_y + 10
 
             # Draw background for turn count
             bg_rect = pygame.Rect(
