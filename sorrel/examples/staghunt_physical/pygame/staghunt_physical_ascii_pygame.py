@@ -1,5 +1,5 @@
-"""Enhanced Pygame implementation of Stag Hunt that uses the exact same sprites and
-ASCII maps as the original Sorrel framework."""
+"""Enhanced Pygame implementation of Stag Hunt Physical that uses the exact same sprites and
+ASCII maps as the original Sorrel framework, with ATTACK/PUNISH actions and health system."""
 
 import os
 import sys
@@ -13,22 +13,23 @@ import pygame
 from PIL import Image
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.examples.staghunt.agents_v2 import StagHuntAgent, StagHuntObservation
-from sorrel.examples.staghunt.entities import (
+from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent, StagHuntObservation
+from sorrel.examples.staghunt_physical.entities import (
     Empty,
     HareResource,
     InteractionBeam,
+    AttackBeam,
+    PunishBeam,
     Sand,
     Spawn,
     StagResource,
     Wall,
 )
-from sorrel.examples.staghunt.map_generator import MapBasedWorldGenerator
-from sorrel.examples.staghunt.world import StagHuntWorld
+from sorrel.examples.staghunt_physical.world import StagHuntWorld
 
 
-class StagHuntASCIIPygame:
-    """Enhanced pygame class that uses exact same sprites and ASCII maps as Sorrel."""
+class StagHuntPhysicalASCIIPygame:
+    """Enhanced pygame class for Stag Hunt Physical with ASCII maps and health system."""
 
     def __init__(self, config=None):
         # Initialize pygame
@@ -41,11 +42,19 @@ class StagHuntASCIIPygame:
                     "generation_mode": "ascii_map",
                     "ascii_map_file": "docs/stag_hunt_ascii_map_clean.txt",
                     "num_agents": 1,
-                    "taste_reward": 0.1,
-                    "destroyable_health": 3,
+                    "stag_reward": 1.0,  # Higher reward for stag (requires coordination)
+                    "hare_reward": 0.1,  # Lower reward for hare (solo achievable)
+                    "taste_reward": 0.1,  # Legacy parameter
+                    "stag_health": 12,
+                    "hare_health": 3,
+                    "agent_health": 5,
+                    "health_regeneration_rate": 0.1,
+                    "reward_sharing_radius": 3,
                     "beam_length": 3,
                     "beam_radius": 1,
-                    "beam_cooldown": 3,
+                    "attack_cooldown": 3,
+                    "punish_cooldown": 5,
+                    "beam_cooldown": 3,  # Legacy parameter
                     "respawn_lag": 10,
                     "payoff_matrix": [[4, 0], [2, 2]],
                     "interaction_reward": 1.0,
@@ -55,6 +64,7 @@ class StagHuntASCIIPygame:
                 "display": {
                     "tile_size": 32,  # Same as original Sorrel
                     "fps": 10,
+                    "show_health": True,
                 },
             }
 
@@ -66,7 +76,7 @@ class StagHuntASCIIPygame:
         self.world = StagHuntWorld(config, Empty())
 
         # Create environment for agent state management (frozen/respawn logic)
-        from sorrel.examples.staghunt.env import StagHuntEnv
+        from sorrel.examples.staghunt_physical.env import StagHuntEnv
 
         self.env = StagHuntEnv(
             self.world, []
@@ -82,7 +92,7 @@ class StagHuntASCIIPygame:
         # Create screen
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         pygame.display.set_caption(
-            "Stag Hunt ASCII Pygame - Exact Sorrel Visualization"
+            "Stag Hunt Physical ASCII Pygame - Enhanced with Health System"
         )
 
         # Load sprites exactly like Sorrel does
@@ -131,10 +141,12 @@ class StagHuntASCIIPygame:
             "wall": Wall(),
             "sand": Sand(),
             "spawn": Spawn(),
-            "stag": StagResource(0.1, 3),
+            "stag": StagResource(1.0, 12),  # Use separate reward values
             "hare": HareResource(0.1, 3),
             "empty": Empty(),
             "beam": InteractionBeam(),
+            "attack_beam": AttackBeam(),
+            "punish_beam": PunishBeam(),
         }
 
         # Load agent sprites for different orientations
@@ -180,6 +192,10 @@ class StagHuntASCIIPygame:
                         placeholder.fill((255, 0, 0, 255))  # Red for stag
                     elif name == "hare":
                         placeholder.fill((0, 255, 0, 255))  # Green for hare
+                    elif name == "attack_beam":
+                        placeholder.fill((255, 100, 100, 128))  # Red for attack beam
+                    elif name == "punish_beam":
+                        placeholder.fill((255, 255, 100, 128))  # Yellow for punish beam
                     else:
                         placeholder.fill((200, 200, 200, 255))  # Light gray for empty
                     self.sprite_cache[name] = placeholder
@@ -284,30 +300,30 @@ class StagHuntASCIIPygame:
                         ),
                     )
 
-        # Place resources EXACTLY where map specifies
+        # Place resources EXACTLY where map specifies with physical health values
         for y, x, resource_type in map_data.resource_locations:
             dynamic_loc = (y, x, world.dynamic_layer)
             if resource_type == "stag":
                 world.add(
                     dynamic_loc,
-                    StagResource(world.taste_reward, world.destroyable_health),
+                    StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown),
                 )
             elif resource_type == "hare":
                 world.add(
                     dynamic_loc,
-                    HareResource(world.taste_reward, world.destroyable_health),
+                    HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown),
                 )
             elif resource_type == "random":
                 # Use ORIGINAL random selection logic
                 if np.random.random() < 0.2:  # Same as original
                     world.add(
                         dynamic_loc,
-                        StagResource(world.taste_reward, world.destroyable_health),
+                        StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown),
                     )
                 else:
                     world.add(
                         dynamic_loc,
-                        HareResource(world.taste_reward, world.destroyable_health),
+                        HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown),
                     )
 
         # Place empty entities on dynamic layer for non-resource, non-spawn locations
@@ -368,11 +384,11 @@ class StagHuntASCIIPygame:
             # choose resource type uniformly at random
             if np.random.random() < 0.2:
                 world.add(
-                    dynamic, StagResource(world.taste_reward, world.destroyable_health)
+                    dynamic, StagResource(world.stag_reward, world.stag_health)
                 )
             else:
                 world.add(
-                    dynamic, HareResource(world.taste_reward, world.destroyable_health)
+                    dynamic, HareResource(world.hare_reward, world.hare_health)
                 )
 
     def create_agents(self):
@@ -393,12 +409,14 @@ class StagHuntASCIIPygame:
             "StagHuntAgentWest",
             "Sand",
             "InteractionBeam",
+            "AttackBeam",
+            "PunishBeam",
         ]
         observation_spec = StagHuntObservation(
             entity_list, full_view=False, vision_radius=2
         )
 
-        # Create action spec
+        # Create action spec with ATTACK and PUNISH actions
         action_spec = ActionSpec(
             [
                 "NOOP",
@@ -408,7 +426,8 @@ class StagHuntASCIIPygame:
                 "STEP_RIGHT",
                 "TURN_LEFT",
                 "TURN_RIGHT",
-                "INTERACT",
+                "ATTACK",
+                "PUNISH",
             ]
         )
 
@@ -437,6 +456,7 @@ class StagHuntASCIIPygame:
                 action_spec=action_spec,
                 model=DummyModel(),
                 interaction_reward=self.config["world"]["interaction_reward"],
+                max_health=self.config["world"]["agent_health"]
             )
 
             # Set the agent kind based on orientation
@@ -493,7 +513,7 @@ class StagHuntASCIIPygame:
             self.switch_agent()
             return
 
-        # Map keys to actions
+        # Map keys to actions - UPDATED FOR PHYSICAL VERSION
         key_to_action = {
             pygame.K_w: "FORWARD",
             pygame.K_s: "BACKWARD",
@@ -501,7 +521,9 @@ class StagHuntASCIIPygame:
             pygame.K_d: "STEP_RIGHT",
             pygame.K_q: "TURN_LEFT",
             pygame.K_e: "TURN_RIGHT",
-            pygame.K_SPACE: "INTERACT",
+            pygame.K_SPACE: "ATTACK",  # Changed from INTERACT to ATTACK
+            pygame.K_p: "PUNISH",      # New PUNISH action
+            pygame.K_r: "ATTACK",      # Alternative key for ATTACK
             pygame.K_RETURN: "END_TURN",  # Enter key to end turn manually
             pygame.K_ESCAPE: "QUIT",
         }
@@ -655,15 +677,6 @@ class StagHuntASCIIPygame:
             # Debug: Check agent states (only print changes)
             for i, agent in enumerate(self.agents):
                 if (
-                    hasattr(agent, "is_frozen")
-                    and agent.is_frozen
-                    and not hasattr(agent, "_debug_frozen_printed")
-                ):
-                    print(
-                        f"Agent {i+1} is FROZEN (timer: {getattr(agent, 'freeze_timer', 'N/A')})"
-                    )
-                    agent._debug_frozen_printed = True
-                elif (
                     hasattr(agent, "is_removed")
                     and agent.is_removed
                     and not hasattr(agent, "_debug_removed_printed")
@@ -672,9 +685,6 @@ class StagHuntASCIIPygame:
                         f"Agent {i+1} is REMOVED (respawn timer: {getattr(agent, 'respawn_timer', 'N/A')})"
                     )
                     agent._debug_removed_printed = True
-                elif not hasattr(agent, "is_frozen") or not agent.is_frozen:
-                    if hasattr(agent, "_debug_frozen_printed"):
-                        delattr(agent, "_debug_frozen_printed")
                 elif not hasattr(agent, "is_removed") or not agent.is_removed:
                     if hasattr(agent, "_debug_removed_printed"):
                         delattr(agent, "_debug_removed_printed")
@@ -687,6 +697,21 @@ class StagHuntASCIIPygame:
                 entity, type(self.agents[0]) if self.agents else False
             ):
                 entity.transition(self.world)
+
+    def draw_health_bar(self, x, y, current_health, max_health, width=40, height=6):
+        """Draw a health bar."""
+        screen_x = x * self.tile_size + (self.tile_size - width) // 2
+        screen_y = y * self.tile_size - 10
+
+        # Background (red)
+        pygame.draw.rect(self.screen, (255, 0, 0), 
+                        (screen_x, screen_y, width, height))
+        
+        # Health (green)
+        health_width = int(width * current_health / max_health)
+        if health_width > 0:
+            pygame.draw.rect(self.screen, (0, 255, 0), 
+                           (screen_x, screen_y, health_width, height))
 
     def draw(self):
         """Draw the game world using exact same rendering as Sorrel."""
@@ -808,6 +833,13 @@ class StagHuntASCIIPygame:
                             self.screen, (255, 255, 255), rect.center, arrow_end, 3
                         )
 
+                # Draw health bars for agents and resources if enabled
+                if self.config["display"].get("show_health", True):
+                    if isinstance(entity, StagHuntAgent) and not entity.is_removed:
+                        self.draw_health_bar(x, y, entity.health, entity.max_health)
+                    elif isinstance(entity, (StagResource, HareResource)):
+                        self.draw_health_bar(x, y, entity.health, entity.max_health)
+
     def draw_beam_layer(self):
         """Draw the beam layer using exact sprites."""
         for y in range(self.world.height):
@@ -819,6 +851,26 @@ class StagHuntASCIIPygame:
                     if "beam" in self.sprite_cache:
                         sprite = self.sprite_cache["beam"]
                         # Draw with transparency
+                        sprite_surface = pygame.Surface(
+                            (self.tile_size, self.tile_size), pygame.SRCALPHA
+                        )
+                        sprite_surface.blit(sprite, (0, 0))
+                        self.screen.blit(
+                            sprite_surface, (x * self.tile_size, y * self.tile_size)
+                        )
+                elif isinstance(entity, AttackBeam):
+                    if "attack_beam" in self.sprite_cache:
+                        sprite = self.sprite_cache["attack_beam"]
+                        sprite_surface = pygame.Surface(
+                            (self.tile_size, self.tile_size), pygame.SRCALPHA
+                        )
+                        sprite_surface.blit(sprite, (0, 0))
+                        self.screen.blit(
+                            sprite_surface, (x * self.tile_size, y * self.tile_size)
+                        )
+                elif isinstance(entity, PunishBeam):
+                    if "punish_beam" in self.sprite_cache:
+                        sprite = self.sprite_cache["punish_beam"]
                         sprite_surface = pygame.Surface(
                             (self.tile_size, self.tile_size), pygame.SRCALPHA
                         )
@@ -869,6 +921,7 @@ class StagHuntASCIIPygame:
             )
             self.screen.blit(score_text, (10, ui_y + 10))
 
+        turn_y = ui_y + 10
         # Turn count - make it VERY prominent and always visible
         if self.turn_based and len(self.agents) > 1:
             # Draw turn count at the top right for maximum visibility
@@ -882,7 +935,6 @@ class StagHuntASCIIPygame:
             # Position at top right of screen
             turn_rect = turn_text.get_rect()
             turn_x = self.screen_width - turn_rect.width - 10
-            turn_y = ui_y + 10
 
             # Draw background for turn count
             bg_rect = pygame.Rect(
@@ -923,6 +975,14 @@ class StagHuntASCIIPygame:
             )
             self.screen.blit(agent_text, (10, agent_info_y))
 
+            # Show health info
+            health_text = self.font_medium.render(
+                f"Health: {self.human_player.health}/{self.human_player.max_health}",
+                True,
+                (255, 255, 255),
+            )
+            self.screen.blit(health_text, (10, agent_info_y + 25))
+
             # Show turn information
             if self.turn_based:
                 # Show action status
@@ -945,8 +1005,22 @@ class StagHuntASCIIPygame:
                     action_status = "Press any key to take action"
                     action_color = (0, 255, 0)
                 action_text = self.font_medium.render(action_status, True, action_color)
-                self.screen.blit(action_text, (10, agent_info_y + 25))
+                self.screen.blit(action_text, (10, agent_info_y + 50))
 
+                inv_text = self.font_medium.render(
+                    f"Stag: {inv_stag} | Hare: {inv_hare} | {ready}",
+                    True,
+                    (255, 255, 255),
+                )
+                self.screen.blit(inv_text, (10, agent_info_y + 75))
+
+                pos_text = self.font_medium.render(
+                    f"Position: ({agent_pos[1]}, {agent_pos[0]}) | Facing: {orientation_name}",
+                    True,
+                    (255, 255, 255),
+                )
+                self.screen.blit(pos_text, (10, agent_info_y + 100))
+            else:
                 inv_text = self.font_medium.render(
                     f"Stag: {inv_stag} | Hare: {inv_hare} | {ready}",
                     True,
@@ -960,24 +1034,10 @@ class StagHuntASCIIPygame:
                     (255, 255, 255),
                 )
                 self.screen.blit(pos_text, (10, agent_info_y + 75))
-            else:
-                inv_text = self.font_medium.render(
-                    f"Stag: {inv_stag} | Hare: {inv_hare} | {ready}",
-                    True,
-                    (255, 255, 255),
-                )
-                self.screen.blit(inv_text, (10, agent_info_y + 25))
 
-                pos_text = self.font_medium.render(
-                    f"Position: ({agent_pos[1]}, {agent_pos[0]}) | Facing: {orientation_name}",
-                    True,
-                    (255, 255, 255),
-                )
-                self.screen.blit(pos_text, (10, agent_info_y + 50))
-
-        # ASCII Map Info
+        # Physical Version Info
         map_text = self.font_small.render(
-            "Using exact ASCII map and sprites from Sorrel", True, (200, 200, 200)
+            "Stag Hunt Physical - ASCII Map with Health System", True, (200, 200, 200)
         )
         if self.turn_based and self.human_player:
             map_y = agent_info_y + 130
@@ -987,14 +1047,16 @@ class StagHuntASCIIPygame:
 
     def run(self):
         """Main game loop."""
-        print("Stag Hunt ASCII Pygame Started!")
+        print("Stag Hunt Physical ASCII Pygame Started!")
         print("Using exact same sprites and ASCII map as Sorrel framework!")
+        print("Enhanced with ATTACK/PUNISH actions and health system!")
         print(f"Number of agents: {len(self.agents)}")
         print("Controls:")
         print("  W/S: Move forward/backward")
         print("  A/D: Step left/right")
         print("  Q/E: Turn left/right")
-        print("  SPACE: Interact (fire beam)")
+        print("  SPACE/R: Attack (red beam)")
+        print("  P: Punish (yellow beam)")
         if self.turn_based:
             print("  ENTER: End turn manually")
             print("  (Turns end automatically after any action)")
@@ -1028,11 +1090,11 @@ class StagHuntASCIIPygame:
 
 
 def main():
-    """Main function to run the ASCII pygame version."""
+    """Main function to run the Physical ASCII pygame version."""
     import argparse
 
     # Set up command line argument parsing
-    parser = argparse.ArgumentParser(description="Stag Hunt ASCII Pygame")
+    parser = argparse.ArgumentParser(description="Stag Hunt Physical ASCII Pygame")
     parser.add_argument(
         "--agents",
         "-a",
@@ -1065,19 +1127,27 @@ def main():
     if args.agents != num_agents:
         print(f"Warning: Number of agents clamped to {num_agents} (max 4)")
 
-    print(f"Starting Stag Hunt with {num_agents} agent(s)")
+    print(f"Starting Stag Hunt Physical with {num_agents} agent(s)")
 
-    # Configuration using ASCII map
+    # Configuration using ASCII map with physical enhancements
     config = {
         "world": {
             "generation_mode": "ascii_map",
             "ascii_map_file": "docs/stag_hunt_ascii_map_clean.txt",
             "num_agents": num_agents,
-            "taste_reward": 0.1,
-            "destroyable_health": 3,
+            "stag_reward": 1.0,  # Higher reward for stag (requires coordination)
+            "hare_reward": 0.1,  # Lower reward for hare (solo achievable)
+            "taste_reward": 0.1,  # Legacy parameter
+            "stag_health": 12,
+            "hare_health": 3,
+            "agent_health": 5,
+            "health_regeneration_rate": 0.1,
+            "reward_sharing_radius": 3,
             "beam_length": 3,
             "beam_radius": 1,
-            "beam_cooldown": 3,
+            "attack_cooldown": 3,
+            "punish_cooldown": 5,
+            "beam_cooldown": 3,  # Legacy parameter
             "respawn_lag": 10,
             "payoff_matrix": [[4, 0], [2, 2]],
             "interaction_reward": 1.0,
@@ -1088,11 +1158,12 @@ def main():
             "tile_size": args.tile_size,
             "fps": args.fps,
             "turn_duration": args.turn_duration,
+            "show_health": True,
         },
     }
 
     # Create and run the game
-    game = StagHuntASCIIPygame(config)
+    game = StagHuntPhysicalASCIIPygame(config)
     game.run()
 
 

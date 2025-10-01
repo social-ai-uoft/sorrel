@@ -1,3 +1,6 @@
+from __future__ import annotations
+from typing import Dict
+
 class ActionSpec:
     """A class that specifies the possible actions that can be taken by an agent.
 
@@ -7,7 +10,7 @@ class ActionSpec:
     """
 
     n_actions: int
-    actions: dict[int, str]
+    actions: Dict[int, str]
 
     def __init__(self, actions: list[str]):  # e.g., ["up", "down", "left", "right"]
 

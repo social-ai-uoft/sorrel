@@ -20,12 +20,15 @@ from typing import Any
 
 import numpy as np
 import torch
+from numpy import ndenumerate
+from typing_extensions import override
 
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
-from sorrel.examples.staghunt.agents_v2 import StagHuntAgent, StagHuntObservation
-from sorrel.examples.staghunt.entities import (
+from sorrel.entities.entity import Entity
+from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent, StagHuntObservation
+from sorrel.examples.staghunt_physical.entities import (
     Empty,
     HareResource,
     Resource,
@@ -34,7 +37,7 @@ from sorrel.examples.staghunt.entities import (
     StagResource,
     Wall,
 )
-from sorrel.examples.staghunt.world import StagHuntWorld
+from sorrel.examples.staghunt_physical.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
 
 
@@ -86,9 +89,10 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             "StagHuntAgentSouth",  # 2: south
             "StagHuntAgentWest",  # 3: west
             "Sand",
-            "InteractionBeam",
+            "AttackBeam",
+            "PunishBeam",
         ]
-        for _ in range(n_agents):
+        for agent_id in range(n_agents):
             # observation spec: uses partial view with specified vision radius
             vision_radius = int(model_cfg.get("agent_vision_radius", 5))
             embedding_size = int(model_cfg.get("embedding_size", 3))
@@ -101,7 +105,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size
 
-            # action spec: eight discrete actions
+            # action spec: ten discrete actions
             action_spec = ActionSpec(
                 [
                     "NOOP",
@@ -111,7 +115,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     "STEP_RIGHT",
                     "TURN_LEFT",
                     "TURN_RIGHT",
-                    "INTERACT"]
+                    "ATTACK",
+                    "PUNISH"]
             )
             # create a simple IQN model; hyperparameters can be tuned via config
             model = PyTorchIQN(
@@ -139,6 +144,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 action_spec=action_spec,
                 model=model,
                 interaction_reward=interaction_reward,
+                max_health=int(world_cfg.get("agent_health", 5)),
+                agent_id=agent_id,
             )
             agents.append(agent)
         self.agents = agents
@@ -200,12 +207,12 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             if np.random.random() < 0.2:
                 resource_type = "stag"
                 world.add(
-                    dynamic, StagResource(world.taste_reward, world.destroyable_health)
+                    dynamic, StagResource(world.taste_reward, world.stag_health)
                 )
             else:
                 resource_type = "hare"
                 world.add(
-                    dynamic, HareResource(world.taste_reward, world.destroyable_health)
+                    dynamic, HareResource(world.taste_reward, world.hare_health)
                 )
 
             # Update the Sand entity below to remember this resource type
@@ -296,24 +303,24 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             if resource_type == "stag":
                 world.add(
                     dynamic_loc,
-                    StagResource(world.taste_reward, world.destroyable_health),
+                    StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown),
                 )
             elif resource_type == "hare":
                 world.add(
                     dynamic_loc,
-                    HareResource(world.taste_reward, world.destroyable_health),
+                    HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown),
                 )
             elif resource_type == "random":
                 # Use ORIGINAL random selection logic
                 if np.random.random() < 0.2:  # Same as original
                     world.add(
                         dynamic_loc,
-                        StagResource(world.taste_reward, world.destroyable_health),
+                        StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown),
                     )
                 else:
                     world.add(
                         dynamic_loc,
-                        HareResource(world.taste_reward, world.destroyable_health),
+                        HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown),
                     )
 
         # Place empty entities on dynamic layer for non-resource, non-spawn locations
@@ -336,14 +343,30 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
         for loc, agent in zip(chosen_positions, self.agents):
             world.add(loc, agent)
-
+    
+    @override
     def take_turn(self) -> None:
         """Performs a full step in the environment with agent state updates."""
-        # Update agent freezing and respawn states first
+        # Update world turn counter
+        self.world.current_turn += 1
+        
+        # Update agent removal and respawn states first
         self.update_agent_states()
 
-        # Call parent take_turn method
-        super().take_turn()
+        # Handle entity transitions (from parent class)
+        self.turn += 1
+        for _, x in ndenumerate(self.world.map):
+            x: Entity
+            if x.has_transitions and not isinstance(x, Agent):
+                x.transition(self.world)
+        
+        # Handle agent transitions - SKIP removed agents
+        for agent in self.agents:            
+            if agent.can_act():  # Only process agents that can act
+                agent.transition(self.world)
+        
+        # Collect metrics for this step
+        self.collect_metrics_for_step()
 
     def override_agents(self, agents: list[Agent]) -> None:
         """Override the current agent configuration with a list of new agents and resets
@@ -352,13 +375,21 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         Args:
             agents: A list of new agents
         """
+        # Assign unique IDs to overridden agents
+        for agent_id, agent in enumerate(agents):
+            if hasattr(agent, 'agent_id'):
+                agent.agent_id = agent_id
+            else:
+                # If agent doesn't have agent_id attribute, add it
+                agent.agent_id = agent_id
+        
         self.agents = agents
 
     def update_agent_states(self) -> None:
-        """Update all agent freezing and respawn states."""
+        """Update all agent removal and respawn states."""
         for agent in self.agents:
-            if hasattr(agent, "update_freeze_state"):
-                agent.update_freeze_state()
+            if hasattr(agent, "update_removal_state"):
+                agent.update_removal_state()
 
                 # Handle removing agent from world when it becomes removed
                 if (
@@ -368,7 +399,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     and agent.respawn_timer > 0
                     and hasattr(agent, "_removed_from_world")
                     and not agent._removed_from_world
-                    and agent.location in self.world.map
+                    and agent.location is not None
                 ):
                     # Remove agent from world (only once)
                     self.world.remove(agent.location)
@@ -413,3 +444,15 @@ class StagHuntEnv(Environment[StagHuntWorld]):
 
         # Place agent at new location
         self.world.add(new_loc, agent)
+    
+    def collect_metrics_for_step(self) -> None:
+        """Collect metrics for the current step."""
+        if hasattr(self, 'metrics_collector') and self.metrics_collector:
+            self.metrics_collector.collect_step_metrics()
+            # Collect agent positions for clustering calculation
+            self.metrics_collector.collect_agent_positions(self.agents)
+    
+    def log_epoch_metrics(self, epoch: int, writer) -> None:
+        """Log metrics for the current epoch."""
+        if hasattr(self, 'metrics_collector') and self.metrics_collector:
+            self.metrics_collector.log_epoch_metrics(self.agents, epoch, writer)

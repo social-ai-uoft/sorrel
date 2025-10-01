@@ -29,7 +29,7 @@ except ImportError:  # pragma: no cover
 
 from typing import Any
 
-from sorrel.examples.staghunt.map_generator import MapBasedWorldGenerator
+from sorrel.examples.staghunt_physical.map_generator import MapBasedWorldGenerator
 from sorrel.worlds import Gridworld
 
 
@@ -116,17 +116,34 @@ class StagHuntWorld(Gridworld):
             get_world_param("num_agents", 2)
         )  # TODO: ideally the default should be 8
         self.resource_density: float = float(get_world_param("resource_density", 0.05))
+        # Separate reward values for stag and hare
+        self.stag_reward: float = float(get_world_param("stag_reward", 1.0))
+        self.hare_reward: float = float(get_world_param("hare_reward", 0.1))
+        # Legacy parameter for backward compatibility
         self.taste_reward: float = float(get_world_param("taste_reward", 0.1))
-        self.destroyable_health: int = int(get_world_param("destroyable_health", 3))
+        self.destroyable_health: int = int(get_world_param("destroyable_health", 3))  # Legacy parameter
         self.respawn_lag: int = int(get_world_param("respawn_lag", 10))
         self.beam_length: int = int(get_world_param("beam_length", 3))
         self.beam_radius: int = int(get_world_param("beam_radius", 1))
-        self.beam_cooldown: int = int(get_world_param("beam_cooldown", 3))
-        self.freeze_duration: int = int(get_world_param("freeze_duration", 5))
+        self.beam_cooldown: int = int(get_world_param("beam_cooldown", 3))  # Legacy parameter
+        self.attack_cooldown: int = int(get_world_param("attack_cooldown", 3))
+        self.attack_cost: float = float(get_world_param("attack_cost", 0.05))
+        self.punish_cooldown: int = int(get_world_param("punish_cooldown", 5))
+        self.punish_cost: float = float(get_world_param("punish_cost", 0.1))
         self.respawn_delay: int = int(get_world_param("respawn_delay", 10))
         self.payoff_matrix: list[list[int]] = [
             list(row) for row in get_world_param("payoff_matrix", [[4, 0], [2, 2]])
         ]
+        
+        # New health system parameters
+        self.stag_health: int = int(get_world_param("stag_health", 12))
+        self.hare_health: int = int(get_world_param("hare_health", 3))
+        self.agent_health: int = int(get_world_param("agent_health", 5))
+        self.health_regeneration_rate: float = float(get_world_param("health_regeneration_rate", 0.1))
+        self.stag_regeneration_cooldown: int = int(get_world_param("stag_regeneration_cooldown", 1))
+        self.hare_regeneration_cooldown: int = int(get_world_param("hare_regeneration_cooldown", 1))
+        self.reward_sharing_radius: int = int(get_world_param("reward_sharing_radius", 3))
+        self.current_turn: int = 0  # Track current turn for regeneration
 
         # record spawn points; to be populated by the environment
         self.agent_spawn_points: list[tuple[int, int, int]] = [

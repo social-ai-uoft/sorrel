@@ -42,12 +42,20 @@ pip install pygame
 
 ## Running the Game
 
-### 🚀 **Quick Start - ASCII Map Version (Recommended)**
+### 🚀 **Quick Start - Human Player Visualization (Recommended)**
 
-Run the enhanced ASCII map version with multiple agents:
+Run the human player visualization interface (similar to the Jupyter notebook):
 
 ```bash
-python staghunt_ascii_pygame.py --agents 2
+python human_player_visualization.py
+```
+
+### 🎮 **Physical ASCII Map Version**
+
+Run the enhanced Physical ASCII map version with ATTACK/PUNISH actions and health system:
+
+```bash
+python staghunt_physical_ascii_pygame.py --agents 2
 ```
 
 **Command line options:**
@@ -55,6 +63,14 @@ python staghunt_ascii_pygame.py --agents 2
 - `--tile-size N`: Tile size in pixels (16-64, default: 32)
 - `--fps N`: Game speed (5-30, default: 10)
 - `--turn-duration N`: Turn duration in frames (10-60, default: 30)
+
+### 🎮 **Original ASCII Map Version**
+
+Run the original ASCII map version (without health system):
+
+```bash
+python staghunt_ascii_pygame.py --agents 2
+```
 
 ### 🎮 **Multi-Agent Launcher**
 
@@ -94,7 +110,8 @@ Options:
 - **W/S**: Move forward/backward relative to your orientation
 - **A/D**: Step left/right relative to your orientation
 - **Q/E**: Turn left/right (change orientation)
-- **SPACE**: Interact (fire interaction beam)
+- **SPACE/R**: Attack (fire red attack beam)
+- **P**: Punish (fire yellow punish beam)
 - **ESC**: Quit game
 
 ### 🔄 **Multi-Agent Controls**
@@ -188,6 +205,53 @@ config = {
 }
 ```
 
+## Human Player Visualization
+
+The `human_player_visualization.py` script provides a **pure visualization interface** similar to the Jupyter notebook `human_player_test.ipynb`, but as a standalone pygame application.
+
+### 🎯 **Purpose**
+- **Testing interface**: Perfect for testing game mechanics and debugging
+- **Pure visualization**: No complex game logic, just visualization and controls
+- **Notebook equivalent**: Same functionality as the Jupyter notebook but in pygame
+- **Minimal dependencies**: Uses only the core game code without additional features
+
+### 🎮 **Features**
+- **Real-time visualization**: See the game world with colored tiles
+- **Health bars**: Visual health indicators for agents and resources
+- **Action feedback**: Console output for each action performed
+- **Turn management**: Manual turn advancement with ENTER key
+- **Configurable**: Command-line options for tile size, FPS, and config file
+
+### 🎨 **Visual Elements**
+- **Colored tiles**: Different colors for walls, sand, spawn points, resources, agents
+- **Health bars**: Green health bars on entities with health
+- **Beam effects**: Semi-transparent overlays for attack/punish beams
+- **UI overlay**: Game info, controls, and status display
+
+### ⌨️ **Controls**
+- **W/S**: Forward/Backward movement
+- **A/D**: Step Left/Right
+- **Q/E**: Turn Left/Right
+- **R**: Attack (reduces resource health)
+- **P**: Punish (affects other agents)
+- **SPACE**: Noop (do nothing)
+- **ENTER**: End turn
+- **ESC**: Quit
+
+### 🚀 **Usage**
+```bash
+# Basic usage
+python human_player_visualization.py
+
+# With custom settings
+python human_player_visualization.py --tile-size 48 --fps 15 --config configs/config.yaml
+```
+
+### 🔧 **Command Line Options**
+- `--config`: Path to config file (default: configs/config_ascii_map.yaml)
+- `--tile-size`: Size of each tile in pixels (default: 32)
+- `--fps`: Frames per second (default: 10)
+
 ## Integration with Sorrel
 
 This pygame implementation provides **exact replication** of the Sorrel framework:
@@ -214,9 +278,14 @@ This pygame implementation provides **exact replication** of the Sorrel framewor
 ## Files
 
 ### 🎮 **Main Game Files**
-- `staghunt_ascii_pygame.py`: **Enhanced ASCII map version** (recommended)
+- `human_player_visualization.py`: **Human player visualization interface** (recommended for testing)
+- `staghunt_physical_ascii_pygame.py`: Physical ASCII map version with health system
+- `staghunt_ascii_pygame.py`: Original ASCII map version (without health system)
+- `staghunt_physical_pygame.py`: Physical version with random generation
 - `staghunt_pygame.py`: Basic pygame implementation with random generation
+- `run_multi_agent_physical.py`: Multi-agent launcher for physical version
 - `run_multi_agent.py`: Multi-agent launcher with pre-configured options
+- `run_staghunt_physical_pygame.py`: Physical interactive launcher script
 - `run_staghunt_pygame.py`: Original interactive launcher script
 
 ### 📁 **Supporting Files**

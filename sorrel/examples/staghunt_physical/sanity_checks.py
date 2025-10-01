@@ -16,10 +16,10 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.examples.staghunt.agents_v2 import StagHuntAgent, StagHuntObservation
-from sorrel.examples.staghunt.entities import Empty, HareResource, StagResource
-from sorrel.examples.staghunt.env import StagHuntEnv
-from sorrel.examples.staghunt.world import StagHuntWorld
+from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent, StagHuntObservation
+from sorrel.examples.staghunt_physical.entities import Empty, HareResource, StagResource
+from sorrel.examples.staghunt_physical.env import StagHuntEnv
+from sorrel.examples.staghunt_physical.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
 
 

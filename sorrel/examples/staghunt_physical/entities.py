@@ -19,19 +19,23 @@ import numpy as np
 from sorrel.entities import Entity
 
 if TYPE_CHECKING:
-    from sorrel.examples.staghunt.world import StagHuntWorld
+    from sorrel.examples.staghunt_physical.world import StagHuntWorld
 
 
 entity_list = [
-    "Empty",
-    "Wall",
-    "Spawn",
-    "StagResource",
-    "HareResource",
-    "StagHuntAgent",
-    "Sand",
-    "InteractionBeam",
-]
+            "Empty",
+            "Wall",
+            "Spawn",
+            "StagResource",
+            "HareResource",
+            "StagHuntAgentNorth",  # 0: north
+            "StagHuntAgentEast",  # 1: east
+            "StagHuntAgentSouth",  # 2: south
+            "StagHuntAgentWest",  # 3: west
+            "Sand",
+            "AttackBeam",
+            "PunishBeam",
+        ]
 
 
 class Wall(Entity["StagHuntWorld"]):
@@ -115,11 +119,25 @@ class Empty(Entity["StagHuntWorld"]):
         terrain_location = (self.location[0], self.location[1], world.terrain_layer)
         if world.valid_location(terrain_location):
             terrain_entity = world.observe(terrain_location)
+            
+            # Check if there's an agent at the current location (dynamic layer)
+            # We need to check all layers to see if there's an agent above this empty cell
+            has_agent = False
+            for layer in range(world.layers):
+                check_location = (self.location[0], self.location[1], layer)
+                if world.valid_location(check_location):
+                    entity_at_layer = world.observe(check_location)
+                    # Check if it's an agent (any orientation)
+                    if hasattr(entity_at_layer, 'kind') and 'StagHuntAgent' in entity_at_layer.kind:
+                        has_agent = True
+                        break
+            
             if (
                 hasattr(terrain_entity, "can_convert_to_resource")
                 and hasattr(terrain_entity, "respawn_ready")
                 and terrain_entity.can_convert_to_resource
                 and terrain_entity.respawn_ready
+                and not has_agent  # Don't spawn if there's an agent above
                 and np.random.random() < world.resource_density
             ):
 
@@ -141,8 +159,18 @@ class Empty(Entity["StagHuntWorld"]):
                     # Fallback to original random selection if no resource type is remembered
                     res_cls = StagResource if np.random.random() < 0.1 else HareResource
 
+                # Use separate reward values for stag and hare
+                if res_cls == StagResource:
+                    reward_value = world.stag_reward
+                    health_value = world.stag_health
+                    cooldown_value = world.stag_regeneration_cooldown
+                else:  # HareResource
+                    reward_value = world.hare_reward
+                    health_value = world.hare_health
+                    cooldown_value = world.hare_regeneration_cooldown
+                
                 world.add(
-                    self.location, res_cls(world.taste_reward, world.destroyable_health)
+                    self.location, res_cls(reward_value, health_value, regeneration_cooldown=cooldown_value)
                 )
 
 
@@ -172,22 +200,27 @@ class Resource(Entity["StagHuntWorld"]):
 
     name: str  # overridden in subclasses
 
-    def __init__(self, taste_reward: float, destroyable_health: int) -> None:
+    def __init__(self, taste_reward: float, max_health: int, regeneration_rate: float = 0.1, regeneration_cooldown: int = 1) -> None:
         super().__init__()
-        self.passable = True
-        self.health = destroyable_health
+        self.passable = False  # Resources are not passable - agents must attack them
+        self.max_health = max_health
+        self.health = max_health
         self.value = taste_reward
+        # self.regeneration_rate = regeneration_rate
+        self.regeneration_cooldown = regeneration_cooldown
+        self.last_attacked_turn = 0
+        self.has_transitions = True
         # sprite will be set in subclasses
 
-    def on_zap(self, world: StagHuntWorld) -> None:
-        """Handle a zap event on this resource.
+    def on_attack(self, world: StagHuntWorld, current_turn: int) -> bool:
+        """Handle an attack on this resource.
 
-        Reduces health by one.  When health reaches zero, the resource is removed and
-        replaced with an empty entity that can convert back to a resource.  The Sand
-        entity below is marked as not ready to respawn and will remember this resource
-        type for future respawning.  No reward is awarded for destroying resources.
+        Reduces health by one and updates last attacked turn. Returns True if resource
+        is defeated (health reaches zero), False otherwise.
         """
         self.health -= 1
+        self.last_attacked_turn = current_turn
+        
         if self.health <= 0:
             # Mark the Sand entity below as not ready to respawn and remember this resource type
             terrain_location = (self.location[0], self.location[1], world.terrain_layer)
@@ -205,6 +238,23 @@ class Resource(Entity["StagHuntWorld"]):
 
             # replace with empty cell (attributes inherited from terrain layer)
             world.add(self.location, Empty())
+            return True
+        return False
+
+    def transition(self, world: StagHuntWorld) -> None:
+        """Handle health regeneration over time.
+        
+        Resources regenerate health when they haven't been attacked recently.
+        """
+        # Only regenerate if not at max health and haven't been attacked recently
+        if self.health < self.max_health:
+            # Get current turn from world (assuming world has a turn counter)
+            current_turn = getattr(world, 'current_turn', 0)
+            turns_since_attack = current_turn - self.last_attacked_turn
+            
+            # Regenerate if enough time has passed since last attack
+            if turns_since_attack >= self.regeneration_cooldown:
+                self.health = min(self.max_health, self.health + world.health_regeneration_rate)
 
 
 class StagResource(Resource):
@@ -212,8 +262,8 @@ class StagResource(Resource):
 
     name = "stag"
 
-    def __init__(self, taste_reward: float, destroyable_health: int) -> None:
-        super().__init__(taste_reward, destroyable_health)
+    def __init__(self, taste_reward: float, max_health: int = 12, regeneration_rate: float = 0.1, regeneration_cooldown: int = 1) -> None:
+        super().__init__(taste_reward, max_health, regeneration_rate, regeneration_cooldown)
         self.sprite = Path(__file__).parent / "./assets/stag.png"
 
 
@@ -222,8 +272,8 @@ class HareResource(Resource):
 
     name = "hare"
 
-    def __init__(self, taste_reward: float, destroyable_health: int) -> None:
-        super().__init__(taste_reward, destroyable_health)
+    def __init__(self, taste_reward: float, max_health: int = 3, regeneration_rate: float = 0.1, regeneration_cooldown: int = 1) -> None:
+        super().__init__(taste_reward, max_health, regeneration_rate, regeneration_cooldown)
         self.sprite = Path(__file__).parent / "./assets/hare.png"
 
 
@@ -254,3 +304,19 @@ class InteractionBeam(Beam):
 
     def __init__(self):
         super().__init__()
+
+
+class AttackBeam(Beam):
+    """Beam used for attacking resources in stag hunt."""
+
+    def __init__(self):
+        super().__init__()
+        self.sprite = Path(__file__).parent / "./assets/beam.png"  # Could use different sprite
+
+
+class PunishBeam(Beam):
+    """Beam used for punishing agents in stag hunt."""
+
+    def __init__(self):
+        super().__init__()
+        self.sprite = Path(__file__).parent / "./assets/zap.png"  # Using zap sprite for punish

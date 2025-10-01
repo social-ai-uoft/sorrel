@@ -1,0 +1,4 @@
+experiment:
+  run_name: test_experiment
+world:
+  num_agents: 3
