@@ -53,6 +53,18 @@ def parse_arguments():
     parser.add_argument(
         "--fixed_punishment", type=float, default=0.2, help="Fixed punishment level"
     )
+    parser.add_argument(
+        "--punishment_level_accessible", action="store_true", 
+        help="Whether agents can access punishment level information"
+    )
+    parser.add_argument(
+        "--use_probabilistic_punishment", action="store_true",
+        help="Whether to use probabilistic punishment system"
+    )
+    parser.add_argument(
+        "--social_harm_accessible", action="store_true",
+        help="Whether agents can access social harm information"
+    )
 
     parser.add_argument(
         "--no_collective_harm", action="store_true", help="no collective harm"
@@ -106,6 +118,9 @@ def run_experiment(args):
         simple_foraging=args.simple_foraging,
         use_random_policy=args.random_policy,
         fixed_punishment_level=args.fixed_punishment,
+        punishment_level_accessible=args.punishment_level_accessible,
+        use_probabilistic_punishment=args.use_probabilistic_punishment,
+        social_harm_accessible=args.social_harm_accessible,
         map_size=args.map_size,
         num_resources=args.num_resources,
         # learning_rate=args.learning_rate,
@@ -125,7 +140,7 @@ def run_experiment(args):
 
     # Both tensorboard logs and animations go to the same timestamped folder
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_p48_a3" / run_folder
+    log_dir = Path(__file__).parent / "runs_p48_a2_bs256_m2048" / run_folder
     anim_dir = Path(__file__).parent / "data" / run_folder
     config_dir = Path(__file__).parent / "configs"
     experiment_name = args.experiment_name or f"{base_run_name}_{args.num_agents}agents"
@@ -164,7 +179,7 @@ def run_experiment(args):
     print("-" * 50)
 
     multi_agent_env.run_experiment(
-        animate=True,  # Enable animations
+        animate=False,  # Enable animations
         logging=True,
         logger=logger,
         output_dir=anim_dir,

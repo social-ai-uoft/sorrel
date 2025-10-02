@@ -12,14 +12,17 @@ def create_config(
     simple_foraging: bool = False,
     use_random_policy: bool = False,
     fixed_punishment_level: float = 0.2,
+    punishment_level_accessible: bool = False,
+    use_probabilistic_punishment: bool = False,
+    social_harm_accessible: bool = False,
     map_size: int = 10,
     num_resources: int = 8,
     learning_rate: float = 0.00025,
-    batch_size: int = 64,
-    memory_size: int = 1024,
+    batch_size: int = 256, #64
+    memory_size: int = 2048, #1024
     target_update_frequency: int = 200,
-    exploration_rate: float = 0.9,
-    exploration_decay: float = 0.00001, 
+    exploration_rate: float = 1.0, # 0.9
+    exploration_decay: float = 0.0001, 
     # 0.001
     exploration_min: float = 0.05,
     no_collective_harm: bool = True,
@@ -61,12 +64,16 @@ def create_config(
     collective_harm_tag = "no_collective_harm" if no_collective_harm else "collective_harm"
 
     # Generate dynamic run name based on experiment parameters
+    punishment_accessibility_tag = "punishment_level_known" if punishment_level_accessible else "punishment_level_unknown"
+    social_harm_accessibility_tag = "social_harm_known" if social_harm_accessible else "social_harm_unknown"
+    probabilistic_tag = "probabilistic" if use_probabilistic_punishment else "deterministic"
+    
     if simple_foraging:
         run_name = (
-            f"probabilistic_{collective_harm_tag}_simple_foraging_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}_{num_agents}agents_punish{fixed_punishment_level:.1f}"
+            f"v2_{probabilistic_tag}_{collective_harm_tag}_simple_foraging_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}_{num_agents}agents_punish{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
         )
     else:
-        run_name = f"unknown_punishment_extended_{collective_harm_tag}_state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents"
+        run_name = f"v2_{probabilistic_tag}_extended_{collective_harm_tag}_state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
 
     return {
         "experiment": {
@@ -82,6 +89,9 @@ def create_config(
             "simple_foraging": simple_foraging,
             "use_random_policy": use_random_policy,
             "fixed_punishment_level": fixed_punishment_level,
+            "punishment_level_accessible": punishment_level_accessible,
+            "use_probabilistic_punishment": use_probabilistic_punishment,
+            "social_harm_accessible": social_harm_accessible,
             "save_models_every": save_models_every,
         },
         "world": {

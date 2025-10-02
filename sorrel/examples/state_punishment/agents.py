@@ -34,6 +34,8 @@ class StatePunishmentAgent(Agent):
         use_composite_actions: bool = False,
         simple_foraging: bool = False,
         use_random_policy: bool = False,
+        punishment_level_accessible: bool = False,
+        social_harm_accessible: bool = False,
     ):
         """Initialize the state punishment agent.
 
@@ -46,6 +48,8 @@ class StatePunishmentAgent(Agent):
             use_composite_actions: Whether to use composite actions (movement + voting)
             simple_foraging: Whether to use simple foraging mode
             use_random_policy: Whether to use random policy instead of trained model
+            punishment_level_accessible: Whether agents can access punishment level information
+            social_harm_accessible: Whether agents can access social harm information
         """
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
@@ -53,6 +57,8 @@ class StatePunishmentAgent(Agent):
         self.use_composite_actions = use_composite_actions
         self.simple_foraging = simple_foraging
         self.use_random_policy = use_random_policy
+        self.punishment_level_accessible = punishment_level_accessible
+        self.social_harm_accessible = social_harm_accessible
         self.sprite = Path(__file__).parent / "./assets/hero.png"
 
         # Track encounters and rewards
@@ -87,10 +93,10 @@ class StatePunishmentAgent(Agent):
         # flatten the image to get the state
         visual_field = image.reshape(1, -1)
 
-        # Add extra features: punishment level, social harm, and random noise
-        punishment_level = state_system.prob #* 0
-        social_harm = social_harm_dict.get(self.agent_id, 0.0) #+ np.random.random() * 10 - 5
-        random_noise = np.random.random() 
+        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and random noise
+        punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
+        social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
+        random_noise = np.random.random()
 
         extra_features = np.array(
             [punishment_level, social_harm, random_noise], dtype=visual_field.dtype
@@ -101,9 +107,9 @@ class StatePunishmentAgent(Agent):
         self, composite_state, state_system, social_harm_dict
     ) -> np.ndarray:
         """Add agent-specific scalar features to composite state."""
-        # Add extra features: punishment level, social harm, and random noise
-        punishment_level = state_system.prob
-        social_harm = social_harm_dict.get(self.agent_id, 0.0)
+        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and random noise
+        punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
+        social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
         random_noise = np.random.random()
 
         extra_features = np.array(

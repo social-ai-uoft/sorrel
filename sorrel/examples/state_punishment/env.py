@@ -537,9 +537,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
             action_spec = ActionSpec(action_names)
 
-            # Create the model with extra features (3 additional: punishment_level, social_harm, random_noise)
+            # Create the model with extra features (punishment_level, social_harm, random_noise)
             # The input_size should be a tuple representing the flattened dimensions
-            # We need to add 3 to the total flattened size
+            # We always add 3 extra features: punishment_level (accessible value or 0), social_harm, random_noise
             base_flattened_size = (
                 observation_spec.input_size[0]
                 * observation_spec.input_size[1]
@@ -583,6 +583,8 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_composite_actions=self.use_composite_actions,
                     simple_foraging=self.simple_foraging,
                     use_random_policy=self.use_random_policy,
+                    punishment_level_accessible=self.config.experiment.get("punishment_level_accessible", False),
+                    social_harm_accessible=self.config.experiment.get("social_harm_accessible", False),
                 )
             )
 

@@ -76,6 +76,7 @@ class StateSystem:
         intercept_increase_speed: float = 2,
         resource_punishment_is_ambiguous: bool = False,
         only_punish_taboo: bool = True,
+        use_probabilistic_punishment: bool = True,
     ):
         """Initialize the state system.
 
@@ -90,6 +91,7 @@ class StateSystem:
             intercept_increase_speed: Speed of intercept increase
             resource_punishment_is_ambiguous: Whether punishment is ambiguous
             only_punish_taboo: Whether to only punish taboo resources
+            use_probabilistic_punishment: Whether to use probabilistic punishment (True) or deterministic (False)
         """
         self.prob = init_prob
         self.init_prob = init_prob
@@ -106,6 +108,7 @@ class StateSystem:
         self.intercept_increase_speed = intercept_increase_speed
         self.resource_punishment_is_ambiguous = resource_punishment_is_ambiguous
         self.only_punish_taboo = only_punish_taboo
+        self.use_probabilistic_punishment = use_probabilistic_punishment
 
         # Generate complex punishment probability matrices
         self.punishments_prob_matrix = compile_punishment_vals(
@@ -188,12 +191,16 @@ class StateSystem:
                         current_level
                     ]
 
-            punishment_value = self.magnitude * punishment_prob
-            # probabilistic punishment
-            #if random.random() < punishment_prob:
-            #    punishment_value = self.magnitude
-            #else:
-            #    punishment_value = 0.0
+            # Calculate punishment based on mode
+            if self.use_probabilistic_punishment:
+                # Probabilistic punishment: random chance based on probability
+                if random.random() < punishment_prob:
+                    punishment_value = self.magnitude
+                else:
+                    punishment_value = 0.0
+            else:
+                # Deterministic punishment: proportional to probability
+                punishment_value = self.magnitude * punishment_prob
 
             self.punishment_history.append(punishment_value)
 
