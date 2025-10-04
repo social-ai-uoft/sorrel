@@ -36,6 +36,7 @@ class StatePunishmentAgent(Agent):
         use_random_policy: bool = False,
         punishment_level_accessible: bool = False,
         social_harm_accessible: bool = False,
+        delayed_punishment: bool = False,
     ):
         """Initialize the state punishment agent.
 
@@ -50,6 +51,7 @@ class StatePunishmentAgent(Agent):
             use_random_policy: Whether to use random policy instead of trained model
             punishment_level_accessible: Whether agents can access punishment level information
             social_harm_accessible: Whether agents can access social harm information
+            delayed_punishment: Whether to defer punishments to the next turn
         """
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
@@ -59,12 +61,16 @@ class StatePunishmentAgent(Agent):
         self.use_random_policy = use_random_policy
         self.punishment_level_accessible = punishment_level_accessible
         self.social_harm_accessible = social_harm_accessible
+        self.delayed_punishment = delayed_punishment
         self.sprite = Path(__file__).parent / "./assets/hero.png"
 
         # Track encounters and rewards
         self.encounters = {}
         self.individual_score = 0.0
         self.vote_history = []
+
+        # Delayed punishment cache system
+        self.pending_punishment = 0.0  # Punishment to be applied next turn
 
         # Simplified - no complex composite state tracking needed
 
@@ -93,13 +99,18 @@ class StatePunishmentAgent(Agent):
         # flatten the image to get the state
         visual_field = image.reshape(1, -1)
 
-        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and random noise
+        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and third feature
         punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
         social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
-        random_noise = np.random.random()
+        
+        # In delayed punishment mode, replace random noise with pending punishment
+        if self.delayed_punishment:
+            third_feature = self.pending_punishment
+        else:
+            third_feature = np.random.random()
 
         extra_features = np.array(
-            [punishment_level, social_harm, random_noise], dtype=visual_field.dtype
+            [punishment_level, social_harm, third_feature], dtype=visual_field.dtype
         ).reshape(1, -1)
         return np.concatenate([visual_field, extra_features], axis=1)
 
@@ -107,13 +118,18 @@ class StatePunishmentAgent(Agent):
         self, composite_state, state_system, social_harm_dict
     ) -> np.ndarray:
         """Add agent-specific scalar features to composite state."""
-        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and random noise
+        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and third feature
         punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
         social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
-        random_noise = np.random.random()
+        
+        # In delayed punishment mode, replace random noise with pending punishment
+        if self.delayed_punishment:
+            third_feature = self.pending_punishment
+        else:
+            third_feature = np.random.random()
 
         extra_features = np.array(
-            [punishment_level, social_harm, random_noise], dtype=composite_state.dtype
+            [punishment_level, social_harm, third_feature], dtype=composite_state.dtype
         ).reshape(1, -1)
 
         return np.concatenate([composite_state, extra_features], axis=1)
@@ -134,7 +150,14 @@ class StatePunishmentAgent(Agent):
         Returns:
             Reward from the action
         """
-        return self._execute_action(action, world, state_system, social_harm_dict)
+        # Apply delayed punishments from previous turn at the start of this action
+        if self.delayed_punishment:
+            delayed_punishment = self.apply_delayed_punishments()
+            # Apply the delayed punishment as a negative reward
+            base_reward = self._execute_action(action, world, state_system, social_harm_dict)
+            return base_reward - delayed_punishment
+        else:
+            return self._execute_action(action, world, state_system, social_harm_dict)
 
     def _execute_action(
         self, action: int, world, state_system=None, social_harm_dict=None
@@ -210,10 +233,16 @@ class StatePunishmentAgent(Agent):
 
         # Apply punishment if it's a taboo resource
         if hasattr(target_object, "kind") and state_system is not None:
+            punishment = state_system.calculate_punishment(target_object.kind)
+            
+            if self.delayed_punishment:
+                # Defer punishment to next turn
+                self.pending_punishment += punishment
+            else:
+                # Apply punishment immediately
+                reward -= punishment
 
-            reward -= state_system.calculate_punishment(target_object.kind)
-
-            # Update social harm for all other agents
+            # Update social harm for all other agents (always applied immediately)
             if hasattr(target_object, "social_harm") and social_harm_dict is not None:
                 harm = target_object.social_harm
                 for agent_id in social_harm_dict:
@@ -240,6 +269,24 @@ class StatePunishmentAgent(Agent):
         self.vote_history.append(1 if voting_action == 1 else -1)
         return -0.1  # Small cost for voting
 
+    def apply_delayed_punishments(self) -> float:
+        """Apply any pending punishments from previous turn.
+        
+        Returns:
+            Total punishment applied this turn
+        """
+        if not self.delayed_punishment:
+            return 0.0
+            
+        total_punishment = 0.0
+        
+        # Apply pending punishment
+        if self.pending_punishment > 0:
+            total_punishment += self.pending_punishment
+            self.pending_punishment = 0.0
+            
+        return total_punishment
+
     @override
     def reset(self) -> None:
         """Reset the agent state."""
@@ -248,6 +295,9 @@ class StatePunishmentAgent(Agent):
         self.encounters = {}
         self.vote_history = []
         self.turn = 0
+
+        # Reset delayed punishment cache
+        self.pending_punishment = 0.0
 
         # Reset debug counter
         if hasattr(self, "_debug_turn_count"):

@@ -585,6 +585,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_random_policy=self.use_random_policy,
                     punishment_level_accessible=self.config.experiment.get("punishment_level_accessible", False),
                     social_harm_accessible=self.config.experiment.get("social_harm_accessible", False),
+                    delayed_punishment=self.config.experiment.get("delayed_punishment", False),
                 )
             )
 

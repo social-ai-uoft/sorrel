@@ -69,6 +69,9 @@ def parse_arguments():
     parser.add_argument(
         "--no_collective_harm", action="store_true", help="no collective harm"
     )
+    parser.add_argument(
+        "--delayed_punishment", action="store_true", help="Use delayed punishment mode (defer punishment to next turn)"
+    )
 
     # Model parameters
     # parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
@@ -128,6 +131,7 @@ def run_experiment(args):
         memory_size=args.memory_size,
         no_collective_harm=args.no_collective_harm,
         save_models_every=args.save_models_every,
+        delayed_punishment=args.delayed_punishment,
     )
 
     # Print expected rewards
