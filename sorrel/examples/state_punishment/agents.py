@@ -37,6 +37,7 @@ class StatePunishmentAgent(Agent):
         punishment_level_accessible: bool = False,
         social_harm_accessible: bool = False,
         delayed_punishment: bool = False,
+        important_rule: bool = False,
     ):
         """Initialize the state punishment agent.
 
@@ -52,6 +53,7 @@ class StatePunishmentAgent(Agent):
             punishment_level_accessible: Whether agents can access punishment level information
             social_harm_accessible: Whether agents can access social harm information
             delayed_punishment: Whether to defer punishments to the next turn
+            important_rule: Whether to use important rule mode (entity A never punished)
         """
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
@@ -62,6 +64,7 @@ class StatePunishmentAgent(Agent):
         self.punishment_level_accessible = punishment_level_accessible
         self.social_harm_accessible = social_harm_accessible
         self.delayed_punishment = delayed_punishment
+        self.important_rule = important_rule
         self.sprite = Path(__file__).parent / "./assets/hero.png"
 
         # Track encounters and rewards
@@ -233,7 +236,11 @@ class StatePunishmentAgent(Agent):
 
         # Apply punishment if it's a taboo resource
         if hasattr(target_object, "kind") and state_system is not None:
-            punishment = state_system.calculate_punishment(target_object.kind)
+            # In important rule mode, entity A is never punished
+            if self.important_rule and target_object.kind == "A":
+                punishment = 0.0
+            else:
+                punishment = state_system.calculate_punishment(target_object.kind)
             
             if self.delayed_punishment:
                 # Defer punishment to next turn

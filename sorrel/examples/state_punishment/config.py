@@ -28,6 +28,7 @@ def create_config(
     no_collective_harm: bool = True,
     save_models_every: int = 1000,
     delayed_punishment: bool = False,
+    important_rule: bool = False,
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -62,20 +63,21 @@ def create_config(
     map_size = map_size
     vision_radius = 4
     respawn_prob = 0.005  # 0.005
-    collective_harm_tag = "no_collective_harm" if no_collective_harm else "collective_harm"
+    collective_harm_tag = "nocharm" if no_collective_harm else "charm"
 
     # Generate dynamic run name based on experiment parameters
-    punishment_accessibility_tag = "punishment_level_known" if punishment_level_accessible else "punishment_level_unknown"
-    social_harm_accessibility_tag = "social_harm_known" if social_harm_accessible else "social_harm_unknown"
-    probabilistic_tag = "probabilistic" if use_probabilistic_punishment else "deterministic"
-    delayed_punishment_tag = "delayed_punishment" if delayed_punishment else "immediate_punishment"
+    punishment_accessibility_tag = "pknown" if punishment_level_accessible else "punkn"
+    social_harm_accessibility_tag = "sknown" if social_harm_accessible else "sknwn"
+    probabilistic_tag = "prob" if use_probabilistic_punishment else "det"
+    delayed_punishment_tag = "delayed" if delayed_punishment else "immed"
+    rule_type_tag = "important" if important_rule else "silly"
     
     if simple_foraging:
         run_name = (
-            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_simple_foraging_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}_{num_agents}agents_punish{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
         )
     else:
-        run_name = f"v2_{probabilistic_tag}_extended_{collective_harm_tag}_{delayed_punishment_tag}_state_punishment_respawn_{respawn_prob:.3f}_vision_{vision_radius}_map_{map_size}_composite_views_{use_composite_views}_multi_env_{use_multi_env_composite}__{num_agents}agents_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
 
     return {
         "experiment": {
@@ -96,6 +98,7 @@ def create_config(
             "social_harm_accessible": social_harm_accessible,
             "save_models_every": save_models_every,
             "delayed_punishment": delayed_punishment,
+            "important_rule": important_rule,
         },
         "world": {
             "height": map_size,
