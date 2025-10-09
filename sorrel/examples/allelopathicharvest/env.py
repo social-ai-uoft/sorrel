@@ -69,7 +69,18 @@ class AllelopathicHarvestEnvironment(Environment[AllelopathicHarvestWorld]):
 
             # create the action spec
             action_spec = ActionSpec(
-                ["up", "down", "left", "right", "green_beam", "red_beam", "blue_beam", "turn_left", "turn_right", "zap"]
+                [
+                    "up",
+                    "down",
+                    "left",
+                    "right",
+                    "green_beam",
+                    "red_beam",
+                    "blue_beam",
+                    "turn_left",
+                    "turn_right",
+                    "zap",
+                ]
             )
 
             # create the model
@@ -140,4 +151,3 @@ class AllelopathicHarvestEnvironment(Environment[AllelopathicHarvestWorld]):
         for loc, agent in zip(agent_locations, self.agents):
             loc = tuple(loc)
             self.world.add(loc, agent)
-        

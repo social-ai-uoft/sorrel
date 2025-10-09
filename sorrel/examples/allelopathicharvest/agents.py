@@ -4,10 +4,15 @@ import numpy as np
 
 from sorrel.agents.agent import MovingAgent
 from sorrel.entities.entity import Entity
-from sorrel.examples.allelopathicharvest.entities import EmptyEntity, RipeBerry, UnripeBerry
+from sorrel.examples.allelopathicharvest.entities import (
+    EmptyEntity,
+    RipeBerry,
+    UnripeBerry,
+)
 from sorrel.examples.allelopathicharvest.world import AllelopathicHarvestWorld
 from sorrel.location import Location, Vector
 from sorrel.worlds.gridworld import Gridworld
+
 
 class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
     """A simple allelopathic harvest agent."""
@@ -32,7 +37,7 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
         image = self.observation_spec.observe(world, self.location)
         # flatten the image to get the state
         return image.reshape(1, -1)
-    
+
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
         prev_states = self.model.memory.current_state()
@@ -41,7 +46,7 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
         model_input = stacked_states.reshape(1, -1)
         action = self.model.take_action(model_input)
         return action
-    
+
     def spawn_beam(self, world: AllelopathicHarvestWorld, action_name: str) -> None:
         # Get the tiles above and adjacent to the agent.
         up_vector = Vector(0, 0, layer=1, direction=self.direction)
@@ -55,18 +60,9 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
         #   1. (1, i+1) tiles ahead of the tile above the agent
         #   2. (0, i) tiles ahead of the tile above and to the right/left of the agent.
         beam_locs = (
-            [
-                (tile_above + (forward_vector * i))
-                for i in range(1, 3 + 1)
-            ]
-            + [
-                (tile_above + (right_vector) + (forward_vector * i))
-                for i in range(3)
-            ]
-            + [
-                (tile_above + (left_vector) + (forward_vector * i))
-                for i in range(3)
-            ]
+            [(tile_above + (forward_vector * i)) for i in range(1, 3 + 1)]
+            + [(tile_above + (right_vector) + (forward_vector * i)) for i in range(3)]
+            + [(tile_above + (left_vector) + (forward_vector * i)) for i in range(3)]
         )
 
         # Check beam layer to determine which locations are valid...
@@ -93,12 +89,7 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
 
         # Candidate beam locations:
         # (1, i+1) tiles ahead of the tile above the agent
-        beam_locs = (
-            [
-                (tile_above + (forward_vector * i))
-                for i in range(1, 3 + 1)
-            ]
-        )
+        beam_locs = [(tile_above + (forward_vector * i)) for i in range(1, 3 + 1)]
 
         # Check beam layer to determine which locations are valid...
         placeable_locs = [loc for loc in beam_locs if world.valid_location(loc)]
@@ -107,7 +98,7 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
         for loc in placeable_locs:
             world.remove(loc.to_tuple())
             world.add(loc.to_tuple(), ZapBeam())
-    
+
     def act(self, world: AllelopathicHarvestWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
 
@@ -138,7 +129,9 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
 
         new_location = self.location  # By default, don't move
         if action_name in ["up", "right", "down", "left"]:
-            new_location = self.movement(action, bound_horizontal=world.width, bound_vertical=world.height)
+            new_location = self.movement(
+                action, bound_horizontal=world.width, bound_vertical=world.height
+            )
             if action_name == "up":
                 self.direction = 0
             elif action_name == "right":
@@ -148,12 +141,7 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
             elif action_name == "left":
                 self.direction = 3
 
-        direction_to_sprite = {
-            0: 0,
-            1: 3,
-            2: 1,
-            3: 2
-        }
+        direction_to_sprite = {0: 0, 1: 3, 2: 1, 3: 2}
 
         if action_name == "turn_left":
             self.direction = (self.direction - 1) % 4
@@ -165,7 +153,11 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
         if action_name == "zap":
             self.spawn_zap(world)
 
-        if action_name == "red_beam" or action_name == "green_beam" or action_name == "blue_beam":
+        if (
+            action_name == "red_beam"
+            or action_name == "green_beam"
+            or action_name == "blue_beam"
+        ):
             self.spawn_beam(world, action_name)
 
             if self.zap_over > 0:
@@ -195,12 +187,27 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
 
             if target_object.kind == f"RipeBerry.{self.preferred_color}":
                 reward += 3  # extra reward for preferred color
-            
+
             if np.random.random() < max(
-                UnripeBerry.total_unripe_red/(UnripeBerry.total_unripe_red + UnripeBerry.total_unripe_green + UnripeBerry.total_unripe_blue),
-                UnripeBerry.total_unripe_green/(UnripeBerry.total_unripe_red + UnripeBerry.total_unripe_green + UnripeBerry.total_unripe_blue),
-                UnripeBerry.total_unripe_blue/(UnripeBerry.total_unripe_red + UnripeBerry.total_unripe_green + UnripeBerry.total_unripe_blue)
-            ):    
+                UnripeBerry.total_unripe_red
+                / (
+                    UnripeBerry.total_unripe_red
+                    + UnripeBerry.total_unripe_green
+                    + UnripeBerry.total_unripe_blue
+                ),
+                UnripeBerry.total_unripe_green
+                / (
+                    UnripeBerry.total_unripe_red
+                    + UnripeBerry.total_unripe_green
+                    + UnripeBerry.total_unripe_blue
+                ),
+                UnripeBerry.total_unripe_blue
+                / (
+                    UnripeBerry.total_unripe_red
+                    + UnripeBerry.total_unripe_green
+                    + UnripeBerry.total_unripe_blue
+                ),
+            ):
                 if self.zap_over > 0:
                     self.switch_kind("MarkedAllelopathicHarvestAgent.Eaten")
                 else:
@@ -223,7 +230,7 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
     def is_done(self, world: AllelopathicHarvestWorld) -> bool:
         """Returns whether this Agent is done."""
         return world.is_done
-    
+
     def switch_kind(self, new_kind: str) -> None:
         """Switch the kind of this agent to the new kind."""
 
@@ -308,6 +315,7 @@ class AllelopathicHarvestAgent(MovingAgent[AllelopathicHarvestWorld]):
                 Path(__file__).parent / "./assets/eaten-marked-hero-right.png",  # Right
             ]
 
+
 class ColorBeam(Entity):
     """Generic beam class for agent beams."""
 
@@ -325,6 +333,7 @@ class ColorBeam(Entity):
             world.add(self.location, EmptyEntity())
         else:
             self.turn_counter += 1
+
 
 class ZapBeam(Entity):
     def __init__(self):

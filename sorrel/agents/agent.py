@@ -153,7 +153,12 @@ class MovingAgent[W: Gridworld](Agent):
         Path(__file__).parent / "./assets/hero-right.png",  # Right
     ]
 
-    def movement(self, action: int, bound_vertical: int | None = None, bound_horizontal: int | None = None) -> tuple[int, int, int]:
+    def movement(
+        self,
+        action: int,
+        bound_vertical: int | None = None,
+        bound_horizontal: int | None = None,
+    ) -> tuple[int, int, int]:
         """Attempt to move with the specified action to a new location.
 
         Args:

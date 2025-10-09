@@ -16,6 +16,7 @@ class EmptyEntity(Entity[Gridworld]):
         self.passable = True
         self.sprite = Path(__file__).parent / "./assets/empty.png"
 
+
 class Floor(Entity[AllelopathicHarvestWorld]):
     """Floor class for the allelopathic harvest environment."""
 
@@ -23,6 +24,7 @@ class Floor(Entity[AllelopathicHarvestWorld]):
         super().__init__()
         self.passable = True
         self.sprite = Path(__file__).parent / "./assets/sand.png"
+
 
 class UnripeBerry(Entity[AllelopathicHarvestWorld]):
     """Unripe Berry class for the allelopathic harvest environment."""
@@ -72,26 +74,27 @@ class UnripeBerry(Entity[AllelopathicHarvestWorld]):
             self.kind = "UnripeBerry.Blue"
 
         if self.kind == "UnripeBerry.Red":
-            p = 5 * ((math.pow(10, -6))*UnripeBerry.total_unripe_red)
+            p = 5 * ((math.pow(10, -6)) * UnripeBerry.total_unripe_red)
 
             if np.random.random() < p:
                 world.remove(self.location)
                 world.add(self.location, RipeBerry(color="red"))
                 UnripeBerry.total_unripe_red -= 1
         elif self.kind == "UnripeBerry.Green":
-            p = 5 * ((math.pow(10, -6))*UnripeBerry.total_unripe_green)
+            p = 5 * ((math.pow(10, -6)) * UnripeBerry.total_unripe_green)
 
             if np.random.random() < p:
                 world.remove(self.location)
                 world.add(self.location, RipeBerry(color="green"))
                 UnripeBerry.total_unripe_green -= 1
         else:
-            p = 5 * ((math.pow(10, -6))*UnripeBerry.total_unripe_blue)
+            p = 5 * ((math.pow(10, -6)) * UnripeBerry.total_unripe_blue)
 
             if np.random.random() < p:
                 world.remove(self.location)
                 world.add(self.location, RipeBerry(color="blue"))
                 UnripeBerry.total_unripe_blue -= 1
+
 
 class RipeBerry(Entity[AllelopathicHarvestWorld]):
     """Ripe Berry class for the allelopathic harvest environment."""
