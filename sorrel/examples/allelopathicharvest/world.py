@@ -7,7 +7,7 @@ class AllelopathicHarvestWorld(Gridworld):
     """A simple allelopathic harvest world environment."""
 
     def __init__(self, config: dict | DictConfig, default_entity):
-        layers = 3 
+        layers = 4
         if type(config) != DictConfig:
             config = OmegaConf.create(config)
 

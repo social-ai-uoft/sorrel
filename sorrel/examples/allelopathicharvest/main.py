@@ -11,12 +11,12 @@ if __name__ == "__main__":
     config = {
         "experiment": {
             "epochs": 1000,
-            "max_turns": 10,
+            "max_turns": 2000,
             "record_period": 100,
             "output_dir": Path(__file__).parent / "./data/",
         },
         "model": {
-            "agent_vision_radius": 2,
+            "agent_vision_radius": 7,
             "epsilon_decay": 0.0001,
         },
         "world": { 

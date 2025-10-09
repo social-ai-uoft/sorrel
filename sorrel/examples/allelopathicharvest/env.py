@@ -27,15 +27,32 @@ class AllelopathicHarvestEnvironment(Environment[AllelopathicHarvestWorld]):
     def setup_agents(self):
         """Create the agents for this experiment and assign them to self.agents."""
 
-        agent_num = 2
+        agent_num = 16
         agents = []
         for _ in range(agent_num):
             # create the observation spec
             entity_list = [
                 "EmptyEntity",
                 "AllelopathicHarvestAgent",
+                "AllelopathicHarvestAgent.Eaten",
                 "AllelopathicHarvestAgent.Green",
-                "UnripeBerry",
+                "AllelopathicHarvestAgent.Red",
+                "AllelopathicHarvestAgent.Blue",
+                "MarkedAllelopathicHarvestAgent",
+                "MarkedAllelopathicHarvestAgent.Green",
+                "MarkedAllelopathicHarvestAgent.Red",
+                "MarkedAllelopathicHarvestAgent.Blue",
+                "MarkedAllelopathicHarvestAgent.Eaten",
+                "UnripeBerry.Red",
+                "UnripeBerry.Green",
+                "UnripeBerry.Blue",
+                "RipeBerry.Red",
+                "RipeBerry.Green",
+                "RipeBerry.Blue",
+                "ColorBeam.Red",
+                "ColorBeam.Green",
+                "ColorBeam.Blue",
+                "ZapBeam",
                 "Floor",
             ]
             observation_spec = OneHotObservationSpec(
@@ -52,7 +69,7 @@ class AllelopathicHarvestEnvironment(Environment[AllelopathicHarvestWorld]):
 
             # create the action spec
             action_spec = ActionSpec(
-                ["up", "down", "left", "right"]
+                ["up", "down", "left", "right", "green_beam", "red_beam", "blue_beam", "turn_left", "turn_right", "zap"]
             )
 
             # create the model
@@ -88,13 +105,25 @@ class AllelopathicHarvestEnvironment(Environment[AllelopathicHarvestWorld]):
     def populate_environment(self):
         valid_spawn_locations = []
 
+        UnripeBerry.total_unripe_red = 0
+        UnripeBerry.total_unripe_green = 0
+        UnripeBerry.total_unripe_blue = 0
+
         for index in np.ndindex(self.world.map.shape):
             y, x, z = index
             if z == 0:  # if location is on the bottom layer, put road there
                 self.world.add(index, Floor())
             elif z == 1:  # if location is on the middle layer
                 if np.random.rand() < 0.4:  # 40% chance for berry
-                    self.world.add(index, UnripeBerry())
+                    if np.random.rand() < 0.33:
+                        self.world.add(index, UnripeBerry(color="red"))
+                        UnripeBerry.increment_unripe_red()
+                    elif np.random.rand() < 0.66:
+                        self.world.add(index, UnripeBerry(color="green"))
+                        UnripeBerry.increment_unripe_green()
+                    else:
+                        self.world.add(index, UnripeBerry(color="blue"))
+                        UnripeBerry.increment_unripe_blue()
                 else:
                     self.world.add(index, EmptyEntity())
             elif (
@@ -111,3 +140,4 @@ class AllelopathicHarvestEnvironment(Environment[AllelopathicHarvestWorld]):
         for loc, agent in zip(agent_locations, self.agents):
             loc = tuple(loc)
             self.world.add(loc, agent)
+        
