@@ -587,6 +587,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     social_harm_accessible=self.config.experiment.get("social_harm_accessible", False),
                     delayed_punishment=self.config.experiment.get("delayed_punishment", False),
                     important_rule=self.config.experiment.get("important_rule", False),
+                    punishment_observable=self.config.experiment.get("punishment_observable", False),
                 )
             )
 

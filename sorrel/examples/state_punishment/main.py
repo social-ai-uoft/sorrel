@@ -75,6 +75,9 @@ def parse_arguments():
     parser.add_argument(
         "--important_rule", action="store_true", help="Use important rule mode (entity A never punished, others normal)"
     )
+    parser.add_argument(
+        "--punishment_observable", action="store_true", help="Make pending punishment observable in third feature"
+    )
 
     # Model parameters
     # parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
@@ -136,6 +139,7 @@ def run_experiment(args):
         save_models_every=args.save_models_every,
         delayed_punishment=args.delayed_punishment,
         important_rule=args.important_rule,
+        punishment_observable=args.punishment_observable,
     )
 
     # Print expected rewards
@@ -144,14 +148,14 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f"extended_random_exploration_{base_run_name}_{timestamp}"
+    run_folder = f"extended_random_exploration_L_n_tau_nstep5_{base_run_name}_{timestamp}"
 
     # Both tensorboard logs and animations go to the same timestamped folder
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_p48_a2_bs256_m2048" / run_folder
+    log_dir = Path(__file__).parent / "runs_p48_a2_bs64_m1024" / run_folder
     anim_dir = Path(__file__).parent / "data" / run_folder
     config_dir = Path(__file__).parent / "configs"
-    experiment_name = args.experiment_name or f"{base_run_name}_{args.num_agents}agents"
+    experiment_name = args.experiment_name or run_folder
 
     # Create the directories if they don't exist
     log_dir.mkdir(parents=True, exist_ok=True)
