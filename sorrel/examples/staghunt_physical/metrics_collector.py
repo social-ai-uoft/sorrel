@@ -43,6 +43,8 @@ class StagHuntMetricsCollector:
             'attack_cost_paid': 0.0,
             'punish_cost_paid': 0.0,
             'resources_defeated': 0,
+            'stags_defeated': 0,  # Number of stags defeated by this agent
+            'hares_defeated': 0,  # Number of hares defeated by this agent
             'shared_rewards_received': 0.0,
         })
         
@@ -124,15 +126,23 @@ class StagHuntMetricsCollector:
         self.agent_metrics[agent_id]['attack_cost_paid'] += attack_cost
         self.agent_metrics[agent_id]['punish_cost_paid'] += punish_cost
         
-    def collect_resource_defeat_metrics(self, agent: StagHuntAgent, shared_reward: float) -> None:
+    def collect_resource_defeat_metrics(self, agent: StagHuntAgent, shared_reward: float, resource_type: str = None) -> None:
         """Collect metrics when an agent defeats a resource.
         
         Args:
             agent: The agent who defeated the resource
             shared_reward: The reward received from defeating the resource
+            resource_type: Type of resource defeated ("stag" or "hare")
         """
         agent_id = agent.agent_id
         self.agent_metrics[agent_id]['resources_defeated'] += 1
+        
+        # Track specific resource type defeats
+        if resource_type:
+            if resource_type.lower() == "stag":
+                self.agent_metrics[agent_id]['stags_defeated'] += 1
+            elif resource_type.lower() == "hare":
+                self.agent_metrics[agent_id]['hares_defeated'] += 1
         
     def collect_shared_reward_metrics(self, agent: StagHuntAgent, shared_reward: float) -> None:
         """Collect metrics when an agent receives shared reward.
@@ -204,6 +214,8 @@ class StagHuntMetricsCollector:
         total_attack_costs = 0.0
         total_punish_costs = 0.0
         total_resources_defeated = 0
+        total_stags_defeated = 0
+        total_hares_defeated = 0
         total_shared_rewards = 0.0
         
         # Log individual agent metrics and accumulate totals
@@ -228,6 +240,10 @@ class StagHuntMetricsCollector:
                               agent_data['punish_cost_paid'], epoch)
             writer.add_scalar(f'Agent_{agent_id}/resources_defeated', 
                               agent_data['resources_defeated'], epoch)
+            writer.add_scalar(f'Agent_{agent_id}/stags_defeated', 
+                              agent_data['stags_defeated'], epoch)
+            writer.add_scalar(f'Agent_{agent_id}/hares_defeated', 
+                              agent_data['hares_defeated'], epoch)
             writer.add_scalar(f'Agent_{agent_id}/shared_rewards_received', 
                               agent_data['shared_rewards_received'], epoch)
             
@@ -245,6 +261,8 @@ class StagHuntMetricsCollector:
             total_attack_costs += agent_data['attack_cost_paid']
             total_punish_costs += agent_data['punish_cost_paid']
             total_resources_defeated += agent_data['resources_defeated']
+            total_stags_defeated += agent_data['stags_defeated']
+            total_hares_defeated += agent_data['hares_defeated']
             total_shared_rewards += agent_data['shared_rewards_received']
         
         # Log global totals
@@ -256,6 +274,8 @@ class StagHuntMetricsCollector:
         writer.add_scalar('Total/total_attack_costs', total_attack_costs, epoch)
         writer.add_scalar('Total/total_punish_costs', total_punish_costs, epoch)
         writer.add_scalar('Total/total_resources_defeated', total_resources_defeated, epoch)
+        writer.add_scalar('Total/total_stags_defeated', total_stags_defeated, epoch)
+        writer.add_scalar('Total/total_hares_defeated', total_hares_defeated, epoch)
         writer.add_scalar('Total/total_shared_rewards', total_shared_rewards, epoch)
         
         # Log means across agents
@@ -269,6 +289,8 @@ class StagHuntMetricsCollector:
             writer.add_scalar('Mean/mean_attack_costs', total_attack_costs / num_agents, epoch)
             writer.add_scalar('Mean/mean_punish_costs', total_punish_costs / num_agents, epoch)
             writer.add_scalar('Mean/mean_resources_defeated', total_resources_defeated / num_agents, epoch)
+            writer.add_scalar('Mean/mean_stags_defeated', total_stags_defeated / num_agents, epoch)
+            writer.add_scalar('Mean/mean_hares_defeated', total_hares_defeated / num_agents, epoch)
             writer.add_scalar('Mean/mean_shared_rewards', total_shared_rewards / num_agents, epoch)
         
         # Log global environment metrics (legacy format for compatibility)
@@ -325,5 +347,7 @@ class StagHuntMetricsCollector:
             'attack_cost_paid': 0.0,
             'punish_cost_paid': 0.0,
             'resources_defeated': 0,
+            'stags_defeated': 0,  # Number of stags defeated by this agent
+            'hares_defeated': 0,  # Number of hares defeated by this agent
             'shared_rewards_received': 0.0,
         })

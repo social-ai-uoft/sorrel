@@ -15,9 +15,12 @@ density, world dimensions and vision radius can be adjusted in the
 # regeneration and spawning.
 
 import argparse
+import copy
+import csv
 from datetime import datetime
 from pathlib import Path
 
+import torch
 import yaml
 
 from sorrel.examples.staghunt_physical.entities import Empty
@@ -58,7 +61,19 @@ def run_stag_hunt() -> None:
             "max_turns": 100,
             # recording period for animation (unused here)
             "record_period": 200,
-            "run_name": "staghunt_with_respawn_8radius_with_sinPosEmb_3agents",
+            "run_name": "staghunt_small_room_size1_regen0.25",
+        },
+        "probe_test": {
+            # Enable probe testing
+            "enabled": True,
+            # Run probe test every X epochs
+            "test_interval": 1000,
+            # Maximum steps for each probe test
+            "max_test_steps": 50,
+            # ASCII map file for probe testing (from docs folder)
+            "test_ascii_map_file": "stag_hunt_ascii_map_test_size7.txt",
+            # Whether to test agents individually (True) or together (False)
+            "individual_testing": True,
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
@@ -77,13 +92,13 @@ def run_stag_hunt() -> None:
             "memory_size": 1024,
             "LR": 0.00025,
             "TAU": 0.001,
-            "GAMMA": 0.95,
+            "GAMMA": 0.99,
             "n_quantiles": 12,
         },
         "world": {
             # map generation mode
             "generation_mode": "ascii_map",  # "random" or "ascii_map"
-            "ascii_map_file": "stag_hunt_ascii_map_clean.txt",  # only used when generation_mode is "ascii_map"
+            "ascii_map_file": "stag_hunt_ascii_map_test_size1.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
             "height": 11,
             "width": 11,
@@ -92,7 +107,7 @@ def run_stag_hunt() -> None:
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
             # separate reward values for stag and hare
-            "stag_reward": 6,  # Higher reward for stag (requires coordination)
+            "stag_reward": 12,  # Higher reward for stag (requires coordination)
             "hare_reward": 3,  # Lower reward for hare (solo achievable)
             # regeneration cooldown parameters
             "stag_regeneration_cooldown": 1,  # Turns to wait before stag regenerates
@@ -106,7 +121,7 @@ def run_stag_hunt() -> None:
             "beam_radius": 1,
             "beam_cooldown": 3,  # Legacy parameter, kept for compatibility
             "attack_cooldown": 1,  # Separate cooldown for ATTACK action
-            "attack_cost": 0.05,  # Cost to use attack action
+            "attack_cost": 0.00,  # Cost to use attack action
             "punish_cooldown": 5,  # Separate cooldown for PUNISH action
             "punish_cost": 0.1,  # Cost to use punish action
             # respawn timing
@@ -122,7 +137,7 @@ def run_stag_hunt() -> None:
             "stag_health": 2,  # Health points for stags (requires coordination)
             "hare_health": 1,   # Health points for hares (solo defeatable)
             "agent_health": 5,  # Health points for agents
-            "health_regeneration_rate": 1,  # How fast resources regenerate health
+            "health_regeneration_rate": 0.25,  # How fast resources regenerate health
             "reward_sharing_radius": 3,  # Radius for reward sharing when resources are defeated
         },
     }

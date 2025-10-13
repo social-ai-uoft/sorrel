@@ -470,10 +470,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                                 shared_reward = self.handle_resource_defeat(entity, world)
                                 reward += shared_reward
                                 
-                                # Record resource defeat metrics
+                                # Record resource defeat metrics with resource type
                                 if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                                    resource_type = "stag" if isinstance(entity, StagResource) else "hare"
                                     world.environment.metrics_collector.collect_resource_defeat_metrics(
-                                        self, shared_reward
+                                        self, shared_reward, resource_type
                                     )
 
                 # set cooldown timer after using attack beam
