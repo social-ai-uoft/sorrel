@@ -38,6 +38,7 @@ class StatePunishmentAgent(Agent):
         social_harm_accessible: bool = False,
         delayed_punishment: bool = False,
         important_rule: bool = False,
+        punishment_observable: bool = False,
     ):
         """Initialize the state punishment agent.
 
@@ -54,6 +55,7 @@ class StatePunishmentAgent(Agent):
             social_harm_accessible: Whether agents can access social harm information
             delayed_punishment: Whether to defer punishments to the next turn
             important_rule: Whether to use important rule mode (entity A never punished)
+            punishment_observable: Whether to show pending punishment in third observation feature
         """
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
@@ -65,12 +67,17 @@ class StatePunishmentAgent(Agent):
         self.social_harm_accessible = social_harm_accessible
         self.delayed_punishment = delayed_punishment
         self.important_rule = important_rule
+        self.punishment_observable = punishment_observable
         self.sprite = Path(__file__).parent / "./assets/hero.png"
 
         # Track encounters and rewards
         self.encounters = {}
         self.individual_score = 0.0
         self.vote_history = []
+        
+        # Track action frequencies
+        self.action_frequencies = {}
+        self.action_names = list(action_spec.actions.values())
 
         # Delayed punishment cache system
         self.pending_punishment = 0.0  # Punishment to be applied next turn
@@ -106,9 +113,9 @@ class StatePunishmentAgent(Agent):
         punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
         social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
         
-        # In delayed punishment mode, replace random noise with pending punishment
-        if self.delayed_punishment:
-            third_feature = self.pending_punishment
+        # Third feature: punishment observable or random noise
+        if self.punishment_observable:
+            third_feature = 1.0 if self.pending_punishment > 0 else 0.0
         else:
             third_feature = np.random.random()
 
@@ -125,9 +132,9 @@ class StatePunishmentAgent(Agent):
         punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
         social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
         
-        # In delayed punishment mode, replace random noise with pending punishment
-        if self.delayed_punishment:
-            third_feature = self.pending_punishment
+        # Third feature: punishment observable or random noise
+        if self.punishment_observable:
+            third_feature = 1.0 if self.pending_punishment > 0 else 0.0
         else:
             third_feature = np.random.random()
 
@@ -153,6 +160,11 @@ class StatePunishmentAgent(Agent):
         Returns:
             Reward from the action
         """
+        # Track action frequency
+        if 0 <= action < len(self.action_names):
+            action_name = self.action_names[action]
+            self.action_frequencies[action_name] = self.action_frequencies.get(action_name, 0) + 1
+        
         # Apply delayed punishments from previous turn at the start of this action
         if self.delayed_punishment:
             delayed_punishment = self.apply_delayed_punishments()
@@ -302,6 +314,9 @@ class StatePunishmentAgent(Agent):
         self.encounters = {}
         self.vote_history = []
         self.turn = 0
+        
+        # Reset action frequencies
+        self.action_frequencies = {}
 
         # Reset delayed punishment cache
         self.pending_punishment = 0.0

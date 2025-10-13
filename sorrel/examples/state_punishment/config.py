@@ -18,8 +18,8 @@ def create_config(
     map_size: int = 10,
     num_resources: int = 8,
     learning_rate: float = 0.00025,
-    batch_size: int = 256, #64
-    memory_size: int = 2048, #1024
+    batch_size: int = 64, #64
+    memory_size: int = 1024, #1024
     target_update_frequency: int = 200,
     exploration_rate: float = 1.0, # 0.9
     exploration_decay: float = 0.0001, 
@@ -29,6 +29,7 @@ def create_config(
     save_models_every: int = 1000,
     delayed_punishment: bool = False,
     important_rule: bool = False,
+    punishment_observable: bool = False,
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -71,13 +72,14 @@ def create_config(
     probabilistic_tag = "prob" if use_probabilistic_punishment else "det"
     delayed_punishment_tag = "delayed" if delayed_punishment else "immed"
     rule_type_tag = "important" if important_rule else "silly"
+    punishment_obs_tag = "pobs" if punishment_observable else "pnoobs"
     
     if simple_foraging:
         run_name = (
-            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
         )
     else:
-        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
 
     return {
         "experiment": {
@@ -99,6 +101,7 @@ def create_config(
             "save_models_every": save_models_every,
             "delayed_punishment": delayed_punishment,
             "important_rule": important_rule,
+            "punishment_observable": punishment_observable,
         },
         "world": {
             "height": map_size,
@@ -133,7 +136,7 @@ def create_config(
             "LR": learning_rate,
             "TAU": 0.001,
             "GAMMA": 0.95,
-            "n_quantiles": 12,
+            "n_quantiles": 12, # 12
             "device": "cpu",
             "target_update_frequency": target_update_frequency,
         },

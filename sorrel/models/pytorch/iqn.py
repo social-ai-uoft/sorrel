@@ -161,8 +161,12 @@ class IQN(nn.Module):
 
         return out.view(batch_size, n_tau, self.action_space), taus
 
-    def get_qvalues(self, inputs):
-        quantiles, _ = self.forward(inputs, self.n_quantiles)
+    def get_qvalues(self, inputs, is_eval=False):
+        if is_eval:
+            n_tau = 256
+        else:
+            n_tau = self.n_quantiles
+        quantiles, _ = self.forward(inputs, n_tau)
         actions = quantiles.mean(dim=1)
         return actions
 
@@ -285,7 +289,7 @@ class iRainbowModel(DoublePyTorchModel):
 
             self.qnetwork_local.eval()
             with torch.no_grad():
-                action_values = self.qnetwork_local.get_qvalues(torch_state)  # .mean(0)
+                action_values = self.qnetwork_local.get_qvalues(torch_state, is_eval=True)  # .mean(0)
             self.qnetwork_local.train()
             action = np.argmax(action_values.cpu().data.numpy(), axis=1)
             return action[0]
