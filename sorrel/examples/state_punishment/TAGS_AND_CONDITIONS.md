@@ -18,6 +18,8 @@ This document provides a comprehensive mapping between experiment tags and their
 | `--composite_actions` | Use composite actions | False |
 | `--multi_env_composite` | Use multi-environment composite | False |
 | `--random_policy` | Use random policy instead of trained model | False |
+| `--observe_other_punishments` | Enable agents to observe whether other agents were punished in the last turn | False |
+| `--disable_punishment_info` | Disable punishment information in observations (keeps channel but sets to 0) | False |
 
 ## Run Name Tags
 
@@ -35,6 +37,9 @@ This document provides a comprehensive mapping between experiment tags and their
 | `important` | `important_rule=True` | Important rule (entity A never punished) |
 | `pnoobs` | `punishment_observable=False` | Punishment not observable |
 | `pobs` | `punishment_observable=True` | Punishment observable |
+| `pothobs` | `observe_other_punishments=True` | Other agents' punishment observable |
+| `pothnoobs` | `observe_other_punishments=False` | Other agents' punishment not observable |
+| `pothdis` | `disable_punishment_info=True` | Other agents' punishment info disabled |
 
 ### Accessibility Tags
 
@@ -57,34 +62,51 @@ This document provides a comprehensive mapping between experiment tags and their
 
 ### Simple Foraging Mode
 ```
-v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_sf_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_p{punishment_level}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
+v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_sf_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_p{punishment_level}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
 ```
 
 ### Extended Mode
 ```
-v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_sp_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
+v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_sp_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
 ```
 
 ## Example Run Names
 
 ### Basic Configuration
 ```
-v2_det_nocharm_immed_silly_pnoobs_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_punkn_sknwn
+v2_det_nocharm_immed_silly_pnoobs_pothnoobs_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_punkn_sknwn
 ```
 - Deterministic punishment
 - No collective harm
 - Immediate punishment
 - Silly rule (all entities punished)
 - Punishment not observable
+- Other agents' punishment not observable
 - Simple foraging mode
 - 3 agents, punishment level 0.2
 
 ### Delayed Punishment with Observation
 ```
-v2_det_nocharm_delayed_silly_pobs_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_punkn_sknwn
+v2_det_nocharm_delayed_silly_pobs_pothnoobs_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_punkn_sknwn
 ```
 - Delayed punishment
 - Punishment observable (binary: 1 if pending > 0, 0 otherwise)
+- Other agents' punishment not observable
+
+### Punishment Observation Enabled
+```
+v2_det_nocharm_immed_silly_pnoobs_pothobs_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_punkn_sknwn
+```
+- Other agents' punishment observable
+- Agents can observe whether other agents were punished in the last turn
+
+### Punishment Observation with Disabled Info (Comparison)
+```
+v2_det_nocharm_immed_silly_pnoobs_pothdis_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_punkn_sknwn
+```
+- Other agents' punishment observation enabled but info disabled
+- Same observation space as above but punishment info set to 0
+- Useful for comparison studies
 
 ### Important Rule Mode
 ```
@@ -119,6 +141,30 @@ v2_det_nocharm_immed_important_pnoobs_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_p
 - Applied to all other agents when consuming taboo resources
 - Not affected by `important_rule` parameter
 
+## Punishment Observation Behavior
+
+### Other Agents' Punishment Observation (`observe_other_punishments`)
+- **When enabled**: Agents observe whether other agents were punished in the last turn
+- **Observation features**: Additional features added to observation vector (one per other agent)
+- **Feature values**: 1.0 if agent was punished, 0.0 if not punished
+- **Timing**: Based on punishment from previous turn (not current turn)
+
+### Disabled Punishment Info (`disable_punishment_info`)
+- **When enabled**: Same observation space as above but punishment info set to 0
+- **Purpose**: Allows controlled comparison studies
+- **Feature values**: Always 0.0 regardless of actual punishment status
+- **Use case**: Testing whether observation space size affects learning vs. actual punishment information
+
+### Observation Vector Structure
+```
+[visual_field_features, punishment_level, social_harm, third_feature, other_agent_1_punishment, other_agent_2_punishment, ...]
+```
+- **Visual field**: Standard entity observations
+- **Punishment level**: Accessible punishment level (if enabled)
+- **Social harm**: Agent's social harm value (if enabled)  
+- **Third feature**: Pending punishment indicator or random noise
+- **Other agent punishments**: Binary indicators for each other agent's punishment status
+
 ## Usage Examples
 
 ### Command Line Examples
@@ -129,8 +175,14 @@ python main.py --delayed_punishment --punishment_observable --num_agents 3
 # Important rule mode
 python main.py --important_rule --num_agents 3
 
-# Full configuration
-python main.py --delayed_punishment --important_rule --punishment_observable --punishment_level_accessible --social_harm_accessible --num_agents 3 --epochs 1000
+# Punishment observation enabled
+python main.py --observe_other_punishments --num_agents 3
+
+# Punishment observation with disabled info (comparison)
+python main.py --observe_other_punishments --disable_punishment_info --num_agents 3
+
+# Full configuration with punishment observation
+python main.py --delayed_punishment --important_rule --punishment_observable --observe_other_punishments --punishment_level_accessible --social_harm_accessible --num_agents 3 --epochs 1000
 ```
 
 ### Configuration Examples
@@ -147,6 +199,19 @@ config = create_config(
     important_rule=True,
     num_agents=3
 )
+
+# Punishment observation enabled
+config = create_config(
+    observe_other_punishments=True,
+    num_agents=3
+)
+
+# Punishment observation with disabled info (comparison)
+config = create_config(
+    observe_other_punishments=True,
+    disable_punishment_info=True,
+    num_agents=3
+)
 ```
 
 ## Notes
@@ -154,3 +219,5 @@ config = create_config(
 - Run names are automatically generated based on parameter combinations
 - Tags are designed to be concise while remaining readable
 - The third observation feature provides binary information about pending punishment when `punishment_observable=True`
+- Punishment observation features are added to the observation vector when `observe_other_punishments=True`
+- The `disable_punishment_info` parameter allows controlled comparison studies by disabling punishment information while maintaining the same observation space

@@ -1,7 +1,7 @@
 """Environment for the state punishment game."""
 
 from pathlib import Path
-from typing import List, override
+from typing import List, override, Dict
 
 import numpy as np
 import torch
@@ -19,6 +19,43 @@ from .agents import StatePunishmentAgent
 from .entities import A, B, C, D, E, EmptyEntity, Sand, Wall
 from .entity_map_shuffler import EntityMapShuffler
 from .world import StatePunishmentWorld
+
+
+class PunishmentTracker:
+    """Minimal punishment tracker that hooks into existing flow."""
+    
+    def __init__(self, num_agents: int):
+        self.num_agents = num_agents
+        self.last_turn_punishments = {i: False for i in range(num_agents)}
+        self.current_turn_punishments = {i: False for i in range(num_agents)}
+    
+    def record_punishment(self, agent_id: int):
+        """Record that an agent was punished this turn."""
+        self.current_turn_punishments[agent_id] = True
+    
+    def end_turn(self):
+        """Move current turn data to last turn data."""
+        self.last_turn_punishments = self.current_turn_punishments.copy()
+        self.current_turn_punishments = {i: False for i in range(self.num_agents)}
+    
+    def get_other_punishments(self, agent_id: int, disable_info: bool = False) -> List[float]:
+        """Get punishment status of other agents from last turn.
+        
+        Args:
+            agent_id: ID of the current agent
+            disable_info: If True, return zeros instead of actual punishment info
+            
+        Returns:
+            List of punishment status (1.0 if punished, 0.0 if not, or 0.0 if disabled)
+        """
+        if disable_info:
+            return [0.0] * (self.num_agents - 1)
+        
+        punishments = []
+        for i in range(self.num_agents):
+            if i != agent_id:
+                punishments.append(1.0 if self.last_turn_punishments[i] else 0.0)
+        return punishments
 
 
 class MultiWorldImageRenderer:
@@ -183,6 +220,11 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             # Just set the agent ID - no complex coordination needed
             env.agents[0].agent_id = i
 
+        # Initialize punishment tracker if needed
+        self.punishment_tracker = None
+        if any(env.config.experiment.get("observe_other_punishments", False) for env in individual_envs):
+            self.punishment_tracker = PunishmentTracker(len(individual_envs))
+
     @override
     def take_turn(self) -> None:
         """Coordinate turns across all individual environments."""
@@ -201,6 +243,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         # Record punishment level for all environments
         for env in self.individual_envs:
             env.world.record_punishment_level()
+
+        # End turn for punishment tracker
+        if self.punishment_tracker is not None:
+            self.punishment_tracker.end_turn()
 
     def _handle_agent_transitions(self) -> None:
         """Handle agent transitions with simplified composite view logic."""
@@ -229,11 +275,13 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     composite_observations[i],
                     self.shared_state_system,
                     self.shared_social_harm,
+                    punishment_tracker=self.punishment_tracker
                 )
             else:
                 # Use single agent view
                 state = agent.generate_single_view(
-                    env.world, self.shared_state_system, self.shared_social_harm
+                    env.world, self.shared_state_system, self.shared_social_harm,
+                    punishment_tracker=self.punishment_tracker
                 )
 
             # Execute agent transition
@@ -248,7 +296,8 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 # Single view for this agent
                 composite_observations.append(
                     agent.generate_single_view(
-                        env.world, self.shared_state_system, self.shared_social_harm
+                        env.world, self.shared_state_system, self.shared_social_harm,
+                        punishment_tracker=self.punishment_tracker
                     )
                 )
                 continue
@@ -276,9 +325,20 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         action = agent.get_action(state)
 
         # Execute action with shared state system and social harm
-        reward = agent.act(
-            env.world, action, self.shared_state_system, self.shared_social_harm
-        )
+        if self.punishment_tracker is not None:
+            # Use new interface with info return
+            reward, info = agent.act(
+                env.world, action, self.shared_state_system, self.shared_social_harm, return_info=True
+            )
+            
+            # Track punishment if it occurred
+            if info.get('is_punished', False):
+                self.punishment_tracker.record_punishment(agent.agent_id)
+        else:
+            # Use original interface (backward compatible)
+            reward = agent.act(
+                env.world, action, self.shared_state_system, self.shared_social_harm
+            )
 
         # Update individual score
         agent.individual_score += reward
@@ -594,6 +654,13 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 * observation_spec.input_size[2]
                 + 3
             )
+            
+            # Add punishment observation features if enabled
+            if self.config.experiment.get("observe_other_punishments", False):
+                # Add features for other agents' punishment status (total_num_agents - 1)
+                total_num_agents = self.config.experiment.get("total_num_agents", self.config.experiment.num_agents)
+                num_other_agents = total_num_agents - 1
+                base_flattened_size += num_other_agents
 
             # Adjust for composite views (multiply by number of views)
             if self.use_composite_views:
@@ -636,6 +703,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     delayed_punishment=self.config.experiment.get("delayed_punishment", False),
                     important_rule=self.config.experiment.get("important_rule", False),
                     punishment_observable=self.config.experiment.get("punishment_observable", False),
+                    disable_punishment_info=self.config.experiment.get("disable_punishment_info", False),
                 )
             )
 

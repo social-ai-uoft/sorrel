@@ -98,6 +98,16 @@ def parse_arguments():
         help="Enable CSV logging of entity appearance mappings"
     )
 
+    # Punishment observation parameters
+    parser.add_argument(
+        "--observe_other_punishments", action="store_true",
+        help="Enable agents to observe whether other agents were punished in the last turn"
+    )
+    parser.add_argument(
+        "--disable_punishment_info", action="store_true",
+        help="Disable punishment information in observations (keeps channel but sets to 0)"
+    )
+
     # Model parameters
     # parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
@@ -163,6 +173,8 @@ def run_experiment(args):
         enable_appearance_shuffling=args.enable_appearance_shuffling,
         shuffle_constraint=args.shuffle_constraint,
         csv_logging=args.csv_logging,
+        observe_other_punishments=args.observe_other_punishments,
+        disable_punishment_info=args.disable_punishment_info,
     )
 
     # Print expected rewards
