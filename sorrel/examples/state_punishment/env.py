@@ -17,6 +17,7 @@ from sorrel.utils.visualization import ImageRenderer
 
 from .agents import StatePunishmentAgent
 from .entities import A, B, C, D, E, EmptyEntity, Sand, Wall
+from .entity_map_shuffler import EntityMapShuffler
 from .world import StatePunishmentWorld
 
 
@@ -321,6 +322,36 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             )
 
         for epoch in range(self.config.experiment.epochs + 1):
+            # Check if entity appearance shuffling should occur
+            shuffle_occurred = False
+            if (self.config.experiment.enable_appearance_shuffling and 
+                epoch > 0 and 
+                epoch % self.config.experiment.shuffle_frequency == 0):
+                
+                # Shuffle entity appearances in all environments using shared mapping
+                if self.individual_envs and self.individual_envs[0].entity_map_shuffler is not None:
+                    # Use the first environment's shuffler to generate the mapping
+                    shared_mapping = self.individual_envs[0].entity_map_shuffler.shuffle_appearances()
+                    
+                    # Apply the same mapping to all environments
+                    for env in self.individual_envs:
+                        if env.entity_map_shuffler is not None:
+                            env.entity_map_shuffler.current_mapping = shared_mapping.copy()
+                            # Apply shuffled mapping to all agents' observation specs
+                            for agent in env.agents:
+                                if hasattr(agent, 'observation_spec'):
+                                    agent.observation_spec.entity_map = env.entity_map_shuffler.apply_to_entity_map(
+                                        agent.observation_spec.entity_map
+                                    )
+                    
+                    shuffle_occurred = True
+                    print(f"Epoch {epoch}: Entity appearances shuffled: {shared_mapping}")
+            
+            # Log appearance mapping for this epoch (even if no shuffle) - only log once
+            if self.config.experiment.csv_logging and self.individual_envs:
+                # Use the first environment's shuffler to log (they should all be the same)
+                self.individual_envs[0].log_entity_appearances(epoch, shuffle_occurred)
+            
             # Reset all environments
             self.reset()
 
@@ -470,8 +501,21 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         self.simple_foraging = config.get("simple_foraging", False)
         self.use_random_policy = config.get("use_random_policy", False)
 
-        # Simplified - no complex coordination needed
+        # Initialize entity map shuffler for appearance shuffling BEFORE calling super().__init__()
+        self.entity_map_shuffler = None
+        if config.experiment.get("enable_appearance_shuffling", False):
+            resource_entities = ["A", "B", "C", "D", "E"]
+            # Create entity_mappings folder and use run_folder as prefix in filename
+            # We'll get the run_folder from the main.py when it's passed to the environment
+            csv_file_path = Path(__file__).parent / "data" / "entity_mappings" / "entity_appearances.csv"
+            self.entity_map_shuffler = EntityMapShuffler(
+                resource_entities=resource_entities,
+                csv_file_path=csv_file_path,
+                enable_logging=config.experiment.get("csv_logging", False),
+                shuffle_constraint=config.experiment.get("shuffle_constraint", "no_fixed")
+            )
 
+        # Simplified - no complex coordination needed
         super().__init__(world, config)
 
     def setup_agents(self):
@@ -502,6 +546,10 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     else None
                 ),
             )
+
+            # Apply shuffled entity map if shuffling is enabled
+            if self.entity_map_shuffler is not None:
+                observation_spec.entity_map = self.entity_map_shuffler.apply_to_entity_map(observation_spec.entity_map)
 
             # Don't override input size - let the observation spec handle it naturally
 
@@ -681,3 +729,25 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
             agents: A list of new agents
         """
         self.agents = agents
+
+    def shuffle_entity_appearances(self) -> None:
+        """Shuffle entity appearances in observation specs."""
+        if self.entity_map_shuffler is None:
+            return
+        
+        # Shuffle the appearance mapping
+        self.entity_map_shuffler.shuffle_appearances()
+        
+        # Apply shuffled mapping to all agents' observation specs
+        for agent in self.agents:
+            if hasattr(agent, 'observation_spec'):
+                agent.observation_spec.entity_map = self.entity_map_shuffler.apply_to_entity_map(
+                    agent.observation_spec.entity_map
+                )
+        
+        print(f"Entity appearances shuffled: {self.entity_map_shuffler.get_current_mapping()}")
+
+    def log_entity_appearances(self, epoch: int, shuffle_occurred: bool = False) -> None:
+        """Log current entity appearance mapping to CSV."""
+        if self.entity_map_shuffler is not None:
+            self.entity_map_shuffler.log_to_csv(epoch, shuffle_occurred)

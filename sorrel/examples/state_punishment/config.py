@@ -30,6 +30,10 @@ def create_config(
     delayed_punishment: bool = False,
     important_rule: bool = False,
     punishment_observable: bool = False,
+    shuffle_frequency: int = 1000,
+    enable_appearance_shuffling: bool = False,
+    shuffle_constraint: str = "no_fixed",
+    csv_logging: bool = False,
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -102,6 +106,10 @@ def create_config(
             "delayed_punishment": delayed_punishment,
             "important_rule": important_rule,
             "punishment_observable": punishment_observable,
+            "shuffle_frequency": shuffle_frequency,
+            "enable_appearance_shuffling": enable_appearance_shuffling,
+            "shuffle_constraint": shuffle_constraint,
+            "csv_logging": csv_logging,
         },
         "world": {
             "height": map_size,

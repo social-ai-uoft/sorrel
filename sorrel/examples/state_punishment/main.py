@@ -79,6 +79,25 @@ def parse_arguments():
         "--punishment_observable", action="store_true", help="Make pending punishment observable in third feature"
     )
 
+    # Appearance shuffling parameters
+    parser.add_argument(
+        "--shuffle_frequency", type=int, default=1000, 
+        help="Frequency of entity appearance shuffling (every X epochs)"
+    )
+    parser.add_argument(
+        "--enable_appearance_shuffling", action="store_true", 
+        help="Enable entity appearance shuffling in observations"
+    )
+    parser.add_argument(
+        "--shuffle_constraint", type=str, default="no_fixed", 
+        choices=["no_fixed", "allow_fixed", "force_all_different"],
+        help="Shuffling constraint: no_fixed=no entity stays same, allow_fixed=any mapping allowed, force_all_different=all must change"
+    )
+    parser.add_argument(
+        "--csv_logging", action="store_true", 
+        help="Enable CSV logging of entity appearance mappings"
+    )
+
     # Model parameters
     # parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
@@ -140,6 +159,10 @@ def run_experiment(args):
         delayed_punishment=args.delayed_punishment,
         important_rule=args.important_rule,
         punishment_observable=args.punishment_observable,
+        shuffle_frequency=args.shuffle_frequency,
+        enable_appearance_shuffling=args.enable_appearance_shuffling,
+        shuffle_constraint=args.shuffle_constraint,
+        csv_logging=args.csv_logging,
     )
 
     # Print expected rewards
@@ -152,8 +175,8 @@ def run_experiment(args):
 
     # Both tensorboard logs and animations go to the same timestamped folder
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_p48_a2_bs64_m1024" / run_folder
-    anim_dir = Path(__file__).parent / "data" / run_folder
+    log_dir = Path(__file__).parent / "test" / run_folder
+    anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     experiment_name = args.experiment_name or run_folder
 
@@ -167,7 +190,7 @@ def run_experiment(args):
 
     # Set up environments
     multi_agent_env, shared_state_system, shared_social_harm = setup_environments(
-        config, args.simple_foraging, args.fixed_punishment, args.random_policy
+        config, args.simple_foraging, args.fixed_punishment, args.random_policy, run_folder
     )
 
     # Create logger
