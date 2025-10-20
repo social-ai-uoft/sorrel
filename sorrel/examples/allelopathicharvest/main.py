@@ -20,8 +20,10 @@ if __name__ == "__main__":
             "epsilon_decay": 0.0001,
         },
         "world": {
-            "height": 29,
-            "width": 30,
+            # "height": 29,
+            # "width": 30,
+            "height": 15,
+            "width": 15,
         },
     }
 

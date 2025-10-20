@@ -27,7 +27,8 @@ class AllelopathicHarvestEnvironment(Environment[AllelopathicHarvestWorld]):
     def setup_agents(self):
         """Create the agents for this experiment and assign them to self.agents."""
 
-        agent_num = 16
+        # agent_num = 16
+        agent_num = 4
         agents = []
         for _ in range(agent_num):
             # create the observation spec
