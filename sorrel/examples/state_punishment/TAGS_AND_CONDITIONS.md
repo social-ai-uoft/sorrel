@@ -20,6 +20,11 @@ This document provides a comprehensive mapping between experiment tags and their
 | `--random_policy` | Use random policy instead of trained model | False |
 | `--observe_other_punishments` | Enable agents to observe whether other agents were punished in the last turn | False |
 | `--disable_punishment_info` | Disable punishment information in observations (keeps channel but sets to 0) | False |
+| `--enable_appearance_shuffling` | Enable entity appearance shuffling in observations | False |
+| `--shuffle_frequency` | Frequency of entity appearance shuffling (every X epochs) | 20000 |
+| `--shuffle_constraint` | Shuffling constraint: no_fixed=no entity stays same + unique targets, allow_fixed=any mapping allowed | no_fixed |
+| `--csv_logging` | Enable CSV logging of entity appearance mappings | False |
+| `--mapping_file_path` | Path to file containing pre-generated mappings (optional) | None |
 
 ## Run Name Tags
 
@@ -40,6 +45,9 @@ This document provides a comprehensive mapping between experiment tags and their
 | `pothobs` | `observe_other_punishments=True` | Other agents' punishment observable |
 | `pothnoobs` | `observe_other_punishments=False` | Other agents' punishment not observable |
 | `pothdis` | `disable_punishment_info=True` | Other agents' punishment info disabled |
+| `appnofix_shuffle{frequency}` | `enable_appearance_shuffling=True` AND `shuffle_constraint=no_fixed` | Appearance shuffling with no_fixed constraint |
+| `appallowfix_shuffle{frequency}` | `enable_appearance_shuffling=True` AND `shuffle_constraint=allow_fixed` | Appearance shuffling with allow_fixed constraint |
+| `noapp` | `enable_appearance_shuffling=False` | No appearance shuffling |
 
 ### Accessibility Tags
 
@@ -62,12 +70,12 @@ This document provides a comprehensive mapping between experiment tags and their
 
 ### Simple Foraging Mode
 ```
-v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_sf_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_p{punishment_level}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
+v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sf_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_p{punishment_level}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
 ```
 
 ### Extended Mode
 ```
-v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_sp_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
+v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sp_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
 ```
 
 ## Example Run Names
@@ -107,6 +115,29 @@ v2_det_nocharm_immed_silly_pnoobs_pothdis_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0
 - Other agents' punishment observation enabled but info disabled
 - Same observation space as above but punishment info set to 0
 - Useful for comparison studies
+
+### Appearance Shuffling Examples
+
+#### No Appearance Shuffling
+```
+v2_det_nocharm_immed_silly_pnoobs_pothnoobs_noapp_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_punkn_sknwn
+```
+- No entity appearance shuffling
+- Entities maintain their original visual appearance
+
+#### Appearance Shuffling with No-Fixed Constraint
+```
+v2_det_nocharm_immed_silly_pnoobs_pothnoobs_appnofix_shuffle100_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_punkn_sknwn
+```
+- Entity appearances shuffled every 100 epochs
+- No entity maps to itself + all targets unique + adjacent diversity
+
+#### Appearance Shuffling with Allow-Fixed Constraint
+```
+v2_det_nocharm_immed_silly_pnoobs_pothnoobs_appallowfix_shuffle200_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_punkn_sknwn
+```
+- Entity appearances shuffled every 200 epochs
+- Any mapping allowed (including self-maps and duplicate targets)
 
 ### Important Rule Mode
 ```
@@ -212,6 +243,37 @@ config = create_config(
     disable_punishment_info=True,
     num_agents=3
 )
+```
+
+## File Outputs
+
+Each experiment run generates several files in different directories:
+
+### Configuration Files
+- **`configs/{run_folder}.yaml`**: Complete experiment configuration in YAML format
+- **`argv/{run_folder}/{run_folder}_command.txt`**: Command line arguments used to run the experiment
+
+### Logging Files
+- **`runs/{run_folder}/`**: Tensorboard event files and training metrics
+- **`data/entity_mappings/`**: CSV logs of entity appearance mappings (if `--csv_logging` enabled)
+- **`data/anims/{run_folder}/`**: Animation files and environment visualizations (if animations enabled)
+
+### Example File Structure
+```
+state_punishment/
+├── runs/
+│   └── extended_random_exploration_L_n_tau_nstep5_{run_name}_{timestamp}/
+│       └── tensorboard_event_files...
+├── argv/
+│   └── extended_random_exploration_L_n_tau_nstep5_{run_name}_{timestamp}/
+│       └── extended_random_exploration_L_n_tau_nstep5_{run_name}_{timestamp}_command.txt
+├── configs/
+│   └── extended_random_exploration_L_n_tau_nstep5_{run_name}_{timestamp}.yaml
+└── data/
+    ├── anims/
+    │   └── extended_random_exploration_L_n_tau_nstep5_{run_name}_{timestamp}/
+    └── entity_mappings/
+        └── entity_appearances.csv
 ```
 
 ## Notes

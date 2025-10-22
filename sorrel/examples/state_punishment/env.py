@@ -568,11 +568,17 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
             # Create entity_mappings folder and use run_folder as prefix in filename
             # We'll get the run_folder from the main.py when it's passed to the environment
             csv_file_path = Path(__file__).parent / "data" / "entity_mappings" / "entity_appearances.csv"
+            # Set up mapping file path if provided
+            mapping_file_path = config.experiment.get("mapping_file_path")
+            if mapping_file_path:
+                mapping_file_path = Path(mapping_file_path)
+            
             self.entity_map_shuffler = EntityMapShuffler(
                 resource_entities=resource_entities,
                 csv_file_path=csv_file_path,
                 enable_logging=config.experiment.get("csv_logging", False),
-                shuffle_constraint=config.experiment.get("shuffle_constraint", "no_fixed")
+                shuffle_constraint=config.experiment.get("shuffle_constraint", "no_fixed"),
+                mapping_file_path=mapping_file_path
             )
 
         # Simplified - no complex coordination needed
