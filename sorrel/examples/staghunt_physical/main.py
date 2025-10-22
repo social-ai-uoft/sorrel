@@ -15,16 +15,13 @@ density, world dimensions and vision radius can be adjusted in the
 # regeneration and spawning.
 
 import argparse
-import copy
-import csv
 from datetime import datetime
 from pathlib import Path
 
-import torch
 import yaml
 
 from sorrel.examples.staghunt_physical.entities import Empty
-from sorrel.examples.staghunt_physical.env import StagHuntEnv
+from sorrel.examples.staghunt_physical.env_with_probe_test import StagHuntEnvWithProbeTest
 from sorrel.examples.staghunt_physical.world import StagHuntWorld
 from sorrel.examples.staghunt_physical.metrics_collector import StagHuntMetricsCollector
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
@@ -50,6 +47,7 @@ class CombinedLogger(Logger):
         if self.experiment_env and hasattr(self.experiment_env, 'metrics_collector'):
             self.experiment_env.log_epoch_metrics(epoch, self.tensorboard_logger.writer)
 
+
 def run_stag_hunt() -> None:
     """Run a single stag hunt experiment with default hyperparameters."""
     # configuration dictionary specifying hyperparameters
@@ -61,19 +59,30 @@ def run_stag_hunt() -> None:
             "max_turns": 100,
             # recording period for animation (unused here)
             "record_period": 200,
-            "run_name": "staghunt_small_room_size1_regen0.25",
+            "run_name": "staghunt_small_room_size7_regen1_v2_test_interval10",
         },
         "probe_test": {
             # Enable probe testing
             "enabled": True,
             # Run probe test every X epochs
-            "test_interval": 1000,
+            "test_interval": 100,
             # Maximum steps for each probe test
             "max_test_steps": 50,
-            # ASCII map file for probe testing (from docs folder)
-            "test_ascii_map_file": "stag_hunt_ascii_map_test_size7.txt",
+            # Number of test epochs to run per probe test (for statistical reliability)
+            "test_epochs": 5,
             # Whether to test agents individually (True) or together (False)
-            "individual_testing": True,
+            "individual_testing": False,
+            # Environment size configuration for probe tests
+            "env_size": {
+                "height": 7,  # Height of probe test environment
+                "width": 7,  # Width of probe test environment
+            },
+            # Spatial layout configuration for probe tests
+            "layout": {
+                "generation_mode": "random",  # "random" or "ascii_map"
+                "ascii_map_file": "stag_hunt_ascii_map_test_size7.txt",  # Only used when generation_mode is "ascii_map"
+                "resource_density": 0.2,  # Only used when generation_mode is "random"
+            },
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
@@ -118,7 +127,7 @@ def run_stag_hunt() -> None:
             # "destroyable_health": 3,
             # beam characteristics
             "beam_length": 3,
-            "beam_radius": 1,
+            "beam_radius": 2,
             "beam_cooldown": 3,  # Legacy parameter, kept for compatibility
             "attack_cooldown": 1,  # Separate cooldown for ATTACK action
             "attack_cost": 0.00,  # Cost to use attack action
@@ -137,7 +146,7 @@ def run_stag_hunt() -> None:
             "stag_health": 2,  # Health points for stags (requires coordination)
             "hare_health": 1,   # Health points for hares (solo defeatable)
             "agent_health": 5,  # Health points for agents
-            "health_regeneration_rate": 0.25,  # How fast resources regenerate health
+            "health_regeneration_rate": 1,  # How fast resources regenerate health
             "reward_sharing_radius": 3,  # Radius for reward sharing when resources are defeated
         },
     }
@@ -159,8 +168,8 @@ def run_stag_hunt() -> None:
 
     # construct the world; we pass our own Empty entity as the default
     world = StagHuntWorld(config=config, default_entity=Empty())
-    # construct the environment
-    experiment = StagHuntEnv(world, config)
+    # construct the environment with probe testing capability
+    experiment = StagHuntEnvWithProbeTest(world, config)
     
     # Initialize metrics collection (no separate tracker needed)
     metrics_collector = StagHuntMetricsCollector()
@@ -178,7 +187,7 @@ def run_stag_hunt() -> None:
             / f'runs/{config["experiment"]["run_name"]}_{timestamp}',
             experiment_env=experiment,
         ),
-        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}',
+        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}',
     )
     
     print(f"Metrics tracking completed - all metrics integrated into main TensorBoard logs")
