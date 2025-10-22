@@ -245,12 +245,19 @@ def run_experiment(args):
     multi_agent_env, shared_state_system, shared_social_harm = setup_environments(
         config, args.simple_foraging, args.fixed_punishment, args.random_policy, run_folder
     )
+    
+    # Add args to multi_agent_env for probe test access
+    multi_agent_env.args = args
 
     # Create logger
     logger = StatePunishmentLogger(
         max_epochs=args.epochs, log_dir=log_dir, experiment_name=experiment_name
     )
     logger.set_multi_agent_env(multi_agent_env)
+    
+    # Create probe test logger
+    from .probe_test import ProbeTestLogger
+    probe_test_logger = ProbeTestLogger(log_dir, experiment_name)
 
     # Run the experiment
     print(f"Starting experiment: {experiment_name}")
@@ -272,6 +279,7 @@ def run_experiment(args):
         logging=True,
         logger=logger,
         output_dir=anim_dir,
+        probe_test_logger=probe_test_logger,
     )
 
     print("Experiment completed!")

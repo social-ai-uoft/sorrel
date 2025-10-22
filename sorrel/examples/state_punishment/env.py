@@ -370,8 +370,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         logging: bool = True,
         logger: Logger | None = None,
         output_dir: Path | None = None,
+        probe_test_logger = None,
     ) -> None:
-        """Run the multi-agent experiment with coordination."""
+        """Run the multi-agent experiment with coordination and optional probe tests."""
         renderer = None
         if animate:
             renderer = MultiWorldImageRenderer(
@@ -379,6 +380,16 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
                 individual_envs=self.individual_envs,
+            )
+
+        # Initialize probe test environment if probe test logger is provided
+        probe_test_env = None
+        if probe_test_logger is not None:
+            from .probe_test import setup_probe_test_environment, PROBE_TEST_CONFIG
+            probe_test_env, _, _ = setup_probe_test_environment(
+                self.config, 
+                getattr(self, 'args', None), 
+                PROBE_TEST_CONFIG["use_important_rule"]
             )
 
         for epoch in range(self.config.experiment.epochs + 1):
@@ -501,6 +512,34 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 for agent in env.agents:
                     agent.model.epsilon_decay(self.config.model.epsilon_decay)
 
+            # Run probe test at specified intervals
+            if (probe_test_logger is not None and 
+                probe_test_env is not None and
+                epoch > 0 and 
+                epoch % PROBE_TEST_CONFIG["frequency"] == 0):
+                
+                print(f"\n--- Running Probe Test at Training Epoch {epoch} ---")
+                
+                # Run probe test
+                from .probe_test import run_probe_test, save_probe_test_models
+                probe_results = run_probe_test(
+                    self,  # training environment
+                    probe_test_env,  # probe test environment
+                    epoch,
+                    PROBE_TEST_CONFIG["epochs"]
+                )
+                
+                # Log probe test results
+                probe_test_logger.record_probe_test(epoch, probe_results)
+                
+                # Save model checkpoints if requested
+                if PROBE_TEST_CONFIG["save_models"]:
+                    experiment_name = self.config.experiment.get("run_name", "experiment")
+                    save_probe_test_models(probe_test_env, epoch, experiment_name)
+                
+                print(f"Probe test completed. Avg reward: {probe_results['avg_total_reward']:.2f}")
+                print("--- End Probe Test ---\n")
+
             # Save models every X epochs
             if epoch > 0 and epoch % self.config.experiment.save_models_every == 0:
                 self._save_models(epoch)
@@ -522,6 +561,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         # Save final models at the end of training
         self._save_models(self.config.experiment.epochs)
+        
+        # Save final probe test results if probe test logger was used
+        if probe_test_logger is not None:
+            probe_test_logger.save_probe_test_results()
 
     def _save_models(self, epoch: int) -> None:
         """Save all agent models to the models directory.
