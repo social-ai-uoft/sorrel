@@ -24,6 +24,16 @@ def run_probe_test(experiment_env, epoch, output_dir):
     if not probe_config.get("enabled", False):
         return
     
+    # Check if using test_intention mode
+    test_mode = probe_config.get("test_mode", "default")
+    
+    if test_mode == "test_intention":
+        from sorrel.examples.staghunt_physical.probe_test import TestIntentionProbeTest
+        test_intention = TestIntentionProbeTest(experiment_env, probe_config, output_dir)
+        test_intention.run_test_intention(experiment_env.agents, epoch)
+        print(f"Test intention probe test completed for epoch {epoch}")
+        return
+    
     test_epochs = probe_config.get("test_epochs", 1)
     print(f"Running probe test at epoch {epoch} with {test_epochs} test epochs")
     

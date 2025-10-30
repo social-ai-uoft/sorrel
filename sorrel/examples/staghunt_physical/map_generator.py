@@ -123,7 +123,7 @@ class MapBasedWorldGenerator:
         wall_locations = []
         empty_locations = []
 
-        valid_chars = {"W", "P", "1", "2", "a", " "}
+        valid_chars = {"W", "P", "1", "2", "a", "A", " "}
 
         for y, row in enumerate(self.raw_map):
             for x, char in enumerate(row):
@@ -134,7 +134,8 @@ class MapBasedWorldGenerator:
 
                 if char == "W":
                     wall_locations.append((y, x))
-                elif char == "P":
+                elif char == "P" or char == "A":
+                    # 'A' represents agent spawn points, same as 'P'
                     spawn_points.append((y, x))
                 elif char == "1":
                     resource_locations.append((y, x, "stag"))

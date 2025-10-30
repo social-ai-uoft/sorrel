@@ -314,8 +314,8 @@ class StagHuntPhysicalASCIIPygame:
                     HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown),
                 )
             elif resource_type == "random":
-                # Use ORIGINAL random selection logic
-                if np.random.random() < 0.2:  # Same as original
+                # Use stag_probability parameter for random resource type selection
+                if np.random.random() < world.stag_probability:
                     world.add(
                         dynamic_loc,
                         StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown),
@@ -381,8 +381,8 @@ class StagHuntPhysicalASCIIPygame:
         for y, x, layer in world.resource_spawn_points:
             # dynamic layer coordinates
             dynamic = (y, x, world.dynamic_layer)
-            # choose resource type uniformly at random
-            if np.random.random() < 0.2:
+            # choose resource type based on stag_probability parameter
+            if np.random.random() < world.stag_probability:
                 world.add(
                     dynamic, StagResource(world.stag_reward, world.stag_health)
                 )

@@ -189,6 +189,26 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         2: (1, 0),  # south (down)
         3: (0, -1),  # west (left)
     }
+    
+    # Reverse mapping: from vector (dy, dx) to orientation
+    VECTOR_TO_ORIENTATION: Dict[Tuple[int, int], int] = {
+        (-1, 0): 0,  # north
+        (0, 1): 1,   # east
+        (1, 0): 2,   # south
+        (0, -1): 3,  # west
+    }
+
+    def _get_orientation_from_move(self, dy: int, dx: int) -> int:
+        """Get orientation from movement vector (dy, dx).
+        
+        Args:
+            dy: Change in y direction
+            dx: Change in x direction
+            
+        Returns:
+            Orientation value (0=north, 1=east, 2=south, 3=west)
+        """
+        return self.VECTOR_TO_ORIENTATION.get((dy, dx), self.orientation)
 
     def __init__(
         self,
@@ -338,6 +358,41 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
         action = self.model.take_action(model_input)
         return action
+    
+    def get_action_with_qvalues(self, state: np.ndarray) -> tuple[int, np.ndarray]:
+        """Get action and Q-values for all actions.
+        
+        Args:
+            state: Current state observation
+            
+        Returns:
+            Tuple of (action_index, q_values_array)
+        """
+        prev_states = self.model.memory.current_state()
+        
+        # Ensure state has the same shape as individual states in prev_states
+        if state.ndim == 2 and state.shape[0] == 1:
+            state = state.flatten()  # Convert from (1, features) to (features,)
+        
+        # Use only current state if memory is empty, otherwise stack with previous states
+        if prev_states.shape[0] == 0:
+            model_input = state.reshape(1, -1)
+        else:
+            # Normal case: stack previous states with current state
+            stacked_states = np.vstack((prev_states, state))
+            model_input = stacked_states.reshape(1, -1)
+        
+        # Get Q-values for all actions
+        if hasattr(self.model, 'get_all_qvalues'):
+            q_values = self.model.get_all_qvalues(model_input)
+        else:
+            # Fallback: can't get Q-values, return zeros
+            q_values = np.zeros(self.action_spec.n_actions)
+        
+        # Get action (use take_action for consistency)
+        action = self.model.take_action(model_input)
+        
+        return action, q_values
 
     def add_memory(
         self, state: np.ndarray, action: int, reward: float, done: bool
@@ -385,6 +440,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             pass
         # handle movement forward/backward relative to orientation
         elif action_name == "FORWARD" or action_name == "BACKWARD":
+            # Check if simplified_movement is enabled
+            simplified_movement = getattr(world, "simplified_movement", False)
+            
             dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
             # invert direction for backward movement
             if action_name == "BACKWARD":
@@ -399,11 +457,17 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 if target_entity.passable:
                     # move into the cell
                     world.move(self, new_pos)
+                    # In simplified movement mode, change orientation to face movement direction
+                    if simplified_movement:
+                        self.orientation = self._get_orientation_from_move(dy, dx)
+                        self.update_agent_kind()
                 else:
                     # target is not passable (e.g., resource, wall) - movement blocked
                     pass
         # handle sidestep movements
         elif action_name == "STEP_LEFT" or action_name == "STEP_RIGHT":
+            simplified_movement = getattr(world, "simplified_movement", False)
+            
             dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
             # calculate perpendicular vectors for sidestep
             if action_name == "STEP_LEFT":
@@ -422,6 +486,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 if target_entity.passable:
                     # move into the cell
                     world.move(self, new_pos)
+                    # In simplified movement mode, change orientation to face movement direction
+                    if simplified_movement:
+                        self.orientation = self._get_orientation_from_move(step_dy, step_dx)
+                        self.update_agent_kind()
                 else:
                     # target is not passable (e.g., resource, wall) - movement blocked
                     pass
@@ -603,38 +671,48 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # Get the tiles in front of the agent
         dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
 
-        # Calculate right and left vectors by rotating 90 degrees
-        right_dy, right_dx = -dx, dy  # 90 degrees clockwise
-        left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
-
         # Get beam radius from world config (default to 3 if not set)
         beam_radius = getattr(world, "beam_radius", 3)
+        
+        # Check if single-tile beam mode is enabled
+        single_tile_attack = getattr(world, "single_tile_attack", False)
 
         # Calculate beam locations
         beam_locs = []
         y, x, z = self.location
 
-        # Forward beam locations
-        for i in range(1, beam_radius + 1):
-            target = (y + dy * i, x + dx * i, world.beam_layer)
+        if single_tile_attack:
+            # Only attack the tile directly in front of the agent
+            target = (y + dy, x + dx, world.beam_layer)
             if world.valid_location(target):
                 beam_locs.append(target)
+        else:
+            # Original multi-tile beam behavior
+            # Calculate right and left vectors by rotating 90 degrees
+            right_dy, right_dx = -dx, dy  # 90 degrees clockwise
+            left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
 
-        # Side beam locations
-        for i in range(beam_radius):
-            # Right side
-            right_target = (
-                y + right_dy + dy * i,
-                x + right_dx + dx * i,
-                world.beam_layer,
-            )
-            if world.valid_location(right_target):
-                beam_locs.append(right_target)
+            # Forward beam locations
+            for i in range(1, beam_radius + 1):
+                target = (y + dy * i, x + dx * i, world.beam_layer)
+                if world.valid_location(target):
+                    beam_locs.append(target)
 
-            # Left side
-            left_target = (y + left_dy + dy * i, x + left_dx + dx * i, world.beam_layer)
-            if world.valid_location(left_target):
-                beam_locs.append(left_target)
+            # Side beam locations
+            for i in range(beam_radius):
+                # Right side
+                right_target = (
+                    y + right_dy + dy * i,
+                    x + right_dx + dx * i,
+                    world.beam_layer,
+                )
+                if world.valid_location(right_target):
+                    beam_locs.append(right_target)
+
+                # Left side
+                left_target = (y + left_dy + dy * i, x + left_dx + dx * i, world.beam_layer)
+                if world.valid_location(left_target):
+                    beam_locs.append(left_target)
 
         # Place attack beams in valid locations
         valid_beam_locs = []

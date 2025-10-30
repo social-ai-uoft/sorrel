@@ -80,6 +80,10 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
             for agent in self.agents:
                 total_loss += agent.model.train_step()
 
+            # Update epsilon for all agents (exactly as in base Environment class)
+            for agent in self.agents:
+                agent.model.epsilon_decay(self.config.model.epsilon_decay)
+
             # Log the information (reuse existing logic)
             if logging:
                 if not logger:
@@ -97,3 +101,42 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
                 if output_dir is None:
                     output_dir = Path(os.getcwd()) / "./data/"
                 run_probe_test(self, epoch, output_dir)
+            
+            # Save models if enabled and it's time (new functionality)
+            if (self.config.experiment.get("save_models", False) and 
+                epoch > 0 and epoch % self.config.experiment.get("save_interval", 1000) == 0):
+                self._save_agent_models(epoch, output_dir)
+    
+    def _save_agent_models(self, epoch: int, output_dir: Path | None) -> None:
+        """Save agent models to disk.
+        
+        Args:
+            epoch: Current epoch number
+            output_dir: Directory to save models to
+        """
+        if output_dir is None:
+            output_dir = Path(os.getcwd()) / "./data/"
+        
+        # Create models directory
+        models_dir = output_dir / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Get experiment name and timestamp for file naming
+        experiment_name = self.config.experiment.get("run_name", "experiment")
+        timestamp = getattr(self, 'timestamp', 'unknown')
+        
+        print(f"Saving agent models at epoch {epoch}")
+        
+        # Save each agent's model
+        for agent_id, agent in enumerate(self.agents):
+            # Create filename: experiment_name_timestamp_agent_X_epoch_Y.pth
+            model_filename = f"{experiment_name}_{timestamp}_agent_{agent_id}_epoch_{epoch}.pth"
+            model_path = models_dir / model_filename
+            
+            try:
+                agent.model.save(model_path)
+                print(f"  Saved agent {agent_id} model to {model_path}")
+            except Exception as e:
+                print(f"  Failed to save agent {agent_id} model: {e}")
+        
+        print(f"Model saving completed for epoch {epoch}")

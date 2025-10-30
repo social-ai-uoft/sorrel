@@ -297,6 +297,25 @@ class iRainbowModel(DoublePyTorchModel):
 
             action = random.choices(np.arange(self.action_space), k=1)
             return action[0]
+    
+    def get_all_qvalues(self, state: np.ndarray) -> np.ndarray:
+        """Get Q-values for all actions in the given state.
+        
+        Args:
+            state: The current state as numpy array
+            
+        Returns:
+            numpy array of Q-values for all actions
+        """
+        torch_state = torch.from_numpy(state)
+        torch_state = torch_state.float().to(self.device)
+        
+        self.qnetwork_local.eval()
+        with torch.no_grad():
+            action_values = self.qnetwork_local.get_qvalues(torch_state, is_eval=True)
+        self.qnetwork_local.train()
+        
+        return action_values.cpu().data.numpy()[0]  # Return as 1D array
 
     def train_step(self) -> np.ndarray:
         """Update value parameters using given batch of experience tuples.
