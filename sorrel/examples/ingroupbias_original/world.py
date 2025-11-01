@@ -24,7 +24,6 @@ except ImportError:  # pragma: no cover
 
 from typing import Any
 
-from sorrel.examples.ingroupbias.map_generator import IngroupBiasMapGenerator
 from sorrel.worlds import Gridworld
 
 
@@ -64,25 +63,12 @@ class IngroupBiasWorld(Gridworld):
         # Determine whether config uses OmegaConf semantics
         if OmegaConf is not None and isinstance(config, DictConfig):  # type: ignore[arg-type]
             world_cfg = config.world  # type: ignore[attr-defined]
+            height = int(world_cfg.height)
+            width = int(world_cfg.width)
         else:
             world_cfg = config.get("world", {}) if isinstance(config, dict) else {}
-
-        # Check if using ASCII map generation
-        generation_mode = world_cfg.get("generation_mode", "random")
-        if generation_mode == "ascii_map":
-            map_file = world_cfg.get("ascii_map_file")
-            if not map_file:
-                raise ValueError(
-                    "ascii_map_file required when generation_mode is 'ascii_map'"
-                )
-            self.map_generator = IngroupBiasMapGenerator(map_file)
-            map_data = self.map_generator.parse_map()
-            height, width = map_data.dimensions
-        else:
-            # Use existing random generation logic
             height = int(world_cfg.get("height", 15))
             width = int(world_cfg.get("width", 15))
-            self.map_generator = None
 
         # number of layers: bottom terrain, middle dynamic layer, top beam layer
         layers = 3
