@@ -1,0 +1,94 @@
+{
+  "metadata": {
+    "resource_entities": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ],
+    "shuffle_constraint": "no_fixed",
+    "num_mappings": 10,
+    "ensure_position_diversity": false,
+    "generated_at": "2025-10-17T21:18:06.848122",
+    "diversity_stats": {
+      "total_mappings": 10,
+      "total_positions": 50,
+      "position_conflicts": 52,
+      "diversity_ratio": -0.040000000000000036,
+      "perfect_diversity": false
+    }
+  },
+  "mappings": [
+    {
+      "A": "B",
+      "B": "C",
+      "C": "A",
+      "D": "E",
+      "E": "D"
+    },
+    {
+      "A": "D",
+      "B": "E",
+      "C": "B",
+      "D": "C",
+      "E": "A"
+    },
+    {
+      "A": "E",
+      "B": "C",
+      "C": "D",
+      "D": "A",
+      "E": "B"
+    },
+    {
+      "A": "B",
+      "B": "E",
+      "C": "A",
+      "D": "C",
+      "E": "D"
+    },
+    {
+      "A": "D",
+      "B": "A",
+      "C": "E",
+      "D": "B",
+      "E": "C"
+    },
+    {
+      "A": "B",
+      "B": "C",
+      "C": "A",
+      "D": "E",
+      "E": "D"
+    },
+    {
+      "A": "C",
+      "B": "E",
+      "C": "D",
+      "D": "B",
+      "E": "A"
+    },
+    {
+      "A": "B",
+      "B": "C",
+      "C": "E",
+      "D": "A",
+      "E": "D"
+    },
+    {
+      "A": "D",
+      "B": "A",
+      "C": "B",
+      "D": "E",
+      "E": "C"
+    },
+    {
+      "A": "C",
+      "B": "E",
+      "C": "D",
+      "D": "B",
+      "E": "A"
+    }
+  ]
+}

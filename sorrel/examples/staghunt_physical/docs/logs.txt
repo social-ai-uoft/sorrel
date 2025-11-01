@@ -1,0 +1,2 @@
+1. Oct 08: staghunt_with_respawn_8radius_with_sinPosEmb_3agents_onlystag_smallroom_v2_20251008-150842 
+    uses small_room_v2 layout (fixed locations surrounded by walls)

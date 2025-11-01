@@ -47,7 +47,7 @@ def create_shared_social_harm(num_agents: int) -> Dict[int, float]:
 
 
 def create_individual_environments(
-    config, num_agents: int, simple_foraging: bool, use_random_policy: bool
+    config, num_agents: int, simple_foraging: bool, use_random_policy: bool, run_folder: str = None
 ) -> List[StatePunishmentEnv]:
     """Create individual environments for each agent.
 
@@ -71,6 +71,9 @@ def create_individual_environments(
         agent_config = OmegaConf.create(dict(config))
         agent_config.experiment.num_agents = 1  # Each environment has only one agent
         agent_config.model.n_frames = 1  # Single frame per observation
+        
+        # Store the total number of agents for punishment observation calculation
+        agent_config.experiment.total_num_agents = num_agents
 
         env = StatePunishmentEnv(world, agent_config)
         env.agents[0].agent_id = i
@@ -82,6 +85,10 @@ def create_individual_environments(
         # Set random policy mode for the environment
         if use_random_policy:
             env.use_random_policy = True
+
+        # Update entity map shuffler with run_folder if available
+        if run_folder and env.entity_map_shuffler is not None:
+            env.entity_map_shuffler.update_csv_path(run_folder)
 
         environments.append(env)
 
@@ -115,6 +122,7 @@ def setup_environments(
     simple_foraging: bool,
     fixed_punishment_level: float,
     use_random_policy: bool,
+    run_folder: str = None,
 ) -> Tuple[MultiAgentStatePunishmentEnv, StateSystem, Dict[int, float]]:
     """Set up all environments for the experiment.
 
@@ -123,6 +131,7 @@ def setup_environments(
         simple_foraging: Whether to use simple foraging mode
         fixed_punishment_level: Fixed punishment level for simple foraging
         use_random_policy: Whether to use random policy
+        run_folder: Run folder name for entity mapping files
 
     Returns:
         Tuple of (multi_agent_env, shared_state_system, shared_social_harm)
@@ -141,7 +150,7 @@ def setup_environments(
 
     # Create individual environments
     individual_envs = create_individual_environments(
-        config, num_agents, simple_foraging, use_random_policy
+        config, num_agents, simple_foraging, use_random_policy, run_folder
     )
 
     # Create multi-agent environment

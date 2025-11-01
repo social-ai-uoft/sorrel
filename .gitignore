@@ -144,8 +144,6 @@ outputs/
 logs/
 data/
 sorrel/examples/*/data/
-sorrel/examples/*/runs/
-sorrel/examples/*/runs_v1/
 sorrel/examples/*/checkpoints/
 pyvenv.cfg
 /bin
@@ -159,3 +157,6 @@ sorrel/examples/*/configs/
 sorrel/examples/*/analysis/res/
 sorrel/examples/*/runs*/
 sorrel/examples/*/models/
+sorrel/examples/*/argv/
+/sorrel/examples/state_punishment/test
+/sorrel/examples/state_punishment/env_shock

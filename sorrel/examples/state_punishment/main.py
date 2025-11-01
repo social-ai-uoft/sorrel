@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Simplified main script for running state punishment experiments."""
 
 import argparse
@@ -75,6 +76,42 @@ def parse_arguments():
     parser.add_argument(
         "--important_rule", action="store_true", help="Use important rule mode (entity A never punished, others normal)"
     )
+    parser.add_argument(
+        "--punishment_observable", action="store_true", help="Make pending punishment observable in third feature"
+    )
+
+    # Appearance shuffling parameters
+    parser.add_argument(
+        "--shuffle_frequency", type=int, default=20000, 
+        help="Frequency of entity appearance shuffling (every X epochs)"
+    )
+    parser.add_argument(
+        "--enable_appearance_shuffling", action="store_true", 
+        help="Enable entity appearance shuffling in observations"
+    )
+    parser.add_argument(
+        "--shuffle_constraint", type=str, default="no_fixed", 
+        choices=["no_fixed", "allow_fixed"],
+        help="Shuffling constraint: no_fixed=no entity stays same + unique targets, allow_fixed=any mapping allowed"
+    )
+    parser.add_argument(
+        "--csv_logging", action="store_true", 
+        help="Enable CSV logging of entity appearance mappings"
+    )
+    parser.add_argument(
+        "--mapping_file_path", type=str, default=None,
+        help="Path to file containing pre-generated mappings (optional)"
+    )
+
+    # Punishment observation parameters
+    parser.add_argument(
+        "--observe_other_punishments", action="store_true",
+        help="Enable agents to observe whether other agents were punished in the last turn"
+    )
+    parser.add_argument(
+        "--disable_punishment_info", action="store_true",
+        help="Disable punishment information in observations (keeps channel but sets to 0)"
+    )
 
     # Model parameters
     # parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
@@ -112,6 +149,36 @@ def save_config(config, config_dir, run_folder):
     return config_file
 
 
+def save_command_line(log_dir, run_folder, args):
+    """Save the command line arguments to a text file."""
+    command_file = log_dir / f"{run_folder}_command.txt"
+    
+    # Get the original command line arguments
+    import sys
+    command_line = " ".join(sys.argv)
+    
+    # Create detailed command information
+    command_info = f"""Command Line Arguments for Run: {run_folder}
+Generated at: {datetime.now().isoformat()}
+
+Full Command:
+{command_line}
+
+Parsed Arguments:
+"""
+    
+    # Add all arguments with their values
+    for arg_name, arg_value in vars(args).items():
+        command_info += f"  --{arg_name}: {arg_value}\n"
+    
+    # Write to file
+    with open(command_file, "w") as f:
+        f.write(command_info)
+    
+    print(f"Command line saved to: {command_file.absolute()}")
+    return command_file
+
+
 def run_experiment(args):
     """Run the state punishment experiment."""
     # Create configuration
@@ -136,6 +203,14 @@ def run_experiment(args):
         save_models_every=args.save_models_every,
         delayed_punishment=args.delayed_punishment,
         important_rule=args.important_rule,
+        punishment_observable=args.punishment_observable,
+        shuffle_frequency=args.shuffle_frequency,
+        enable_appearance_shuffling=args.enable_appearance_shuffling,
+        shuffle_constraint=args.shuffle_constraint,
+        csv_logging=args.csv_logging,
+        mapping_file_path=args.mapping_file_path,
+        observe_other_punishments=args.observe_other_punishments,
+        disable_punishment_info=args.disable_punishment_info,
     )
 
     # Print expected rewards
@@ -144,33 +219,45 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f"extended_random_exploration_{base_run_name}_{timestamp}"
+    run_folder = f"extended_random_exploration_L_n_tau_nstep5_{base_run_name}_{timestamp}"
 
-    # Both tensorboard logs and animations go to the same timestamped folder
+    # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_p48_a2_bs256_m2048" / run_folder
-    anim_dir = Path(__file__).parent / "data" / run_folder
+    log_dir = Path(__file__).parent / "runs" / run_folder
+    anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
-    experiment_name = args.experiment_name or f"{base_run_name}_{args.num_agents}agents"
+    argv_dir = Path(__file__).parent / "argv" / run_folder
+    experiment_name = args.experiment_name or run_folder
 
     # Create the directories if they don't exist
     log_dir.mkdir(parents=True, exist_ok=True)
     anim_dir.mkdir(parents=True, exist_ok=True)
     config_dir.mkdir(parents=True, exist_ok=True)
+    argv_dir.mkdir(parents=True, exist_ok=True)
 
     # Save the configuration
     config_file = save_config(config, config_dir, run_folder)
+    
+    # Save the command line arguments in separate argv folder
+    command_file = save_command_line(argv_dir, run_folder, args)
 
     # Set up environments
     multi_agent_env, shared_state_system, shared_social_harm = setup_environments(
-        config, args.simple_foraging, args.fixed_punishment, args.random_policy
+        config, args.simple_foraging, args.fixed_punishment, args.random_policy, run_folder
     )
+    
+    # Add args to multi_agent_env for probe test access
+    multi_agent_env.args = args
 
     # Create logger
     logger = StatePunishmentLogger(
         max_epochs=args.epochs, log_dir=log_dir, experiment_name=experiment_name
     )
     logger.set_multi_agent_env(multi_agent_env)
+    
+    # Create probe test logger
+    from .probe_test import ProbeTestLogger
+    probe_test_logger = ProbeTestLogger(log_dir, experiment_name)
 
     # Run the experiment
     print(f"Starting experiment: {experiment_name}")
@@ -178,6 +265,7 @@ def run_experiment(args):
     print(f"Tensorboard logs: {log_dir.absolute()}")
     print(f"Animations: {anim_dir.absolute()}")
     print(f"Configuration: {config_file.absolute()}")
+    print(f"Command line: {command_file.absolute()}")
     print(f"Number of agents: {args.num_agents}")
     print(f"Epochs: {args.epochs}")
     print(f"Composite views: {args.composite_views}")
@@ -191,6 +279,7 @@ def run_experiment(args):
         logging=True,
         logger=logger,
         output_dir=anim_dir,
+        probe_test_logger=probe_test_logger,
     )
 
     print("Experiment completed!")

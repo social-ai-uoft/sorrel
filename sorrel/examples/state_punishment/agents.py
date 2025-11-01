@@ -1,7 +1,7 @@
 """Agents for the state punishment game."""
 
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 try:
     from typing import override
@@ -38,6 +38,8 @@ class StatePunishmentAgent(Agent):
         social_harm_accessible: bool = False,
         delayed_punishment: bool = False,
         important_rule: bool = False,
+        punishment_observable: bool = False,
+        disable_punishment_info: bool = False,
     ):
         """Initialize the state punishment agent.
 
@@ -54,6 +56,7 @@ class StatePunishmentAgent(Agent):
             social_harm_accessible: Whether agents can access social harm information
             delayed_punishment: Whether to defer punishments to the next turn
             important_rule: Whether to use important rule mode (entity A never punished)
+            punishment_observable: Whether to show pending punishment in third observation feature
         """
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
@@ -65,12 +68,18 @@ class StatePunishmentAgent(Agent):
         self.social_harm_accessible = social_harm_accessible
         self.delayed_punishment = delayed_punishment
         self.important_rule = important_rule
+        self.punishment_observable = punishment_observable
+        self.disable_punishment_info = disable_punishment_info
         self.sprite = Path(__file__).parent / "./assets/hero.png"
 
         # Track encounters and rewards
         self.encounters = {}
         self.individual_score = 0.0
         self.vote_history = []
+        
+        # Track action frequencies
+        self.action_frequencies = {}
+        self.action_names = list(action_spec.actions.values())
 
         # Delayed punishment cache system
         self.pending_punishment = 0.0  # Punishment to be applied next turn
@@ -96,7 +105,7 @@ class StatePunishmentAgent(Agent):
 
     # Note: pov method removed - use generate_single_view directly
 
-    def generate_single_view(self, world, state_system, social_harm_dict) -> np.ndarray:
+    def generate_single_view(self, world, state_system, social_harm_dict, punishment_tracker=None) -> np.ndarray:
         """Generate observation from single agent perspective."""
         image = self.observation_spec.observe(world, self.location)
         # flatten the image to get the state
@@ -106,67 +115,100 @@ class StatePunishmentAgent(Agent):
         punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
         social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
         
-        # In delayed punishment mode, replace random noise with pending punishment
-        if self.delayed_punishment:
-            third_feature = self.pending_punishment
+        # Third feature: punishment observable or random noise
+        if self.punishment_observable:
+            third_feature = 1.0 if self.pending_punishment > 0 else 0.0
         else:
             third_feature = np.random.random()
 
         extra_features = np.array(
             [punishment_level, social_harm, third_feature], dtype=visual_field.dtype
         ).reshape(1, -1)
+        
+        # Add other agents' punishment status if enabled
+        if punishment_tracker is not None:
+            other_punishments = punishment_tracker.get_other_punishments(
+                self.agent_id, 
+                disable_info=self.disable_punishment_info
+            )
+            punishment_features = np.array(other_punishments, dtype=visual_field.dtype).reshape(1, -1)
+            extra_features = np.concatenate([extra_features, punishment_features], axis=1)
+        
         return np.concatenate([visual_field, extra_features], axis=1)
 
     def _add_scalars_to_composite_state(
-        self, composite_state, state_system, social_harm_dict
+        self, composite_state, state_system, social_harm_dict, punishment_tracker=None
     ) -> np.ndarray:
         """Add agent-specific scalar features to composite state."""
         # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and third feature
         punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
         social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
         
-        # In delayed punishment mode, replace random noise with pending punishment
-        if self.delayed_punishment:
-            third_feature = self.pending_punishment
+        # Third feature: punishment observable or random noise
+        if self.punishment_observable:
+            third_feature = 1.0 if self.pending_punishment > 0 else 0.0
         else:
             third_feature = np.random.random()
 
         extra_features = np.array(
             [punishment_level, social_harm, third_feature], dtype=composite_state.dtype
         ).reshape(1, -1)
+        
+        # Add other agents' punishment status if enabled
+        if punishment_tracker is not None:
+            other_punishments = punishment_tracker.get_other_punishments(
+                self.agent_id, 
+                disable_info=self.disable_punishment_info
+            )
+            punishment_features = np.array(other_punishments, dtype=composite_state.dtype).reshape(1, -1)
+            extra_features = np.concatenate([extra_features, punishment_features], axis=1)
 
         return np.concatenate([composite_state, extra_features], axis=1)
 
     # Note: Complex composite view generation methods removed - now handled by environment
 
     def act(
-        self, world, action: int, state_system=None, social_harm_dict=None
-    ) -> float:
-        """Act on the environment, returning the reward.
+        self, world, action: int, state_system=None, social_harm_dict=None, return_info=False
+    ) -> Union[float, Tuple[float, dict]]:
+        """Act on the environment, returning the reward and optionally info.
 
         Args:
             world: The game world
             action: Action to execute
             state_system: Shared state system for punishment calculations
             social_harm_dict: Shared social harm dictionary
+            return_info: If True, return (reward, info_dict). If False, return only reward.
 
         Returns:
-            Reward from the action
+            Reward from the action, or (reward, info_dict) if return_info=True
         """
+        # Track action frequency
+        if 0 <= action < len(self.action_names):
+            action_name = self.action_names[action]
+            self.action_frequencies[action_name] = self.action_frequencies.get(action_name, 0) + 1
+        
         # Apply delayed punishments from previous turn at the start of this action
         if self.delayed_punishment:
             delayed_punishment = self.apply_delayed_punishments()
             # Apply the delayed punishment as a negative reward
-            base_reward = self._execute_action(action, world, state_system, social_harm_dict)
-            return base_reward - delayed_punishment
+            base_reward, base_info = self._execute_action(action, world, state_system, social_harm_dict, return_info)
+            if return_info:
+                return base_reward - delayed_punishment, base_info
+            else:
+                return base_reward - delayed_punishment
         else:
-            return self._execute_action(action, world, state_system, social_harm_dict)
+            result = self._execute_action(action, world, state_system, social_harm_dict, return_info)
+            if return_info:
+                return result
+            else:
+                return result[0] if isinstance(result, tuple) else result
 
     def _execute_action(
-        self, action: int, world, state_system=None, social_harm_dict=None
-    ) -> float:
-        """Execute the given action and return reward."""
+        self, action: int, world, state_system=None, social_harm_dict=None, return_info=False
+    ) -> Union[float, Tuple[float, dict]]:
+        """Execute the given action and return reward and optionally info."""
         reward = 0.0
+        info = {'is_punished': False}
 
         # Determine movement and voting actions based on mode
         if self.use_composite_actions:
@@ -178,9 +220,17 @@ class StatePunishmentAgent(Agent):
 
         # Execute movement (if valid and not simple foraging with non-movement action)
         if movement_action >= 0 and not (self.simple_foraging and action >= 4):
-            reward += self._execute_movement(
-                movement_action, world, state_system, social_harm_dict
-            )
+            if return_info:
+                movement_reward, movement_info = self._execute_movement(
+                    movement_action, world, state_system, social_harm_dict, return_info
+                )
+                reward += movement_reward
+                info.update(movement_info)
+            else:
+                movement_reward = self._execute_movement(
+                    movement_action, world, state_system, social_harm_dict, return_info
+                )
+                reward += movement_reward
 
         # Execute voting (if valid and not simple foraging)
         if voting_action > 0 and not self.simple_foraging:
@@ -193,14 +243,20 @@ class StatePunishmentAgent(Agent):
             # Reset social harm to 0 after applying it
             social_harm_dict[self.agent_id] = 0.0
 
-        return reward
+        if return_info:
+            return reward, info
+        else:
+            return reward
 
     def _execute_movement(
-        self, movement_action: int, world, state_system=None, social_harm_dict=None
-    ) -> float:
-        """Execute movement action and return reward."""
+        self, movement_action: int, world, state_system=None, social_harm_dict=None, return_info=False
+    ) -> Union[float, Tuple[float, dict]]:
+        """Execute movement action and return reward and optionally info."""
         if movement_action >= 4:  # Invalid movement
-            return 0.0
+            if return_info:
+                return 0.0, {'is_punished': False}
+            else:
+                return 0.0
 
         # Calculate new location based on movement
         directions = [
@@ -222,7 +278,10 @@ class StatePunishmentAgent(Agent):
             and 0 <= new_location[1] < world.width
             and 0 <= new_location[2] < world.layers
         ):
-            return 0.0
+            if return_info:
+                return 0.0, {'is_punished': False}
+            else:
+                return 0.0
 
         # Get the object at the new location
         target_object = world.observe(new_location)
@@ -235,12 +294,16 @@ class StatePunishmentAgent(Agent):
         )
 
         # Apply punishment if it's a taboo resource
+        is_punished = False
         if hasattr(target_object, "kind") and state_system is not None:
             # In important rule mode, entity A is never punished
             if self.important_rule and target_object.kind == "A":
                 punishment = 0.0
             else:
                 punishment = state_system.calculate_punishment(target_object.kind)
+            
+            if punishment > 0:  # Only record if there was actual punishment
+                is_punished = True
             
             if self.delayed_punishment:
                 # Defer punishment to next turn
@@ -258,7 +321,15 @@ class StatePunishmentAgent(Agent):
 
         # Move the agent to the new location
         world.move(self, new_location)
-        return reward
+        
+        if return_info:
+            info = {
+                'is_punished': is_punished,
+                'resource_collected': target_object.kind if hasattr(target_object, 'kind') else None,
+            }
+            return reward, info
+        else:
+            return reward
 
     def _execute_voting(self, voting_action: int, world, state_system=None) -> float:
         """Execute voting action and return reward."""
@@ -302,6 +373,9 @@ class StatePunishmentAgent(Agent):
         self.encounters = {}
         self.vote_history = []
         self.turn = 0
+        
+        # Reset action frequencies
+        self.action_frequencies = {}
 
         # Reset delayed punishment cache
         self.pending_punishment = 0.0

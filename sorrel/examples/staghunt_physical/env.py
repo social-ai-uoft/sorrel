@@ -105,18 +105,17 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size
 
-            # action spec: ten discrete actions
+            # action spec: nine discrete actions (PUNISH removed)
             action_spec = ActionSpec(
                 [
-                    "NOOP",
+                    # "NOOP",
                     "FORWARD",
                     "BACKWARD",
                     "STEP_LEFT",
                     "STEP_RIGHT",
-                    "TURN_LEFT",
-                    "TURN_RIGHT",
-                    "ATTACK",
-                    "PUNISH"]
+                    # "TURN_LEFT",
+                    # "TURN_RIGHT",
+                    "ATTACK"]
             )
             # create a simple IQN model; hyperparameters can be tuned via config
             model = PyTorchIQN(
@@ -174,7 +173,15 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             elif layer == world.terrain_layer:
                 # interior cells are spawnable and traversable
                 if (y, x, world.dynamic_layer) in world.agent_spawn_points:
-                    world.add(index, Spawn())
+                    # Only place Spawn() entities if NOT using random agent spawning
+                    if not world.random_agent_spawning:
+                        world.add(index, Spawn())
+                    else:
+                        # When random spawning, these locations get regular Sand like other cells
+                        if (y, x, world.dynamic_layer) not in world.resource_spawn_points:
+                            world.add(index, Sand(can_convert_to_resource=False, respawn_ready=True))
+                        else:
+                            world.add(index, Sand(can_convert_to_resource=True, respawn_ready=True))
                 elif (y, x, world.dynamic_layer) not in world.resource_spawn_points:
                     # Non-resource locations get Sand that cannot convert to resources
                     world.add(
@@ -203,8 +210,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         for y, x, layer in world.resource_spawn_points:
             # dynamic layer coordinates
             dynamic = (y, x, world.dynamic_layer)
-            # choose resource type uniformly at random
-            if np.random.random() < 0.2:
+            # choose resource type based on stag_probability parameter
+            if np.random.random() < world.stag_probability:
                 resource_type = "stag"
                 world.add(
                     dynamic, StagResource(world.taste_reward, world.stag_health)
@@ -225,8 +232,33 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 ):
                     terrain_entity.resource_type = resource_type
 
-        # choose initial agent positions uniformly from spawn points without replacement
-        chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
+        # choose initial agent positions
+        if world.random_agent_spawning:
+            # Find all valid spawn locations (not walls, not resources, not fixed spawn points)
+            valid_spawn_locations = []
+            for y in range(1, world.height - 1):  # Exclude walls on border
+                for x in range(1, world.width - 1):  # Exclude walls on border
+                    dynamic = (y, x, world.dynamic_layer)
+                    # Skip resource spawn points and fixed agent spawn points
+                    if dynamic not in world.resource_spawn_points and dynamic not in world.agent_spawn_points:
+                        # Check if location is passable
+                        terrain_loc = (y, x, world.terrain_layer)
+                        if world.valid_location(terrain_loc):
+                            terrain_entity = world.observe(terrain_loc)
+                            if hasattr(terrain_entity, 'passable') and terrain_entity.passable:
+                                valid_spawn_locations.append(dynamic)
+            
+            # Randomly select spawn locations for agents
+            if len(valid_spawn_locations) < len(self.agents):
+                # Fallback: use agent_spawn_points if not enough valid locations
+                print(f"Warning: Only {len(valid_spawn_locations)} valid random locations found for {len(self.agents)} agents. Using fixed spawn points.")
+                chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
+            else:
+                chosen_positions = random.sample(valid_spawn_locations, len(self.agents))
+        else:
+            # Original behavior: use fixed spawn points
+            chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
+        
         for loc, agent in zip(chosen_positions, self.agents):
             # dynamic layer coordinate for agent
             dynamic = (loc[0], loc[1], world.dynamic_layer)
@@ -238,7 +270,9 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         map_data = world.map_generator.parse_map()
 
         # Validate map has sufficient spawn points
-        world.map_generator.validate_map_for_agents(map_data, len(self.agents))
+        # Skip validation for test_intention mode where we manually control agent placement
+        if not getattr(world, 'skip_spawn_validation', False):
+            world.map_generator.validate_map_for_agents(map_data, len(self.agents))
 
         # Initialize all layers with default entities first
         for y, x, layer in np.ndindex(world.map.shape):
@@ -311,8 +345,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown),
                 )
             elif resource_type == "random":
-                # Use ORIGINAL random selection logic
-                if np.random.random() < 0.2:  # Same as original
+                # Use stag_probability parameter for random resource type selection
+                if np.random.random() < world.stag_probability:
                     world.add(
                         dynamic_loc,
                         StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown),
@@ -340,8 +374,10 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     world.add((y, x, layer), Empty())
 
         # Place agents using ORIGINAL spawn logic
-        chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
-        for loc, agent in zip(chosen_positions, self.agents):
+        # Use min to handle cases where num_spawn_points < num_agents (e.g., test_intention mode)
+        num_spawn_needed = min(len(world.agent_spawn_points), len(self.agents))
+        chosen_positions = random.sample(world.agent_spawn_points, num_spawn_needed)
+        for loc, agent in zip(chosen_positions, self.agents[:num_spawn_needed]):
             world.add(loc, agent)
     
     @override

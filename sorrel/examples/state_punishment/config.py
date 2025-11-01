@@ -1,4 +1,4 @@
-﻿"""Configuration module for state punishment experiments."""
+"""Configuration module for state punishment experiments."""
 
 from typing import Any, Dict
 
@@ -18,8 +18,8 @@ def create_config(
     map_size: int = 10,
     num_resources: int = 8,
     learning_rate: float = 0.00025,
-    batch_size: int = 256, #64
-    memory_size: int = 2048, #1024
+    batch_size: int = 64, #64
+    memory_size: int = 1024, #1024
     target_update_frequency: int = 200,
     exploration_rate: float = 1.0, # 0.9
     exploration_decay: float = 0.0001, 
@@ -29,6 +29,14 @@ def create_config(
     save_models_every: int = 1000,
     delayed_punishment: bool = False,
     important_rule: bool = False,
+    punishment_observable: bool = False,
+    shuffle_frequency: int = 1000,
+    enable_appearance_shuffling: bool = False,
+    shuffle_constraint: str = "no_fixed",
+    csv_logging: bool = False,
+    mapping_file_path: str = None,
+    observe_other_punishments: bool = False,
+    disable_punishment_info: bool = False,
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -71,13 +79,36 @@ def create_config(
     probabilistic_tag = "prob" if use_probabilistic_punishment else "det"
     delayed_punishment_tag = "delayed" if delayed_punishment else "immed"
     rule_type_tag = "important" if important_rule else "silly"
+    punishment_obs_tag = "pobs" if punishment_observable else "pnoobs"
+    
+    # Generate other punishment observation tag
+    if observe_other_punishments:
+        if disable_punishment_info:
+            other_punishment_obs_tag = "pothdis"
+        else:
+            other_punishment_obs_tag = "pothobs"
+    else:
+        other_punishment_obs_tag = "pothnoobs"
+    
+    # Appearance shuffling tags
+    if enable_appearance_shuffling:
+        appearance_shuffle_tag = f"shuffle{shuffle_frequency}"
+        if shuffle_constraint == "no_fixed":
+            constraint_tag = "nofix"
+        elif shuffle_constraint == "allow_fixed":
+            constraint_tag = "allowfix"
+        else:
+            constraint_tag = "unknown"
+        appearance_tag = f"app{constraint_tag}_{appearance_shuffle_tag}"
+    else:
+        appearance_tag = "noapp"
     
     if simple_foraging:
         run_name = (
-            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
         )
     else:
-        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
 
     return {
         "experiment": {
@@ -99,6 +130,14 @@ def create_config(
             "save_models_every": save_models_every,
             "delayed_punishment": delayed_punishment,
             "important_rule": important_rule,
+            "punishment_observable": punishment_observable,
+            "shuffle_frequency": shuffle_frequency,
+            "enable_appearance_shuffling": enable_appearance_shuffling,
+            "shuffle_constraint": shuffle_constraint,
+            "csv_logging": csv_logging,
+            "mapping_file_path": mapping_file_path,
+            "observe_other_punishments": observe_other_punishments,
+            "disable_punishment_info": disable_punishment_info,
         },
         "world": {
             "height": map_size,
@@ -133,7 +172,7 @@ def create_config(
             "LR": learning_rate,
             "TAU": 0.001,
             "GAMMA": 0.95,
-            "n_quantiles": 12,
+            "n_quantiles": 12, # 12
             "device": "cpu",
             "target_update_frequency": target_update_frequency,
         },

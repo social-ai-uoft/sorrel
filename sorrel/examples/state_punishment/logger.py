@@ -43,6 +43,10 @@ class StatePunishmentLogger:
             sigma_weights_advantage = []
             sigma_weights_value = []
             
+            # Track action frequencies
+            total_action_frequencies = {}
+            mean_action_frequencies = {}
+            
             for i, env in enumerate(self.multi_agent_env.individual_envs):
                 agent = env.agents[0]
                 agent_count = len(agent.encounters)
@@ -62,6 +66,18 @@ class StatePunishmentLogger:
                 # Individual agent score
                 encounter_data[f"Agent_{i}/individual_score"] = agent.individual_score
                 total_individual_scores += agent.individual_score
+                
+                # Track action frequencies for this agent
+                for action_name, frequency in agent.action_frequencies.items():
+                    encounter_data[f"Agent_{i}/action_freq_{action_name}"] = frequency
+                    
+                    # Initialize if first time seeing this action
+                    if action_name not in total_action_frequencies:
+                        total_action_frequencies[action_name] = 0
+                        mean_action_frequencies[action_name] = 0
+                    
+                    total_action_frequencies[action_name] += frequency
+                    mean_action_frequencies[action_name] += frequency
                 
                 # Access sigma_weight from PyTorchIQN model
                 if hasattr(agent.model, 'qnetwork_local') and hasattr(agent.model.qnetwork_local, 'ff_1'):
@@ -88,6 +104,11 @@ class StatePunishmentLogger:
             # Add total and mean individual scores
             encounter_data["Total/total_individual_score"] = total_individual_scores
             encounter_data["Mean/mean_individual_score"] = total_individual_scores / len(self.multi_agent_env.individual_envs)
+            
+            # Add total and mean action frequencies
+            for action_name in total_action_frequencies:
+                encounter_data[f"Total/total_action_freq_{action_name}"] = total_action_frequencies[action_name]
+                encounter_data[f"Mean/mean_action_freq_{action_name}"] = mean_action_frequencies[action_name] / len(self.multi_agent_env.individual_envs)
             
             # Add mean sigma weights across all agents
             if sigma_weights_ff1:

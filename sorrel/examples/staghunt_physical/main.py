@@ -21,7 +21,7 @@ from pathlib import Path
 import yaml
 
 from sorrel.examples.staghunt_physical.entities import Empty
-from sorrel.examples.staghunt_physical.env import StagHuntEnv
+from sorrel.examples.staghunt_physical.env_with_probe_test import StagHuntEnvWithProbeTest
 from sorrel.examples.staghunt_physical.world import StagHuntWorld
 from sorrel.examples.staghunt_physical.metrics_collector import StagHuntMetricsCollector
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
@@ -47,6 +47,7 @@ class CombinedLogger(Logger):
         if self.experiment_env and hasattr(self.experiment_env, 'metrics_collector'):
             self.experiment_env.log_epoch_metrics(epoch, self.tensorboard_logger.writer)
 
+
 def run_stag_hunt() -> None:
     """Run a single stag hunt experiment with default hyperparameters."""
     # configuration dictionary specifying hyperparameters
@@ -58,7 +59,36 @@ def run_stag_hunt() -> None:
             "max_turns": 100,
             # recording period for animation (unused here)
             "record_period": 200,
-            "run_name": "staghunt_with_respawn_8radius_with_sinPosEmb_3agents",
+            "run_name": "test_oct29_regen0.25", # "staghunt_small_room_size7_regen1_v2_test_interval10"
+            # Model saving configuration
+            "save_models": True,  # Enable model saving
+            "save_interval": 1000,  # Save models every X epochs
+        },
+        "probe_test": {
+            # Enable probe testing
+            "enabled": True,
+            # Test mode: "default" or "test_intention"
+            "test_mode": "test_intention",
+            # Run probe test every X epochs
+            "test_interval": 10,
+            # Maximum steps for each probe test
+            "max_test_steps": 1,  # Only 1 turn for test_intention
+            # Number of test epochs to run per probe test (for statistical reliability)
+            "test_epochs": 1,
+            # Whether to test agents individually (True) or together (False)
+            "individual_testing": True,
+            # Environment size configuration for probe tests
+            "env_size": {
+                "height": 7,  # Height of probe test environment
+                "width": 7,  # Width of probe test environment
+            },
+            # Spatial layout configuration for probe tests (only used in default mode)
+            "layout": {
+                "generation_mode": "random",  # "random" or "ascii_map"
+                "ascii_map_file": "stag_hunt_ascii_map_test_size1.txt",  # Only used when generation_mode is "ascii_map"
+                "resource_density": 0.2,  # Only used when generation_mode is "random"
+                "stag_probability": 0.5,  # Probability that spawned resources are stags (vs hares)
+            },
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
@@ -77,22 +107,33 @@ def run_stag_hunt() -> None:
             "memory_size": 1024,
             "LR": 0.00025,
             "TAU": 0.001,
-            "GAMMA": 0.95,
+            "GAMMA": 0.99,
             "n_quantiles": 12,
         },
         "world": {
             # map generation mode
-            "generation_mode": "ascii_map",  # "random" or "ascii_map"
-            "ascii_map_file": "stag_hunt_ascii_map_clean.txt",  # only used when generation_mode is "ascii_map"
+            "generation_mode": "random",  # "random" or "ascii_map"
+            "ascii_map_file": "stag_hunt_ascii_map_test_size7.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 11,
-            "width": 11,
+            "height": 15,
+            "width": 15,
             # number of players in the game
             "num_agents": 3,
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
+            # If True in random mode, agents spawn randomly in valid locations instead of fixed spawn points
+            "random_agent_spawning": True,
+            # If True, movement actions automatically change orientation to face movement direction
+            "simplified_movement": True,
+            # If True, attack only hits the tile directly in front of agent (single tile)
+            "single_tile_attack": True,
+            # If True, skip spawn validation for test_intention mode
+            "skip_spawn_validation": True,
+            # probability that a spawned resource is a stag (vs hare)
+            # stag_probability + hare_probability = 1.0
+            "stag_probability": 0.5,  # 20% stag, 80% hare
             # separate reward values for stag and hare
-            "stag_reward": 6,  # Higher reward for stag (requires coordination)
+            "stag_reward": 12,  # Higher reward for stag (requires coordination)
             "hare_reward": 3,  # Lower reward for hare (solo achievable)
             # regeneration cooldown parameters
             "stag_regeneration_cooldown": 1,  # Turns to wait before stag regenerates
@@ -103,10 +144,10 @@ def run_stag_hunt() -> None:
             # "destroyable_health": 3,
             # beam characteristics
             "beam_length": 3,
-            "beam_radius": 1,
+            "beam_radius": 2,
             "beam_cooldown": 3,  # Legacy parameter, kept for compatibility
             "attack_cooldown": 1,  # Separate cooldown for ATTACK action
-            "attack_cost": 0.05,  # Cost to use attack action
+            "attack_cost": 0.00,  # Cost to use attack action
             "punish_cooldown": 5,  # Separate cooldown for PUNISH action
             "punish_cost": 0.1,  # Cost to use punish action
             # respawn timing
@@ -122,8 +163,8 @@ def run_stag_hunt() -> None:
             "stag_health": 2,  # Health points for stags (requires coordination)
             "hare_health": 1,   # Health points for hares (solo defeatable)
             "agent_health": 5,  # Health points for agents
-            "health_regeneration_rate": 1,  # How fast resources regenerate health
-            "reward_sharing_radius": 3,  # Radius for reward sharing when resources are defeated
+            "health_regeneration_rate": 0.25,  # How fast resources regenerate health
+            "reward_sharing_radius": 2,  # Radius for reward sharing when resources are defeated
         },
     }
 
@@ -144,8 +185,11 @@ def run_stag_hunt() -> None:
 
     # construct the world; we pass our own Empty entity as the default
     world = StagHuntWorld(config=config, default_entity=Empty())
-    # construct the environment
-    experiment = StagHuntEnv(world, config)
+    # construct the environment with probe testing capability
+    experiment = StagHuntEnvWithProbeTest(world, config)
+    
+    # Add timestamp to config for model saving
+    experiment.timestamp = timestamp
     
     # Initialize metrics collection (no separate tracker needed)
     metrics_collector = StagHuntMetricsCollector()
@@ -163,7 +207,7 @@ def run_stag_hunt() -> None:
             / f'runs/{config["experiment"]["run_name"]}_{timestamp}',
             experiment_env=experiment,
         ),
-        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}',
+        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}',
     )
     
     print(f"Metrics tracking completed - all metrics integrated into main TensorBoard logs")
