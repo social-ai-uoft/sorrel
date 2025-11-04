@@ -13,6 +13,8 @@ from sorrel.examples.state_punishment.config import (
 )
 from sorrel.examples.state_punishment.environment_setup import setup_environments
 from sorrel.examples.state_punishment.logger import StatePunishmentLogger
+from sorrel.examples.state_punishment.probe_test import ProbeTestLogger
+from sorrel.utils.helpers import set_seed
 
 
 def parse_arguments():
@@ -115,6 +117,7 @@ def parse_arguments():
 
     # Model parameters
     # parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--epsilon", type=float, default=0.0, help="Initial epsilon value for exploration (default: 0.0)")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
     parser.add_argument("--memory_size", type=int, default=1024, help="Memory size")
     parser.add_argument("--save_models_every", type=int, default=1000, help="Save models every X epochs")
@@ -123,24 +126,45 @@ def parse_arguments():
     parser.add_argument(
         "--experiment_name", type=str, default=None, help="Experiment name"
     )
+    parser.add_argument(
+        "--disable_probe_test", action="store_true", help="Disable probe test functionality"
+    )
+
+    # Random seed for reproducibility
+    parser.add_argument(
+        "--seed", type=int, default=None, help="Random seed for reproducibility (if not set, uses default random state)"
+    )
 
     return parser.parse_args()
 
 
-def save_config(config, config_dir, run_folder):
-    """Save the configuration to a YAML file."""
+def save_config(config, config_dir, run_folder, seed=None):
+    """Save the configuration to a YAML file.
+    
+    Args:
+        config: Configuration dictionary
+        config_dir: Directory to save config file
+        run_folder: Run folder name
+        seed: Optional random seed value to include in metadata
+    """
     # config_dir already includes the run_folder subdirectory, so no need to create it again
     config_file = config_dir / f"{run_folder}.yaml"
-
+    
     # Convert config to a serializable format
     config_dict = dict(config)
 
     # Add metadata
-    config_dict["_metadata"] = {
+    metadata = {
         "created_at": datetime.now().isoformat(),
         "run_folder": run_folder,
         "description": "Configuration used for state punishment experiment",
     }
+    
+    # Add seed to metadata if available
+    if seed is not None:
+        metadata["seed"] = seed
+    
+    config_dict["_metadata"] = metadata
 
     with open(config_file, "w") as f:
         yaml.dump(config_dict, f, default_flow_style=False, indent=2)
@@ -181,6 +205,16 @@ Parsed Arguments:
 
 def run_experiment(args):
     """Run the state punishment experiment."""
+    # Set random seed for reproducibility if provided
+    if args.seed is not None:
+        set_seed(args.seed)
+        print(f"Random seed set to: {args.seed}")
+        # Store seed for later use in config saving
+        run_experiment._seed = args.seed
+    else:
+        print("No random seed specified - using default random state (not reproducible)")
+        run_experiment._seed = None
+    
     # Create configuration
     config = create_config(
         num_agents=args.num_agents,
@@ -197,6 +231,7 @@ def run_experiment(args):
         map_size=args.map_size,
         num_resources=args.num_resources,
         # learning_rate=args.learning_rate,
+        exploration_rate=args.epsilon,
         batch_size=args.batch_size,
         memory_size=args.memory_size,
         no_collective_harm=args.no_collective_harm,
@@ -223,7 +258,7 @@ def run_experiment(args):
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs" / run_folder
+    log_dir = Path(__file__).parent / "runs_no_exploration" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder
@@ -236,7 +271,7 @@ def run_experiment(args):
     argv_dir.mkdir(parents=True, exist_ok=True)
 
     # Save the configuration
-    config_file = save_config(config, config_dir, run_folder)
+    config_file = save_config(config, config_dir, run_folder, seed=run_experiment._seed)
     
     # Save the command line arguments in separate argv folder
     command_file = save_command_line(argv_dir, run_folder, args)
@@ -248,6 +283,8 @@ def run_experiment(args):
     
     # Add args to multi_agent_env for probe test access
     multi_agent_env.args = args
+    # Add run_folder to args for probe test access
+    args.run_folder = run_folder
 
     # Create logger
     logger = StatePunishmentLogger(
@@ -255,9 +292,18 @@ def run_experiment(args):
     )
     logger.set_multi_agent_env(multi_agent_env)
     
-    # Create probe test logger
-    from .probe_test import ProbeTestLogger
-    probe_test_logger = ProbeTestLogger(log_dir, experiment_name)
+    # Create probe test logger (optional)
+    probe_test_logger = None
+    if not args.disable_probe_test:
+        try:
+            probe_test_logger = ProbeTestLogger(log_dir, experiment_name)
+            print("Probe test enabled")
+        except ImportError as e:
+            print(f"Probe test disabled: {e}")
+        except Exception as e:
+            print(f"Probe test disabled: {e}")
+    else:
+        print("Probe test disabled by user")
 
     # Run the experiment
     print(f"Starting experiment: {experiment_name}")
@@ -268,10 +314,13 @@ def run_experiment(args):
     print(f"Command line: {command_file.absolute()}")
     print(f"Number of agents: {args.num_agents}")
     print(f"Epochs: {args.epochs}")
+    print(f"Epsilon: {args.epsilon}")
     print(f"Composite views: {args.composite_views}")
     print(f"Composite actions: {args.composite_actions}")
     print(f"Simple foraging: {args.simple_foraging}")
     print(f"Random policy: {args.random_policy}")
+    print(f"Random seed: {args.seed if args.seed is not None else 'Not set (not reproducible)'}")
+    print(f"Probe test: {'disabled' if args.disable_probe_test else 'enabled'}")
     print("-" * 50)
 
     multi_agent_env.run_experiment(

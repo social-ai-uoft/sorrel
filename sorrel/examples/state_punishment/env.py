@@ -385,7 +385,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         # Initialize probe test environment if probe test logger is provided
         probe_test_env = None
         if probe_test_logger is not None:
-            from .probe_test import setup_probe_test_environment, PROBE_TEST_CONFIG
+            from sorrel.examples.state_punishment.probe_test import setup_probe_test_environment, PROBE_TEST_CONFIG
             probe_test_env, _, _ = setup_probe_test_environment(
                 self.config, 
                 getattr(self, 'args', None), 
@@ -521,7 +521,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 print(f"\n--- Running Probe Test at Training Epoch {epoch} ---")
                 
                 # Run probe test
-                from .probe_test import run_probe_test, save_probe_test_models
+                from sorrel.examples.state_punishment.probe_test import run_probe_test, save_probe_test_models
                 probe_results = run_probe_test(
                     self,  # training environment
                     probe_test_env,  # probe test environment
