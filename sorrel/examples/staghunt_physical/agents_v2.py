@@ -309,7 +309,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         Clears the inventory, resets the orientation and notifies the model that a new
         episode has begun.
         """
-        self.orientation = 0
+        self.orientation = 3  # WEST (left)
         self.inventory = {"stag": 0, "hare": 0}
         self.ready = False
         self.beam_cooldown_timer = 0  # Reset beam cooldown (legacy)
@@ -537,7 +537,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                                 # Handle reward sharing for defeated resource
                                 shared_reward = self.handle_resource_defeat(entity, world)
                                 reward += shared_reward
-                                
+
                                 # Record resource defeat metrics with resource type
                                 if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
                                     resource_type = "stag" if isinstance(entity, StagResource) else "hare"
@@ -674,18 +674,38 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # Get beam radius from world config (default to 3 if not set)
         beam_radius = getattr(world, "beam_radius", 3)
         
-        # Check if single-tile beam mode is enabled
+        # Check if single-tile beam mode or area attack mode is enabled
         single_tile_attack = getattr(world, "single_tile_attack", False)
+        area_attack = getattr(world, "area_attack", False)
 
         # Calculate beam locations
         beam_locs = []
         y, x, z = self.location
 
-        if single_tile_attack:
-            # Only attack the tile directly in front of the agent
-            target = (y + dy, x + dx, world.beam_layer)
-            if world.valid_location(target):
-                beam_locs.append(target)
+        if area_attack:
+            # 3x3 area attack: covers a 3x3 region in front of the agent
+            # Calculate perpendicular vectors for left/right
+            right_dy, right_dx = -dx, dy  # 90 degrees clockwise
+            left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
+            
+            # The 3x3 area is centered 1 tile forward from the agent
+            # Generate all 9 tiles in the 3x3 grid
+            for i in range(-1, 2):  # -1, 0, 1 (back, center, forward relative to center tile)
+                for j in range(-1, 2):  # -1, 0, 1 (left, center, right relative to center tile)
+                    # Center tile is 1 tile forward: (y + dy, x + dx)
+                    # Offset by i tiles forward and j tiles to the side
+                    target_y = y + dy + (i * dy) + (j * left_dy)
+                    target_x = x + dx + (i * dx) + (j * left_dx)
+                    target = (target_y, target_x, world.beam_layer)
+                    if world.valid_location(target):
+                        beam_locs.append(target)
+        elif single_tile_attack:
+            # Attack tiles directly in front of the agent (configurable range, default: 2)
+            attack_range = getattr(world, "attack_range", 2)
+            for i in range(1, attack_range + 1):
+                target = (y + dy * i, x + dx * i, world.beam_layer)
+                if world.valid_location(target):
+                    beam_locs.append(target)
         else:
             # Original multi-tile beam behavior
             # Calculate right and left vectors by rotating 90 degrees
@@ -740,6 +760,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         right_dy, right_dx = -dx, dy  # 90 degrees clockwise
         left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
 
+        # Check if area attack mode is enabled
+        area_attack = getattr(world, "area_attack", False)
+
         # Get beam radius from world config (default to 3 if not set)
         beam_radius = getattr(world, "beam_radius", 3)
 
@@ -747,27 +770,41 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         beam_locs = []
         y, x, z = self.location
 
-        # Forward beam locations
-        for i in range(1, beam_radius + 1):
-            target = (y + dy * i, x + dx * i, world.beam_layer)
-            if world.valid_location(target):
-                beam_locs.append(target)
+        if area_attack:
+            # 3x3 area attack: covers a 3x3 region in front of the agent
+            # The 3x3 area is centered 1 tile forward from the agent
+            # Generate all 9 tiles in the 3x3 grid
+            for i in range(-1, 2):  # -1, 0, 1 (back, center, forward relative to center tile)
+                for j in range(-1, 2):  # -1, 0, 1 (left, center, right relative to center tile)
+                    # Center tile is 1 tile forward: (y + dy, x + dx)
+                    # Offset by i tiles forward and j tiles to the side
+                    target_y = y + dy + (i * dy) + (j * left_dy)
+                    target_x = x + dx + (i * dx) + (j * left_dx)
+                    target = (target_y, target_x, world.beam_layer)
+                    if world.valid_location(target):
+                        beam_locs.append(target)
+        else:
+            # Forward beam locations
+            for i in range(1, beam_radius + 1):
+                target = (y + dy * i, x + dx * i, world.beam_layer)
+                if world.valid_location(target):
+                    beam_locs.append(target)
 
-        # Side beam locations
-        for i in range(beam_radius):
-            # Right side
-            right_target = (
-                y + right_dy + dy * i,
-                x + right_dx + dx * i,
-                world.beam_layer,
-            )
-            if world.valid_location(right_target):
-                beam_locs.append(right_target)
+            # Side beam locations
+            for i in range(beam_radius):
+                # Right side
+                right_target = (
+                    y + right_dy + dy * i,
+                    x + right_dx + dx * i,
+                    world.beam_layer,
+                )
+                if world.valid_location(right_target):
+                    beam_locs.append(right_target)
 
-            # Left side
-            left_target = (y + left_dy + dy * i, x + left_dx + dx * i, world.beam_layer)
-            if world.valid_location(left_target):
-                beam_locs.append(left_target)
+                # Left side
+                left_target = (y + left_dy + dy * i, x + left_dx + dx * i, world.beam_layer)
+                if world.valid_location(left_target):
+                    beam_locs.append(left_target)
 
         # Place punishment beams in valid locations
         valid_beam_locs = []
@@ -816,8 +853,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                         agent, shared_reward
                     )
         
-        # Update world total reward
-        world.total_reward += resource.value
+        # Note: Do NOT add resource.value directly to world.total_reward here.
+        # The rewards are already accumulated correctly through Agent.transition():
+        # - The attacking agent's reward (shared_reward) is added when they act
+        # - Other agents' pending_reward is added when they act on their next turn
+        # Adding resource.value here would cause double-counting.
         
         # Return the attacking agent's immediate reward
         return shared_reward

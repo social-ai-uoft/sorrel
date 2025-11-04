@@ -115,6 +115,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     "STEP_RIGHT",
                     # "TURN_LEFT",
                     # "TURN_RIGHT",
+                    # "PUNISH",
                     "ATTACK"]
             )
             # create a simple IQN model; hyperparameters can be tuned via config
@@ -155,10 +156,38 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         Supports both random generation and ASCII map-based generation.
         """
         world = self.world
+        
+        # Save manually set spawn points before reset (for probe tests)
+        # Probe tests set a flag to indicate they want deterministic placement
+        manually_set_spawn_points = None
+        if hasattr(world, "_probe_test_spawn_points"):
+            # Probe test has explicitly set spawn points - preserve them
+            manually_set_spawn_points = world._probe_test_spawn_points.copy()
+            # Clear the flag after reading
+            delattr(world, "_probe_test_spawn_points")
+        elif hasattr(world, "map_generator") and world.map_generator is not None:
+            # Fallback: detect by checking if spawn points differ from map order
+            map_data = world.map_generator.parse_map()
+            expected_map_spawn_points = [
+                (y, x, world.dynamic_layer) for y, x in map_data.spawn_points
+            ]
+            # Check if current spawn points match map spawn points but in different order
+            if len(world.agent_spawn_points) > 0:
+                current_set = set(world.agent_spawn_points)
+                expected_set = set(expected_map_spawn_points)
+                if current_set == expected_set:
+                    # Same elements - check if order is different
+                    if world.agent_spawn_points != expected_map_spawn_points:
+                        # Order is different - manually set
+                        manually_set_spawn_points = world.agent_spawn_points.copy()
+                elif world.agent_spawn_points != expected_map_spawn_points:
+                    # Different elements - also manually set
+                    manually_set_spawn_points = world.agent_spawn_points.copy()
+        
         world.reset_spawn_points()
 
         if hasattr(world, "map_generator") and world.map_generator is not None:
-            self._populate_from_ascii_map()
+            self._populate_from_ascii_map(manually_set_spawn_points)
         else:
             self._populate_randomly()
 
@@ -214,12 +243,12 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             if np.random.random() < world.stag_probability:
                 resource_type = "stag"
                 world.add(
-                    dynamic, StagResource(world.taste_reward, world.stag_health)
+                    dynamic, StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown)
                 )
             else:
                 resource_type = "hare"
                 world.add(
-                    dynamic, HareResource(world.taste_reward, world.hare_health)
+                    dynamic, HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown)
                 )
 
             # Update the Sand entity below to remember this resource type
@@ -264,8 +293,13 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             dynamic = (loc[0], loc[1], world.dynamic_layer)
             world.add(dynamic, agent)
 
-    def _populate_from_ascii_map(self) -> None:
-        """Populate environment using ASCII map layout - PRESERVES ALL ORIGINAL LOGIC."""
+    def _populate_from_ascii_map(self, manually_set_spawn_points=None) -> None:
+        """Populate environment using ASCII map layout - PRESERVES ALL ORIGINAL LOGIC.
+        
+        Args:
+            manually_set_spawn_points: If provided, use these spawn points instead of map's spawn points
+                (used by probe tests to control agent placement order)
+        """
         world = self.world
         map_data = world.map_generator.parse_map()
 
@@ -284,10 +318,13 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             for layer in [world.terrain_layer, world.dynamic_layer, world.beam_layer]:
                 world.add((y, x, layer), Wall())
 
-        # Set spawn points EXACTLY where map specifies
-        world.agent_spawn_points = [
-            (y, x, world.dynamic_layer) for y, x in map_data.spawn_points
-        ]
+        # Set spawn points - use manually set ones if provided (for probe tests), otherwise use map's
+        if manually_set_spawn_points is not None:
+            world.agent_spawn_points = manually_set_spawn_points
+        else:
+            world.agent_spawn_points = [
+                (y, x, world.dynamic_layer) for y, x in map_data.spawn_points
+            ]
 
         # Create resource spawn points from map resource locations
         world.resource_spawn_points = [
@@ -301,10 +338,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 # Skip if it's a wall (walls are already placed)
                 if (y, x) in map_data.wall_locations:
                     continue
-                # Place Spawn entity for spawn points
-                elif (y, x) in map_data.spawn_points:
-                    world.add(terrain_loc, Spawn())
-                # Place Sand entity for all other locations
+                # Place Sand entity for all locations (including spawn points - no Spawn entities)
                 else:
                     # Use original Sand logic - can_convert_to_resource based on resource locations
                     can_convert = (
@@ -373,10 +407,21 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 if (y, x) not in map_data.wall_locations:
                     world.add((y, x, layer), Empty())
 
-        # Place agents using ORIGINAL spawn logic
+        # Place agents - use deterministic placement if spawn points were manually set (probe test),
+        # otherwise use random placement (training)
         # Use min to handle cases where num_spawn_points < num_agents (e.g., test_intention mode)
         num_spawn_needed = min(len(world.agent_spawn_points), len(self.agents))
-        chosen_positions = random.sample(world.agent_spawn_points, num_spawn_needed)
+        
+        # If spawn points were manually set (probe test), use deterministic order
+        # Otherwise use random placement for training
+        if manually_set_spawn_points is not None:
+            # Deterministic: assign agents to spawn points in order (preserve manual order)
+            # Use the manually set spawn points, not the world's (which may have been reset)
+            chosen_positions = manually_set_spawn_points[:num_spawn_needed]
+        else:
+            # Random: use random sampling for training
+            chosen_positions = random.sample(world.agent_spawn_points, num_spawn_needed)
+        
         for loc, agent in zip(chosen_positions, self.agents[:num_spawn_needed]):
             world.add(loc, agent)
     
