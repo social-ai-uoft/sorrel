@@ -14,7 +14,6 @@ details on the expected configuration keys.
 
 from __future__ import annotations
 
-import copy
 import random
 from typing import Any
 
@@ -145,19 +144,14 @@ class IngroupBiasEnv(Environment[IngroupBiasWorld]):
     def populate_environment(self) -> None:
         """Populate the gridworld with terrain, resources and agents.
 
-        Supports both random generation and ASCII map-based generation.
+        Walls are placed around the border of the bottom layer. Spawn
+        locations for agents are recorded and used to respawn players after
+        interactions. Resources are initially populated at random based
+        on the ``resource_density`` parameter. Agents are placed on
+        random spawn points.
         """
         world = self.world
         world.reset_spawn_points()
-
-        if hasattr(world, "map_generator") and world.map_generator is not None:
-            self._populate_from_ascii_map()
-        else:
-            self._populate_randomly()
-
-    def _populate_randomly(self) -> None:
-        """Populate environment using random generation (original logic)."""
-        world = self.world
 
         # Generate spawn points in the interior of the world
         spawn_points = []
@@ -203,86 +197,6 @@ class IngroupBiasEnv(Environment[IngroupBiasWorld]):
             # dynamic layer coordinate for agent
             dynamic = (loc[0], loc[1], world.dynamic_layer)
             world.add(dynamic, agent)
-
-    def _populate_from_ascii_map(self) -> None:
-        """Populate environment using ASCII map layout."""
-        world = self.world
-        map_data = world.map_generator.parse_map()
-
-        # Validate map has sufficient spawn points
-        world.map_generator.validate_map_for_agents(map_data, len(self.agents))
-
-        # Initialize all layers with default entities first
-        for y, x, layer in np.ndindex(world.map.shape):
-            index = (y, x, layer)
-            world.add(index, copy.deepcopy(world.default_entity))
-
-        # Place walls EXACTLY where map specifies (all layers)
-        for y, x in map_data.wall_locations:
-            for layer in [world.terrain_layer, world.dynamic_layer, world.beam_layer]:
-                world.add((y, x, layer), Wall())
-
-        # Set spawn points EXACTLY where map specifies
-        world.agent_spawn_points = [
-            (y, x, world.dynamic_layer) for y, x in map_data.spawn_points
-        ]
-
-        # Create resource spawn points from map resource locations
-        world.resource_spawn_points = []
-        for y, x in map_data.red_resource_locations:
-            world.resource_spawn_points.append((y, x, world.dynamic_layer))
-        for y, x in map_data.green_resource_locations:
-            world.resource_spawn_points.append((y, x, world.dynamic_layer))
-        for y, x in map_data.blue_resource_locations:
-            world.resource_spawn_points.append((y, x, world.dynamic_layer))
-
-        # Place terrain layer entities (Spawn/Sand) for ALL locations
-        for y, x, layer in np.ndindex(world.map.shape):
-            if layer == world.terrain_layer:
-                terrain_loc = (y, x, layer)
-                # Skip if it's a wall (walls are already placed)
-                if (y, x) in map_data.wall_locations:
-                    continue
-                # Place Spawn entity for spawn points
-                elif (y, x) in map_data.spawn_points:
-                    world.add(terrain_loc, Spawn())
-                # Place Sand entity for all other locations
-                else:
-                    world.add(terrain_loc, Sand())
-
-        # Place resources EXACTLY where map specifies
-        for y, x in map_data.red_resource_locations:
-            dynamic_loc = (y, x, world.dynamic_layer)
-            world.add(dynamic_loc, RedResource())
-
-        for y, x in map_data.green_resource_locations:
-            dynamic_loc = (y, x, world.dynamic_layer)
-            world.add(dynamic_loc, GreenResource())
-
-        for y, x in map_data.blue_resource_locations:
-            dynamic_loc = (y, x, world.dynamic_layer)
-            world.add(dynamic_loc, BlueResource())
-
-        # Place empty entities on dynamic layer for non-resource, non-spawn locations
-        for y, x in map_data.empty_locations:
-            dynamic_loc = (y, x, world.dynamic_layer)
-            if (
-                dynamic_loc not in world.agent_spawn_points
-                and dynamic_loc not in world.resource_spawn_points
-            ):
-                world.add(dynamic_loc, Empty())
-
-        # Initialize beam layer with empty entities (preserve walls)
-        for y, x, layer in np.ndindex(world.map.shape):
-            if layer == world.beam_layer:
-                # Only place Empty if it's not a wall location
-                if (y, x) not in map_data.wall_locations:
-                    world.add((y, x, layer), Empty())
-
-        # Place agents using spawn logic
-        chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
-        for loc, agent in zip(chosen_positions, self.agents):
-            world.add(loc, agent)
 
     def override_agents(self, agents: list[Agent]) -> None:
         """Override the current agent configuration with a list of new agents and resets

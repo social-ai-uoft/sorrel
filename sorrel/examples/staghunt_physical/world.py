@@ -143,6 +143,14 @@ class StagHuntWorld(Gridworld):
         self.stag_regeneration_cooldown: int = int(get_world_param("stag_regeneration_cooldown", 1))
         self.hare_regeneration_cooldown: int = int(get_world_param("hare_regeneration_cooldown", 1))
         self.reward_sharing_radius: int = int(get_world_param("reward_sharing_radius", 3))
+        self.stag_probability: float = float(get_world_param("stag_probability", 0.2))
+        self.random_agent_spawning: bool = bool(get_world_param("random_agent_spawning", False))
+        self.simplified_movement: bool = bool(get_world_param("simplified_movement", False))
+        self.single_tile_attack: bool = bool(get_world_param("single_tile_attack", False))
+        # Number of tiles to attack in front when single_tile_attack is True (default: 2)
+        self.attack_range: int = int(get_world_param("attack_range", 2))
+        self.area_attack: bool = bool(get_world_param("area_attack", False))
+        self.skip_spawn_validation: bool = bool(get_world_param("skip_spawn_validation", False))
         self.current_turn: int = 0  # Track current turn for regeneration
 
         # record spawn points; to be populated by the environment

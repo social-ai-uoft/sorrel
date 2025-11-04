@@ -59,40 +59,46 @@ def run_stag_hunt() -> None:
             "max_turns": 100,
             # recording period for animation (unused here)
             "record_period": 200,
-            "run_name": "staghunt_small_room_size7_regen1_v2_test_interval10",
+            "run_name": "test_line_attack_3a_Nov03_with_epsilon1_control_test_stagHealth10", # "staghunt_small_room_size7_regen1_v2_test_interval10"
+            # Model saving configuration
+            "save_models": True,  # Enable model saving
+            "save_interval": 1000,  # Save models every X epochs
         },
         "probe_test": {
             # Enable probe testing
             "enabled": True,
+            # Test mode: "default" or "test_intention"
+            "test_mode": "test_intention",
             # Run probe test every X epochs
-            "test_interval": 100,
+            "test_interval": 10,
             # Maximum steps for each probe test
-            "max_test_steps": 50,
+            "max_test_steps": 1,  # Only 1 turn for test_intention
             # Number of test epochs to run per probe test (for statistical reliability)
-            "test_epochs": 5,
+            "test_epochs": 1,
             # Whether to test agents individually (True) or together (False)
-            "individual_testing": False,
+            "individual_testing": True,
             # Environment size configuration for probe tests
             "env_size": {
                 "height": 7,  # Height of probe test environment
                 "width": 7,  # Width of probe test environment
             },
-            # Spatial layout configuration for probe tests
+            # Spatial layout configuration for probe tests (only used in default mode)
             "layout": {
                 "generation_mode": "random",  # "random" or "ascii_map"
-                "ascii_map_file": "stag_hunt_ascii_map_test_size7.txt",  # Only used when generation_mode is "ascii_map"
+                "ascii_map_file": "stag_hunt_ascii_map_test_size1.txt",  # Only used when generation_mode is "ascii_map"
                 "resource_density": 0.2,  # Only used when generation_mode is "random"
+                "stag_probability": 0.5,  # Probability that spawned resources are stags (vs hares)
             },
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
-            "agent_vision_radius": 8,
+            "agent_vision_radius": 3,
             # epsilon decay hyperparameter for the IQN model
             "epsilon_decay": 0.0001,
             "epsilon_min": 0.05,
             # model architecture parameters
             "layer_size": 250,
-            "epsilon": 1.0,
+            "epsilon": 1,
             "n_frames": 1,
             "n_step": 3,
             "sync_freq": 200,
@@ -106,15 +112,30 @@ def run_stag_hunt() -> None:
         },
         "world": {
             # map generation mode
-            "generation_mode": "ascii_map",  # "random" or "ascii_map"
-            "ascii_map_file": "stag_hunt_ascii_map_test_size1.txt",  # only used when generation_mode is "ascii_map"
+            "generation_mode": "random",  # "random" or "ascii_map"
+            "ascii_map_file": "stag_hunt_ascii_map_test_size7.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 11,
-            "width": 11,
+            "height": 13,
+            "width": 13,
             # number of players in the game
             "num_agents": 3,
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
+            # If True in random mode, agents spawn randomly in valid locations instead of fixed spawn points
+            "random_agent_spawning": True,
+            # If True, movement actions automatically change orientation to face movement direction
+            "simplified_movement": True,
+            # If True, attack only hits tiles directly in front of agent (number controlled by attack_range)
+            "single_tile_attack": True,
+            # Number of tiles to attack in front when single_tile_attack is True (default: 2)
+            "attack_range": 3,
+            # If True, attack covers a 3x3 region in front of agent (overrides single_tile_attack)
+            "area_attack": False,
+            # If True, skip spawn validation for test_intention mode
+            "skip_spawn_validation": True,
+            # probability that a spawned resource is a stag (vs hare)
+            # stag_probability + hare_probability = 1.0
+            "stag_probability": 0.5,  # 20% stag, 80% hare
             # separate reward values for stag and hare
             "stag_reward": 12,  # Higher reward for stag (requires coordination)
             "hare_reward": 3,  # Lower reward for hare (solo achievable)
@@ -143,11 +164,11 @@ def run_stag_hunt() -> None:
             "respawn_delay": 10,  # Y: number of frames before agent respawns after removal
             
             # New health system parameters
-            "stag_health": 2,  # Health points for stags (requires coordination)
+            "stag_health": 10,  # Health points for stags (requires coordination)
             "hare_health": 1,   # Health points for hares (solo defeatable)
             "agent_health": 5,  # Health points for agents
             "health_regeneration_rate": 1,  # How fast resources regenerate health
-            "reward_sharing_radius": 3,  # Radius for reward sharing when resources are defeated
+            "reward_sharing_radius": 2,  # Radius for reward sharing when resources are defeated
         },
     }
 
@@ -170,6 +191,9 @@ def run_stag_hunt() -> None:
     world = StagHuntWorld(config=config, default_entity=Empty())
     # construct the environment with probe testing capability
     experiment = StagHuntEnvWithProbeTest(world, config)
+    
+    # Add timestamp to config for model saving
+    experiment.timestamp = timestamp
     
     # Initialize metrics collection (no separate tracker needed)
     metrics_collector = StagHuntMetricsCollector()

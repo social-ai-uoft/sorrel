@@ -1,0 +1,23 @@
+Legend:
+W – Wall (impassable)
+P – Spawn point (agent starting location)
+R – Red resource
+G – Green resource
+B – Blue resource
+(space) – Empty floor tile
+
+WWWWWWWWWWWWWWW
+W             W
+W  P    P     W
+W             W
+W  R    G     W
+W             W
+W    P        W
+W             W
+W  B    R     W
+W             W
+W    P        W
+W             W
+W  G    B     W
+W             W
+WWWWWWWWWWWWWWW

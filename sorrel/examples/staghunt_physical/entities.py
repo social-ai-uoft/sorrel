@@ -152,12 +152,14 @@ class Empty(Entity["StagHuntWorld"]):
                         res_cls = HareResource
                     else:
                         # Fallback to random selection for unknown types
+                        stag_prob = getattr(world, 'stag_probability', 0.2)
                         res_cls = (
-                            StagResource if np.random.random() < 0.1 else HareResource
+                            StagResource if np.random.random() < stag_prob else HareResource
                         )
                 else:
                     # Fallback to original random selection if no resource type is remembered
-                    res_cls = StagResource if np.random.random() < 0.1 else HareResource
+                    stag_prob = getattr(world, 'stag_probability', 0.2)
+                    res_cls = StagResource if np.random.random() < stag_prob else HareResource
 
                 # Use separate reward values for stag and hare
                 if res_cls == StagResource:

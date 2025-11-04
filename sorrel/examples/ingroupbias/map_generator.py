@@ -1,8 +1,8 @@
-"""ASCII Map-based world generation for Stag Hunt environment.
+"""ASCII Map-based world generation for Ingroup Bias environment.
 
 This module provides functionality to parse ASCII map files and generate world layouts
-based on the map specifications. The parser strictly follows the map layout without
-adding extra entities.
+based on the map specifications. The parser follows the map layout for the ingroup bias
+game with specific entity types for agents and resources.
 """
 
 from __future__ import annotations
@@ -15,26 +15,27 @@ import numpy as np
 
 
 @dataclass
-class MapLayoutData:
-    """Data structure containing parsed ASCII map information."""
+class IngroupBiasMapData:
+    """Data structure containing parsed ASCII map information for ingroup bias game."""
 
     dimensions: Tuple[int, int]
     spawn_points: List[Tuple[int, int]]
-    resource_locations: List[Tuple[int, int, str]]  # (y, x, resource_type)
+    red_resource_locations: List[Tuple[int, int]]
+    green_resource_locations: List[Tuple[int, int]]
+    blue_resource_locations: List[Tuple[int, int]]
     wall_locations: List[Tuple[int, int]]
     empty_locations: List[Tuple[int, int]]
 
 
-class MapBasedWorldGenerator:
-    """Parses ASCII map files and provides exact layout data without adding extra
-    entities.
+class IngroupBiasMapGenerator:
+    """Parses ASCII map files and provides exact layout data for ingroup bias game.
 
     The parser follows the ASCII map format:
     - W: Wall (impassable)
     - P: Spawn point (agent starting location)
-    - 1: Stag resource (class 1)
-    - 2: Hare resource (class 2)
-    - a: Random resource (stag or hare)
+    - R: Red resource
+    - G: Green resource
+    - B: Blue resource
     - (space): Empty floor tile
     """
 
@@ -74,7 +75,7 @@ class MapBasedWorldGenerator:
             line = line.rstrip()
             # Skip empty lines and comment lines (starting with non-map characters)
             if line and not line.startswith(
-                ("Legend:", "W –", "P –", "1 –", "2 –", "a –", "(space)")
+                ("Legend:", "W –", "P –", "R –", "G –", "B –", "(space)")
             ):
                 map_lines.append(line)
 
@@ -109,21 +110,23 @@ class MapBasedWorldGenerator:
 
         return height, width
 
-    def parse_map(self) -> MapLayoutData:
+    def parse_map(self) -> IngroupBiasMapData:
         """Parse ASCII map and return structured layout data.
 
         Returns:
-            MapLayoutData containing all parsed map information
+            IngroupBiasMapData containing all parsed map information
 
         Raises:
             ValueError: If map contains invalid characters
         """
         spawn_points = []
-        resource_locations = []
+        red_resource_locations = []
+        green_resource_locations = []
+        blue_resource_locations = []
         wall_locations = []
         empty_locations = []
 
-        valid_chars = {"W", "P", "1", "2", "a", "A", " "}
+        valid_chars = {"W", "P", "R", "G", "B", " "}
 
         for y, row in enumerate(self.raw_map):
             for x, char in enumerate(row):
@@ -134,27 +137,28 @@ class MapBasedWorldGenerator:
 
                 if char == "W":
                     wall_locations.append((y, x))
-                elif char == "P" or char == "A":
-                    # 'A' represents agent spawn points, same as 'P'
+                elif char == "P":
                     spawn_points.append((y, x))
-                elif char == "1":
-                    resource_locations.append((y, x, "stag"))
-                elif char == "2":
-                    resource_locations.append((y, x, "hare"))
-                elif char == "a":
-                    resource_locations.append((y, x, "random"))
+                elif char == "R":
+                    red_resource_locations.append((y, x))
+                elif char == "G":
+                    green_resource_locations.append((y, x))
+                elif char == "B":
+                    blue_resource_locations.append((y, x))
                 elif char == " ":
                     empty_locations.append((y, x))
 
-        return MapLayoutData(
+        return IngroupBiasMapData(
             dimensions=(self.height, self.width),
             spawn_points=spawn_points,
-            resource_locations=resource_locations,
+            red_resource_locations=red_resource_locations,
+            green_resource_locations=green_resource_locations,
+            blue_resource_locations=blue_resource_locations,
             wall_locations=wall_locations,
             empty_locations=empty_locations,
         )
 
-    def validate_map_for_agents(self, map_data: MapLayoutData, num_agents: int) -> None:
+    def validate_map_for_agents(self, map_data: IngroupBiasMapData, num_agents: int) -> None:
         """Validate that the map has sufficient spawn points for the number of agents.
 
         Args:
@@ -170,7 +174,7 @@ class MapBasedWorldGenerator:
                 f"Add more 'P' characters to the map or reduce the number of agents."
             )
 
-    def check_overlaps(self, map_data: MapLayoutData = None) -> dict:
+    def check_overlaps(self, map_data: IngroupBiasMapData = None) -> dict:
         """Check for overlaps between different location types.
 
         Args:
@@ -182,8 +186,12 @@ class MapBasedWorldGenerator:
         if map_data is None:
             map_data = self.parse_map()
 
-        # Convert resource_locations to (y, x) tuples for comparison
-        resource_coords = [(y, x) for y, x, _ in map_data.resource_locations]
+        # Combine all resource locations for comparison
+        all_resource_locations = (
+            map_data.red_resource_locations +
+            map_data.green_resource_locations +
+            map_data.blue_resource_locations
+        )
 
         # Check all possible overlaps
         overlaps = {
@@ -191,23 +199,23 @@ class MapBasedWorldGenerator:
                 map_data.spawn_points, map_data.wall_locations
             ),
             "spawn_vs_resources": self._find_overlaps(
-                map_data.spawn_points, resource_coords
+                map_data.spawn_points, all_resource_locations
             ),
             "spawn_vs_empty": self._find_overlaps(
                 map_data.spawn_points, map_data.empty_locations
             ),
             "walls_vs_resources": self._find_overlaps(
-                map_data.wall_locations, resource_coords
+                map_data.wall_locations, all_resource_locations
             ),
             "walls_vs_empty": self._find_overlaps(
                 map_data.wall_locations, map_data.empty_locations
             ),
             "resources_vs_empty": self._find_overlaps(
-                resource_coords, map_data.empty_locations
+                all_resource_locations, map_data.empty_locations
             ),
             "spawn_vs_spawn": self._find_duplicates(map_data.spawn_points),
             "walls_vs_walls": self._find_duplicates(map_data.wall_locations),
-            "resources_vs_resources": self._find_duplicates(resource_coords),
+            "resources_vs_resources": self._find_duplicates(all_resource_locations),
             "empty_vs_empty": self._find_duplicates(map_data.empty_locations),
         }
 
@@ -286,7 +294,7 @@ class MapBasedWorldGenerator:
 
         return "Overlaps found:\n" + "\n".join(f"- {part}" for part in summary_parts)
 
-    def validate_no_overlaps(self, map_data: MapLayoutData = None) -> None:
+    def validate_no_overlaps(self, map_data: IngroupBiasMapData = None) -> None:
         """Validate that there are no overlaps between location types.
 
         Args:
@@ -311,14 +319,13 @@ class MapBasedWorldGenerator:
             "dimensions": map_data.dimensions,
             "spawn_points": len(map_data.spawn_points),
             "walls": len(map_data.wall_locations),
-            "stag_resources": len(
-                [r for r in map_data.resource_locations if r[2] == "stag"]
-            ),
-            "hare_resources": len(
-                [r for r in map_data.resource_locations if r[2] == "hare"]
-            ),
-            "random_resources": len(
-                [r for r in map_data.resource_locations if r[2] == "random"]
+            "red_resources": len(map_data.red_resource_locations),
+            "green_resources": len(map_data.green_resource_locations),
+            "blue_resources": len(map_data.blue_resource_locations),
+            "total_resources": (
+                len(map_data.red_resource_locations) +
+                len(map_data.green_resource_locations) +
+                len(map_data.blue_resource_locations)
             ),
             "empty_spaces": len(map_data.empty_locations),
         }
