@@ -21,7 +21,7 @@ def create_config(
     batch_size: int = 64, #64
     memory_size: int = 1024, #1024
     target_update_frequency: int = 200,
-    exploration_rate: float = 1.0, # 0.9
+    exploration_rate: float = 0, # 0.9 #1.0
     exploration_decay: float = 0.0001, 
     # 0.001
     exploration_min: float = 0.05,

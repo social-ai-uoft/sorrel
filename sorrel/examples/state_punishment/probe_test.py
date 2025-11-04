@@ -9,12 +9,12 @@ from typing import Dict, List, Optional
 from omegaconf import OmegaConf
 
 from sorrel.utils.logging import TensorboardLogger
-from .environment_setup import setup_environments
+from sorrel.examples.state_punishment.environment_setup import setup_environments
 
 
 # Hardcoded probe test configuration
 PROBE_TEST_CONFIG = {
-    "frequency": 1000,                    # Run probe test every 1000 training epochs
+    "frequency": 0,                        # Set to 0 to disable probe tests, >0 to enable
     "epochs": 10,                         # Number of probe test epochs per test
     "epsilon": 0.0,                       # Epsilon for probe test (0 = no exploration)
     "freeze_networks": True,              # Freeze neural networks during probe test
@@ -36,13 +36,21 @@ class ProbeTestLogger:
     
     def record_probe_test(self, training_epoch: int, probe_results: dict):
         """Record probe test results - each probe test is one timestep."""
-        # Log to tensorboard with same structure as training
+        # Add probe_test prefix to all metric names
+        prefixed_metrics = {}
+        for key, value in probe_results["metrics"].items():
+            prefixed_metrics[f"probe_test_{key}"] = value
+        
+        # Also prefix the main reward metric
+        prefixed_metrics["probe_test_avg_total_reward"] = probe_results["avg_total_reward"]
+        
+        # Log to tensorboard with probe_test prefix
         self.probe_test_logger.record_turn(
             training_epoch,  # Use training epoch as the "epoch" for probe tests
             0.0,  # No loss during probe test
-            probe_results["avg_total_reward"],
+            probe_results["avg_total_reward"],  # Keep original for backward compatibility
             0.0,  # Epsilon = 0 for probe tests
-            **probe_results["metrics"]  # All the same metrics as training
+            **prefixed_metrics  # All metrics with probe_test prefix
         )
         
         # Store results
