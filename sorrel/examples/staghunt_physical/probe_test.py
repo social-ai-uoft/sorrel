@@ -282,18 +282,18 @@ class TestIntentionProbeTest:
                 f"is below {spawn_points[1]} (should be lower)"
             )
         
-        # Verify expected row positions (0-indexed: line 6 in file = row 5, line 8 = row 7)
-        expected_upper_row = 5  # Line 6 in ASCII file (0-indexed)
-        expected_lower_row = 7  # Line 8 in ASCII file (0-indexed)
+        # Verify expected row positions (0-indexed: line 5 in file = row 4, line 9 = row 8)
+        expected_upper_row = 4  # Line 5 in ASCII file (0-indexed)
+        expected_lower_row = 8  # Line 9 in ASCII file (0-indexed)
         if spawn_points[0][0] != expected_upper_row:
             raise ValueError(
                 f"Upper spawn point at wrong row: got row {spawn_points[0][0]}, "
-                f"expected row {expected_upper_row} (line 6 in ASCII file)"
+                f"expected row {expected_upper_row} (line 5 in ASCII file)"
             )
         if spawn_points[1][0] != expected_lower_row:
             raise ValueError(
                 f"Lower spawn point at wrong row: got row {spawn_points[1][0]}, "
-                f"expected row {expected_lower_row} (line 8 in ASCII file)"
+                f"expected row {expected_lower_row} (line 9 in ASCII file)"
             )
         
         # Temporarily reorder spawn points so focal agent goes to desired position
@@ -302,7 +302,7 @@ class TestIntentionProbeTest:
         desired_spawn = spawn_points[spawn_point_idx]
         other_spawn = spawn_points[1 - spawn_point_idx]  # The other spawn point
         
-        # Verify assignment: spawn_point_idx=0 should be upper (row 5), idx=1 should be lower (row 7)
+        # Verify assignment: spawn_point_idx=0 should be upper (row 4), idx=1 should be lower (row 8)
         expected_row = expected_upper_row if spawn_point_idx == 0 else expected_lower_row
         if desired_spawn[0] != expected_row:
             raise ValueError(
@@ -330,8 +330,8 @@ class TestIntentionProbeTest:
         
         # Debug logging with verification
         orientation_names = {0: "NORTH", 1: "EAST", 2: "SOUTH", 3: "WEST"}
-        expected_position = "upper (row 5)" if spawn_point_idx == 0 else "lower (row 7)"
-        expected_row = 5 if spawn_point_idx == 0 else 7
+        expected_position = "upper (row 4)" if spawn_point_idx == 0 else "lower (row 8)"
+        expected_row = 4 if spawn_point_idx == 0 else 8
         
         print(f"DEBUG probe test - Epoch {epoch}, Agent {agent_id}, Version {version_name}:")
         print(f"  Requested spawn_point_idx: {spawn_point_idx} (expected: {expected_position})")
@@ -390,11 +390,11 @@ class TestIntentionProbeTest:
         
         # Determine orientation and which actions face stag/hare
         # In test_intention layout (0-indexed rows, 1=stag, 2=hare):
-        # - Row 4: hare (2) - line 5 in file
-        # - Row 5: upper spawn (A) - line 6 in file
+        # - Row 2: hare (2) - line 3 in file
+        # - Row 4: upper spawn (A) - line 5 in file
         # - Row 6: stag (1) - line 7 in file
-        # - Row 7: lower spawn (A) - line 8 in file
-        # - Row 8: hare (2) - line 9 in file
+        # - Row 8: lower spawn (A) - line 9 in file
+        # - Row 10: hare (2) - line 11 in file
         # 
         # Agents start facing WEST (orientation 3) after reset
         # When facing WEST with simplified_movement enabled:
@@ -403,18 +403,18 @@ class TestIntentionProbeTest:
         #   STEP_RIGHT: (-dx, dy) = (1, 0) → moves SOUTH (down), row increases
         # 
         # Position-dependent mapping (VERIFIED, 0-indexed rows):
-        # - Upper position (row 5): 
-        #   STEP_LEFT (north) → moves to row 4 (hare)
-        #   STEP_RIGHT (south) → moves to row 6 (stag)
-        # - Lower position (row 7):
-        #   STEP_LEFT (north) → moves to row 6 (stag)
-        #   STEP_RIGHT (south) → moves to row 8 (hare)
-        if spawn_point_idx == 0:  # Upper position (row 5)
-            # STEP_LEFT faces hare (row 4), STEP_RIGHT faces stag (row 6)
+        # - Upper position (row 4): 
+        #   STEP_LEFT (north) → faces north toward row 2 (hare)
+        #   STEP_RIGHT (south) → faces south toward row 6 (stag)
+        # - Lower position (row 8):
+        #   STEP_LEFT (north) → faces north toward row 6 (stag)
+        #   STEP_RIGHT (south) → faces south toward row 10 (hare)
+        if spawn_point_idx == 0:  # Upper position (row 4)
+            # STEP_LEFT faces north toward hare (row 2), STEP_RIGHT faces south toward stag (row 6)
             weight_facing_stag = weights[step_right_idx]
             weight_facing_hare = weights[step_left_idx]
-        else:  # Lower position (spawn_point_idx == 1, row 7)
-            # STEP_LEFT faces stag (row 6), STEP_RIGHT faces hare (row 8)
+        else:  # Lower position (spawn_point_idx == 1, row 8)
+            # STEP_LEFT faces north toward stag (row 6), STEP_RIGHT faces south toward hare (row 10)
             weight_facing_stag = weights[step_left_idx]
             weight_facing_hare = weights[step_right_idx]
         

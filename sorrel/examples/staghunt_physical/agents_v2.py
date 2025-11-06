@@ -526,7 +526,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                         if isinstance(entity, (StagResource, HareResource)):
                             # Record attack metrics
                             if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
-                                target_type = "stag" if isinstance(entity, StagResource) else "hare"
+                                # Explicitly determine target type - must be either stag or hare
+                                # (guaranteed by the isinstance check above)
+                                if isinstance(entity, StagResource):
+                                    target_type = "stag"
+                                else:  # Must be HareResource
+                                    target_type = "hare"
                                 world.environment.metrics_collector.collect_attack_metrics(
                                     self, target_type, entity
                                 )
@@ -540,7 +545,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
                                 # Record resource defeat metrics with resource type
                                 if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
-                                    resource_type = "stag" if isinstance(entity, StagResource) else "hare"
+                                    # Explicitly determine resource type - must be either stag or hare
+                                    # (guaranteed by the isinstance check above)
+                                    if isinstance(entity, StagResource):
+                                        resource_type = "stag"
+                                    else:  # Must be HareResource
+                                        resource_type = "hare"
                                     world.environment.metrics_collector.collect_resource_defeat_metrics(
                                         self, shared_reward, resource_type
                                     )
