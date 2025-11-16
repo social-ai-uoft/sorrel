@@ -11,17 +11,17 @@ if __name__ == "__main__":
     # object configurations
     config = {
         "experiment": {
-            "epochs": 1000,
-            "max_turns": 100,
-            "record_period": 100,
+            "epochs": 5000,
+            "max_turns": 200,
+            "record_period": 500,
             "output_dir": Path(__file__).parent / "./data/",
         },
         "model": {
             "epsilon_decay": 0.0001,
         },
         "world": {
-            "height": 15,
-            "width": 15,
+            "height": 16,
+            "width": 16,
         },
     }
 

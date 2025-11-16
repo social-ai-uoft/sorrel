@@ -5,7 +5,7 @@ import numpy as np
 
 from sorrel.agents.agent import Agent
 from sorrel.entities.entity import Entity
-from sorrel.examples.territory.entities import Block, Province
+from sorrel.examples.territory.entities import Province
 from sorrel.examples.territory.world import TerritoryWorld
 from sorrel.location import Location, Vector
 from sorrel.observation import observation_spec
@@ -46,6 +46,7 @@ class TerritoryObservation(observation_spec.OneHotObservationSpec):
             
             return np.concatenate((visual, enemy_code))
         except IndexError:
+            print('No enemy provinces found!')
             return np.concatenate((visual, np.array([1])))
 
 class TerritoryAgent(Agent[TerritoryWorld]):
@@ -95,6 +96,7 @@ class TerritoryAgent(Agent[TerritoryWorld]):
     def transition(self, world: TerritoryWorld):
         reward = 0
         plan = []
+        distances = []
 
         state = self.pov(world)
         action = self.get_action(state)
@@ -113,11 +115,12 @@ class TerritoryAgent(Agent[TerritoryWorld]):
         for province in self.provinces:
             province.switch_state(action_name)
         for province in self.provinces:
-            r, p = province.act(world)
+            r, p, d = province.act(world)
             plan.append(p)
             reward += r
+            distances.append(d)
         
-        return first, plan, reward
+        return first, plan, reward, distances
     
     def is_done(self, world: TerritoryWorld) -> bool:
         """Returns whether this Agent is done."""
