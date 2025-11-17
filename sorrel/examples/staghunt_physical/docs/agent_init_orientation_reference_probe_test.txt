@@ -1,0 +1,4 @@
+when agent at row 4 col 6, orientation is 3, the orientation of facing stag is 2; 
+when agent is at row 6 col 8, orientation is 0, the orientation of facing stag is 3;
+when agent is at row 8 col 6, orientation is 1, the orientation of facing stag is 0;
+when agent is at row 6 col 4, orientation is 2, the orientation of facing stag is 1;

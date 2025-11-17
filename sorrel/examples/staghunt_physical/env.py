@@ -77,21 +77,50 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             interaction_reward = 1.0
 
         agents = []
-        # list all entity kinds present in the environment for one‑hot encoding
-        entity_list = [
-            "Empty",
-            "Wall",
-            "Spawn",
-            "StagResource",
-            "HareResource",
-            "StagHuntAgentNorth",  # 0: north
-            "StagHuntAgentEast",  # 1: east
-            "StagHuntAgentSouth",  # 2: south
-            "StagHuntAgentWest",  # 3: west
-            "Sand",
-            "AttackBeam",
-            "PunishBeam",
-        ]
+        
+        # Generate entity list dynamically based on agent kinds
+        def _generate_entity_list(agent_kinds: list[str]) -> list[str]:
+            """Generate entity list including all agent kinds.
+            
+            Args:
+                agent_kinds: List of agent kind names (e.g., ["AgentKindA", "AgentKindB"])
+            
+            Returns:
+                Complete entity list with all base entities and agent kind combinations
+            """
+            base_entities = [
+                "Empty",
+                "Wall",
+                "Spawn",
+                "StagResource",
+                "WoundedStagResource",
+                "HareResource",
+                "Sand",
+                "AttackBeam",
+                "PunishBeam",
+            ]
+            
+            # Add agent kinds (with orientations for each kind)
+            agent_entities = []
+            if agent_kinds:
+                # If agent kinds are specified, add all combinations
+                for kind in agent_kinds:
+                    for orientation in ["North", "East", "South", "West"]:
+                        agent_entities.append(f"{kind}{orientation}")
+            else:
+                # Default: use orientation-based kinds (backward compatibility)
+                for orientation in ["North", "East", "South", "West"]:
+                    agent_entities.append(f"StagHuntAgent{orientation}")
+            
+            return base_entities + agent_entities
+        
+        # Get agent configuration from world
+        agent_kinds = getattr(self.world, 'agent_kinds', [])
+        agent_kind_mapping = getattr(self.world, 'agent_kind_mapping', {})
+        agent_attributes = getattr(self.world, 'agent_attributes', {})
+        
+        # Generate entity list dynamically
+        entity_list = _generate_entity_list(agent_kinds)
         for agent_id in range(n_agents):
             # observation spec: uses partial view with specified vision radius
             vision_radius = int(model_cfg.get("agent_vision_radius", 5))
@@ -139,6 +168,11 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 n_quantiles=int(model_cfg.get("n_quantiles", 12)),
             )
 
+            # Get agent kind and attributes from config
+            assigned_kind = agent_kind_mapping.get(agent_id, None)
+            agent_attrs = agent_attributes.get(agent_id, {})
+            can_hunt = agent_attrs.get("can_hunt", True)  # Default to True
+            
             agent = StagHuntAgent(
                 observation_spec=observation_spec,
                 action_spec=action_spec,
@@ -146,6 +180,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 interaction_reward=interaction_reward,
                 max_health=int(world_cfg.get("agent_health", 5)),
                 agent_id=agent_id,
+                agent_kind=assigned_kind,  # NEW: pass kind to agent
+                can_hunt=can_hunt,  # NEW: pass can_hunt attribute
             )
             agents.append(agent)
         self.agents = agents

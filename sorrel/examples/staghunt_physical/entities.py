@@ -27,6 +27,7 @@ entity_list = [
             "Wall",
             "Spawn",
             "StagResource",
+            "WoundedStagResource",  # Wounded stag type (kind changes when health < max_health)
             "HareResource",
             "StagHuntAgentNorth",  # 0: north
             "StagHuntAgentEast",  # 1: east
@@ -267,6 +268,45 @@ class StagResource(Resource):
     def __init__(self, taste_reward: float, max_health: int = 12, regeneration_rate: float = 0.1, regeneration_cooldown: int = 1) -> None:
         super().__init__(taste_reward, max_health, regeneration_rate, regeneration_cooldown)
         self.sprite = Path(__file__).parent / "./assets/stag.png"
+        # Initialize kind as 'StagResource' (full health)
+        self.kind = "StagResource"
+    
+    def _update_kind(self, world: StagHuntWorld) -> None:
+        """Update kind based on current health status (only if enabled in world config)."""
+        if not getattr(world, 'use_wounded_stag', False):
+            return  # Feature disabled, keep kind as 'StagResource'
+        
+        if self.health < self.max_health:
+            self.kind = "WoundedStagResource"
+        else:
+            self.kind = "StagResource"
+    
+    def on_attack(self, world: StagHuntWorld, current_turn: int) -> bool:
+        """Handle an attack on this resource.
+        
+        Updates kind to 'WoundedStagResource' if health < max_health (only if enabled).
+        """
+        # Call parent to handle health reduction
+        defeated = super().on_attack(world, current_turn)
+        
+        # Update kind based on new health (if not defeated and feature enabled)
+        if not defeated:
+            self._update_kind(world)
+        
+        return defeated
+    
+    def transition(self, world: StagHuntWorld) -> None:
+        """Handle health regeneration and kind updates.
+        
+        Updates kind back to 'StagResource' when health returns to max (only if enabled).
+        """
+        old_health = self.health
+        # Call parent to handle regeneration
+        super().transition(world)
+        
+        # Update kind if health changed (regenerated) and feature enabled
+        if self.health != old_health:
+            self._update_kind(world)
 
 
 class HareResource(Resource):

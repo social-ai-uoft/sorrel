@@ -1,0 +1,153 @@
+Agent Orientation Reference for ASCII Maps
+============================================
+
+This document explains how agent orientations work in the StagHunt_Physical environment.
+
+ORIENTATION VALUES
+------------------
+0: NORTH (up)    - Vector: (-1, 0) - Row decreases, column unchanged
+1: EAST (right)  - Vector: (0, 1)  - Row unchanged, column increases
+2: SOUTH (down)  - Vector: (1, 0)  - Row increases, column unchanged
+3: WEST (left)   - Vector: (0, -1) - Row unchanged, column decreases
+
+Note: In grid coordinates, y (row) increases downward, x (column) increases rightward.
+
+VISUAL REPRESENTATION IN ASCII MAPS
+------------------------------------
+In ASCII map files, agents are represented by the character 'A' (or 'P' for spawn points).
+The orientation is not visually shown in the ASCII map itself - all agents appear as 'A'.
+However, the orientation determines:
+- Which direction the agent faces
+- Which direction movement actions move the agent
+- Which direction attack beams fire
+
+EXAMPLE: Agent at Center Facing Different Directions
+-----------------------------------------------------
+
+Map layout showing an agent at position (row=5, col=6) facing different orientations:
+
+NORTH (Orientation 0) - Facing UP:
+WWWWWWWWWWWWW
+W           W
+W     2     W  <- Agent faces this direction (row decreases)
+W           W
+W           W
+W     A     W  <- Agent position (row=5, col=6)
+W           W
+W     1     W
+W           W
+W     2     W
+W           W
+WWWWWWWWWWWWW
+
+EAST (Orientation 1) - Facing RIGHT:
+WWWWWWWWWWWWW
+W           W
+W     2     W
+W           W
+W           W
+W     A     W  <- Agent position (row=5, col=6) -> faces right
+W           W
+W     1     W
+W           W
+W     2     W
+W           W
+WWWWWWWWWWWWW
+
+SOUTH (Orientation 2) - Facing DOWN:
+WWWWWWWWWWWWW
+W           W
+W     2     W
+W           W
+W           W
+W     A     W  <- Agent position (row=5, col=6)
+W           W  <- Agent faces this direction (row increases)
+W     1     W
+W           W
+W     2     W
+W           W
+WWWWWWWWWWWWW
+
+WEST (Orientation 3) - Facing LEFT:
+WWWWWWWWWWWWW
+W           W
+W     2     W
+W           W
+W           W
+W     A     W  <- Agent position (row=5, col=6) <- faces left
+W           W
+W     1     W
+W           W
+W     2     W
+W           W
+WWWWWWWWWWWWW
+
+MOVEMENT AND ORIENTATION
+-------------------------
+When simplified_movement is enabled:
+- FORWARD moves in the direction the agent is facing
+- BACKWARD moves opposite to facing direction
+- STEP_LEFT and STEP_RIGHT are relative to facing direction
+
+For example, if agent faces WEST (orientation 3):
+- FORWARD moves left (column decreases)
+- BACKWARD moves right (column increases)
+- STEP_LEFT moves up (row decreases, north)
+- STEP_RIGHT moves down (row increases, south)
+
+ATTACK DIRECTION
+----------------
+Attack beams fire in the direction the agent is facing:
+- Orientation 0 (NORTH): Attacks upward
+- Orientation 1 (EAST): Attacks rightward
+- Orientation 2 (SOUTH): Attacks downward
+- Orientation 3 (WEST): Attacks leftward
+
+EXAMPLE: Agent Attacking a Stag
+---------------------------------
+
+Agent at (row=6, col=7) facing WEST (orientation 3) to attack stag at (row=6, col=5):
+
+WWWWWWWWWWWWW
+W           W
+W     2     W
+W           W
+W           W
+W           W
+W 2   1 A 2 W  <- Agent A at col=7, stag 1 at col=5
+W           W     Agent faces left (WEST) to attack stag
+W     A     W
+W           W
+W     2     W
+W           W
+WWWWWWWWWWWWW
+
+To face the stag, agent needs orientation 3 (WEST).
+
+EXAMPLE: Agent Facing Up Toward Row 0
+---------------------------------------
+
+Agent at (row=6, col=7) facing NORTH (orientation 0) to look toward row 0:
+
+WWWWWWWWWWWWW  <- Agent faces this direction (row 0)
+W           W
+W     2     W
+W           W
+W           W
+W           W
+W 2   1 A 2 W  <- Agent A at row=6, col=7
+W           W     Agent faces up (NORTH) toward row 0
+W     A     W
+W           W
+W     2     W
+W           W
+WWWWWWWWWWWWW
+
+To face toward row 0, agent needs orientation 0 (NORTH).
+
+COORDINATE SYSTEM REMINDER
+---------------------------
+- Rows (y): 0 is top, increases downward
+- Columns (x): 0 is left, increases rightward
+- Position format: (row, column) or (y, x)
+

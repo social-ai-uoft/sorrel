@@ -197,12 +197,18 @@ class TestIntentionProbeTest:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
+        # NEW: Get agent kind configurations for probe tests
+        self.focus_agent_kind = test_config.get("focus_agent_kind", None)
+        self.partner_agent_kinds = test_config.get("partner_agent_kinds", [None])  # List of partner kinds to test
+        # Example: partner_agent_kinds = [None, "AgentKindA", "AgentKindB"]
+        # None means use the original agent's kind
+        
         # Create test environment
         self._setup_test_env()
         
         # CSV headers
         self.csv_headers = [
-            "epoch", "agent_id", 
+            "epoch", "agent_id", "partner_kind", "version",  # NEW: partner_kind, version
             "q_val_forward", "q_val_backward", "q_val_step_left", "q_val_step_right", "q_val_attack",
             "weight_facing_stag", "weight_facing_hare"
         ]
@@ -241,29 +247,65 @@ class TestIntentionProbeTest:
                 (y, x, self.probe_env.test_world.dynamic_layer) for y, x in map_data.spawn_points[:2]
             ]
     
-    def _run_single_version(self, probe_agent, spawn_point_idx, agent_id, epoch, version_name):
-        """Run a single version of test_intention with focal agent at a specific spawn point.
+    def _create_partner_agent(self, partner_kind: str | None, original_agent):
+        """Create a partner agent with specified kind.
         
         Args:
-            probe_agent: The ProbeTestAgent instance
+            partner_kind: Kind for partner agent (None = use original agent's kind)
+            original_agent: Original agent to copy attributes from
+        
+        Returns:
+            StagHuntAgent instance with specified kind
+        """
+        from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent
+        
+        # Determine partner kind
+        if partner_kind is None:
+            # Use original agent's kind
+            partner_kind = getattr(original_agent, 'agent_kind', None)
+        
+        # Get partner attributes (can_hunt, etc.) - default to True
+        partner_attrs = self.test_config.get("partner_agent_attributes", {})
+        can_hunt = partner_attrs.get("can_hunt", True)
+        
+        partner_agent = StagHuntAgent(
+            observation_spec=original_agent.observation_spec,
+            action_spec=original_agent.action_spec,
+            model=original_agent.model,  # Use same model (dummy for partner)
+            interaction_reward=original_agent.interaction_reward,
+            max_health=original_agent.max_health,
+            agent_id=1,  # Partner always has ID 1 in test
+            agent_kind=partner_kind,
+            can_hunt=can_hunt,
+        )
+        return partner_agent
+    
+    def _run_single_version(
+        self, 
+        probe_agent, 
+        spawn_point_idx, 
+        agent_id, 
+        epoch, 
+        version_name, 
+        partner_kind: str | None,
+        should_save_png: bool = True
+    ):
+        """Run a single version of test_intention with specified agent kinds.
+        
+        Args:
+            probe_agent: The ProbeTestAgent instance (focus agent)
             spawn_point_idx: Index of spawn point to use (0=upper, 1=lower)
             agent_id: ID of the agent being tested
             epoch: Current training epoch
             version_name: Name for version ("upper" or "lower") for filename
+            partner_kind: Kind of partner agent (None = use original agent's kind)
+            should_save_png: Whether to save PNG visualization (default: True)
         
         Returns:
             Tuple of (q_values, weight_facing_stag, weight_facing_hare)
         """
-        # Create dummy agent for second spawn point if needed
-        from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent
-        dummy_agent = StagHuntAgent(
-            observation_spec=probe_agent.agent.observation_spec,
-            action_spec=probe_agent.agent.action_spec,
-            model=probe_agent.agent.model,
-            interaction_reward=1.0,
-            max_health=5,
-            agent_id=1
-        )
+        # Create partner agent with specified kind
+        partner_agent = self._create_partner_agent(partner_kind, probe_agent.agent)
         
         # Get spawn points (sorted by row, so index 0 is upper, index 1 is lower)
         spawn_points = sorted(
@@ -317,7 +359,7 @@ class TestIntentionProbeTest:
         self.probe_env.test_world._probe_test_spawn_points = reordered_spawn_points
         
         # Set up environment with both agents
-        self.probe_env.test_env.override_agents([probe_agent.agent, dummy_agent])
+        self.probe_env.test_env.override_agents([probe_agent.agent, partner_agent])
         
         # Reset environment (this will place focal agent at desired position)
         self.probe_env.test_env.reset()
@@ -351,22 +393,23 @@ class TestIntentionProbeTest:
                 f"but agent is at {focal_agent.location[:2]}"
             )
         
-        # Save visualization of the state
-        unit_test_dir = self.output_dir / "unit_test"
-        unit_test_dir.mkdir(parents=True, exist_ok=True)
-        viz_filename = f"test_intention_epoch_{epoch}_agent_{agent_id}_{version_name}_state.png"
-        viz_path = unit_test_dir / viz_filename
-        
-        try:
-            # Render the world state
-            layers = render_sprite(self.probe_env.test_world, tile_size=[32, 32])
-            composited = image_from_array(layers)
+        # Save visualization of the state (only if should_save_png is True)
+        if should_save_png:
+            unit_test_dir = self.output_dir / "unit_test"
+            unit_test_dir.mkdir(parents=True, exist_ok=True)
+            viz_filename = f"test_intention_epoch_{epoch}_agent_{agent_id}_{version_name}_state.png"
+            viz_path = unit_test_dir / viz_filename
             
-            # Save the image
-            composited.save(viz_path)
-            print(f"  Saved visualization to: {viz_path}")
-        except Exception as e:
-            print(f"  Warning: Failed to save visualization: {e}")
+            try:
+                # Render the world state
+                layers = render_sprite(self.probe_env.test_world, tile_size=[32, 32])
+                composited = image_from_array(layers)
+                
+                # Save the image
+                composited.save(viz_path)
+                print(f"  Saved visualization to: {viz_path}")
+            except Exception as e:
+                print(f"  Warning: Failed to save visualization: {e}")
         
         # Get state observation
         state = focal_agent.pov(self.probe_env.test_world)
@@ -421,71 +464,90 @@ class TestIntentionProbeTest:
         return q_values, weight_facing_stag, weight_facing_hare
     
     def run_test_intention(self, agents, epoch):
-        """Run test_intention probe test for all agents in two counterbalanced versions.
+        """Run test_intention probe test for all agents with all partner kind combinations.
+        
+        Now runs 4 tests per agent:
+        - Lower + Upper for (both agents same kind as focus agent)
+        - Lower + Upper for (focus agent original kind, partner agent different kind)
         
         Args:
             agents: List of original training agents
             epoch: Current training epoch
         """
+        # Calculate probe test number (which probe test this is, starting from 1)
+        test_interval = self.test_config.get("test_interval", 10)
+        probe_test_number = epoch // test_interval if epoch > 0 else 0
+        
+        # Determine if we should save PNGs
+        save_png_limit = self.test_config.get("save_png_for_first_n_tests", None)
+        if save_png_limit is None:
+            # None means save all PNGs
+            should_save_png = True
+        else:
+            # Only save PNGs for the first N probe tests
+            should_save_png = probe_test_number <= save_png_limit
+        
+        # Get selected agent IDs from config (if specified)
+        selected_agent_ids = self.test_config.get("selected_agent_ids", None)
+        if selected_agent_ids is None:
+            # Test all agents
+            agent_ids_to_test = list(range(len(agents)))
+        else:
+            agent_ids_to_test = selected_agent_ids
+        
         # Create unit_test directory
         unit_test_dir = self.output_dir / "unit_test"
         unit_test_dir.mkdir(parents=True, exist_ok=True)
         
-        for agent_id, agent in enumerate(agents):
-            # Create probe agent using ProbeTestAgent
-            probe_agent = ProbeTestAgent(agent)
+        for agent_id in agent_ids_to_test:
+            if agent_id >= len(agents):
+                continue  # Skip if agent_id out of range
+            original_agent = agents[agent_id]
+            probe_agent = ProbeTestAgent(original_agent)
             
-            # Version 1: Lower position (current version, spawn point index 1)
-            q_values_lower, weight_facing_stag_lower, weight_facing_hare_lower = \
-                self._run_single_version(probe_agent, spawn_point_idx=1, agent_id=agent_id, 
-                                         epoch=epoch, version_name="lower")
+            # Get focus agent kind
+            focus_kind = self.focus_agent_kind or getattr(original_agent, 'agent_kind', None)
             
-            # Version 2: Upper position (spawn point index 0)
-            # Need to create a fresh probe agent for this version
-            probe_agent_upper = ProbeTestAgent(agent)
-            q_values_upper, weight_facing_stag_upper, weight_facing_hare_upper = \
-                self._run_single_version(probe_agent_upper, spawn_point_idx=0, agent_id=agent_id, 
-                                        epoch=epoch, version_name="upper")
-            
-            # Get action names for indices (same for both versions)
+            # Get action names for indices
             action_names = list(probe_agent.agent.action_spec.actions.values())
             step_left_idx = action_names.index("STEP_LEFT")
             step_right_idx = action_names.index("STEP_RIGHT")
             
-            # Save lower version CSV
-            csv_filename_lower = f"test_intention_epoch_{epoch}_agent_{agent_id}_lower.csv"
-            csv_path_lower = unit_test_dir / csv_filename_lower
-            
-            with open(csv_path_lower, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(self.csv_headers)
-                writer.writerow([
-                    epoch,
-                    agent_id,
-                    q_values_lower[0],  # FORWARD
-                    q_values_lower[1],  # BACKWARD
-                    q_values_lower[step_left_idx],  # STEP_LEFT
-                    q_values_lower[step_right_idx],  # STEP_RIGHT
-                    q_values_lower[-1],  # ATTACK (last action)
-                    weight_facing_stag_lower,
-                    weight_facing_hare_lower
-                ])
-            
-            # Save upper version CSV
-            csv_filename_upper = f"test_intention_epoch_{epoch}_agent_{agent_id}_upper.csv"
-            csv_path_upper = unit_test_dir / csv_filename_upper
-            
-            with open(csv_path_upper, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(self.csv_headers)
-                writer.writerow([
-                    epoch,
-                    agent_id,
-                    q_values_upper[0],  # FORWARD
-                    q_values_upper[1],  # BACKWARD
-                    q_values_upper[step_left_idx],  # STEP_LEFT
-                    q_values_upper[step_right_idx],  # STEP_RIGHT
-                    q_values_upper[-1],  # ATTACK (last action)
-                    weight_facing_stag_upper,
-                    weight_facing_hare_upper
-                ])
+            # Run tests for each partner agent kind
+            for partner_kind in self.partner_agent_kinds:
+                # Determine partner kind name for filename
+                if partner_kind is None:
+                    partner_kind_name = focus_kind or "same"  # Use focus agent's kind
+                else:
+                    partner_kind_name = partner_kind
+                
+                # Run both upper and lower versions
+                for version_name, spawn_idx in [("upper", 0), ("lower", 1)]:
+                    q_values, weight_stag, weight_hare = self._run_single_version(
+                        probe_agent, spawn_idx, agent_id, epoch, version_name, partner_kind, should_save_png
+                    )
+                    
+                    # Generate filename with partner kind
+                    csv_filename = (
+                        f"test_intention_epoch_{epoch}_agent_{agent_id}_"
+                        f"partner_{partner_kind_name}_{version_name}.csv"
+                    )
+                    csv_path = unit_test_dir / csv_filename
+                    
+                    # Save results
+                    with open(csv_path, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(self.csv_headers)
+                        writer.writerow([
+                            epoch,
+                            agent_id,
+                            partner_kind_name,  # NEW: partner kind
+                            version_name,  # NEW: version (upper/lower)
+                            q_values[0],  # FORWARD
+                            q_values[1],  # BACKWARD
+                            q_values[step_left_idx],  # STEP_LEFT
+                            q_values[step_right_idx],  # STEP_RIGHT
+                            q_values[-1],  # ATTACK (last action)
+                            weight_stag,
+                            weight_hare
+                        ])

@@ -58,10 +58,10 @@ def run_stag_hunt() -> None:
             # maximum number of turns per episode
             "max_turns": 100,
             # recording period for animation (unused here)
-            "record_period": 200,
-            "run_name": "test_vis4_area_attack_3a_Nov04_with_epsilon1", # "staghunt_small_room_size7_regen1_v2_test_interval10"
+            "record_period": 1000,
+            "run_name": "test_vis4_area_attack_3a_Nov04_with_epsilon1_v2_stag24_conditional_coop_size9", # "staghunt_small_room_size7_regen1_v2_test_interval10"
             # Model saving configuration
-            "save_models": True,  # Enable model saving
+            "save_models": False,  # Enable model saving
             "save_interval": 1000,  # Save models every X epochs
         },
         "probe_test": {
@@ -71,12 +71,25 @@ def run_stag_hunt() -> None:
             "test_mode": "test_intention",
             # Run probe test every X epochs
             "test_interval": 10,
+            # Only save PNG visualizations for the first N probe tests (None = save all)
+            "save_png_for_first_n_tests": 3,  # Only save PNGs for first 3 probe tests
             # Maximum steps for each probe test
             "max_test_steps": 1,  # Only 1 turn for test_intention
             # Number of test epochs to run per probe test (for statistical reliability)
             "test_epochs": 1,
             # Whether to test agents individually (True) or together (False)
             "individual_testing": True,
+            # NEW: Agent selection for probe tests
+            "selected_agent_ids": None,  # List of agent IDs to test (None = test all agents)
+            # Example: [0, 1] tests only agents 0 and 1
+            # NEW: Agent kind specifications for probe tests
+            "focus_agent_kind": None,  # None = use original agent's kind
+            "partner_agent_kinds": ["AgentKindA", "AgentKindB"],  # List of partner kinds to test
+            # None means use focus agent's kind (both agents same kind)
+            # Example: [None, "AgentKindA", "AgentKindB"] tests with same kind, KindA, and KindB
+            "partner_agent_attributes": {  # Attributes for partner agent in tests
+                "can_hunt": True,  # Default partner can hunt
+            },
             # Environment size configuration for probe tests
             "env_size": {
                 "height": 7,  # Height of probe test environment
@@ -115,8 +128,8 @@ def run_stag_hunt() -> None:
             "generation_mode": "random",  # "random" or "ascii_map"
             "ascii_map_file": "stag_hunt_ascii_map_test_size7.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 13,
-            "width": 13,
+            "height": 9, # 13
+            "width": 9,
             # number of players in the game
             "num_agents": 3,
             # probability an empty cell spawns a resource each step
@@ -137,7 +150,7 @@ def run_stag_hunt() -> None:
             # stag_probability + hare_probability = 1.0
             "stag_probability": 0.5,  # 20% stag, 80% hare
             # separate reward values for stag and hare
-            "stag_reward": 12,  # Higher reward for stag (requires coordination)
+            "stag_reward": 24,  # Higher reward for stag (requires coordination)
             "hare_reward": 3,  # Lower reward for hare (solo achievable)
             # regeneration cooldown parameters
             "stag_regeneration_cooldown": 1,  # Turns to wait before stag regenerates
@@ -169,6 +182,27 @@ def run_stag_hunt() -> None:
             "agent_health": 5,  # Health points for agents
             "health_regeneration_rate": 1,  # How fast resources regenerate health
             "reward_sharing_radius": 2,  # Radius for reward sharing when resources are defeated
+            # Wounded stag mechanism
+            "use_wounded_stag": False,  # If True, stags change kind to 'WoundedStagResource' when health < max_health
+            # Agent configuration system
+            "use_agent_config": True,  # If True, use agent_config to assign kinds and attributes
+            # Agent configuration - mapping from agent_id to kind and attributes
+            # Only used if use_agent_config is True
+            "agent_config": {
+                    0: {
+                        "kind": "AgentKindA",
+                        "can_hunt": True,  # If False, attacks don't harm resources
+                    },
+                    1: {
+                        "kind": "AgentKindA",
+                        "can_hunt": True,
+                    },
+                    2: {
+                        "kind": "AgentKindB",
+                        "can_hunt": False,
+                    },
+                # ... etc
+            },
         },
     }
 
