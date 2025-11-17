@@ -56,10 +56,10 @@ def run_stag_hunt() -> None:
             # number of episodes/epochs to run
             "epochs": 3000000,
             # maximum number of turns per episode
-            "max_turns": 100,
+            "max_turns": 2,
             # recording period for animation (unused here)
             "record_period": 1000,
-            "run_name": "test_vis4_area_attack_3a_Nov04_with_epsilon1_v2_stag24_conditional_coop_size9", # "staghunt_small_room_size7_regen1_v2_test_interval10"
+            "run_name": "test_probe_test_changes", # "staghunt_small_room_size7_regen1_v2_test_interval10"
             # Model saving configuration
             "save_models": False,  # Enable model saving
             "save_interval": 1000,  # Save models every X epochs
@@ -102,6 +102,14 @@ def run_stag_hunt() -> None:
                 "resource_density": 0.2,  # Only used when generation_mode is "random"
                 "stag_probability": 0.5,  # Probability that spawned resources are stags (vs hares)
             },
+            # Multi-map probe test configuration (for test_intention mode)
+            "test_maps": [
+                "test_intention_probe_test_1.txt",
+                "test_intention_probe_test_2.txt",
+                "test_intention_probe_test_3.txt",
+                "test_intention_probe_test_4.txt"
+            ],
+            "orientation_reference_file": "agent_init_orientation_reference_probe_test.txt",  # Path to orientation reference file
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
@@ -125,8 +133,8 @@ def run_stag_hunt() -> None:
         },
         "world": {
             # map generation mode
-            "generation_mode": "random",  # "random" or "ascii_map"
-            "ascii_map_file": "stag_hunt_ascii_map_test_size7.txt",  # only used when generation_mode is "ascii_map"
+            "generation_mode": "ascii_map",  # "random" or "ascii_map"
+            "ascii_map_file": "test_intention_full.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
             "height": 9, # 13
             "width": 9,
@@ -135,7 +143,7 @@ def run_stag_hunt() -> None:
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
             # If True in random mode, agents spawn randomly in valid locations instead of fixed spawn points
-            "random_agent_spawning": True,
+            "random_agent_spawning": False,
             # If True, movement actions automatically change orientation to face movement direction
             "simplified_movement": True,
             # If True, attack only hits tiles directly in front of agent (number controlled by attack_range)
@@ -242,7 +250,7 @@ def run_stag_hunt() -> None:
         logger=CombinedLogger(
             max_epochs=config["experiment"]["epochs"],
             log_dir=Path(__file__).parent
-            / f'runs/{config["experiment"]["run_name"]}_{timestamp}',
+            / f'runs_validate_probe_test/{config["experiment"]["run_name"]}_{timestamp}',
             experiment_env=experiment,
         ),
         output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}',
