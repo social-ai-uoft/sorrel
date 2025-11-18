@@ -367,6 +367,249 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             for agent in env.agents:
                 agent.reset()
 
+    def replace_agent_model(
+        self,
+        agent_id: int,
+        model_path: str = None,
+    ) -> None:
+        """Replace an agent's model and memory buffer, resetting all tracking attributes.
+        
+        Args:
+            agent_id: ID of the agent to replace
+            model_path: Path to pretrained model checkpoint. If None, creates fresh model.
+        
+        Raises:
+            ValueError: If agent_id is invalid
+            FileNotFoundError: If model_path is specified but file doesn't exist
+        """
+        # Validate agent_id
+        if agent_id < 0 or agent_id >= len(self.individual_envs):
+            raise ValueError(f"Invalid agent_id: {agent_id}. Must be between 0 and {len(self.individual_envs) - 1}")
+        
+        # Get the environment and agent
+        env = self.individual_envs[agent_id]
+        old_agent = env.agents[0]
+        
+        # Store configuration from old agent (to preserve settings)
+        observation_spec = old_agent.observation_spec
+        action_spec = old_agent.action_spec
+        agent_id_value = old_agent.agent_id  # Keep the same agent_id
+        
+        # Store all configuration flags
+        use_composite_views = old_agent.use_composite_views
+        use_composite_actions = old_agent.use_composite_actions
+        simple_foraging = old_agent.simple_foraging
+        use_random_policy = old_agent.use_random_policy
+        punishment_level_accessible = old_agent.punishment_level_accessible
+        social_harm_accessible = old_agent.social_harm_accessible
+        delayed_punishment = old_agent.delayed_punishment
+        important_rule = old_agent.important_rule
+        punishment_observable = old_agent.punishment_observable
+        disable_punishment_info = old_agent.disable_punishment_info
+        
+        # Calculate model input size (same as old agent)
+        base_flattened_size = (
+            observation_spec.input_size[0]
+            * observation_spec.input_size[1]
+            * observation_spec.input_size[2]
+            + 3  # punishment_level, social_harm, random_noise
+        )
+        
+        # Add punishment observation features if enabled
+        if env.config.experiment.get("observe_other_punishments", False):
+            total_num_agents = env.config.experiment.get("total_num_agents", len(self.individual_envs))
+            num_other_agents = total_num_agents - 1
+            base_flattened_size += num_other_agents
+        
+        # Adjust for composite views
+        if use_composite_views:
+            flattened_size = base_flattened_size * env.config.experiment.get("total_num_agents", len(self.individual_envs))
+        else:
+            flattened_size = base_flattened_size
+        
+        # Create new model with same architecture
+        new_model = PyTorchIQN(
+            input_size=(flattened_size,),
+            action_space=action_spec.n_actions,
+            layer_size=env.config.model.layer_size,
+            epsilon=env.config.model.epsilon,
+            epsilon_min=env.config.model.epsilon_min,
+            device=env.config.model.device,
+            seed=torch.random.seed(),  # Fresh random seed
+            n_frames=env.config.model.n_frames,
+            n_step=env.config.model.n_step,
+            sync_freq=env.config.model.sync_freq,
+            model_update_freq=env.config.model.model_update_freq,
+            batch_size=env.config.model.batch_size,
+            memory_size=env.config.model.memory_size,
+            LR=env.config.model.LR,
+            TAU=env.config.model.TAU,
+            GAMMA=env.config.model.GAMMA,
+            n_quantiles=env.config.model.n_quantiles,
+        )
+        
+        # Load pretrained model if path is specified
+        if model_path is not None and model_path != "":
+            from pathlib import Path
+            model_file = Path(model_path)
+            if not model_file.exists():
+                raise FileNotFoundError(
+                    f"Model checkpoint not found at specified path: {model_path}"
+                )
+            
+            try:
+                new_model.load(model_file)
+                print(f"Loaded pretrained model for agent {agent_id} from {model_path}")
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to load model from {model_path} for agent {agent_id}: {e}"
+                )
+        
+        # Create new agent with same configuration but new model
+        new_agent = StatePunishmentAgent(
+            observation_spec=observation_spec,
+            action_spec=action_spec,
+            model=new_model,
+            agent_id=agent_id_value,
+            use_composite_views=use_composite_views,
+            use_composite_actions=use_composite_actions,
+            simple_foraging=simple_foraging,
+            use_random_policy=use_random_policy,
+            punishment_level_accessible=punishment_level_accessible,
+            social_harm_accessible=social_harm_accessible,
+            delayed_punishment=delayed_punishment,
+            important_rule=important_rule,
+            punishment_observable=punishment_observable,
+            disable_punishment_info=disable_punishment_info,
+        )
+        
+        # Preserve agent location in the world
+        old_location = None
+        if hasattr(old_agent, 'location') and old_agent.location is not None:
+            old_location = old_agent.location
+            # Remove old agent from world
+            env.world.remove(old_location)
+        
+        # Replace the agent in the environment
+        env.agents[0] = new_agent
+        
+        # Add new agent to world at the same location (if it existed)
+        if old_location is not None:
+            env.world.add(old_location, new_agent)
+        
+        # Reset shared_social_harm for this agent (if it exists)
+        if agent_id in self.shared_social_harm:
+            self.shared_social_harm[agent_id] = 0.0
+
+    def replace_agents(
+        self,
+        agent_ids: List[int],
+        model_path: str = None,
+    ) -> None:
+        """Replace multiple agents' models and memory buffers.
+        
+        Args:
+            agent_ids: List of agent IDs to replace
+            model_path: Path to pretrained model checkpoint. If None, creates fresh models.
+        
+        Raises:
+            ValueError: If any agent_id is invalid or list is empty
+        """
+        if not agent_ids:
+            return  # Nothing to do
+        
+        # Validate all agent IDs
+        for agent_id in agent_ids:
+            if agent_id < 0 or agent_id >= len(self.individual_envs):
+                raise ValueError(
+                    f"Invalid agent_id: {agent_id}. Must be between 0 and {len(self.individual_envs) - 1}"
+                )
+        
+        # Replace each agent
+        for agent_id in agent_ids:
+            self.replace_agent_model(agent_id, model_path)
+
+    def select_agents_to_replace(
+        self,
+        num_agents: int = None,
+        selection_mode: str = "first_n",
+        specified_ids: List[int] = None,
+        replacement_probability: float = 0.1,
+    ) -> List[int]:
+        """Select which agents to replace based on selection mode.
+        
+        Args:
+            num_agents: Number of agents to select (ignored for "probability" mode)
+            selection_mode: "first_n", "random", "specified_ids", or "probability"
+            specified_ids: List of agent IDs (used when selection_mode is "specified_ids")
+            replacement_probability: Probability of each agent being replaced (used when selection_mode is "probability")
+        
+        Returns:
+            List of agent IDs to replace
+        
+        Raises:
+            ValueError: If selection_mode is invalid or parameters are invalid
+        """
+        total_agents = len(self.individual_envs)
+        
+        if selection_mode == "probability":
+            # Probability-based selection: each agent independently evaluated
+            if not (0.0 <= replacement_probability <= 1.0):
+                raise ValueError(
+                    f"replacement_probability must be between 0.0 and 1.0, got {replacement_probability}"
+                )
+            
+            import random
+            agent_ids = []
+            for agent_id in range(total_agents):
+                if random.random() < replacement_probability:
+                    agent_ids.append(agent_id)
+            
+            return agent_ids
+        
+        # For other modes, num_agents is required
+        if num_agents is None:
+            raise ValueError("num_agents must be provided when selection_mode is not 'probability'")
+        
+        if num_agents <= 0:
+            return []
+        
+        if num_agents > total_agents:
+            raise ValueError(
+                f"Cannot replace {num_agents} agents when only {total_agents} exist"
+            )
+        
+        if selection_mode == "first_n":
+            # Select first N agents
+            return list(range(num_agents))
+        
+        elif selection_mode == "random":
+            # Select N random agents
+            import random
+            return random.sample(range(total_agents), num_agents)
+        
+        elif selection_mode == "specified_ids":
+            # Use specified IDs
+            if specified_ids is None:
+                raise ValueError("specified_ids must be provided when selection_mode is 'specified_ids'")
+            
+            # Validate specified IDs
+            for agent_id in specified_ids:
+                if agent_id < 0 or agent_id >= total_agents:
+                    raise ValueError(
+                        f"Invalid agent_id in specified_ids: {agent_id}. "
+                        f"Must be between 0 and {total_agents - 1}"
+                    )
+            
+            # Return up to num_agents from specified_ids
+            return specified_ids[:num_agents]
+        
+        else:
+            raise ValueError(
+                f"Invalid selection_mode: {selection_mode}. "
+                f"Must be 'first_n', 'random', 'specified_ids', or 'probability'"
+            )
+
     @override
     def run_experiment(
         self,
@@ -433,6 +676,74 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             # Reset epoch-specific tracking for shared state system
             if hasattr(self.shared_state_system, "reset_epoch"):
                 self.shared_state_system.reset_epoch()
+            
+            # ============================================================
+            # AGENT REPLACEMENT LOGIC (NEW)
+            # ============================================================
+            # IMPORTANT: This entire block is only executed when enable_agent_replacement=True
+            # When False (default), this code is completely skipped - no performance impact
+            # Check if agent replacement should occur this epoch
+            replacement_config = self.config.experiment
+            if replacement_config.get("enable_agent_replacement", False):
+                # All replacement code is inside this block - safe when feature is disabled
+                agents_to_replace = replacement_config.get("agents_to_replace_per_epoch", 0)
+                start_epoch = replacement_config.get("replacement_start_epoch", 0)
+                end_epoch = replacement_config.get("replacement_end_epoch", None)
+                
+                # Get selection mode to determine if we should check replacement conditions
+                selection_mode = replacement_config.get("replacement_selection_mode", "first_n")
+                
+                # For probability mode, check probability > 0 instead of agents_to_replace > 0
+                if selection_mode == "probability":
+                    replacement_prob = replacement_config.get("replacement_probability", 0.0)
+                    should_replace = (
+                        replacement_prob > 0.0 and
+                        epoch >= start_epoch and
+                        (end_epoch is None or epoch <= end_epoch)
+                    )
+                else:
+                    # For other modes, check agents_to_replace > 0
+                    should_replace = (
+                        agents_to_replace > 0 and
+                        epoch >= start_epoch and
+                        (end_epoch is None or epoch <= end_epoch)
+                    )
+                
+                if should_replace:
+                    try:
+                        # Get selection mode and model path
+                        specified_ids = replacement_config.get("replacement_agent_ids", None)
+                        model_path = replacement_config.get("new_agent_model_path", None)
+                        replacement_prob = replacement_config.get("replacement_probability", 0.1)
+                        
+                        # Select agents to replace
+                        if selection_mode == "probability":
+                            # Probability mode: num_agents is ignored
+                            agent_ids = self.select_agents_to_replace(
+                                num_agents=None,
+                                selection_mode=selection_mode,
+                                replacement_probability=replacement_prob,
+                            )
+                        else:
+                            # Other modes: use num_agents
+                            agent_ids = self.select_agents_to_replace(
+                                num_agents=agents_to_replace,
+                                selection_mode=selection_mode,
+                                specified_ids=specified_ids,
+                            )
+                        
+                        # Replace selected agents
+                        if agent_ids:
+                            self.replace_agents(agent_ids, model_path)
+                            print(f"Epoch {epoch}: Replaced {len(agent_ids)} agent(s) "
+                                  f"(IDs: {agent_ids}, mode: {selection_mode})")
+                        
+                    except (ValueError, FileNotFoundError, RuntimeError) as e:
+                        # If replacement fails, log and continue
+                        print(f"Epoch {epoch}: Agent replacement skipped - {e}")
+            # ============================================================
+            # END AGENT REPLACEMENT LOGIC
+            # ============================================================
             
             # Start epoch action for all agents
             for env in self.individual_envs:

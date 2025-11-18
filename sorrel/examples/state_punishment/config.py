@@ -1,6 +1,6 @@
 """Configuration module for state punishment experiments."""
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 
 def create_config(
@@ -37,6 +37,14 @@ def create_config(
     mapping_file_path: str = None,
     observe_other_punishments: bool = False,
     disable_punishment_info: bool = False,
+    enable_agent_replacement: bool = False,
+    agents_to_replace_per_epoch: int = 0,
+    replacement_start_epoch: int = 0,
+    replacement_end_epoch: Optional[int] = None,
+    replacement_agent_ids: Optional[List[int]] = None,
+    replacement_selection_mode: str = "first_n",
+    replacement_probability: float = 0.1,
+    new_agent_model_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -138,6 +146,14 @@ def create_config(
             "mapping_file_path": mapping_file_path,
             "observe_other_punishments": observe_other_punishments,
             "disable_punishment_info": disable_punishment_info,
+            "enable_agent_replacement": enable_agent_replacement,
+            "agents_to_replace_per_epoch": agents_to_replace_per_epoch,
+            "replacement_start_epoch": replacement_start_epoch,
+            "replacement_end_epoch": replacement_end_epoch,
+            "replacement_agent_ids": replacement_agent_ids,
+            "replacement_selection_mode": replacement_selection_mode,
+            "replacement_probability": replacement_probability,
+            "new_agent_model_path": new_agent_model_path,
         },
         "world": {
             "height": map_size,

@@ -135,6 +135,41 @@ def parse_arguments():
         "--seed", type=int, default=None, help="Random seed for reproducibility (if not set, uses default random state)"
     )
 
+    # Agent replacement parameters
+    parser.add_argument(
+        "--enable_agent_replacement", action="store_true",
+        help="Enable agent replacement during training"
+    )
+    parser.add_argument(
+        "--agents_to_replace_per_epoch", type=int, default=0,
+        help="Number of agents to replace per epoch (default: 0)"
+    )
+    parser.add_argument(
+        "--replacement_start_epoch", type=int, default=0,
+        help="First epoch when replacement can occur (default: 0)"
+    )
+    parser.add_argument(
+        "--replacement_end_epoch", type=int, default=None,
+        help="Last epoch when replacement can occur (None = no limit, default: None)"
+    )
+    parser.add_argument(
+        "--replacement_agent_ids", type=str, default=None,
+        help="Comma-separated list of agent IDs to replace (e.g., '0,1,2'). Only used with --replacement_selection_mode=specified_ids"
+    )
+    parser.add_argument(
+        "--replacement_selection_mode", type=str, default="first_n",
+        choices=["first_n", "random", "specified_ids", "probability"],
+        help="Mode for selecting agents to replace: first_n, random, specified_ids, or probability (default: first_n)"
+    )
+    parser.add_argument(
+        "--replacement_probability", type=float, default=0.1,
+        help="Probability of each agent being replaced per epoch (used with --replacement_selection_mode=probability, default: 0.1)"
+    )
+    parser.add_argument(
+        "--new_agent_model_path", type=str, default=None,
+        help="Path to pretrained model checkpoint for replaced agents (None = fresh random model, default: None)"
+    )
+
     return parser.parse_args()
 
 
@@ -215,6 +250,14 @@ def run_experiment(args):
         print("No random seed specified - using default random state (not reproducible)")
         run_experiment._seed = None
     
+    # Parse replacement_agent_ids if provided
+    replacement_agent_ids = None
+    if args.replacement_agent_ids:
+        try:
+            replacement_agent_ids = [int(id.strip()) for id in args.replacement_agent_ids.split(",")]
+        except ValueError:
+            raise ValueError(f"Invalid --replacement_agent_ids format: {args.replacement_agent_ids}. Expected comma-separated integers (e.g., '0,1,2')")
+
     # Create configuration
     config = create_config(
         num_agents=args.num_agents,
@@ -246,6 +289,14 @@ def run_experiment(args):
         mapping_file_path=args.mapping_file_path,
         observe_other_punishments=args.observe_other_punishments,
         disable_punishment_info=args.disable_punishment_info,
+        enable_agent_replacement=args.enable_agent_replacement,
+        agents_to_replace_per_epoch=args.agents_to_replace_per_epoch,
+        replacement_start_epoch=args.replacement_start_epoch,
+        replacement_end_epoch=args.replacement_end_epoch,
+        replacement_agent_ids=replacement_agent_ids,
+        replacement_selection_mode=args.replacement_selection_mode,
+        replacement_probability=args.replacement_probability,
+        new_agent_model_path=args.new_agent_model_path,
     )
 
     # Print expected rewards
@@ -258,7 +309,7 @@ def run_experiment(args):
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_Nov16" / run_folder
+    log_dir = Path(__file__).parent / "runs_debug" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder
@@ -321,6 +372,19 @@ def run_experiment(args):
     print(f"Random policy: {args.random_policy}")
     print(f"Random seed: {args.seed if args.seed is not None else 'Not set (not reproducible)'}")
     print(f"Probe test: {'disabled' if args.disable_probe_test else 'enabled'}")
+    print(f"Agent replacement: {'enabled' if args.enable_agent_replacement else 'disabled'}")
+    if args.enable_agent_replacement:
+        print(f"  - Agents to replace per epoch: {args.agents_to_replace_per_epoch}")
+        print(f"  - Replacement window: epochs {args.replacement_start_epoch} to {args.replacement_end_epoch if args.replacement_end_epoch is not None else 'end'}")
+        print(f"  - Selection mode: {args.replacement_selection_mode}")
+        if args.replacement_selection_mode == "probability":
+            print(f"  - Replacement probability: {args.replacement_probability}")
+        if args.replacement_selection_mode == "specified_ids" and replacement_agent_ids:
+            print(f"  - Specified agent IDs: {replacement_agent_ids}")
+        if args.new_agent_model_path:
+            print(f"  - New agent model path: {args.new_agent_model_path}")
+        else:
+            print(f"  - New agents: fresh random models")
     print("-" * 50)
 
     multi_agent_env.run_experiment(

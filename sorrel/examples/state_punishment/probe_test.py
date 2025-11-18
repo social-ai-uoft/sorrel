@@ -261,7 +261,7 @@ def run_probe_test(training_env, probe_env, training_epoch: int, probe_epochs: i
 def save_probe_test_models(probe_env, epoch: int, experiment_name: str):
     """Save probe test models using existing model saving infrastructure."""
     # Create probe test models directory
-    models_dir = Path(__file__).parent / "models" / "probe_tests"
+    models_dir = Path(__file__).parent.parent / "models" / "probe_tests"
     models_dir.mkdir(parents=True, exist_ok=True)
     
     # Save each agent's model
