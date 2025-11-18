@@ -80,6 +80,9 @@ class StatePunishmentAgent(Agent):
         # Track action frequencies
         self.action_frequencies = {}
         self.action_names = list(action_spec.actions.values())
+        
+        # Track social harm received per epoch
+        self.social_harm_received_epoch = 0.0
 
         # Delayed punishment cache system
         self.pending_punishment = 0.0  # Punishment to be applied next turn
@@ -240,6 +243,8 @@ class StatePunishmentAgent(Agent):
         if social_harm_dict is not None:
             social_harm_value = social_harm_dict.get(self.agent_id, 0.0)
             reward -= social_harm_value
+            # Track social harm received in this epoch
+            self.social_harm_received_epoch += social_harm_value
             # Reset social harm to 0 after applying it
             social_harm_dict[self.agent_id] = 0.0
 
@@ -365,6 +370,10 @@ class StatePunishmentAgent(Agent):
             
         return total_punishment
 
+    def reset_epoch_tracking(self) -> None:
+        """Reset epoch-specific tracking counters."""
+        self.social_harm_received_epoch = 0.0
+
     @override
     def reset(self) -> None:
         """Reset the agent state."""
@@ -379,6 +388,9 @@ class StatePunishmentAgent(Agent):
 
         # Reset delayed punishment cache
         self.pending_punishment = 0.0
+        
+        # Reset epoch-specific tracking
+        self.reset_epoch_tracking()
 
         # Reset debug counter
         if hasattr(self, "_debug_turn_count"):
