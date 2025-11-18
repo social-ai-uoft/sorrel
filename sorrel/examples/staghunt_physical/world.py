@@ -143,6 +143,9 @@ class StagHuntWorld(Gridworld):
         self.stag_regeneration_cooldown: int = int(get_world_param("stag_regeneration_cooldown", 1))
         self.hare_regeneration_cooldown: int = int(get_world_param("hare_regeneration_cooldown", 1))
         self.reward_sharing_radius: int = int(get_world_param("reward_sharing_radius", 3))
+        
+        # Wounded stag mechanism flag
+        self.use_wounded_stag: bool = bool(get_world_param("use_wounded_stag", False))
         self.stag_probability: float = float(get_world_param("stag_probability", 0.2))
         self.random_agent_spawning: bool = bool(get_world_param("random_agent_spawning", False))
         self.simplified_movement: bool = bool(get_world_param("simplified_movement", False))
@@ -152,6 +155,26 @@ class StagHuntWorld(Gridworld):
         self.area_attack: bool = bool(get_world_param("area_attack", False))
         self.skip_spawn_validation: bool = bool(get_world_param("skip_spawn_validation", False))
         self.current_turn: int = 0  # Track current turn for regeneration
+
+        # Agent configuration system
+        use_agent_config = bool(get_world_param("use_agent_config", False))  # Default to False for backward compatibility
+        agent_config = get_world_param("agent_config", None)
+
+        if not use_agent_config or agent_config is None:
+            # Default: no agent kinds, use orientation-based kinds
+            self.agent_kinds: list[str] = []
+            self.agent_kind_mapping: dict[int, str] = {}
+            self.agent_attributes: dict[int, dict] = {}
+        else:
+            # Extract kinds and attributes from config
+            self.agent_kinds: list[str] = list(set([cfg.get("kind") for cfg in agent_config.values() if cfg.get("kind")]))
+            self.agent_kind_mapping: dict[int, str] = {
+                agent_id: cfg.get("kind") for agent_id, cfg in agent_config.items() if cfg.get("kind")
+            }
+            self.agent_attributes: dict[int, dict] = {
+                agent_id: {k: v for k, v in cfg.items() if k != "kind"}
+                for agent_id, cfg in agent_config.items()
+            }
 
         # record spawn points; to be populated by the environment
         self.agent_spawn_points: list[tuple[int, int, int]] = [

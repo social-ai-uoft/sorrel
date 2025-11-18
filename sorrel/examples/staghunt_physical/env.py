@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import copy
 import random
+import re
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -77,21 +79,50 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             interaction_reward = 1.0
 
         agents = []
-        # list all entity kinds present in the environment for one‑hot encoding
-        entity_list = [
-            "Empty",
-            "Wall",
-            "Spawn",
-            "StagResource",
-            "HareResource",
-            "StagHuntAgentNorth",  # 0: north
-            "StagHuntAgentEast",  # 1: east
-            "StagHuntAgentSouth",  # 2: south
-            "StagHuntAgentWest",  # 3: west
-            "Sand",
-            "AttackBeam",
-            "PunishBeam",
-        ]
+        
+        # Generate entity list dynamically based on agent kinds
+        def _generate_entity_list(agent_kinds: list[str]) -> list[str]:
+            """Generate entity list including all agent kinds.
+            
+            Args:
+                agent_kinds: List of agent kind names (e.g., ["AgentKindA", "AgentKindB"])
+            
+            Returns:
+                Complete entity list with all base entities and agent kind combinations
+            """
+            base_entities = [
+                "Empty",
+                "Wall",
+                "Spawn",
+                "StagResource",
+                "WoundedStagResource",
+                "HareResource",
+                "Sand",
+                "AttackBeam",
+                "PunishBeam",
+            ]
+            
+            # Add agent kinds (with orientations for each kind)
+            agent_entities = []
+            if agent_kinds:
+                # If agent kinds are specified, add all combinations
+                for kind in agent_kinds:
+                    for orientation in ["North", "East", "South", "West"]:
+                        agent_entities.append(f"{kind}{orientation}")
+            else:
+                # Default: use orientation-based kinds (backward compatibility)
+                for orientation in ["North", "East", "South", "West"]:
+                    agent_entities.append(f"StagHuntAgent{orientation}")
+            
+            return base_entities + agent_entities
+        
+        # Get agent configuration from world
+        agent_kinds = getattr(self.world, 'agent_kinds', [])
+        agent_kind_mapping = getattr(self.world, 'agent_kind_mapping', {})
+        agent_attributes = getattr(self.world, 'agent_attributes', {})
+        
+        # Generate entity list dynamically
+        entity_list = _generate_entity_list(agent_kinds)
         for agent_id in range(n_agents):
             # observation spec: uses partial view with specified vision radius
             vision_radius = int(model_cfg.get("agent_vision_radius", 5))
@@ -139,6 +170,11 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 n_quantiles=int(model_cfg.get("n_quantiles", 12)),
             )
 
+            # Get agent kind and attributes from config
+            assigned_kind = agent_kind_mapping.get(agent_id, None)
+            agent_attrs = agent_attributes.get(agent_id, {})
+            can_hunt = agent_attrs.get("can_hunt", True)  # Default to True
+            
             agent = StagHuntAgent(
                 observation_spec=observation_spec,
                 action_spec=action_spec,
@@ -146,6 +182,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 interaction_reward=interaction_reward,
                 max_health=int(world_cfg.get("agent_health", 5)),
                 agent_id=agent_id,
+                agent_kind=assigned_kind,  # NEW: pass kind to agent
+                can_hunt=can_hunt,  # NEW: pass can_hunt attribute
             )
             agents.append(agent)
         self.agents = agents
@@ -157,7 +195,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         """
         world = self.world
         
-        # Save manually set spawn points before reset (for probe tests)
+        # Save manually set spawn points before reset (for probe tests only)
         # Probe tests set a flag to indicate they want deterministic placement
         manually_set_spawn_points = None
         if hasattr(world, "_probe_test_spawn_points"):
@@ -165,24 +203,6 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             manually_set_spawn_points = world._probe_test_spawn_points.copy()
             # Clear the flag after reading
             delattr(world, "_probe_test_spawn_points")
-        elif hasattr(world, "map_generator") and world.map_generator is not None:
-            # Fallback: detect by checking if spawn points differ from map order
-            map_data = world.map_generator.parse_map()
-            expected_map_spawn_points = [
-                (y, x, world.dynamic_layer) for y, x in map_data.spawn_points
-            ]
-            # Check if current spawn points match map spawn points but in different order
-            if len(world.agent_spawn_points) > 0:
-                current_set = set(world.agent_spawn_points)
-                expected_set = set(expected_map_spawn_points)
-                if current_set == expected_set:
-                    # Same elements - check if order is different
-                    if world.agent_spawn_points != expected_map_spawn_points:
-                        # Order is different - manually set
-                        manually_set_spawn_points = world.agent_spawn_points.copy()
-                elif world.agent_spawn_points != expected_map_spawn_points:
-                    # Different elements - also manually set
-                    manually_set_spawn_points = world.agent_spawn_points.copy()
         
         world.reset_spawn_points()
 
@@ -424,6 +444,130 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         
         for loc, agent in zip(chosen_positions, self.agents[:num_spawn_needed]):
             world.add(loc, agent)
+    
+    def _parse_orientation_reference(self, file_path: str) -> dict:
+        """Parse orientation reference file and extract mappings.
+        
+        Args:
+            file_path: Path to orientation reference file (relative to docs folder or absolute)
+            
+        Returns:
+            Dictionary mapping (row, col) -> (initial_orientation, orientation_facing_stag)
+        """
+        # Try to find the file in docs folder first, then try as absolute path
+        # File is in sorrel/examples/staghunt_physical/docs/
+        docs_dir = Path(__file__).parent / "docs"
+        ref_path = docs_dir / file_path
+        if not ref_path.exists():
+            ref_path = Path(file_path)
+            if not ref_path.exists():
+                raise FileNotFoundError(
+                    f"Orientation reference file not found: {file_path} "
+                    f"(tried {docs_dir / file_path} and {ref_path})"
+                )
+        
+        orientation_ref = {}
+        
+        with open(ref_path, 'r') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Parse format: "when agent at row X col Y, orientation is Z, the orientation of facing stag is W;"
+                pattern = r'when agent (?:is )?at row (\d+) col (\d+), orientation is (\d+), the orientation of facing stag is (\d+);'
+                match = re.search(pattern, line)
+                
+                if match:
+                    row = int(match.group(1))
+                    col = int(match.group(2))
+                    init_orient = int(match.group(3))
+                    stag_orient = int(match.group(4))
+                    
+                    # Validate orientations
+                    if init_orient not in [0, 1, 2, 3] or stag_orient not in [0, 1, 2, 3]:
+                        raise ValueError(
+                            f"Invalid orientation value in line {line_num} of {ref_path}: "
+                            f"orientations must be 0-3, got init={init_orient}, stag={stag_orient}"
+                        )
+                    
+                    orientation_ref[(row, col)] = (init_orient, stag_orient)
+                else:
+                    # Try to parse with more flexible pattern
+                    pattern2 = r'row (\d+).*?col (\d+).*?orientation is (\d+).*?facing stag is (\d+)'
+                    match2 = re.search(pattern2, line)
+                    if match2:
+                        row = int(match2.group(1))
+                        col = int(match2.group(2))
+                        init_orient = int(match2.group(3))
+                        stag_orient = int(match2.group(4))
+                        
+                        if init_orient not in [0, 1, 2, 3] or stag_orient not in [0, 1, 2, 3]:
+                            raise ValueError(
+                                f"Invalid orientation value in line {line_num} of {ref_path}: "
+                                f"orientations must be 0-3, got init={init_orient}, stag={stag_orient}"
+                            )
+                        
+                        orientation_ref[(row, col)] = (init_orient, stag_orient)
+                    else:
+                        print(f"Warning: Could not parse line {line_num} in {ref_path}: {line}")
+        
+        if not orientation_ref:
+            raise ValueError(f"No valid orientation mappings found in {ref_path}")
+        
+        return orientation_ref
+    
+    @override
+    def reset(self) -> None:
+        """Reset the experiment, including the environment and the agents.
+        
+        If ascii_map_file is 'test_intention_full.txt', agents' orientations
+        are initialized from the orientation reference file.
+        """
+        # Call parent reset (places agents and calls agent.reset())
+        super().reset()
+        
+        # Check if we need to set orientations from reference file
+        world = self.world
+        
+        # Get ascii_map_file from map_generator
+        ascii_map_file = None
+        if hasattr(world, 'map_generator') and world.map_generator is not None:
+            # Get filename from map_generator's file path
+            map_file_path = getattr(world.map_generator, 'map_file_path', None)
+            if map_file_path:
+                # Extract just the filename
+                ascii_map_file = Path(map_file_path).name
+        
+        if ascii_map_file == "test_intention_full.txt":
+            # Load orientation reference file
+            orientation_ref_file = "agent_init_orientation_reference_probe_test.txt"
+            try:
+                orientation_ref = self._parse_orientation_reference(orientation_ref_file)
+                
+                # Set agent orientations based on their spawn points
+                for agent in self.agents:
+                    if agent.location is not None:
+                        # Extract row and col from location (location is (row, col, layer))
+                        row, col = agent.location[0], agent.location[1]
+                        
+                        if (row, col) in orientation_ref:
+                            initial_orientation, _ = orientation_ref[(row, col)]
+                            agent.orientation = initial_orientation
+                            # Update agent kind to reflect new orientation
+                            if hasattr(agent, 'update_agent_kind'):
+                                agent.update_agent_kind()
+                        else:
+                            print(
+                                f"Warning: Agent at (row={row}, col={col}) not found in orientation reference file. "
+                                f"Using default orientation."
+                            )
+            except FileNotFoundError as e:
+                print(f"Warning: Could not load orientation reference file: {e}")
+                print("Agents will use default orientations.")
+            except Exception as e:
+                print(f"Warning: Error loading orientation reference: {e}")
+                print("Agents will use default orientations.")
     
     @override
     def take_turn(self) -> None:

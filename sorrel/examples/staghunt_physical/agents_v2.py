@@ -218,6 +218,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         interaction_reward: float = 1.0,
         max_health: int = 5,
         agent_id: int = 0,
+        agent_kind: str | None = None,  # NEW: explicit kind assignment
+        can_hunt: bool = True,  # NEW: whether agent can harm resources
     ):
         super().__init__(observation_spec, action_spec, model)
         # assign a default sprite; can be overridden externally
@@ -225,6 +227,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         
         # assign unique agent ID
         self.agent_id = agent_id
+        self.agent_kind: str | None = agent_kind  # Store the base kind (e.g., "AgentKindA")
+        self.can_hunt: bool = can_hunt  # NEW: whether attacks harm resources
 
         # orientation encoded as 0: north, 1: east, 2: south, 3: west
         self.orientation: int = 0
@@ -266,13 +270,42 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
     @property
     def sprite(self) -> Path:
-        """Return the sprite based on the current orientation."""
+        """Return the sprite based on the current orientation and agent kind."""
+        base_dir = Path(__file__).parent / "./assets"
+        orientation_map = {
+            0: "back",   # north
+            1: "right",  # east
+            2: "",       # south (default)
+            3: "left",   # west
+        }
+        orientation_suffix = orientation_map[self.orientation]
+        
+        if self.agent_kind:
+            # Try kind-specific sprite first
+            if orientation_suffix:
+                kind_sprite = base_dir / f"hero_{self.agent_kind}_{orientation_suffix}.png"
+            else:
+                kind_sprite = base_dir / f"hero_{self.agent_kind}.png"
+            
+            if kind_sprite.exists():
+                return kind_sprite
+            else:
+                raise ValueError(f'Sprite does not exist: {kind_sprite}')
+        
+        # Fallback to default sprite
         return self._directional_sprites[self.orientation]
 
     def update_agent_kind(self) -> None:
-        """Update the agent's kind based on current orientation."""
+        """Update the agent's kind based on current orientation and base kind."""
         orientation_names = {0: "North", 1: "East", 2: "South", 3: "West"}
-        self.kind = f"StagHuntAgent{orientation_names[self.orientation]}"
+        orientation = orientation_names[self.orientation]
+        
+        if self.agent_kind:
+            # Use the assigned base kind
+            self.kind = f"{self.agent_kind}{orientation}"
+        else:
+            # Fallback to default behavior
+            self.kind = f"StagHuntAgent{orientation}"
 
     def update_cooldown(self) -> None:
         """Update the beam cooldown timers."""
@@ -524,26 +557,44 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     if world.valid_location(target):
                         entity = world.observe(target)
                         if isinstance(entity, (StagResource, HareResource)):
-                            # Record attack metrics
+                            # Record attack metrics (always log attacks, regardless of can_hunt)
                             if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
-                                target_type = "stag" if isinstance(entity, StagResource) else "hare"
+                                # Explicitly determine target type - must be either stag or hare
+                                # (guaranteed by the isinstance check above)
+                                if isinstance(entity, StagResource):
+                                    target_type = "stag"
+                                else:  # Must be HareResource
+                                    target_type = "hare"
                                 world.environment.metrics_collector.collect_attack_metrics(
                                     self, target_type, entity
                                 )
                             
-                            # Attack the resource
-                            defeated = entity.on_attack(world, world.current_turn)
-                            if defeated:
-                                # Handle reward sharing for defeated resource
-                                shared_reward = self.handle_resource_defeat(entity, world)
-                                reward += shared_reward
+                            # Determine if attack should harm the resource
+                            # - Hares can always be harmed (regardless of can_hunt)
+                            # - Stags can only be harmed if agent can_hunt
+                            is_stag = isinstance(entity, StagResource)
+                            should_harm = not is_stag or self.can_hunt
+                            
+                            if should_harm:
+                                # Attack the resource
+                                defeated = entity.on_attack(world, world.current_turn)
+                                if defeated:
+                                    # Handle reward sharing for defeated resource
+                                    shared_reward = self.handle_resource_defeat(entity, world)
+                                    reward += shared_reward
 
-                                # Record resource defeat metrics with resource type
-                                if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
-                                    resource_type = "stag" if isinstance(entity, StagResource) else "hare"
-                                    world.environment.metrics_collector.collect_resource_defeat_metrics(
-                                        self, shared_reward, resource_type
-                                    )
+                                    # Record resource defeat metrics with resource type
+                                    if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                                        # Explicitly determine resource type - must be either stag or hare
+                                        # (guaranteed by the isinstance check above)
+                                        if isinstance(entity, StagResource):
+                                            resource_type = "stag"
+                                        else:  # Must be HareResource
+                                            resource_type = "hare"
+                                        world.environment.metrics_collector.collect_resource_defeat_metrics(
+                                            self, shared_reward, resource_type
+                                        )
+                            # else: Agent cannot hunt stags - attack is logged but does not harm stag
 
                 # set cooldown timer after using attack beam
                 self.attack_cooldown_timer = getattr(world, "attack_cooldown", 3)
