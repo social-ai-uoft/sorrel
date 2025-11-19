@@ -18,6 +18,7 @@ if __name__ == "__main__":
         },
         "model": {
             "epsilon_decay": 0.0001,
+            "gcn": True,
         },
         "world": {
             "height": 16,
@@ -31,3 +32,4 @@ if __name__ == "__main__":
     env = TerritoryEnvironment(world, config)
     # run the experiment with default parameters
     env.run_experiment()
+    

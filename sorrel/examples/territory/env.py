@@ -12,6 +12,7 @@ from sorrel.environment import Environment
 # sorrel imports
 from sorrel.examples.territory.agents import TerritoryAgent, TerritoryObservation
 from sorrel.examples.territory.entities import EmptyEntity, Province, River
+from sorrel.examples.territory.gcn_iqn import GCNObservationSpec, GCNiRainbowModel
 from sorrel.examples.territory.world import TerritoryWorld
 from sorrel.location import Location
 from sorrel.models.pytorch import PyTorchIQN
@@ -44,12 +45,9 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
                 "red_capital",
                 "river"
             ]
-            
-            observation_spec = TerritoryObservation(
-                entity_list=entity_list,
-                env_dims=(self.world.height, self.world.width),
-                side="red" if is_blue_agent else "blue",
-            )
+
+            observation_spec = None
+            model = None
 
             # create the action spec
             action_spec = ActionSpec(
@@ -59,29 +57,66 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
                 ]
             )
 
-            # create the model
-            model = PyTorchIQN(
-                input_size=observation_spec.input_size,
-                action_space=action_spec.n_actions,
-                layer_size=250,
-                # epsilon=0.6,
-                epsilon=0.85,
-                device="cpu",
-                seed=torch.random.seed(),
-                # n_frames=5,
-                n_frames=1,
-                n_step=3,
-                sync_freq=200,
-                model_update_freq=4,
-                batch_size=64,
-                #batch_size=32,
-                memory_size=1024,
-                # LR=0.00025,
-                LR=0.001,
-                TAU=0.001,
-                GAMMA=0.99,
-                n_quantiles=12,
-            )
+            if (self.config.model.gcn):
+                observation_spec = GCNObservationSpec(
+                    entity_list=entity_list,
+                    full_view=True,
+                    env_dims=(self.world.height, self.world.width),
+                    #side="red" if is_blue_agent else "blue",
+                )
+
+                model = GCNiRainbowModel(
+                    input_size=observation_spec.input_size[1],
+                    action_space=action_spec.n_actions,
+                    layer_size=250,
+                    # epsilon=0.6,
+                    epsilon=0.85,
+                    device="cpu",
+                    seed=torch.random.seed(),
+                    # n_frames=5,
+                    n_frames=1,
+                    n_step=3,
+                    sync_freq=200,
+                    model_update_freq=4,
+                    batch_size=64,
+                    #batch_size=32,
+                    #memory_size=1024,
+                    memory_size=1024,
+                    # LR=0.00025,
+                    LR=0.001,
+                    TAU=0.001,
+                    GAMMA=0.99,
+                    n_quantiles=12,
+                )
+            else:
+                observation_spec = TerritoryObservation(
+                    entity_list=entity_list,
+                    env_dims=(self.world.height, self.world.width),
+                    side="red" if is_blue_agent else "blue",
+                )
+
+                model = PyTorchIQN(
+                    input_size=observation_spec.input_size,
+                    action_space=action_spec.n_actions,
+                    layer_size=250,
+                    # epsilon=0.6,
+                    epsilon=0.85,
+                    device="cpu",
+                    seed=torch.random.seed(),
+                    # n_frames=5,
+                    n_frames=1,
+                    n_step=3,
+                    sync_freq=200,
+                    model_update_freq=4,
+                    batch_size=64,
+                    #batch_size=32,
+                    memory_size=1024,
+                    # LR=0.00025,
+                    LR=0.001,
+                    TAU=0.001,
+                    GAMMA=0.99,
+                    n_quantiles=12,
+                )
 
             if not is_blue_agent:
                 agents.append(
@@ -208,8 +243,8 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
 
         plans = values
         
-        #rewards[0] -= sum(((distances[0][j] - 1) * 4) for j in indices[0])
-        #rewards[1] -= sum(((distances[1][j] - 1) * 4) for j in indices[1])
+        # rewards[0] -= sum(((distances[0][j] - 1) * 4) for j in indices[0])
+        # rewards[1] -= sum(((distances[1][j] - 1) * 4) for j in indices[1])
 
         rewards[0] += ((sum(1 for item in plans[0] if isinstance(item, Location)) * 5) - (sum(1 for item in plans[1] if isinstance(item, Location)) * 20))
         rewards[1] += ((sum(1 for item in plans[1] if isinstance(item, Location)) * 5) - (sum(1 for item in plans[0] if isinstance(item, Location)) * 20))

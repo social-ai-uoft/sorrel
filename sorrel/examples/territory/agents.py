@@ -6,10 +6,12 @@ import numpy as np
 from sorrel.agents.agent import Agent
 from sorrel.entities.entity import Entity
 from sorrel.examples.territory.entities import Province
+from sorrel.examples.territory.gcn_iqn import GCNObservationSpec
 from sorrel.examples.territory.world import TerritoryWorld
 from sorrel.location import Location, Vector
 from sorrel.observation import observation_spec
 from sorrel.worlds.gridworld import Gridworld
+from torch_geometric.data import Data
 
 
 class TerritoryObservation(observation_spec.OneHotObservationSpec):
@@ -58,6 +60,7 @@ class TerritoryAgent(Agent[TerritoryWorld]):
         self.provinces = provinces
         self.side = side
         self.kind = f"{side}_capital"
+        self.gcn = True if isinstance(observation_spec, GCNObservationSpec) else False
     
     def reset(self):
         """Resets the agent by fill in blank images for the memory buffer."""
@@ -65,18 +68,28 @@ class TerritoryAgent(Agent[TerritoryWorld]):
 
     def pov(self, world: TerritoryWorld) -> np.ndarray:
         """Returns the state observed by the agent, from the flattened visual field."""
-        image = self.observation_spec.observe(world, self.location)
-        # flatten the image to get the state
-        return image.reshape(1, -1)
+        if not self.gcn:
+            image = self.observation_spec.observe(world, self.location)
+            # flatten the image to get the state
+            return image.reshape(1, -1)
+        else:
+            x, edge_index = self.observation_spec.observe(world, self.location)
+            return (x, edge_index)
     
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
-        prev_states = self.model.memory.current_state()
-        stacked_states = np.vstack((prev_states, state))
+        if not self.gcn:
+            prev_states = self.model.memory.current_state()
+            stacked_states = np.vstack((prev_states, state))
 
-        model_input = stacked_states.reshape(1, -1)
-        action = self.model.take_action(model_input)
-        return action
+            model_input = stacked_states.reshape(1, -1)
+            action = self.model.take_action(model_input)
+            return action
+        else:
+            prev_states = self.model.memory.current_state()
+
+            action, state = self.model.take_action(state[0], state[1], prev_states, return_state = True)
+            return action, state
 
     def act(self, world: TerritoryWorld, plan: list[Location], first: list, reward: int):
         """Act on the environment."""
@@ -99,9 +112,13 @@ class TerritoryAgent(Agent[TerritoryWorld]):
         distances = []
 
         state = self.pov(world)
-        action = self.get_action(state)
 
-        first = [state, action]
+        if self.gcn:
+            action, s = self.get_action(state)
+            first = [s, action]
+        else:
+            action = self.get_action(state)
+            first = [state, action]
 
         action_name = self.action_spec.get_readable_action(action)
         
@@ -125,3 +142,4 @@ class TerritoryAgent(Agent[TerritoryWorld]):
     def is_done(self, world: TerritoryWorld) -> bool:
         """Returns whether this Agent is done."""
         return world.is_done
+    
