@@ -4,7 +4,6 @@ from sorrel.examples.territory.entities import EmptyEntity
 from sorrel.examples.territory.env import TerritoryEnvironment
 from sorrel.examples.territory.world import TerritoryWorld
 
-
 # begin main
 if __name__ == "__main__":
 
@@ -32,4 +31,3 @@ if __name__ == "__main__":
     env = TerritoryEnvironment(world, config)
     # run the experiment with default parameters
     env.run_experiment()
-    

@@ -1,19 +1,21 @@
 import random
 from typing import Sequence
-from sorrel.buffers import Buffer
+
 import numpy as np
 import torch
-from sorrel.models.pytorch import PyTorchIQN
-from torch_geometric.nn import GCNConv
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
+from torch_geometric.nn import GCNConv
 
+from sorrel.buffers import Buffer
+from sorrel.models.pytorch import PyTorchIQN
 from sorrel.models.pytorch.iqn import IQN, calculate_huber_loss
 from sorrel.models.pytorch.pytorch_base import DoublePyTorchModel
-from sorrel.observation.visual_field import visual_field
 from sorrel.observation.observation_spec import ObservationSpec
+from sorrel.observation.visual_field import visual_field
 from sorrel.worlds.gridworld import Gridworld
+
 
 class GCNiRainbowModel(DoublePyTorchModel):
     def __init__(
@@ -37,7 +39,9 @@ class GCNiRainbowModel(DoublePyTorchModel):
         GAMMA: float = 0.99,
         n_quantiles: int = 12,
         hidden_dim: int = 64,
-        embed_dim: int = 64
+        embed_dim: int = 64,
+        world: Gridworld = None,
+        side: str = "",
     ):
         # Initialize base ANN parameters
         super().__init__(input_size, action_space, layer_size, epsilon, device, seed)
@@ -54,6 +58,8 @@ class GCNiRainbowModel(DoublePyTorchModel):
 
         self.conv1 = GCNConv(input_size, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, embed_dim)
+
+        embed_dim += 1
 
         # IQN-Network
         self.qnetwork_local = IQN(
@@ -83,13 +89,33 @@ class GCNiRainbowModel(DoublePyTorchModel):
             capacity=memory_size,
             obs_shape=(np.array(self.input_size).prod(),),
             n_frames=n_frames,
-            states_shape=(memory_size, 64),
+            states_shape=(memory_size, embed_dim),
         )
+
+        self.world = world
+        self.side = side
 
     def __str__(self):
         return f"GCNiRainbowModel(input_size={np.array(self.input_size).prod() * self.n_frames},action_space={self.action_space})"
 
-    def take_action(self, x, edge_index, prev_states, return_state = False) -> int:
+    def take_action(self, x, edge_index, prev_states, return_state=False) -> int:
+        enemy_code = None
+        try:
+            prov = self.world.get_entities_of_kind(
+                f"{"blue" if self.side == "red" else "red"}_province"
+            )[0]
+
+            if prov.state == "harvest":
+                enemy_code = np.array([1])
+            else:
+                enemy_code = np.array([0])
+        except IndexError:
+            print("No enemy provinces found!")
+            enemy_code = np.array([1])
+
+        enemy_code = torch.tensor([enemy_code], dtype=torch.float32, device=self.device)
+        enemy_code = enemy_code.reshape(1, -1)
+
         x = torch.from_numpy(x).float().to(self.device)
         edge_index = torch.from_numpy(edge_index).long().to(self.device)
 
@@ -101,10 +127,12 @@ class GCNiRainbowModel(DoublePyTorchModel):
         if isinstance(prev_states, np.ndarray):
             prev_states = torch.from_numpy(prev_states).float().to(self.device)
 
-        prev_states = prev_states.reshape(1, -1)       # (1, k)
-        state = state.reshape(1, -1)                   # (1, D)
+        prev_states = prev_states.reshape(1, -1)  # (1, k)
+        state = state.reshape(1, -1)  # (1, D)
 
-        s = torch.cat((prev_states, state), dim=1)     # concat along feature dim
+        s = torch.cat(
+            (prev_states, state, enemy_code), dim=1
+        )  # concat along feature dim
 
         # Epsilon-greedy action selection
         if random.random() > self.epsilon:
@@ -116,10 +144,14 @@ class GCNiRainbowModel(DoublePyTorchModel):
                 action_values = self.qnetwork_local.get_qvalues(torch_state)  # .mean(0)
             self.qnetwork_local.train()
             action = np.argmax(action_values.cpu().data.numpy(), axis=1)
-            return action[0] if not return_state else action[0], state.cpu().data.numpy()
+            return action[0] if not return_state else action[0], np.append(
+                state.cpu().data.numpy(), enemy_code.cpu().data.numpy()
+            )
         else:
             action = random.choices(np.arange(self.action_space), k=1)
-            return action[0] if not return_state else action[0], state.cpu().data.numpy()
+            return action[0] if not return_state else action[0], np.append(
+                state.cpu().data.numpy(), enemy_code.cpu().data.numpy()
+            )
 
     def train_step(self) -> np.ndarray:
         loss = torch.tensor(0.0)
@@ -207,6 +239,7 @@ class GCNiRainbowModel(DoublePyTorchModel):
     def end_epoch_action(self, **kwargs) -> None:
         pass
 
+
 class GCNObservationSpec(ObservationSpec[tuple[np.ndarray, np.ndarray], Gridworld]):
     def __init__(
         self,
@@ -228,7 +261,7 @@ class GCNObservationSpec(ObservationSpec[tuple[np.ndarray, np.ndarray], Gridworl
             width, height = env_dims
             self.num_nodes = width * height
         else:
-            size = (2 * self.vision_radius + 1)
+            size = 2 * self.vision_radius + 1
             self.num_nodes = size * size
 
         # Let each node have len(entity_list) features by default
@@ -255,9 +288,7 @@ class GCNObservationSpec(ObservationSpec[tuple[np.ndarray, np.ndarray], Gridworl
         location: tuple | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         if not self.full_view and location is None:
-            raise TypeError(
-                "location must be provided when full_view=False"
-            )
+            raise TypeError("location must be provided when full_view=False")
 
         grid = visual_field(
             world=world,
@@ -266,7 +297,7 @@ class GCNObservationSpec(ObservationSpec[tuple[np.ndarray, np.ndarray], Gridworl
             location=location if not self.full_view else None,
             fill_entity_kind=self.fill_entity_kind,
         )
-        
+
         # grid shape: (channels, W, H)
         # Example: (num_features, width, height)
 
@@ -276,6 +307,7 @@ class GCNObservationSpec(ObservationSpec[tuple[np.ndarray, np.ndarray], Gridworl
         x = grid.reshape(W * H, C)  # shape (num_nodes, num_features)
 
         edges = []
+
         def node_id(r, c):
             return r * H + c
 
@@ -296,12 +328,16 @@ class GCNObservationSpec(ObservationSpec[tuple[np.ndarray, np.ndarray], Gridworl
         edge_index = np.array(edges, dtype=np.int64).T  # shape (2, E)
 
         return x, edge_index
-    
+
+
 class GCNBuffer(Buffer):
-    def __init__(self, capacity, obs_shape, states_shape = None, n_frames=1):
+    def __init__(self, capacity, obs_shape, states_shape=None, n_frames=1):
         self.capacity = capacity
         self.obs_shape = obs_shape
-        self.states = np.zeros((capacity, *obs_shape) if states_shape == None else states_shape, dtype=np.float32)
+        self.states = np.zeros(
+            (capacity, *obs_shape) if states_shape == None else states_shape,
+            dtype=np.float32,
+        )
         self.actions = np.zeros(capacity, dtype=np.int64)
         self.rewards = np.zeros(capacity, dtype=np.float32)
         self.dones = np.zeros(capacity, dtype=np.float32)

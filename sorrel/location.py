@@ -128,7 +128,7 @@ class Location(tuple):
                 + type(other).__name__
                 + " with a Location."
             )
-        
+
     def __hash__(self):
         return hash((self.x, self.y, self.z))
 

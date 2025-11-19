@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
+
 import numpy as np
-import torch
 import pandas as pd
+import torch
 
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents.agent import Agent
@@ -12,7 +13,7 @@ from sorrel.environment import Environment
 # sorrel imports
 from sorrel.examples.territory.agents import TerritoryAgent, TerritoryObservation
 from sorrel.examples.territory.entities import EmptyEntity, Province, River
-from sorrel.examples.territory.gcn_iqn import GCNObservationSpec, GCNiRainbowModel
+from sorrel.examples.territory.gcn_iqn import GCNiRainbowModel, GCNObservationSpec
 from sorrel.examples.territory.world import TerritoryWorld
 from sorrel.location import Location
 from sorrel.models.pytorch import PyTorchIQN
@@ -27,7 +28,7 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
         super().__init__(world, config, stop_if_done=True)
         self.current_attacks = 0
         self.current_epoch = 1
-        self.data = pd.DataFrame(columns=['epoch', 'attacks'])
+        self.data = pd.DataFrame(columns=["epoch", "attacks"])
 
     def setup_agents(self):
         """Create the agents for this experiment and assign them to self.agents."""
@@ -43,26 +44,21 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
                 "red_province",
                 "blue_capital",
                 "red_capital",
-                "river"
+                "river",
             ]
 
             observation_spec = None
             model = None
 
             # create the action spec
-            action_spec = ActionSpec(
-                [
-                    "harvest",
-                    "attack"
-                ]
-            )
+            action_spec = ActionSpec(["harvest", "attack"])
 
-            if (self.config.model.gcn):
+            if self.config.model.gcn:
                 observation_spec = GCNObservationSpec(
                     entity_list=entity_list,
                     full_view=True,
                     env_dims=(self.world.height, self.world.width),
-                    #side="red" if is_blue_agent else "blue",
+                    # side="red" if is_blue_agent else "blue",
                 )
 
                 model = GCNiRainbowModel(
@@ -79,14 +75,16 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
                     sync_freq=200,
                     model_update_freq=4,
                     batch_size=64,
-                    #batch_size=32,
-                    #memory_size=1024,
+                    # batch_size=32,
+                    # memory_size=1024,
                     memory_size=1024,
                     # LR=0.00025,
                     LR=0.001,
                     TAU=0.001,
                     GAMMA=0.99,
                     n_quantiles=12,
+                    world=self.world,
+                    side="red" if is_blue_agent else "blue",
                 )
             else:
                 observation_spec = TerritoryObservation(
@@ -109,7 +107,7 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
                     sync_freq=200,
                     model_update_freq=4,
                     batch_size=64,
-                    #batch_size=32,
+                    # batch_size=32,
                     memory_size=1024,
                     # LR=0.00025,
                     LR=0.001,
@@ -146,12 +144,12 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
         red_province_locations = []
         river_locations = []
 
-        formation = 'halves'
+        formation = "halves"
 
         for index in np.ndindex(self.world.map.shape):
             y, x, z = index
-            
-            if formation == 'random':
+
+            if formation == "random":
                 if np.random.rand() < 0.1 and len(capital_locations) < len(self.agents):
                     capital_locations.append(index)
                 else:
@@ -159,19 +157,25 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
                         blue_province_locations.append(index)
                     else:
                         red_province_locations.append(index)
-            elif formation == 'halves':
+            elif formation == "halves":
                 capital_locations.append((self.world.height // 2, 0, 0))
-                capital_locations.append((self.world.height // 2, self.world.width - 1, 0))
+                capital_locations.append(
+                    (self.world.height // 2, self.world.width - 1, 0)
+                )
                 if x < self.world.width // 2:
                     if index not in capital_locations:
                         blue_province_locations.append(index)
                 else:
                     if index not in capital_locations:
                         red_province_locations.append(index)
-            elif formation == 'halves_river':
+            elif formation == "halves_river":
                 capital_locations.append((self.world.height // 2, 0, 0))
-                capital_locations.append((self.world.height // 2, self.world.width - 1, 0))
-                if (x == self.world.width // 2 or x == (self.world.width // 2) - 1) and np.random.rand() < 1:
+                capital_locations.append(
+                    (self.world.height // 2, self.world.width - 1, 0)
+                )
+                if (
+                    x == self.world.width // 2 or x == (self.world.width // 2) - 1
+                ) and np.random.rand() < 1:
                     river_locations.append(index)
                 elif x < self.world.width // 2:
                     if index not in capital_locations:
@@ -188,19 +192,18 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
             self.world.add(loc, Province(side="red"))
         for loc in river_locations:
             loc = tuple(loc)
-            self.world.add(loc, River()) 
+            self.world.add(loc, River())
         for loc, agent in zip(capital_locations, self.agents):
             loc = tuple(loc)
             self.world.add(loc, agent)
             if agent.side == "blue":
                 agent.provinces = [
                     entity
-                    for entity in self.world.get_entities_of_kind('blue_province')
+                    for entity in self.world.get_entities_of_kind("blue_province")
                 ]
             else:
                 agent.provinces = [
-                    entity
-                    for entity in self.world.get_entities_of_kind('red_province')
+                    entity for entity in self.world.get_entities_of_kind("red_province")
                 ]
 
     def take_turn(self) -> None:
@@ -222,7 +225,7 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
 
         for f, a in zip(firsts, self.agents):
             action_name = a.action_spec.get_readable_action(f[1])
-            if action_name == 'attack':
+            if action_name == "attack":
                 self.current_attacks += 1
 
         values = []
@@ -242,19 +245,31 @@ class TerritoryEnvironment(Environment[TerritoryWorld]):
             indices.append(idxs)
 
         plans = values
-        
+
         # rewards[0] -= sum(((distances[0][j] - 1) * 4) for j in indices[0])
         # rewards[1] -= sum(((distances[1][j] - 1) * 4) for j in indices[1])
 
-        rewards[0] += ((sum(1 for item in plans[0] if isinstance(item, Location)) * 5) - (sum(1 for item in plans[1] if isinstance(item, Location)) * 20))
-        rewards[1] += ((sum(1 for item in plans[1] if isinstance(item, Location)) * 5) - (sum(1 for item in plans[0] if isinstance(item, Location)) * 20))
+        rewards[0] += (
+            sum(1 for item in plans[0] if isinstance(item, Location)) * 5
+        ) - (sum(1 for item in plans[1] if isinstance(item, Location)) * 20)
+        rewards[1] += (
+            sum(1 for item in plans[1] if isinstance(item, Location)) * 5
+        ) - (sum(1 for item in plans[0] if isinstance(item, Location)) * 20)
 
         for agent, p, f, r in zip(self.agents, plans, firsts, rewards):
             agent.act(self.world, p, f, r)
 
     def reset(self) -> None:
         super().reset()
-        self.data = pd.concat([self.data, pd.DataFrame({'epoch': [self.current_epoch], 'attacks': [self.current_attacks]})], ignore_index=True)
+        self.data = pd.concat(
+            [
+                self.data,
+                pd.DataFrame(
+                    {"epoch": [self.current_epoch], "attacks": [self.current_attacks]}
+                ),
+            ],
+            ignore_index=True,
+        )
         self.current_epoch += 1
         self.current_attacks = 0
 
