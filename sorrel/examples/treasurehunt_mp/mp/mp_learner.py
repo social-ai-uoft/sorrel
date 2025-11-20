@@ -1,171 +1,171 @@
-"""Learner process for training agent models."""
+"""Learner process for training agent models.
+
+Based on refined plan: trains on shared model or GPU copy, publishes weights atomically.
+"""
 
 import random
 import time
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
+from copy import deepcopy
 
 import numpy as np
 
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.examples.treasurehunt_mp.mp.mp_shared_models import publish_model, copy_model_state_dict
+from sorrel.examples.treasurehunt_mp.mp.mp_shared_models import (
+    create_model_from_config,
+    copy_model_state_dict,
+)
 
 
-def learner_process(agent_id, shared_state, shared_buffers, shared_models, config, agent_model_config):
+def learner_process(agent_id, shared_model, shared_buffer, shared_state, config, model_config):
     """Learner process for a single agent.
     
-    This process:
-    1. Samples experiences from the agent's shared replay buffer
-    2. Trains a private copy of the model
-    3. Periodically publishes updated model to shared memory
+    Based on refined plan: trains directly on shared model (or GPU copy for speed).
     
     Args:
         agent_id: Agent ID (0-indexed)
+        shared_model: Shared model (on CPU, shared memory)
+        shared_buffer: Shared replay buffer for this agent
         shared_state: Shared state dictionary
-        shared_buffers: List of shared replay buffers
-        shared_models: Shared models (format depends on publish_mode)
         config: MPConfig object
-        agent_model_config: Model configuration for this agent
+        model_config: Model configuration dictionary
     """
-    # Set device (can be different per agent)
-    if config.device_per_agent and torch.cuda.is_available():
-        device = torch.device(f'cuda:{agent_id % torch.cuda.device_count()}')
+    # Get device from config
+    device = config.get_device(agent_id=agent_id)
+
+    if device.type in ('cuda', 'mps'):
+        # Create GPU copy for training (faster)
+        train_model = create_model_from_config(model_config, device=device)
+        copy_model_state_dict(shared_model, train_model)
+        # CRITICAL: Recreate optimizer after copying weights
+        # The optimizer was created with random initial weights, but we've now
+        # copied weights from the shared model. The optimizer's internal state
+        # (momentum, Adam statistics) needs to be reset to match the new weights.
+        train_model.optimizer = optim.Adam(
+            train_model.qnetwork_local.parameters(),
+            lr=config.learning_rate
+        )
     else:
-        device = torch.device('cpu')
+        # Train directly on shared model (CPU)
+        # CRITICAL: If shared_model was created by copying from a source model,
+        # the optimizer state might be wrong. Recreate it to be safe.
+        # (create_shared_model() already recreates optimizer, but double-check)
+        train_model = shared_model
+        # Ensure optimizer is properly initialized (should already be done in create_shared_model)
+        # But if not, recreate it
+        # if not hasattr(train_model, 'optimizer') or train_model.optimizer is None:
+        train_model.optimizer = optim.Adam(
+            train_model.qnetwork_local.parameters(),
+            lr=config.learning_rate
+        )
+
+    # debug
+    # train_model = create_model_from_config(model_config, device=device)
+    # optimizer = optim.Adam(
+    #     train_model.qnetwork_local.parameters(),
+    #     lr=config.learning_rate
+    # )
+    # train_model.optimizer = optimizer
+    # print(f'learning rate: {train_model.optimizer.param_groups[0]["lr"]}')
     
-    # Create private model (learner's working copy)
-    private_model = PyTorchIQN(
-        input_size=agent_model_config['input_size'],
-        action_space=agent_model_config['action_space'],
-        layer_size=agent_model_config['layer_size'],
-        epsilon=agent_model_config['epsilon'],
-        epsilon_min=agent_model_config.get('epsilon_min', 0.01),
-        device=device,
-        seed=agent_model_config.get('seed') if agent_model_config.get('seed') is not None else random.randint(0, 2**31),
-        n_frames=agent_model_config['n_frames'],
-        n_step=agent_model_config['n_step'],
-        sync_freq=agent_model_config['sync_freq'],
-        model_update_freq=agent_model_config['model_update_freq'],
-        batch_size=agent_model_config['batch_size'],
-        memory_size=agent_model_config['memory_size'],
-        LR=agent_model_config['LR'],
-        TAU=agent_model_config['TAU'],
-        GAMMA=agent_model_config['GAMMA'],
-        n_quantiles=agent_model_config['n_quantiles'],
-    )
-    
-    # Copy initial weights from shared model
-    if config.publish_mode == 'double_buffer':
-        slot = shared_state['active_slots'][agent_id].value
-        copy_model_state_dict(shared_models[agent_id][slot], private_model)
-    else:
-        copy_model_state_dict(shared_models[agent_id], private_model)
-    
-    # Move to device
-    private_model = private_model.to(device)
-    
-    # Training counters
     training_step = 0
-    last_published_step = -1
+    version = 0  # Version counter for debugging
     
-    try:
-        while not shared_state['should_stop'].value:
-            # Sample batch from shared buffer
-            batch = shared_buffers[agent_id].sample(config.batch_size)
-            
-            if batch is None:
-                # Not enough data yet, wait a bit
-                time.sleep(0.01)
-                continue
-            
-            states, actions, rewards, next_states, dones, valid = batch
-            
-            # Convert to torch tensors
-            states = torch.from_numpy(states).float().to(device)
-            next_states = torch.from_numpy(next_states).float().to(device)
-            actions = torch.from_numpy(actions).long().to(device)
-            rewards = torch.from_numpy(rewards).float().to(device)
-            dones = torch.from_numpy(dones).float().to(device)
-            valid = torch.from_numpy(valid).float().to(device)
-            
-            # Train on batch
-            loss = train_step(
-                private_model,
-                states,
-                actions,
-                rewards,
-                next_states,
-                dones,
-                valid,
-                device
-            )
-            
-            training_step += 1
-            
-            # Periodically publish updated model
-            if training_step % config.publish_interval == 0 and training_step > last_published_step:
-                publish_model(
-                    agent_id,
-                    private_model,
-                    shared_models,
-                    shared_state,
-                    config
-                )
-                last_published_step = training_step
-            
-            # Store loss for epoch-level logging (write to shared state)
-            loss_val = loss.item() if hasattr(loss, 'item') else float(loss)
-            
-            # Write loss to shared array for aggregation in actor process
-            if 'agent_losses' in shared_state:
-                with shared_state['agent_loss_counts'][agent_id].get_lock():
-                    idx = shared_state['agent_loss_counts'][agent_id].value % 100
-                    shared_state['agent_losses'][agent_id][idx] = loss_val
-                    shared_state['agent_loss_counts'][agent_id].value += 1
-            
-            # Optional: Logging - print progress more frequently
-            if config.logging:
-                # Print every 50 training steps or every log_interval epochs
-                if (training_step % 50 == 0) or (shared_state['global_epoch'].value % config.log_interval == 0):
-                    epoch = shared_state['global_epoch'].value
-                    print(f"Agent {agent_id}: Training step {training_step}, Loss: {loss_val:.4f}, "
-                          f"Epoch: {epoch}, Buffer size: {shared_buffers[agent_id].size}")
+    while not shared_state['should_stop'].value:
+        # Sample batch from shared buffer (protected by lock per refined plan)
+        # with shared_state['buffer_locks'][agent_id]:
+        batch = shared_buffer.sample(config.batch_size)
+        
+        if batch is None:
+            time.sleep(0.001)
+            continue
+        
+        
+        # Train model
+        # also check if the train_model has updated any parameters by comparing the weight before and after training
+        # weight_before_train = deepcopy(train_model.qnetwork_local.head1.weight.data.clone())
+        loss = train_step(train_model, batch, device)
+        # weight_after_train = deepcopy(train_model.qnetwork_local.head1.weight.data.clone())
+        # weight_change = torch.abs(weight_after_train - weight_before_train).mean().item()
+        # if weight_change < 1e-20:
+        #     print(f"[Learner {agent_id}] ❌ CRITICAL: No parameters updated at step {training_step}!")
+        #     print(f"  Loss: {loss.item():.6f}, Weight change: {weight_change:.8f}")
+        # else:
+        #     print(f"[Learner {agent_id}] ✅ Parameters updated at step {training_step}!")
+        #     print(f"  Loss: {loss.item():.6f}, Weight change: {weight_change:.8f}")
+
     
-    except Exception as e:
-        print(f"Learner {agent_id} crashed: {e}")
-        import traceback
-        traceback.print_exc()
-        # Set error flag if it exists
-        if 'learner_error_flags' in shared_state:
-            shared_state['learner_error_flags'][agent_id].value = True
-    
-    finally:
-        # Cleanup
-        pass
+        
+        training_step += 1
+        version += 1  # Increment version each time we learn
+        
+        # Always publish weights back to shared model (even on CPU, since we use local copy)
+        # CRITICAL: Shared memory tensors can't receive gradients, so we must train on local copy
+        if training_step % config.publish_interval == 0:
+            # Copy weights from local model to shared model
+            # CRITICAL FIX: Use load_state_dict() for atomic snapshot
+            # This prevents race conditions where actor reads weights during update
+     
+            with torch.no_grad():
+                # Atomic operation: load entire model state at once
+                # This ensures shared_model gets a consistent snapshot of train_model
+                # NOTE: state_dict() includes both qnetwork_local and qnetwork_target
+                # (all registered submodules), so both networks are synced to shared model
+                # Get state dict on GPU first, then move to CPU
+                state_dict_gpu = train_model.state_dict()
+                state_dict_cpu = {k: v.cpu() for k, v in state_dict_gpu.items()}
+                shared_model.load_state_dict(state_dict_cpu)
+            
+            # Copy epsilon (not part of state_dict)
+            shared_model.epsilon = train_model.epsilon
+            
 
 
-def train_step(model, states, actions, rewards, next_states, dones, valid, device):
+def train_step(model, batch, device):
     """Single training step for IQN model.
     
-    This is adapted from PyTorchIQN.train_step() but works with
-    pre-converted tensors instead of sampling from model.memory.
-    
     Args:
-        model: PyTorchIQN model
-        states: Batch of states
-        actions: Batch of actions
-        rewards: Batch of rewards
-        next_states: Batch of next states
-        dones: Batch of done flags
-        valid: Batch of valid flags (for frame stacking)
+        model: Model to train (can be shared model or GPU copy)
+        batch: Training batch (states, actions, rewards, next_states, dones, valid)
         device: Device to run on
     
     Returns:
-        Loss tensor
+        Loss value
     """
-    loss = torch.tensor(0.0).to(device)
+    states, actions, rewards, next_states, dones, valid = batch
+    
+    # CRITICAL: Check if batch data is valid (from shared memory)
+    # print(f"[train_step] Batch data check:", flush=True)
+    # print(f"  states shape: {states.shape}, dtype: {states.dtype}, min: {states.min():.6f}, max: {states.max():.6f}, mean: {states.mean():.6f}", flush=True)
+    # print(f"  rewards shape: {rewards.shape}, dtype: {rewards.dtype}, min: {rewards.min():.6f}, max: {rewards.max():.6f}, mean: {rewards.mean():.6f}", flush=True)
+    # print(f"  actions shape: {actions.shape}, unique actions: {np.unique(actions)}", flush=True)
+    # print(f"  dones shape: {dones.shape}, sum: {dones.sum()}, mean: {dones.mean():.6f}", flush=True)
+    # print(f"  valid shape: {valid.shape}, sum: {valid.sum()}, mean: {valid.mean():.6f}", flush=True)
+    
+    # # CRITICAL: Make a copy to ensure we're not sharing memory with the buffer
+    # # Shared memory numpy arrays might cause issues when converted to tensors
+    # states = np.array(states, copy=True)
+    # actions = np.array(actions, copy=True)
+    # rewards = np.array(rewards, copy=True)
+    # next_states = np.array(next_states, copy=True)
+    # dones = np.array(dones, copy=True)
+    # valid = np.array(valid, copy=True)
+    
+    # Convert to tensors and move to device
+    states = torch.from_numpy(states).float().to(device)
+    actions = torch.from_numpy(actions).long().to(device)
+    rewards = torch.from_numpy(rewards).float().to(device)
+    next_states = torch.from_numpy(next_states).float().to(device)
+    dones = torch.from_numpy(dones).float().to(device)
+    valid = torch.from_numpy(valid).float().to(device)
+    
+    # Set model to training mode
+    model.qnetwork_local.train()
+    model.qnetwork_target.eval()
+    
+    # Compute loss
     model.optimizer.zero_grad()
     
     batch_size = states.shape[0]
@@ -177,12 +177,13 @@ def train_step(model, states, actions, rewards, next_states, dones, valid, devic
         q_values_next_local.mean(dim=1), dim=1, keepdim=True
     )
     
-    # Get Q values from target network
-    Q_targets_next, _ = model.qnetwork_target(next_states, n_quantiles)
-    Q_targets_next = Q_targets_next.gather(
-        2,
-        action_indx.unsqueeze(-1).expand(batch_size, n_quantiles, 1),
-    ).transpose(1, 2)
+    # Get Q values from target network (detached - we don't train target network)
+    with torch.no_grad():
+        Q_targets_next, _ = model.qnetwork_target(next_states, n_quantiles)
+        Q_targets_next = Q_targets_next.gather(
+            2,
+            action_indx.unsqueeze(-1).expand(batch_size, n_quantiles, 1),
+        ).transpose(1, 2)
     
     # Compute Q targets for current states
     Q_targets = rewards.unsqueeze(-1) + (
@@ -191,7 +192,7 @@ def train_step(model, states, actions, rewards, next_states, dones, valid, devic
         * (1.0 - dones.unsqueeze(-1))
     )
     
-    # Get expected Q values from local model
+    # Get expected Q values from local model (THIS needs gradients!)
     Q_expected, taus = model.qnetwork_local(states, n_quantiles)
     Q_expected = Q_expected.gather(
         2, actions.unsqueeze(-1).expand(batch_size, n_quantiles, 1)
@@ -204,6 +205,12 @@ def train_step(model, states, actions, rewards, next_states, dones, valid, devic
     # Zero out loss on invalid actions
     huber_l = huber_l * valid.unsqueeze(-1)
     
+    # Check if all actions are invalid (would zero out all gradients)
+    valid_count = valid.sum().item()
+    if valid_count == 0:
+        # All actions invalid - return zero loss (no gradients)
+        return torch.tensor(0.0, device=device, requires_grad=False)
+    
     quantil_l = (
         abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
     )
@@ -211,10 +218,36 @@ def train_step(model, states, actions, rewards, next_states, dones, valid, devic
     # Average across all quantile & batch dimensions
     loss = quantil_l.mean()
     
-    # Minimize the loss
+    # CRITICAL DEBUG: Always trace gradient chain when loss has no gradients
+    # Print to stdout with explicit flush to ensure visibility
+    if not loss.requires_grad:
+        print(f"\n[train_step] ❌ CRITICAL: Loss doesn't require gradients! Tracing gradient chain...", flush=True)
+        print(f"[train_step]   Q_expected.requires_grad: {Q_expected.requires_grad}", flush=True)
+        print(f"[train_step]   td_error.requires_grad: {td_error.requires_grad}", flush=True)
+        print(f"[train_step]   huber_l.requires_grad: {huber_l.requires_grad}", flush=True)
+        print(f"[train_step]   quantil_l.requires_grad: {quantil_l.requires_grad}", flush=True)
+        print(f"[train_step]   loss.requires_grad: {loss.requires_grad}", flush=True)
+        print(f"[train_step]   Model training mode: {model.qnetwork_local.training}", flush=True)
+        print(f"[train_step]   Valid count: {valid_count}/{batch_size}", flush=True)
+        # Check if Q_expected is the problem
+        if not Q_expected.requires_grad:
+            print(f"[train_step]   ⚠️  Q_expected has no gradients! Model output is broken!", flush=True)
+            # Check model parameters
+            first_param = next(model.qnetwork_local.parameters())
+            print(f"[train_step]   First param requires_grad: {first_param.requires_grad}", flush=True)
+    
+    # Backward pass
     loss.backward()
-    clip_grad_norm_(model.qnetwork_local.parameters(), 1)
+    
+    # Gradient clipping
+    # clip_grad_norm_(model.qnetwork_local.parameters(), max_norm=1.0)
+    
+
+
+    # Update weights
     model.optimizer.step()
+
+
     
     # Soft update target network
     model.soft_update()

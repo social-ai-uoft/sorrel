@@ -1,5 +1,9 @@
-"""Actor process for environment interaction."""
+"""Actor process for environment interaction.
 
+Based on refined plan: uses local model copies for inference, syncs periodically.
+"""
+
+import random
 import time
 from pathlib import Path
 
@@ -8,17 +12,20 @@ from numpy import ndenumerate
 
 from sorrel.agents import Agent
 from sorrel.entities import Entity
-from sorrel.utils.logging import ConsoleLogger, Logger
 from sorrel.utils.visualization import ImageRenderer
 
-from sorrel.examples.treasurehunt_mp.mp.mp_shared_models import get_published_policy
+import torch
+from sorrel.models.pytorch import PyTorchIQN
+from sorrel.examples.treasurehunt_mp.mp.mp_shared_models import (
+    create_model_from_config,
+    copy_model_state_dict,
+)
 
 
 class ActorProcess:
     """Actor process that runs the environment.
     
-    This process steps the environment, queries published policies,
-    and writes experiences to shared replay buffers.
+    Based on refined plan: uses local model copies for inference, syncs periodically.
     """
     
     def __init__(self, env, agents, shared_state, shared_buffers, shared_models, config, logger_queue=None):
@@ -29,7 +36,7 @@ class ActorProcess:
             agents: List of agents
             shared_state: Shared state dictionary
             shared_buffers: List of shared replay buffers (one per agent)
-            shared_models: Shared models (format depends on publish_mode)
+            shared_models: List of shared models (one per agent)
             config: MPConfig object
             logger_queue: Queue for sending metrics to main process (optional)
         """
@@ -39,12 +46,45 @@ class ActorProcess:
         self.shared_buffers = shared_buffers
         self.shared_models = shared_models
         self.config = config
-        self.publish_mode = config.publish_mode
         self.logger_queue = logger_queue
+        
+        # Create local model copies for each agent (on GPU for fast inference)
+        # Get device from config
+        device = config.get_device(agent_id=0)  # Actor uses device 0
+        
+        # Extract model configs from agents
+        self.local_models = []
+        for i, agent in enumerate(agents):
+            agent_model = agent.model
+            model_config = {
+                'input_size': agent_model.input_size,
+                'action_space': agent_model.action_space,
+                'layer_size': agent_model.layer_size,
+                'epsilon': agent_model.epsilon,
+                'epsilon_min': getattr(agent_model, 'epsilon_min', 0.01),
+                'seed': random.randint(0, 2**31),  # Random seed (weights copied immediately)
+                'n_frames': getattr(agent_model, 'n_frames', config.n_frames),
+                'n_step': getattr(agent_model, 'n_step', 3),
+                'sync_freq': getattr(agent_model, 'sync_freq', 200),
+                'model_update_freq': getattr(agent_model, 'model_update_freq', 4),
+                'batch_size': config.batch_size,
+                'memory_size': config.buffer_capacity,
+                'LR': config.learning_rate,
+                'TAU': getattr(agent_model, 'TAU', 0.001),
+                'GAMMA': getattr(agent_model, 'GAMMA', 0.99),
+                'n_quantiles': getattr(agent_model, 'n_quantiles', 12),
+            }
+            local_model = create_model_from_config(model_config, device=device)
+            # Initial sync from shared model
+            copy_model_state_dict(shared_models[i], local_model)
+            self.local_models.append(local_model)
+        
+        # Sync counter for periodic syncing
+        self.sync_counter = 0
         
         # Animation setup
         self.renderer = None
-        self.animate = config.logging  # Use logging flag to determine animation
+        self.animate = config.logging
     
     def run(self):
         """Main actor loop."""
@@ -58,27 +98,25 @@ class ActorProcess:
                 )
             
             # Main epoch loop
-            for epoch in range(self.config.epochs + 1):
+            for epoch in range(self.config.epochs):
                 if self.shared_state['should_stop'].value:
                     break
                 
-                # Print progress
-                if epoch % max(1, self.config.epochs // 10) == 0 or epoch == 0:
-                    print(f"Actor: Epoch {epoch}/{self.config.epochs}")
+                # Update shared epoch counter (atomic write)
+                self.shared_state['global_epoch'].value = epoch
                 
                 # Reset environment at start of each epoch
                 self.env.reset()
+                
+                # Reset local model memory buffers for state stacking
+                # This ensures clean state stacking at the start of each epoch
+                for local_model in self.local_models:
+                    local_model.memory.clear()
                 
                 # Determine whether to animate this epoch
                 animate_this_epoch = self.animate and (
                     epoch % self.config.record_period == 0
                 )
-                
-                # Start epoch action for each agent model
-                for agent in self.agents:
-                    # Use published model for start_epoch_action
-                    # Note: We need to handle this carefully since models are shared
-                    pass  # Skip for now, can be added if needed
                 
                 # Run environment for specified number of turns
                 self.env.turn = 0
@@ -93,74 +131,52 @@ class ActorProcess:
                     # Step environment
                     self.step_environment()
                     
-                    # Increment turn counter (local to actor process)
-                    self.env.turn += 1
+                    # Periodically sync local models from shared models (refined plan)
+                    self.sync_counter += 1
+                    if self.sync_counter % self.config.sync_interval == 0:
+                        for agent_id in range(len(self.agents)):
+                            # Read from shared model (atomic read via load_state_dict, no lock needed)
+                            copy_model_state_dict(self.shared_models[agent_id], self.local_models[agent_id])
                     
-                    # Increment global epoch counter (represents turns/experience collection)
-                    with self.shared_state['global_epoch'].get_lock():
-                        self.shared_state['global_epoch'].value += 1
+                    # Increment turn counter
+                    self.env.turn += 1
                 
-                self.env.world.is_done = True
+                # Decay epsilon at end of each epoch (matching sequential version)
+                for agent_id in range(len(self.agents)):
+                    local_model = self.local_models[agent_id]
+                    # Decay epsilon using the same method as sequential version
+                    local_model.epsilon = max(
+                        local_model.epsilon * (1 - self.config.epsilon_decay),
+                        self.config.epsilon_min
+                    )
+                    # Publish epsilon to shared model so learner can read it
+                    self.shared_models[agent_id].epsilon = local_model.epsilon
                 
                 # Collect metrics for logging
                 total_reward = self.env.world.total_reward
-                total_loss = 0.0
                 epsilon = 0.0
-                
-                # Get epsilon from published model (use first agent's epsilon as representative)
                 if len(self.agents) > 0:
-                    published_model = get_published_policy(
-                        0, self.shared_models, self.shared_state, self.config
-                    )
-                    epsilon = getattr(published_model, 'epsilon', 0.0)
+                    epsilon = getattr(self.shared_models[0], 'epsilon', 0.0)
                 
-                # Aggregate losses from shared state (learner processes write here)
-                agent_losses_dict = {}
-                for i in range(len(self.agents)):
-                    if 'agent_losses' in self.shared_state:
-                        with self.shared_state['agent_loss_counts'][i].get_lock():
-                            count = self.shared_state['agent_loss_counts'][i].value
-                        if count > 0:
-                            # Get recent losses from shared array (last 100 training steps)
-                            losses_array = self.shared_state['agent_losses'][i]
-                            # Use circular buffer: get last min(count, 100) losses
-                            start_idx = max(0, count - 100)
-                            recent_losses = [losses_array[j % 100] for j in range(start_idx, count)]
-                            avg_loss = np.mean(recent_losses) if recent_losses else 0.0
-                            agent_losses_dict[f'agent_{i}_loss'] = avg_loss
-                            total_loss += avg_loss
                 
                 # Send metrics to main process for logging
                 if self.logger_queue is not None:
                     metrics = {
                         'epoch': epoch,
                         'total_reward': total_reward,
-                        'total_loss': total_loss / len(self.agents) if len(self.agents) > 0 else 0.0,
+                        'total_loss': 0.0,  # Loss not tracked in metrics (would need shared state)
                         'epsilon': epsilon,
-                        **agent_losses_dict
                     }
                     try:
-                        self.logger_queue.put(metrics, block=False)
-                    except:
-                        pass  # Queue full, skip this epoch's logging
-                
-                # Print epoch completion
-                if epoch % max(1, self.config.epochs // 10) == 0 or epoch == self.config.epochs:
-                    print(f"Actor: Epoch {epoch} completed. Total reward: {total_reward:.2f}")
+                        self.logger_queue.put(metrics, block=True, timeout=1.0)
+                    except Exception:
+                        pass
                 
                 # Generate GIF if animation was done
                 if animate_this_epoch and self.renderer is not None:
                     output_dir = Path(self.config.log_dir)
                     output_dir.mkdir(parents=True, exist_ok=True)
                     self.renderer.save_gif(epoch, output_dir)
-                
-                # End epoch action
-                for agent in self.agents:
-                    pass  # Skip for now, can be added if needed
-                
-                # Check for termination
-                if self.env.world.is_done:
-                    break
             
         except KeyboardInterrupt:
             print("Actor process interrupted")
@@ -168,16 +184,13 @@ class ActorProcess:
             print(f"Actor process error: {e}")
             import traceback
             traceback.print_exc()
-            self.shared_state['actor_error_flag'].value = True
         finally:
             self.cleanup()
     
     def step_environment(self):
-        """Single environment step - uses sequential agent transitions like original code.
+        """Single environment step - uses sequential agent transitions.
         
-        This follows the original Environment.take_turn() logic:
-        1. Transition non-agent entities first
-        2. Transition each agent sequentially (to avoid conflicts)
+        Based on refined plan: uses local model copies (no lock needed!).
         """
         # 1. Transition non-agent entities first
         for _, x in ndenumerate(self.env.world.map):
@@ -186,54 +199,51 @@ class ActorProcess:
                 x.transition(self.env.world)
         
         # 2. Transition each agent sequentially (to avoid conflicts)
-        # This follows the original agent.transition() logic but uses:
-        # - Published model for action selection
-        # - Shared buffer for experience storage
         for i, agent in enumerate(self.agents):
-            # Get observation (same as agent.pov())
+            # Get observation
             state = agent.pov(self.env.world)
             
-            # Get published policy for this agent
-            published_model = get_published_policy(
-                i, self.shared_models, self.shared_state, self.config
-            )
+            # Use local model copy for inference (no lock needed!)
+            local_model = self.local_models[i]
             
-            # Get action using published model
-            # We need to use the shared buffer's current_state() for frame stacking
             # Temporarily replace agent's model for action selection
-            original_model = agent.model
-            agent.model = published_model
+            # CRITICAL FIX: Use local model's own memory buffer for state stacking,
+            # NOT the shared buffer. The shared buffer is only for storing experiences.
+            # The local model has its own memory buffer that we use for state stacking.
+            agent.model = local_model
+            # Note: local_model.memory is already set up when the model was created
+            # We use it for state stacking, but don't write to it (we write to shared buffer)
             
-            # Replace agent's memory with shared buffer for state stacking
-            original_memory = agent.model.memory
-            agent.model.memory = self.shared_buffers[i]
-            
-            # Get action (this will use published_model with shared_buffer for state stacking)
-            action = agent.get_action(state)
+            # Get action using local model copy (no lock needed!)
+            # This uses local_model.memory.current_state() for state stacking
+            with torch.no_grad():
+                action = agent.get_action(state)
             
             # Execute action (this updates the world)
             reward = agent.act(self.env.world, action)
             done = agent.is_done(self.env.world)
             
-            # Restore original model and memory
-            agent.model.memory = original_memory
-            agent.model = original_model
+            # Store experience in shared buffer (protected by lock per refined plan)
+            # CRITICAL: We write to shared buffer, but state stacking uses local model's memory
+            # CRITICAL FIX: Flatten state to match buffer's expected shape
+            # agent.pov() returns (1, features) but buffer expects (features,)
+            state_flat = state.flatten() if state.ndim > 1 else state
+            with self.shared_state['buffer_locks'][i]:
+                self.shared_buffers[i].add(
+                    obs=state_flat,
+                    action=action,
+                    reward=reward,
+                    done=done
+                )
             
-            # Store experience in shared buffer (agent.add_memory would use agent.model.memory,
-            # so we manually add to shared buffer)
-            self.shared_buffers[i].add(
-                obs=state,
-                action=action,
-                reward=reward,
-                done=done
-            )
+            # Also update local model's memory for state stacking (needed for next action)
+            # This ensures the local model's memory buffer has the latest state for stacking
+            local_model.memory.add(state, action, reward, done)
             
-            # Update world total reward (normally done in agent.transition)
+            # Update world total reward
             self.env.world.total_reward += reward
     
     def cleanup(self):
         """Clean up resources."""
         if self.renderer is not None:
-            # Cleanup renderer if needed
             pass
-

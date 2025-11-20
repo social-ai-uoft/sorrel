@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.entities import Entity
-from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_mp.world import TreasurehuntWorld
 
 # end imports
 

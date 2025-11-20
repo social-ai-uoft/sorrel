@@ -1,0 +1,13 @@
+experiment_name,timestamp,mp_enabled,time_seconds,time_formatted,epochs,max_turns
+treasurehunt_mp_mp,2025-11-19 20:32:40,True,16.40,00:00:16,100,50
+treasurehunt_mp_mp,2025-11-19 20:33:14,True,56.08,00:00:56,500,50
+treasurehunt_mp_seq,2025-11-19 20:36:00,False,33.87,00:00:33,500,50
+treasurehunt_mp_seq,2025-11-19 20:45:27,False,104.02,00:01:44,500,50
+treasurehunt_mp_mp,2025-11-19 20:47:58,True,155.79,00:02:35,500,50
+treasurehunt_mp_mp,2025-11-19 21:05:11,True,147.34,00:02:27,500,50
+treasurehunt_mp_mp,2025-11-19 21:17:23,True,350.20,00:05:50,1000,50
+treasurehunt_mp_seq,2025-11-19 21:24:35,False,206.63,00:03:26,1000,50
+treasurehunt_mp_mp,2025-11-19 21:36:10,True,355.57,00:05:55,1000,50
+treasurehunt_mp_seq,2025-11-19 21:46:38,False,205.06,00:03:25,1000,50
+treasurehunt_mp_seq,2025-11-19 22:51:18,False,300.92,00:05:00,1000,50
+treasurehunt_mp_mp,2025-11-19 22:59:21,True,429.04,00:07:09,1000,50

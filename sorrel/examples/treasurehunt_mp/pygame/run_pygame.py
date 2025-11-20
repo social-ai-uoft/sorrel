@@ -11,7 +11,7 @@ from pathlib import Path
 # Add the parent directory to the path to import sorrel modules
 sys.path.append(str(Path(__file__).parent.parent.parent.parent.parent))
 
-from sorrel.examples.treasurehunt.pygame.treasurehunt_pygame import TreasurehuntPygame
+from sorrel.examples.treasurehunt_mp.pygame.treasurehunt_pygame import TreasurehuntPygame
 
 
 def main():

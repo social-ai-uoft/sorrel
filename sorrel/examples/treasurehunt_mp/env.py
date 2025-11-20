@@ -9,9 +9,9 @@ from sorrel.action.action_spec import ActionSpec
 from sorrel.environment import Environment
 
 # imports from our example
-from sorrel.examples.treasurehunt.agents import TreasurehuntAgent
-from sorrel.examples.treasurehunt.entities import EmptyEntity, Sand, Wall
-from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_mp.agents import TreasurehuntAgent
+from sorrel.examples.treasurehunt_mp.entities import EmptyEntity, Sand, Wall
+from sorrel.examples.treasurehunt_mp.world import TreasurehuntWorld
 
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
@@ -34,7 +34,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
 
         Requires self.config.model.agent_vision_radius to be defined.
         """
-        agent_num = 2
+        agent_num = self.config.world.get("num_agents", 2)  # Number of agents (default: 2)
         agents = []
         for _ in range(agent_num):
             # create the observation spec
@@ -58,15 +58,15 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 input_size=observation_spec.input_size,
                 action_space=action_spec.n_actions,
                 layer_size=250,
-                epsilon=0.7,
-                epsilon_min=0.01,
+                epsilon=self.config.model.get("epsilon", 0.7),  # Initial exploration rate
+                epsilon_min=self.config.model.get("epsilon_min", 0.01),  # Minimum exploration rate
                 device="cpu",
                 seed=torch.random.seed(),
                 n_frames=5,
                 n_step=3,
                 sync_freq=200,
                 model_update_freq=4,
-                batch_size=64,
+                batch_size=self.config.model.get("batch_size", 64),  # Batch size from config
                 memory_size=1024,
                 LR=0.00025,
                 TAU=0.001,
