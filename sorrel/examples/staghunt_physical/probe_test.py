@@ -311,6 +311,48 @@ class TestIntentionProbeTest:
         
         return self.orientation_reference[(row, col)]
     
+    def _calculate_orientation_after_step(self, current_orient: int, action: str) -> int:
+        """Calculate the orientation after taking STEP_LEFT or STEP_RIGHT.
+        
+        This replicates the logic from StagHuntAgent.act() for simplified_movement.
+        
+        Args:
+            current_orient: Current agent orientation (0-3)
+            action: Either "STEP_LEFT" or "STEP_RIGHT"
+            
+        Returns:
+            New orientation after the step action
+        """
+        # Orientation vectors: (dy, dx) for each orientation
+        ORIENTATION_VECTORS = {
+            0: (-1, 0),  # north (up)
+            1: (0, 1),   # east (right)
+            2: (1, 0),   # south (down)
+            3: (0, -1),  # west (left)
+        }
+        
+        # Reverse mapping: from vector (dy, dx) to orientation
+        VECTOR_TO_ORIENTATION = {
+            (-1, 0): 0,  # north
+            (0, 1): 1,   # east
+            (1, 0): 2,   # south
+            (0, -1): 3,  # west
+        }
+        
+        # Get current orientation vector
+        dy, dx = ORIENTATION_VECTORS[current_orient]
+        
+        # Calculate perpendicular vectors for sidestep (same logic as in agents_v2.py)
+        if action == "STEP_LEFT":
+            # sidestep left: rotate orientation vector 90° counterclockwise
+            step_dy, step_dx = dx, -dy
+        else:  # STEP_RIGHT
+            # sidestep right: rotate orientation vector 90° clockwise
+            step_dy, step_dx = -dx, dy
+        
+        # Return the orientation that matches the movement direction
+        return VECTOR_TO_ORIENTATION.get((step_dy, step_dx), current_orient)
+    
     def _determine_action_facing_stag(
         self, 
         current_orient: int, 
@@ -341,24 +383,34 @@ class TestIntentionProbeTest:
         Returns:
             Action index for the action that faces toward the stag
         """
-        # Calculate relative direction from current orientation to stag orientation
-        orient_diff = (stag_orient - current_orient) % 4
+        # Calculate what orientation each action would result in
+        left_result = self._calculate_orientation_after_step(current_orient, "STEP_LEFT")
+        right_result = self._calculate_orientation_after_step(current_orient, "STEP_RIGHT")
         
-        # STEP_LEFT: orientation decreases by 1 (counter-clockwise)
-        # STEP_RIGHT: orientation increases by 1 (clockwise)
+        # Choose the action that results in facing the stag
+        if left_result == stag_orient:
+            action_idx = step_left_idx
+        elif right_result == stag_orient:
+            action_idx = step_right_idx
+        else:
+            # Neither action gives the correct orientation (shouldn't happen with step actions)
+            # This would only occur if stag_orient == current_orient, but we handle that case
+            # Default to STEP_RIGHT and let validation catch the error
+            action_idx = step_right_idx
         
-        if orient_diff == 0:
-            # Already facing the stag - use STEP_RIGHT as default
-            return step_right_idx
-        elif orient_diff == 1:
-            # Need to rotate clockwise by 1 - use STEP_RIGHT
-            return step_right_idx
-        elif orient_diff == 2:
-            # Need to rotate by 2 - either direction works, use STEP_RIGHT
-            return step_right_idx
-        else:  # orient_diff == 3
-            # Need to rotate counter-clockwise by 1 (or clockwise by 3) - use STEP_LEFT
-            return step_left_idx
+        # VALIDATION: Verify that the chosen action actually results in the correct orientation
+        action_name = "STEP_LEFT" if action_idx == step_left_idx else "STEP_RIGHT"
+        resulting_orient = self._calculate_orientation_after_step(current_orient, action_name)
+        
+        if resulting_orient != stag_orient:
+            raise ValueError(
+                f"Action determination error: "
+                f"current_orient={current_orient}, stag_orient={stag_orient}, "
+                f"chose {action_name}, but resulting_orient={resulting_orient} (expected {stag_orient}). "
+                f"STEP_LEFT would give {left_result}, STEP_RIGHT would give {right_result}."
+            )
+        
+        return action_idx
     
     def _setup_test_env(self, map_file_name: str):
         """Set up the test environment with specified ASCII map layout.
@@ -452,7 +504,7 @@ class TestIntentionProbeTest:
             agent_id: ID of the agent being tested
             epoch: Current training epoch
             version_name: Name for version ("upper" or "lower") for filename
-            partner_kind: Kind of partner agent (None = use original agent's kind)
+            partner_kind: Kind of partner agent ("no_partner" = no partner spawned, None = use original agent's kind)
             map_name: Name of the map file (for filenames)
             initial_orientation: Initial orientation for the agent
             orientation_facing_stag: Orientation that faces toward the stag
@@ -461,9 +513,6 @@ class TestIntentionProbeTest:
         Returns:
             Tuple of (q_values, weight_facing_stag, weight_facing_hare)
         """
-        # Create partner agent with specified kind
-        partner_agent = self._create_partner_agent(partner_kind, probe_agent.agent)
-        
         # Get spawn points (sorted by row, so index 0 is upper, index 1 is lower)
         spawn_points = sorted(
             self.probe_env.test_world.agent_spawn_points,
@@ -482,19 +531,32 @@ class TestIntentionProbeTest:
             )
         
         # Temporarily reorder spawn points so focal agent goes to desired position
-        # The first agent in override_agents will be placed at the first spawn point
         original_spawn_points = self.probe_env.test_world.agent_spawn_points.copy()
         desired_spawn = spawn_points[spawn_point_idx]
         other_spawn = spawn_points[1 - spawn_point_idx]  # The other spawn point
         
-        # Reorder so desired spawn is first
-        # Store in both the spawn_points list and a special flag for detection
-        reordered_spawn_points = [desired_spawn, other_spawn]
-        self.probe_env.test_world.agent_spawn_points = reordered_spawn_points
-        self.probe_env.test_world._probe_test_spawn_points = reordered_spawn_points
+        # Check if we need to spawn a partner agent
+        has_partner = partner_kind != "no_partner"
         
-        # Set up environment with both agents
-        self.probe_env.test_env.override_agents([probe_agent.agent, partner_agent])
+        if has_partner:
+            # Create partner agent with specified kind
+            partner_agent = self._create_partner_agent(partner_kind, probe_agent.agent)
+            
+            # Reorder so desired spawn is first (for both agents)
+            reordered_spawn_points = [desired_spawn, other_spawn]
+            self.probe_env.test_world.agent_spawn_points = reordered_spawn_points
+            self.probe_env.test_world._probe_test_spawn_points = reordered_spawn_points
+            
+            # Set up environment with both agents
+            self.probe_env.test_env.override_agents([probe_agent.agent, partner_agent])
+        else:
+            # No partner: only spawn focal agent
+            reordered_spawn_points = [desired_spawn]
+            self.probe_env.test_world.agent_spawn_points = reordered_spawn_points
+            self.probe_env.test_world._probe_test_spawn_points = reordered_spawn_points
+            
+            # Set up environment with only focal agent
+            self.probe_env.test_env.override_agents([probe_agent.agent])
         
         # Reset environment (this will place focal agent at desired position)
         self.probe_env.test_env.reset()
@@ -502,30 +564,33 @@ class TestIntentionProbeTest:
         # Restore original spawn points
         self.probe_env.test_world.agent_spawn_points = original_spawn_points
         
-        # Get focal agent and partner agent
+        # Get focal agent
         focal_agent = self.probe_env.test_env.agents[0]
-        partner_agent = self.probe_env.test_env.agents[1]
         
         # Set focal agent orientation to the initial orientation from reference file
         focal_agent.orientation = initial_orientation
         
-        # Get orientation for partner agent's spawn point
-        partner_spawn = other_spawn
-        partner_initial_orient, _ = self._get_orientation_for_spawn_point(partner_spawn, map_name)
-        # Set partner agent orientation to the initial orientation from reference file
-        partner_agent.orientation = partner_initial_orient
-        
         # Debug logging with verification
         orientation_names = {0: "NORTH", 1: "EAST", 2: "SOUTH", 3: "WEST"}
         
-        print(f"DEBUG probe test - Epoch {epoch}, Agent {agent_id}, Map {map_name}, Version {version_name}:")
+        print(f"DEBUG probe test - Epoch {epoch}, Agent {agent_id}, Map {map_name}, Version {version_name}, Partner: {partner_kind}:")
         print(f"  Focal agent spawn point: {desired_spawn} (row={desired_spawn[0]}, col={desired_spawn[1]})")
         print(f"  Focal agent location: {focal_agent.location} (row={focal_agent.location[0]}, col={focal_agent.location[1]})")
         print(f"  Focal agent initial orientation: {orientation_names.get(initial_orientation, 'UNKNOWN')} ({initial_orientation})")
         print(f"  Focal agent orientation facing stag: {orientation_names.get(orientation_facing_stag, 'UNKNOWN')} ({orientation_facing_stag})")
-        print(f"  Partner agent spawn point: {partner_spawn} (row={partner_spawn[0]}, col={partner_spawn[1]})")
-        print(f"  Partner agent location: {partner_agent.location} (row={partner_agent.location[0]}, col={partner_agent.location[1]})")
-        print(f"  Partner agent orientation: {orientation_names.get(partner_agent.orientation, 'UNKNOWN')} ({partner_agent.orientation})")
+        
+        if has_partner:
+            # Get partner agent and set its orientation
+            partner_agent = self.probe_env.test_env.agents[1]
+            partner_spawn = other_spawn
+            partner_initial_orient, _ = self._get_orientation_for_spawn_point(partner_spawn, map_name)
+            partner_agent.orientation = partner_initial_orient
+            
+            print(f"  Partner agent spawn point: {partner_spawn} (row={partner_spawn[0]}, col={partner_spawn[1]})")
+            print(f"  Partner agent location: {partner_agent.location} (row={partner_agent.location[0]}, col={partner_agent.location[1]})")
+            print(f"  Partner agent orientation: {orientation_names.get(partner_agent.orientation, 'UNKNOWN')} ({partner_agent.orientation})")
+        else:
+            print(f"  No partner agent (focal agent alone)")
         
         # Verify agent is at correct position
         if focal_agent.location[:2] != desired_spawn[:2]:
@@ -540,7 +605,19 @@ class TestIntentionProbeTest:
             unit_test_dir.mkdir(parents=True, exist_ok=True)
             # Remove .txt extension from map_name for filename
             map_name_clean = map_name.replace('.txt', '')
-            viz_filename = f"test_intention_epoch_{epoch}_agent_{agent_id}_map_{map_name_clean}_{version_name}_state.png"
+            # Determine partner kind name for filename (matching CSV filename logic)
+            if partner_kind == "no_partner":
+                partner_kind_name = "no_partner"
+            elif partner_kind is None:
+                # Use focus agent's kind (need to get it from probe_agent)
+                focus_kind = getattr(probe_agent.agent, 'agent_kind', None)
+                partner_kind_name = focus_kind or "same"
+            else:
+                partner_kind_name = partner_kind
+            viz_filename = (
+                f"test_intention_epoch_{epoch}_agent_{agent_id}_"
+                f"map_{map_name_clean}_partner_{partner_kind_name}_{version_name}_state.png"
+            )
             viz_path = unit_test_dir / viz_filename
             
             try:
@@ -594,9 +671,13 @@ class TestIntentionProbeTest:
     def run_test_intention(self, agents, epoch):
         """Run test_intention probe test for all agents with all partner kind combinations.
         
-        Now runs 4 tests per agent:
-        - Lower + Upper for (both agents same kind as focus agent)
-        - Lower + Upper for (focus agent original kind, partner agent different kind)
+        Runs tests for each combination of:
+        - Agent ID
+        - Map (4 different maps)
+        - Partner condition (no_partner, AgentKindA, AgentKindB, etc.)
+        - Spawn position (upper/ver1, lower/ver2)
+        
+        Total tests per package: num_agents × num_maps × num_partner_conditions × 2 spawn positions
         
         Args:
             agents: List of original training agents
@@ -662,7 +743,9 @@ class TestIntentionProbeTest:
                 # Run tests for each partner agent kind
                 for partner_kind in self.partner_agent_kinds:
                     # Determine partner kind name for filename
-                    if partner_kind is None:
+                    if partner_kind == "no_partner":
+                        partner_kind_name = "no_partner"
+                    elif partner_kind is None:
                         partner_kind_name = focus_kind or "same"  # Use focus agent's kind
                     else:
                         partner_kind_name = partner_kind
