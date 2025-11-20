@@ -328,9 +328,10 @@ class iRainbowModel(DoublePyTorchModel):
         loss = torch.tensor(0.0)
         self.optimizer.zero_grad()
 
-        # REPLACED: as suggested by Gemini, Claude, and GPT
-        # if (len(self.memory) // self.n_frames // 2) > self.batch_size:
-        if len(self.memory) > self.batch_size:
+        # Check if we have enough experiences to sample a batch
+        # The sampleable population is reduced by n_frames + 1 due to frame stacking requirements
+        sampleable_size = max(1, len(self.memory) - self.n_frames - 1)
+        if sampleable_size >= self.batch_size:
             # Sample minibatch
             states, actions, rewards, next_states, dones, valid = self.memory.sample(
                 batch_size=self.batch_size
@@ -397,7 +398,8 @@ class iRainbowModel(DoublePyTorchModel):
             # )  # , keepdim=True if per weights get multipl
             # loss = loss.mean()
             loss = quantil_l.mean()
-
+            
+            
             # Minimize the loss
             loss.backward()
             clip_grad_norm_(self.qnetwork_local.parameters(), 1)
