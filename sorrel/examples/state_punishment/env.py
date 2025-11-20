@@ -243,6 +243,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         # Record punishment level for all environments
         for env in self.individual_envs:
             env.world.record_punishment_level()
+        
+        # Record punishment level for shared state system (for global average calculation)
+        if hasattr(self.shared_state_system, "record_punishment_level"):
+            self.shared_state_system.record_punishment_level()
 
         # End turn for punishment tracker
         if self.punishment_tracker is not None:
@@ -423,9 +427,13 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 # Use the first environment's shuffler to log (they should all be the same)
                 self.individual_envs[0].log_entity_appearances(epoch, shuffle_occurred)
             
-            # Reset all environments
+            # Reset all environments (this also resets epoch-specific tracking)
             self.reset()
-
+            
+            # Reset epoch-specific tracking for shared state system
+            if hasattr(self.shared_state_system, "reset_epoch"):
+                self.shared_state_system.reset_epoch()
+            
             # Start epoch action for all agents
             for env in self.individual_envs:
                 for agent in env.agents:

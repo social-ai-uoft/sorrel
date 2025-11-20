@@ -39,6 +39,7 @@ class StatePunishmentLogger:
             
             # Track encounters and scores for each agent
             total_individual_scores = 0
+            total_social_harm_received = 0.0
             sigma_weights_ff1 = []
             sigma_weights_advantage = []
             sigma_weights_value = []
@@ -66,6 +67,10 @@ class StatePunishmentLogger:
                 # Individual agent score
                 encounter_data[f"Agent_{i}/individual_score"] = agent.individual_score
                 total_individual_scores += agent.individual_score
+                
+                # Track social harm received for this agent
+                encounter_data[f"Agent_{i}/social_harm_received"] = agent.social_harm_received_epoch
+                total_social_harm_received += agent.social_harm_received_epoch
                 
                 # Track action frequencies for this agent
                 for action_name, frequency in agent.action_frequencies.items():
@@ -104,6 +109,10 @@ class StatePunishmentLogger:
             # Add total and mean individual scores
             encounter_data["Total/total_individual_score"] = total_individual_scores
             encounter_data["Mean/mean_individual_score"] = total_individual_scores / len(self.multi_agent_env.individual_envs)
+            
+            # Add total and mean social harm received
+            encounter_data["Total/total_social_harm_received"] = total_social_harm_received
+            encounter_data["Mean/mean_social_harm_received"] = total_social_harm_received / len(self.multi_agent_env.individual_envs)
             
             # Add total and mean action frequencies
             for action_name in total_action_frequencies:

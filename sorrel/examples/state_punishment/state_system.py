@@ -126,6 +126,9 @@ class StateSystem:
         self.epoch_vote_up = 0
         self.epoch_vote_down = 0
         self.epoch_vote_history = []
+        
+        # Punishment level tracking for epoch averaging
+        self.punishment_level_history = []
 
     def _generate_resource_schedules(self) -> Dict[str, List[float]]:
         """Generate resource-specific punishment schedules."""
@@ -253,6 +256,8 @@ class StateSystem:
                 "punishment_level": self.prob,
             }
         )
+        # Reset punishment level history for new epoch
+        self.punishment_level_history = []
 
     def get_epoch_vote_stats(self) -> Dict:
         """Get vote statistics for the current epoch."""
@@ -287,6 +292,17 @@ class StateSystem:
         self.epoch_vote_up = 0
         self.epoch_vote_down = 0
         self.epoch_vote_history = []
+        self.punishment_level_history = []
+
+    def record_punishment_level(self) -> None:
+        """Record current punishment level for epoch averaging."""
+        self.punishment_level_history.append(self.prob)
+
+    def get_average_punishment_level(self) -> float:
+        """Get average punishment level for the current epoch."""
+        if not self.punishment_level_history:
+            return self.prob
+        return sum(self.punishment_level_history) / len(self.punishment_level_history)
 
     def get_state_info(self) -> Dict:
         """Get current state information for observations."""

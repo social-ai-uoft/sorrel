@@ -254,11 +254,11 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f"extended_random_exploration_L_n_tau_nstep5_{base_run_name}_{timestamp}"
+    run_folder = f"epsilon{args.epsilon}_{base_run_name}_{timestamp}"
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_no_exploration" / run_folder
+    log_dir = Path(__file__).parent / "runs_Nov16" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder
