@@ -1,0 +1,7 @@
+Error executing job with overrides: []
+Traceback (most recent call last):
+  File "/Users/wil/git/sorrel/sorrel/sorrel/examples/cleanup/main.py", line 23, in main
+    experiment.run_experiment(
+TypeError: Environment.run_experiment() got an unexpected keyword argument 'simultaneous_moves'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.

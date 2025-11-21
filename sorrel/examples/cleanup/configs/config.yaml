@@ -1,9 +1,9 @@
 experiment:
   name: cleanup
-  epochs: 5000
+  epochs: 100  # Quick verification run
   max_turns: 100
   epsilon_decay: 0.0001
-  record_period: 50
+  record_period: 25  # Log every 25 epochs
 
 env:
   height: 21
@@ -48,4 +48,4 @@ agent:
       embeddings: 3
 
 root: '~/Documents/GitHub/sorrel'
-log: False
+log: True  # Enable logging to see rewards

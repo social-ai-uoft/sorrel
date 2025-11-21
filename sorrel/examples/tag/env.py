@@ -26,8 +26,8 @@ from sorrel.worlds import Gridworld
 class TagEnv(Environment[Gridworld]):
     """The experiment for tag."""
 
-    def __init__(self, world: Gridworld, config: dict) -> None:
-        super().__init__(world, config)
+    def __init__(self, world: Gridworld, config: dict, simultaneous_moves: bool = False) -> None:
+        super().__init__(world, config, simultaneous_moves=simultaneous_moves)
 
     # end constructor
 

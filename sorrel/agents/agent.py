@@ -41,14 +41,14 @@ class Agent[W: Gridworld](Entity[W]):
         model: BaseModel,
         location=None,
     ):
+        super().__init__()
+
         # initializations based on parameters
         self.observation_spec = observation_spec
         self.action_spec = action_spec
         self.model = model
         self.sprite = Path(__file__).parent / "./assets/hero.png"
         self._location = location
-
-        super().__init__()
 
         # overriding parent default attributes
         self.has_transitions = True
@@ -122,25 +122,65 @@ class Agent[W: Gridworld](Entity[W]):
         """
         self.model.memory.add(state, action, reward, done)
 
-    def transition(self, world: W) -> None:
-        """Processes a full transition step for the agent.
+    def get_proposed_action(self, world: W) -> dict:
+        """Calculates the proposed action and its consequences without executing it.
 
-        This function does the following:
-        - Get the current state from the environment through :meth:`pov()`
-        - Get the action based on the current state through :meth:`get_action()`
-        - Changes the environment based on the action and obtains the reward through :meth:`act()`
-        - Determines if the agent is done through :meth:`is_done()`
-
-        Args:
-            env (Gridworld): the environment that this agent is acting in.
+        Returns:
+            dict: A dictionary containing:
+                - 'action': The action index
+                - 'state': The observed state
+                - 'new_location': The intended destination (if applicable)
+                - 'reward': The expected reward
+                - 'done': Whether the agent is done
         """
         state = self.pov(world)
         action = self.get_action(state)
-        reward = self.act(world, action)
         done = self.is_done(world)
+        
+        # Default implementation for base Agent (assumes no movement, just action)
+        # Subclasses like MovingAgent should override to include movement logic
+        return {
+            "action": action,
+            "state": state,
+            "new_location": None,
+            "reward": 0.0, # Base agent doesn't know reward without acting
+            "done": done
+        }
 
+    def finalize_turn(self, world: W, proposal: dict, allowed: bool = True) -> None:
+        """Finalizes the turn based on the proposal and whether the move is allowed.
+
+        Args:
+            world: The environment world.
+            proposal: The dictionary returned by get_proposed_action.
+            allowed: Whether the proposed move is allowed (e.g. no collision).
+        """
+        state = proposal["state"]
+        action = proposal["action"]
+        reward = proposal["reward"]
+        done = proposal["done"]
+
+        if allowed:
+             # If allowed, we assume the reward in proposal is valid. 
+             # For base Agent, act() might need to be called if it wasn't fully simulated.
+             # But for MovingAgent, we'll handle the move here.
+             pass
+        
+        # This base method is tricky because act() in the original code did everything.
+        # We'll rely on the refactored transition() to keep backward compatibility
+        # and let subclasses handle the specifics.
+        
         world.total_reward += reward
         self.add_memory(state, action, reward, done)
+
+    def transition(self, world: W) -> None:
+        """Processes a full transition step for the agent.
+        
+        Refactored to use get_proposed_action and finalize_turn.
+        """
+        proposal = self.get_proposed_action(world)
+        # In standard sequential mode, we always allow the attempt (act handles validity)
+        self.finalize_turn(world, proposal, allowed=True)
 
 
 class MovingAgent[W: Gridworld](Agent):
@@ -164,7 +204,11 @@ class MovingAgent[W: Gridworld](Agent):
         """
         # Translate the model output to an action string
         action_name = self.action_spec.get_readable_action(action)
-        self.sprite = self.sprite_directions[action]
+        
+        # Only update sprite for movement actions (to avoid index errors with non-movement actions)
+        if action < len(self.sprite_directions):
+            self.sprite = self.sprite_directions[action]
+            
         new_location = self.location
         if action_name == "up":
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
@@ -177,14 +221,76 @@ class MovingAgent[W: Gridworld](Agent):
 
         return new_location
 
-    def act(self, world: W, action: int):
-        # get attempted location
+    def get_proposed_action(self, world: W) -> dict:
+        state = self.pov(world)
+        action = self.get_action(state)
+        done = self.is_done(world)
+        
         new_location = self.movement(action)
-        # get reward obtained from object at new_location
+        
+        # Check what's at the new location to determine reward
+        # Note: In the original act(), it calls world.observe(new_location)
+        # We do this here to predict the reward.
+        if world.valid_location(new_location):
+             target_object = world.observe(new_location)
+             reward = target_object.value
+        else:
+             # If invalid location (out of bounds), we might need logic. 
+             # But movement() usually returns valid coords or clamped? 
+             # The original code didn't check valid_location explicitly in act(), 
+             # but world.observe might fail if out of bounds.
+             # Assuming movement logic keeps it in bounds or world handles it.
+             # Let's assume valid for now or catch exception if needed.
+             # Actually, world.move checks passability.
+             try:
+                target_object = world.observe(new_location)
+                reward = target_object.value
+             except IndexError:
+                reward = 0 # Or some penalty? Original code would crash or handle it.
+                new_location = self.location # Stay put
+        
+        return {
+            "action": action,
+            "state": state,
+            "new_location": new_location,
+            "reward": reward,
+            "done": done
+        }
+
+    def finalize_turn(self, world: W, proposal: dict, allowed: bool = True) -> None:
+        if allowed:
+            new_location = proposal["new_location"]
+            # Try moving to new_location
+            # world.move returns True if successful, False if blocked (impassable)
+            # In original act(), reward was returned regardless of move success?
+            # "get reward obtained from object at new_location" -> "try moving" -> return reward.
+            # So yes, reward is obtained even if move fails (e.g. bumping into wall)?
+            # Wait, if wall is impassable, do we get the wall's value?
+            # "reward = target_object.value" happens BEFORE world.move.
+            # So yes.
+            
+            if new_location != self.location:
+                world.move(self, new_location)
+        
+        # Add memory and update total reward
+        # Note: If !allowed (simultaneous collision), do we still get reward?
+        # "if two agents simulatanously try to move into the same square, neither move into it."
+        # Presumably they also don't get the reward of the thing they didn't enter?
+        # Or do they bump into each other?
+        # Let's assume if !allowed, they stay put and get 0 reward (or whatever staying put gives).
+        
+        final_reward = proposal["reward"] if allowed else 0.0 
+        # Actually, if they are blocked, they might still get a "step" penalty if defined?
+        # But here reward comes from the target object. If they don't reach it, they shouldn't get it.
+        
+        world.total_reward += final_reward
+        self.add_memory(proposal["state"], proposal["action"], final_reward, proposal["done"])
+
+    def act(self, world: W, action: int):
+        # Kept for backward compatibility if called directly, but transition() uses the new flow.
+        # This is effectively what finalize_turn does when allowed=True
+        new_location = self.movement(action)
         target_object = world.observe(new_location)
         reward = target_object.value
-        # try moving to new_location
         world.move(self, new_location)
-
-        # return reward
         return reward

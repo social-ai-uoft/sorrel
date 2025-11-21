@@ -101,6 +101,31 @@ class BaseModel:
         """Get the name of the model class."""
         return self.__class__.__name__
 
+    def get_weights_copy(self):
+        """Return a copy of model weights for thread-safe transfer.
+        
+        This is an abstract method that should be implemented by subclasses
+        to enable asynchronous training with thread-safe weight updates.
+        
+        Returns:
+            A deep copy of the model weights that can be safely transferred
+            between threads.
+        """
+        # Default implementation: no weights to copy
+        return None
+
+    def set_weights(self, weights):
+        """Set model weights from a copy (thread-safe).
+        
+        This is an abstract method that should be implemented by subclasses
+        to enable asynchronous training with thread-safe weight updates.
+        
+        Args:
+            weights: Model weights returned from get_weights_copy()
+        """
+        # Default implementation: no weights to set
+        pass
+
 
 class RandomModel(BaseModel):
     """A non-trainable model that chooses a random action."""

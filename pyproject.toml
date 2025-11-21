@@ -1,28 +1,26 @@
-[project]
-readme = "README.md"
+[tool.poetry]
 name = "sorrel"
 version = "1.3.0"
 description = "A flexible framework for developing reinforcement learning algorithms."
 license = "MIT"
+readme = "README.md"
 maintainers = [
-    {name = "Yibing Ju", email = "bing.ju@mail.utoronto.ca"}, 
-    {name = "Rebekah Gelpi", email = "rebekah.gelpi@mail.utoronto.ca"},
+    "Yibing Ju <bing.ju@mail.utoronto.ca>", 
+    "Rebekah Gelpi <rebekah.gelpi@mail.utoronto.ca>"
 ]
-contributors = [
-    {name = "Ethan Jackson", email = "jackson.ethan.c@gmail.com"},
-    {name = "Shon Verch", email = "verchshon@gmail.com"},
-    {name = "Yikai Tang", email = "yikai.tang@mail.utoronto.ca"},
-    {name = "Claas Voelcker", email = "claas@voelcker.net"},
-    {name = "Wil Cunningham"}
+authors = [
+    "Ethan Jackson <jackson.ethan.c@gmail.com>",
+    "Shon Verch <verchshon@gmail.com>",
+    "Yikai Tang <yikai.tang@mail.utoronto.ca>",
+    "Claas Voelcker <claas@voelcker.net>",
+    "Wil Cunningham"
 ]
-
-[project.urls]
-Homepage = "https://github.com/social-ai-uoft/sorrel"
-Documentation = "https://sorrel.readthedocs.io"
-Paper = "https://doi.org/10.48550/arXiv.2506.00228"
-
-[tool.poetry]
 packages = [{ include = "sorrel" }]
+homepage = "https://github.com/social-ai-uoft/sorrel"
+documentation = "https://sorrel.readthedocs.io"
+
+[tool.poetry.urls]
+Paper = "https://doi.org/10.48550/arXiv.2506.00228"
 
 [tool.poetry.dependencies]
 python = "^3.12.0"

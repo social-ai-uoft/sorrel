@@ -211,6 +211,42 @@ class TensorboardLogger(Logger):
         )
 
 
+
+class RollingAverageLogger(Logger):
+    """Logs rolling average of rewards to the console.
+
+    Attributes:
+        window_size: The size of the rolling window.
+        print_freq: How often to print the average (in epochs).
+    """
+
+    def __init__(self, max_epochs: int, window_size: int = 100, print_freq: int = 100, *args):
+        super().__init__(max_epochs, *args)
+        self.window_size = window_size
+        self.print_freq = print_freq
+
+    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+        # Filter kwargs to only include those that are in additional_values
+        # This prevents crashes when environments pass extra data (like encounters) that we don't track
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k in self.additional_values}
+        super().record_turn(epoch, loss, reward, epsilon, **filtered_kwargs)
+        
+        if epoch % self.print_freq == 0 and epoch > 0:
+            # Calculate average of last window_size rewards
+            # Note: self.rewards includes the current one we just added
+            recent_rewards = self.rewards[-self.window_size:]
+            avg_reward = np.mean(recent_rewards)
+            avg_loss = np.mean(self.losses[-self.window_size:])
+            
+            print(f"Epoch {epoch}: Avg Reward (last {len(recent_rewards)}): {avg_reward:.2f}, Avg Loss: {avg_loss:.2f}, Epsilon: {epsilon:.4f}", flush=True)
+
+    @classmethod
+    def from_config(cls, config: dict | Mapping):
+        # Default to window size 100 if not specified
+        # Use record_period from config for print_freq if available, else 100
+        print_freq = config["experiment"].get("record_period", 100)
+        return cls(max_epochs=config["experiment"]["epochs"], window_size=100, print_freq=print_freq)
+
 # --------------------------- #
 # endregion                   #
 # --------------------------- #

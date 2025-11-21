@@ -25,6 +25,7 @@ iRainbowModel (contains two IQN networks; one for local and one for target)
 
 # Import base packages
 import random
+import threading
 from typing import Any, Sequence
 
 import numpy as np
@@ -274,6 +275,9 @@ class iRainbowModel(DoublePyTorchModel):
             obs_shape=(np.array(self.input_size).prod(),),
             n_frames=n_frames,
         )
+        
+        # Threading lock for async training
+        self._lock = threading.Lock()
 
     def __str__(self):
         return f"iRainbowModel(input_size={np.array(self.input_size).prod() * self.n_frames},action_space={self.action_space})"
@@ -289,17 +293,18 @@ class iRainbowModel(DoublePyTorchModel):
         """
         # Epsilon-greedy action selection
         if random.random() > self.epsilon:
-            torch_state = torch.from_numpy(state)
-            torch_state = torch_state.float().to(self.device)
+            # Lock during inference to prevent concurrent training modification
+            with self._lock:
+                torch_state = torch.from_numpy(state)
+                torch_state = torch_state.float().to(self.device)
 
-            self.qnetwork_local.eval()
-            with torch.no_grad():
-                action_values = self.qnetwork_local.get_qvalues(torch_state)  # .mean(0)
-            self.qnetwork_local.train()
-            action = np.argmax(action_values.cpu().data.numpy(), axis=1)
-            return action[0]
+                self.qnetwork_local.eval()
+                with torch.no_grad():
+                    action_values = self.qnetwork_local.get_qvalues(torch_state)
+                self.qnetwork_local.train()
+                action = np.argmax(action_values.cpu().data.numpy(), axis=1)
+                return action[0]
         else:
-
             action = random.choices(np.arange(self.action_space), k=1)
             return action[0]
 
@@ -431,6 +436,33 @@ class iRainbowModel(DoublePyTorchModel):
         #         kwargs["game_vars"].losses.append(kwargs["loss"])
         #     else:
         #         kwargs["losses"] += kwargs["loss"]
+
+    def get_weights_copy(self):
+        """Return a deep copy of model weights for thread-safe transfer.
+        
+        Returns:
+            dict: A dictionary containing copies of:
+                - 'local': local network state dict
+                - 'target': target network state dict
+                - 'optimizer': optimizer state dict
+        """
+        import copy
+        return {
+            'local': copy.deepcopy(self.qnetwork_local.state_dict()),
+            'target': copy.deepcopy(self.qnetwork_target.state_dict()),
+            'optimizer': copy.deepcopy(self.optimizer.state_dict())
+        }
+
+    def set_weights(self, weights):
+        """Load weights from state dict copy.
+        
+        Args:
+            weights: Dictionary with 'local', 'target', 'optimizer' keys
+        """
+        if weights is not None:
+            self.qnetwork_local.load_state_dict(weights['local'])
+            self.qnetwork_target.load_state_dict(weights['target'])
+            self.optimizer.load_state_dict(weights['optimizer'])
 
 
 # ------------------------ #

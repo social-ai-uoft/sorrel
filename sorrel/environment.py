@@ -32,8 +32,10 @@ class Environment[W: Gridworld]:
     agents: list[Agent]
     stop_if_done: bool
 
+    simultaneous_moves: bool
+
     def __init__(
-        self, world: W, config: DictConfig | dict | list, stop_if_done: bool = False
+        self, world: W, config: DictConfig | dict | list, stop_if_done: bool = False, simultaneous_moves: bool = False
     ) -> None:
 
         if isinstance(config, DictConfig):
@@ -48,6 +50,7 @@ class Environment[W: Gridworld]:
         self.turn = 0
         self.world.create_world()
         self.stop_if_done = stop_if_done
+        self.simultaneous_moves = simultaneous_moves
 
         self.setup_agents()
         self.populate_environment()
@@ -88,8 +91,39 @@ class Environment[W: Gridworld]:
             x: Entity
             if x.has_transitions and not isinstance(x, Agent):
                 x.transition(self.world)
-        for agent in self.agents:
-            agent.transition(self.world)
+        
+        if not self.simultaneous_moves:
+            # Original sequential logic
+            for agent in self.agents:
+                agent.transition(self.world)
+        else:
+            # Simultaneous logic
+            proposals = []
+            destinations = {} # location -> list of agent indices
+            
+            # 1. Get all proposals
+            for i, agent in enumerate(self.agents):
+                proposal = agent.get_proposed_action(self.world)
+                proposals.append(proposal)
+                
+                new_loc = proposal["new_location"]
+                if new_loc is not None:
+                    if new_loc not in destinations:
+                        destinations[new_loc] = []
+                    destinations[new_loc].append(i)
+            
+            # 2. Resolve conflicts and finalize
+            for i, agent in enumerate(self.agents):
+                proposal = proposals[i]
+                new_loc = proposal["new_location"]
+                
+                allowed = True
+                if new_loc is not None:
+                    # Conflict if more than one agent wants to go to this location
+                    if len(destinations[new_loc]) > 1:
+                        allowed = False
+                
+                agent.finalize_turn(self.world, proposal, allowed=allowed)
 
     # TODO: ability to save/load?
     def run_experiment(
@@ -98,6 +132,8 @@ class Environment[W: Gridworld]:
         logging: bool = True,
         logger: Logger | None = None,
         output_dir: Path | None = None,
+        async_training: bool = False,
+        train_interval: float = 0.0,
     ) -> None:
         """Run the experiment.
 
@@ -114,8 +150,10 @@ class Environment[W: Gridworld]:
         Args:
             animate: Whether to animate the experiment. Defaults to True.
             logging: Whether to log the experiment. Defaults to True.
-            logger: The logger to use. Defaults to a ConsoleLogger.
-            output_dir: The directory to save the animations to. Defaults to "./data/" (relative to current working directory).
+            logger: Optional logger instance. If None, ConsoleLogger will be used.
+            output_dir: Optional output directory for checkpoints and gifs.
+            async_training: Whether to use asynchronous background training. Defaults to False.
+            train_interval: Minimum seconds between async training steps. Defaults to 0.0.
         """
         renderer = None
         if output_dir is None:
@@ -132,6 +170,16 @@ class Environment[W: Gridworld]:
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
             )
+        
+        # Set up async trainers if requested
+        async_trainers = []
+        if async_training:
+            from sorrel.training import AsyncTrainer
+            for agent in self.agents:
+                trainer = AsyncTrainer(agent.model, train_interval=train_interval)
+                trainer.start()
+                async_trainers.append(trainer)
+        
         for epoch in range(self.config.experiment.epochs + 1):
             # Reset the environment at the start of each epoch
             self.reset()
@@ -165,14 +213,20 @@ class Environment[W: Gridworld]:
             for agent in self.agents:
                 agent.model.end_epoch_action(epoch=epoch)
 
-            # # At the end of each epoch, train the agents.
-            # with Pool() as pool:
-            #     # Use multiprocessing to train agents in parallel
-            #     models = [agent.model for agent in self.agents]
-            #     total_loss = sum(pool.map(lambda model: model.train_step(), models))
+            # Train the agents (sync or async)
             total_loss = 0
-            for agent in self.agents:
-                total_loss = agent.model.train_step()
+            if not async_training:
+                # Synchronous training: one train_step per epoch
+                for agent in self.agents:
+                    total_loss = agent.model.train_step()
+            else:
+                # Async training: get stats from background trainers
+                for trainer in async_trainers:
+                    stats = trainer.get_stats()
+                    total_loss += stats['avg_loss']
+                # Average across trainers
+                if async_trainers:
+                    total_loss /= len(async_trainers)
 
             # Log the information
             if logging:
@@ -194,3 +248,8 @@ class Environment[W: Gridworld]:
                         output_dir
                         / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
                     )
+        
+        # Stop async trainers
+        if async_training:
+            for trainer in async_trainers:
+                trainer.stop()

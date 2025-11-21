@@ -22,8 +22,8 @@ from sorrel.observation.observation_spec import OneHotObservationSpec
 class TreasurehuntEnv(Environment[TreasurehuntWorld]):
     """The experiment for treasurehunt."""
 
-    def __init__(self, world: TreasurehuntWorld, config: dict) -> None:
-        super().__init__(world, config)
+    def __init__(self, world: TreasurehuntWorld, config: dict, simultaneous_moves: bool = False) -> None:
+        super().__init__(world, config, simultaneous_moves=simultaneous_moves)
 
     # end constructor
 

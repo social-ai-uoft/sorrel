@@ -4,7 +4,7 @@ from pathlib import Path
 from sorrel.examples.treasurehunt.entities import EmptyEntity
 from sorrel.examples.treasurehunt.env import TreasurehuntEnv
 from sorrel.examples.treasurehunt.world import TreasurehuntWorld
-from sorrel.utils.logging import TensorboardLogger
+from sorrel.utils.logging import TensorboardLogger, ConsoleLogger, RollingAverageLogger
 
 # begin main
 if __name__ == "__main__":
@@ -12,7 +12,7 @@ if __name__ == "__main__":
     # object configurations
     config = {
         "experiment": {
-            "epochs": 1000,
+            "epochs": 300,  # Quick benchmark
             "max_turns": 100,
             "record_period": 50,
             "log_dir": Path(__file__).parent
@@ -35,11 +35,15 @@ if __name__ == "__main__":
     # construct the world
     world = TreasurehuntWorld(config=config, default_entity=EmptyEntity())
     # construct the environment
-    env = TreasurehuntEnv(world, config)
+    env = TreasurehuntEnv(world, config, simultaneous_moves=True)
     # run the experiment with default parameters
+    logger = RollingAverageLogger.from_config(config)
     env.run_experiment(
         output_dir=Path(__file__).parent / "./data",
-        logger=TensorboardLogger.from_config(config),
+        logger=logger,
+        async_training=True,  # ASYNC MODE
+        train_interval=0.0,
     )
+    print(f"\n🏁 ASYNC COMPLETE - Check logs above for performance")
 
 # end main
