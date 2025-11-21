@@ -35,7 +35,11 @@ class Environment[W: Gridworld]:
     simultaneous_moves: bool
 
     def __init__(
-        self, world: W, config: DictConfig | dict | list, stop_if_done: bool = False, simultaneous_moves: bool = False
+        self,
+        world: W,
+        config: DictConfig | dict | list,
+        stop_if_done: bool = False,
+        simultaneous_moves: bool = False,
     ) -> None:
 
         if isinstance(config, DictConfig):
@@ -91,7 +95,7 @@ class Environment[W: Gridworld]:
             x: Entity
             if x.has_transitions and not isinstance(x, Agent):
                 x.transition(self.world)
-        
+
         if not self.simultaneous_moves:
             # Original sequential logic
             for agent in self.agents:
@@ -99,30 +103,30 @@ class Environment[W: Gridworld]:
         else:
             # Simultaneous logic
             proposals = []
-            destinations = {} # location -> list of agent indices
-            
+            destinations = {}  # location -> list of agent indices
+
             # 1. Get all proposals
             for i, agent in enumerate(self.agents):
                 proposal = agent.get_proposed_action(self.world)
                 proposals.append(proposal)
-                
+
                 new_loc = proposal["new_location"]
                 if new_loc is not None:
                     if new_loc not in destinations:
                         destinations[new_loc] = []
                     destinations[new_loc].append(i)
-            
+
             # 2. Resolve conflicts and finalize
             for i, agent in enumerate(self.agents):
                 proposal = proposals[i]
                 new_loc = proposal["new_location"]
-                
+
                 allowed = True
                 if new_loc is not None:
                     # Conflict if more than one agent wants to go to this location
                     if len(destinations[new_loc]) > 1:
                         allowed = False
-                
+
                 agent.finalize_turn(self.world, proposal, allowed=allowed)
 
     # TODO: ability to save/load?
@@ -170,16 +174,17 @@ class Environment[W: Gridworld]:
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
             )
-        
+
         # Set up async trainers if requested
         async_trainers = []
         if async_training:
             from sorrel.training import AsyncTrainer
+
             for agent in self.agents:
                 trainer = AsyncTrainer(agent.model, train_interval=train_interval)
                 trainer.start()
                 async_trainers.append(trainer)
-        
+
         for epoch in range(self.config.experiment.epochs + 1):
             # Reset the environment at the start of each epoch
             self.reset()
@@ -223,7 +228,7 @@ class Environment[W: Gridworld]:
                 # Async training: get stats from background trainers
                 for trainer in async_trainers:
                     stats = trainer.get_stats()
-                    total_loss += stats['avg_loss']
+                    total_loss += stats["avg_loss"]
                 # Average across trainers
                 if async_trainers:
                     total_loss /= len(async_trainers)
@@ -248,7 +253,7 @@ class Environment[W: Gridworld]:
                         output_dir
                         / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
                     )
-        
+
         # Stop async trainers
         if async_training:
             for trainer in async_trainers:

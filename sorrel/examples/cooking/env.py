@@ -52,7 +52,9 @@ ENTITY_LIST: List[str] = [
 class CookingEnv(Environment[CookingWorld]):
     """Environment inspired by Overcooked."""
 
-    def __init__(self, world: CookingWorld, config: dict, simultaneous_moves: bool = False) -> None:
+    def __init__(
+        self, world: CookingWorld, config: dict, simultaneous_moves: bool = False
+    ) -> None:
         super().__init__(world, config, simultaneous_moves=simultaneous_moves)
 
     def setup_agents(self) -> None:

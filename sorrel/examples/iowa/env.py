@@ -28,7 +28,9 @@ from sorrel.utils.visualization import ImageRenderer
 class GamblingEnv(Environment[GamblingWorld]):
     """Environment inspired by the Iowa Gambling Task (IGT)."""
 
-    def __init__(self, world: GamblingWorld, config: dict, simultaneous_moves: bool = False) -> None:
+    def __init__(
+        self, world: GamblingWorld, config: dict, simultaneous_moves: bool = False
+    ) -> None:
         super().__init__(world, config, simultaneous_moves=simultaneous_moves)
 
     def setup_agents(self):
@@ -152,16 +154,17 @@ class GamblingEnv(Environment[GamblingWorld]):
         """
         if output_dir is None:
             output_dir = Path(__file__).parent / "./data/"
-            
+
         # Initialize AsyncTrainer if enabled
         async_trainers = []
         if async_training:
             from sorrel.training.async_trainer import AsyncTrainer
+
             for agent in self.agents:
                 trainer = AsyncTrainer(agent.model, train_interval=train_interval)
                 trainer.start()
                 async_trainers.append(trainer)
-            
+
         renderer = None
         if animate:
             renderer = ImageRenderer(
@@ -169,7 +172,7 @@ class GamblingEnv(Environment[GamblingWorld]):
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
             )
-            
+
         try:
             for epoch in range(self.config.experiment.epochs + 1):
                 try:
@@ -177,38 +180,39 @@ class GamblingEnv(Environment[GamblingWorld]):
                     self.reset()
                 except Exception as e:
                     import traceback
+
                     traceback.print_exc()
                     raise e
-    
+
                 # Determine whether to animate this turn.
                 animate_this_turn = animate and (
                     epoch % self.config.experiment.record_period == 0
                 )
-    
+
                 # start epoch action for each agent model
                 for agent in self.agents:
                     agent.model.start_epoch_action(epoch=epoch)
-    
+
                 # run the environment for the specified number of turns
                 while not self.turn >= self.config.experiment.max_turns:
                     # renderer should never be None if animate is true; this is just written for pyright to not complain
                     if animate_this_turn and renderer is not None:
                         renderer.add_image(self.world)
                     self.take_turn()
-    
+
                 self.world.is_done = True
-    
+
                 # generate the gif if animation was done
                 if animate_this_turn and renderer is not None:
                     renderer.save_gif(epoch, output_dir / "./gifs/")
-    
+
                 # end epoch action for each agent model
                 for agent in self.agents:
                     agent.model.end_epoch_action(epoch=epoch)
-    
+
                 total_loss = 0
                 encounters = {"DeckA": 0, "DeckB": 0, "DeckC": 0, "DeckD": 0}
-                
+
                 # Training logic
                 if not async_training:
                     for agent in self.agents:
@@ -218,15 +222,15 @@ class GamblingEnv(Environment[GamblingWorld]):
                     total_loss = 0
                     for trainer in async_trainers:
                         stats = trainer.get_stats()
-                        total_loss += stats['avg_loss']
+                        total_loss += stats["avg_loss"]
                     if async_trainers:
                         total_loss /= len(async_trainers)
-                    
+
                 # Collect encounters stats
                 for agent in self.agents:
                     for key in encounters.keys():
                         encounters[key] += agent.encounters[key]
-    
+
                 # Log the information
                 if logging:
                     if not logger:

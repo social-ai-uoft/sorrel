@@ -55,6 +55,6 @@ env = TreasurehuntEnv(world, config, simultaneous_moves=True)
 env.run_experiment(animate=False, logging=False, async_training=True)
 print("✅ PASS\n")
 
-print("="*50)
+print("=" * 50)
 print("ALL 4 MODES TESTED SUCCESSFULLY!")
-print("="*50)
+print("=" * 50)

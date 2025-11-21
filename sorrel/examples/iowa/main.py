@@ -36,9 +36,10 @@ if __name__ == "__main__":
 
     # construct the world
     world = GamblingWorld(config=config, default_entity=EmptyEntity())
-    
+
     # Parse command line arguments to override config
     import sys
+
     for arg in sys.argv:
         if arg.startswith("experiment.epochs="):
             config["experiment"]["epochs"] = int(arg.split("=")[1])
@@ -48,15 +49,16 @@ if __name__ == "__main__":
         if arg.startswith("async_training="):
             val = arg.split("=")[1]
             config["async_training"] = val.lower() == "true"
-            
+
     # Get optional parameters from config if they exist, otherwise default to False
-    simultaneous_moves = config.get('simultaneous_moves', False)
-    async_training = config.get('async_training', False)
-    
+    simultaneous_moves = config.get("simultaneous_moves", False)
+    async_training = config.get("async_training", False)
+
     # construct the environment
     env = GamblingEnv(world, config, simultaneous_moves=simultaneous_moves)
-    
+
     from sorrel.utils.logging import RollingAverageLogger
+
     # run the experiment with default parameters
     env.run_experiment(
         animate=False,

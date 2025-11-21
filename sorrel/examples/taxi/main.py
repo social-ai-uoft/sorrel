@@ -15,7 +15,7 @@ if __name__ == "__main__":
             "record_period": 10,
             "output_dir": Path(__file__).parent / "./data/",
             "simultaneous_moves": False,  # Added parameter
-            "async_training": False,      # Added parameter
+            "async_training": False,  # Added parameter
         },
         "model": {
             "epsilon_decay": 0.00005,
@@ -30,14 +30,18 @@ if __name__ == "__main__":
     env = TaxiWorld(config=config, default_entity=EmptyEntity())
     # Get optional parameters from config if they exist, otherwise default to False
     # These are now directly in the config under "experiment"
-    simultaneous_moves = config["experiment"].get('simultaneous_moves', False)
-    async_training = config["experiment"].get('async_training', False)
-    
+    simultaneous_moves = config["experiment"].get("simultaneous_moves", False)
+    async_training = config["experiment"].get("async_training", False)
+
     # construct the environment
-    experiment = TaxiEnv(env, config, stop_if_done=True, simultaneous_moves=simultaneous_moves)
-    
+    experiment = TaxiEnv(
+        env, config, stop_if_done=True, simultaneous_moves=simultaneous_moves
+    )
+
     # run the experiment with default parameters
     experiment.run_experiment(
-        output_dir=config["experiment"]["output_dir"], # Use existing output_dir from config
+        output_dir=config["experiment"][
+            "output_dir"
+        ],  # Use existing output_dir from config
         async_training=async_training,
     )

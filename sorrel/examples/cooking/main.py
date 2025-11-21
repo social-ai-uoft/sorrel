@@ -19,13 +19,13 @@ def main(config: DictConfig):
         layers=config.world.layers,
     )
     # Get optional parameters from config if they exist, otherwise default to False
-    simultaneous_moves = config.get('simultaneous_moves', False)
-    async_training = config.get('async_training', False)
-    
+    simultaneous_moves = config.get("simultaneous_moves", False)
+    async_training = config.get("async_training", False)
+
     experiment = CookingEnv(env, config, simultaneous_moves=simultaneous_moves)
-    
+
     from sorrel.utils.logging import RollingAverageLogger
-    
+
     experiment.run_experiment(
         output_dir=Path(__file__).parent / "./data",
         logger=RollingAverageLogger.from_config(config),

@@ -4,7 +4,7 @@ from pathlib import Path
 from sorrel.examples.treasurehunt.entities import EmptyEntity
 from sorrel.examples.treasurehunt.env import TreasurehuntEnv
 from sorrel.examples.treasurehunt.world import TreasurehuntWorld
-from sorrel.utils.logging import TensorboardLogger, ConsoleLogger, RollingAverageLogger
+from sorrel.utils.logging import ConsoleLogger, RollingAverageLogger, TensorboardLogger
 
 # begin main
 if __name__ == "__main__":
