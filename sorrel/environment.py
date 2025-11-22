@@ -219,11 +219,14 @@ class Environment[W: Gridworld]:
                 agent.model.end_epoch_action(epoch=epoch)
 
             # Train the agents (sync or async)
-            total_loss = 0
+            total_loss = 0.0
+            # Sync training: train every 10 steps to match Async ratio
             if not async_training:
-                # Synchronous training: one train_step per epoch
-                for agent in self.agents:
-                    total_loss = agent.model.train_step()
+                # We run 10 training steps per epoch (since epoch = 100 turns)
+                # This matches the 1:10 ratio we set for Async
+                for _ in range(10):
+                    for agent in self.agents:
+                        total_loss = agent.model.train_step()
             else:
                 # Async training: get stats from background trainers
                 for trainer in async_trainers:

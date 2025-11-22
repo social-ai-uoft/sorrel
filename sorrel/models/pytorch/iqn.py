@@ -251,9 +251,10 @@ class iRainbowModel(DoublePyTorchModel):
             time.sleep(0.05) # Yield GIL if waiting for buffer
             return 0.0
 
-        # 2. RATIO CONTROL (1 Train : 3 Turns)
+        # 2. RATIO CONTROL (1 Train : 10 Turns)
         # Forces training to wait if it gets too far ahead of gameplay
-        target_train_steps = self.inference_steps / 3.0
+        # Sync mode trains 10/epoch (10/100 steps = 1/10). We set this to 1/10 to match.
+        target_train_steps = self.inference_steps / 10.0
         
         if self.training_steps > target_train_steps:
             time.sleep(0.01) # Yield GIL to let main thread play more turns
