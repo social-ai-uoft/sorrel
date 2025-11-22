@@ -36,6 +36,8 @@ from torch.nn.utils import clip_grad_norm_
 
 from sorrel.buffers import Buffer
 
+from sorrel.models.pytorch.device_utils import resolve_device
+
 # Import sorrel-specific packages
 from sorrel.models.pytorch.layers import NoisyLinear
 from sorrel.models.pytorch.pytorch_base import DoublePyTorchModel
@@ -60,10 +62,13 @@ class IQN(nn.Module):
         seed: int,
         n_quantiles: int,
         n_frames: int = 5,
-        device: str | torch.device = "cpu",
+        device: str | torch.device | None = None,
     ) -> None:
 
         super().__init__()
+        # Auto-detect optimal device if not specified
+        self.device = resolve_device(device)
+        
         self.seed = torch.manual_seed(seed)
         self.input_shape = np.array(input_size)
         self.state_dim = len(self.input_shape)
@@ -74,9 +79,8 @@ class IQN(nn.Module):
         self.pis = (
             torch.FloatTensor([np.pi * i for i in range(1, self.n_cos + 1)])
             .view(1, 1, self.n_cos)
-            .to(device)
+            .to(self.device)
         )
-        self.device = device
 
         # Network architecture
         self.head1 = nn.Linear(n_frames * self.input_shape.prod(), layer_size)
@@ -200,10 +204,10 @@ class iRainbowModel(DoublePyTorchModel):
         action_space: int,
         layer_size: int,
         epsilon: float,
-        device: str | torch.device,
-        seed: int,
+        device: str | torch.device | None = None,
+        seed: int | None = None,
         # iRainbow parameters
-        n_frames: int,
+        n_frames: int = 5,
         n_step: int = 3,
         sync_freq: int = 200,
         model_update_freq: int = 4,
@@ -221,7 +225,7 @@ class iRainbowModel(DoublePyTorchModel):
             action_space (int): The number of possible actions.
             layer_size (int): The size of the hidden layer.
             epsilon (float): Epsilon-greedy action value.
-            device (str | torch.device): Device used for the compute.
+            device (str | torch.device | None): Device for compute. If None, auto-detects (MPS > CUDA > CPU).
             seed (int): Random seed value for replication.
             n_frames (int): Number of timesteps for the state input.
             batch_size (int): The size of the training batch.
@@ -231,6 +235,9 @@ class iRainbowModel(DoublePyTorchModel):
             TAU (float): Network weight soft update rate
             n_quantiles (int): Number of quantiles
         """
+        
+        # Auto-detect optimal device if not specified
+        device = resolve_device(device)
 
         # Initialize base ANN parameters
         super().__init__(input_size, action_space, layer_size, epsilon, device, seed)
