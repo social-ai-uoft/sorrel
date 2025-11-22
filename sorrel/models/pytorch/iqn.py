@@ -275,7 +275,7 @@ class iRainbowModel(DoublePyTorchModel):
             obs_shape=(np.array(self.input_size).prod(),),
             n_frames=n_frames,
         )
-        
+
         # Threading lock for async training
         self._lock = threading.Lock()
 
@@ -439,7 +439,7 @@ class iRainbowModel(DoublePyTorchModel):
 
     def get_weights_copy(self):
         """Return a deep copy of model weights for thread-safe transfer.
-        
+
         Returns:
             dict: A dictionary containing copies of:
                 - 'local': local network state dict
@@ -447,22 +447,23 @@ class iRainbowModel(DoublePyTorchModel):
                 - 'optimizer': optimizer state dict
         """
         import copy
+
         return {
-            'local': copy.deepcopy(self.qnetwork_local.state_dict()),
-            'target': copy.deepcopy(self.qnetwork_target.state_dict()),
-            'optimizer': copy.deepcopy(self.optimizer.state_dict())
+            "local": copy.deepcopy(self.qnetwork_local.state_dict()),
+            "target": copy.deepcopy(self.qnetwork_target.state_dict()),
+            "optimizer": copy.deepcopy(self.optimizer.state_dict()),
         }
 
     def set_weights(self, weights):
         """Load weights from state dict copy.
-        
+
         Args:
             weights: Dictionary with 'local', 'target', 'optimizer' keys
         """
         if weights is not None:
-            self.qnetwork_local.load_state_dict(weights['local'])
-            self.qnetwork_target.load_state_dict(weights['target'])
-            self.optimizer.load_state_dict(weights['optimizer'])
+            self.qnetwork_local.load_state_dict(weights["local"])
+            self.qnetwork_target.load_state_dict(weights["target"])
+            self.optimizer.load_state_dict(weights["optimizer"])
 
 
 # ------------------------ #

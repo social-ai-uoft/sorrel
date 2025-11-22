@@ -13,7 +13,7 @@ if __name__ == "__main__":
         "experiment": {
             "epochs": 100,  # Reduced for verification
             "max_turns": 20,
-            "record_period": 10, # Frequent updates
+            "record_period": 10,  # Frequent updates
             "output_dir": Path(__file__).parent / "./data/",
         },
         "model": {
@@ -26,13 +26,14 @@ if __name__ == "__main__":
     # construct the world (base gridworld)
     world = Gridworld(**config["world"], default_entity=EmptyEntity())
     # Get optional parameters from config if they exist, otherwise default to False
-    simultaneous_moves = config.get('simultaneous_moves', False)
-    async_training = config.get('async_training', False)
+    simultaneous_moves = config.get("simultaneous_moves", False)
+    async_training = config.get("async_training", False)
 
     # construct the environment
     experiment = TagEnv(world, config, simultaneous_moves=simultaneous_moves)
 
     from sorrel.utils.logging import RollingAverageLogger
+
     experiment.run_experiment(
         output_dir=config["experiment"]["output_dir"],
         # animate=False,
