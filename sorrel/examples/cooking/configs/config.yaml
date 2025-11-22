@@ -25,7 +25,6 @@ model:
       sync_freq: 200
       model_update_freq: 4
       epsilon: 0.8
-      device: cpu
   epsilon_decay: 0.0003
 
 agent:

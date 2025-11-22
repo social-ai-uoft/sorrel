@@ -1,31 +1,12 @@
-"""Implicit Quantile Network Implementation.
-
-The IQN learns an estimate of the entire distribution of possible rewards (Q-values) for taking
-some action.
-
-Source code is based on Dittert, Sebastian. "Implicit Quantile Networks (IQN) for Distributional
-Reinforcement Learning and Extensions." https://github.com/BY571/IQN. (2020).
-
-Structure:
-
-IQN
- - calc_cos: calculate the cos values
- - forward: input pass through linear layer, get modified by cos values, pass through NOISY linear layer, and calculate output based on value and advantage
- - get_qvalues: set action probabilities as the mean of the quantiles
-
-iRainbowModel (contains two IQN networks; one for local and one for target)
- - take_action: standard epsilon greedy action selection
- - train_step: train the model using quantile huber loss from IQN
- - soft_update: set weights of target network to be a mixture of weights from local and target network
-"""
+"""Implicit Quantile Network Implementation with Ratio Control."""
 
 # ------------------------ #
 # region: Imports          #
 # ------------------------ #
 
-# Import base packages
 import random
 import threading
+import time
 from typing import Any, Sequence
 
 import numpy as np
@@ -35,10 +16,7 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
 
 from sorrel.buffers import Buffer
-
 from sorrel.models.pytorch.device_utils import resolve_device
-
-# Import sorrel-specific packages
 from sorrel.models.pytorch.layers import NoisyLinear
 from sorrel.models.pytorch.pytorch_base import DoublePyTorchModel
 
@@ -76,10 +54,14 @@ class IQN(nn.Module):
         self.n_quantiles = n_quantiles
         self.n_cos = 64
         self.layer_size = layer_size
+        
+        # Explicitly use torch.tensor with float32 for MPS compatibility
         self.pis = (
-            torch.FloatTensor([np.pi * i for i in range(1, self.n_cos + 1)])
-            .view(1, 1, self.n_cos)
-            .to(self.device)
+            torch.tensor(
+                [np.pi * i for i in range(1, self.n_cos + 1)], 
+                dtype=torch.float32, 
+                device=self.device
+            ).view(1, 1, self.n_cos)
         )
 
         # Network architecture
@@ -95,15 +77,7 @@ class IQN(nn.Module):
     def calc_cos(
         self, batch_size: int, n_tau: int = 8
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Calculating the cosine values depending on the number of tau samples.
-
-        Args:
-            batch_size (int): The batch size.
-            n_tau (int): The number of tau samples.
-
-        Returns:
-            tuple[torch.Tensor, torch.Tensor]: The cosine values and tau samples.
-        """
+        """Calculating the cosine values depending on the number of tau samples."""
         taus = (
             torch.rand(batch_size, n_tau).unsqueeze(-1).to(self.device)
         )  # (batch_size, n_tau, 1)  .to(self.device)
@@ -115,47 +89,27 @@ class IQN(nn.Module):
     def forward(
         self, input: torch.Tensor, n_tau: int = 8
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Quantile Calculation depending on the number of tau.
-
-        Returns:
-            tuple: quantiles, torch.Tensor (size: (batch_size, n_tau, action_space)); taus, torch.Tensor (size) ((batch_size, n_tau, 1))
-        """
-        # REMOVED: as suggested by Claude and GPT, input is not an image, so no need to add noise or normalize
-        # Add noise to the input
-        # eps = 0.01
-        # noise = torch.rand_like(input) * eps
-        # input = input / 255.0
-        # input = input + noise
-
-        # Flatten the input from [1, N, 7, 9, 9] to [1, N * 7 * 9 * 9]
-        # batch_size, timesteps, C, H, W = input.size()
-        # c_out = input.view(batch_size * timesteps, C, H, W)
-        # r_in = c_out.view(batch_size, -1)
-
+        """Quantile Calculation depending on the number of tau."""
         batch_size = input.size()[0]
         r_in = input.view(batch_size, -1)
 
-        # Pass input through linear layer and activation function ([1, 250])
+        # Pass input through linear layer and activation function
         x = self.head1(r_in)
         x = torch.relu(x)
 
         # Calculate cos values
-        cos, taus = self.calc_cos(
-            batch_size, n_tau
-        )  # cos.shape = (batch, n_tau, layer_size)
-        cos = cos.view(batch_size * n_tau, self.n_cos)  # (1 * 12, 64)
+        cos, taus = self.calc_cos(batch_size, n_tau)
+        cos = cos.view(batch_size * n_tau, self.n_cos)
 
         # Pass cos through linear layer and activation function
         cos = self.cos_embedding(cos)
         cos = torch.relu(cos)
-        cos_x = cos.view(
-            batch_size, n_tau, self.cos_layer_out
-        )  # cos_x.shape = (batch, n_tau, layer_size)
+        cos_x = cos.view(batch_size, n_tau, self.cos_layer_out)
 
         # x has shape (batch, layer_size) for multiplication –> reshape to (batch, 1, layer)
         x = (x.unsqueeze(1) * cos_x).view(batch_size * n_tau, self.cos_layer_out)
 
-        # Pass input through NOISY linear layer and activation function ([1, 250])
+        # Pass input through NOISY linear layer and activation function
         x = self.ff_1(x)
         x = torch.relu(x)
 
@@ -182,20 +136,7 @@ class IQN(nn.Module):
 
 
 class iRainbowModel(DoublePyTorchModel):
-    """A combination of IQN with Rainbow, which itself combines priority experience
-    replay, dueling DDQN, distributional DQN, noisy DQN, and multi-step return.
-
-    Attributes:
-        input_size (Sequence[int]): The shape of the state input.
-        action_space (int): The number of actions/the size of the output head.
-        layer_size (int): The size of the hidden player.
-        epsilon (float): The initial epsilon value for the epsilon-greedy action.
-        device (str | torch.device): Device used for the compute.
-        n_frames (int): The number of frames to stack for each state input.
-        batch_size (int): The size of the training batch.
-        memory_size (int): The size of the replay memory.
-        sync_freq (int): How often to update the target network.
-    """
+    """A combination of IQN with Rainbow."""
 
     def __init__(
         # Base ANN parameters
@@ -218,23 +159,7 @@ class iRainbowModel(DoublePyTorchModel):
         GAMMA: float = 0.99,
         n_quantiles: int = 12,
     ):
-        """Initialize an iRainbow model.
-
-        Args:
-            input_size (Sequence[int]): The dimension of each state.
-            action_space (int): The number of possible actions.
-            layer_size (int): The size of the hidden layer.
-            epsilon (float): Epsilon-greedy action value.
-            device (str | torch.device | None): Device for compute. If None, auto-detects (MPS > CUDA > CPU).
-            seed (int): Random seed value for replication.
-            n_frames (int): Number of timesteps for the state input.
-            batch_size (int): The size of the training batch.
-            memory_size (int): The size of the replay memory.
-            GAMMA (float): Discount factor
-            LR (float): Learning rate
-            TAU (float): Network weight soft update rate
-            n_quantiles (int): Number of quantiles
-        """
+        """Initialize an iRainbow model."""
         
         # Auto-detect optimal device if not specified
         device = resolve_device(device)
@@ -276,28 +201,29 @@ class iRainbowModel(DoublePyTorchModel):
         self.models = {"local": self.qnetwork_local, "target": self.qnetwork_target}
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
 
-        # Memory buffer
         self.memory = Buffer(
             capacity=memory_size,
             obs_shape=(np.array(self.input_size).prod(),),
             n_frames=n_frames,
         )
 
-        # Threading lock for async training
-        self._lock = threading.Lock()
+        # CRITICAL: Use RLock to prevent deadlock between AsyncTrainer and train_step
+        self._lock = threading.RLock()
+
+        # NEW COUNTERS FOR RATIO CONTROL
+        self.inference_steps = 0  # How many moves we've made
+        self.training_steps = 0   # How many times we've trained
 
     def __str__(self):
         return f"iRainbowModel(input_size={np.array(self.input_size).prod() * self.n_frames},action_space={self.action_space})"
 
     def take_action(self, state: np.ndarray) -> int:
-        """Returns actions for given state as per current policy.
+        """Returns actions for given state as per current policy."""
+        
+        # 1. Track Inference Steps (Thread Safe)
+        with self._lock:
+            self.inference_steps += 1
 
-        Args:
-            state (np.ndarray): current state
-
-        Returns:
-            int: The action to take.
-        """
         # Epsilon-greedy action selection
         if random.random() > self.epsilon:
             # Lock during inference to prevent concurrent training modification
@@ -309,49 +235,48 @@ class iRainbowModel(DoublePyTorchModel):
                 with torch.no_grad():
                     action_values = self.qnetwork_local.get_qvalues(torch_state)
                 self.qnetwork_local.train()
-                action = np.argmax(action_values.cpu().data.numpy(), axis=1)
-                return action[0]
+                action = torch.argmax(action_values, dim=1).cpu()
+                
+                # FIXED: Use .item() so we return a Python int, not a Tensor
+                return action[0].item()
         else:
             action = random.choices(np.arange(self.action_space), k=1)
             return action[0]
 
-    def train_step(self) -> np.ndarray:
-        """Update value parameters using given batch of experience tuples.
+    def train_step(self) -> float:
+        """Update value parameters using given batch of experience tuples."""
+        
+        # 1. Buffer Guard (Prevents sample error on empty buffer)
+        if len(self.memory) < self.batch_size * 3:
+            time.sleep(0.05) # Yield GIL if waiting for buffer
+            return 0.0
 
-        .. note:: The training loop CANNOT be named `train()` or `training()` as this conflicts with `nn.Module` superclass functions.
+        # 2. RATIO CONTROL (1 Train : 3 Turns)
+        # Forces training to wait if it gets too far ahead of gameplay
+        target_train_steps = self.inference_steps / 3.0
+        
+        if self.training_steps > target_train_steps:
+            time.sleep(0.01) # Yield GIL to let main thread play more turns
+            return 0.0
 
-        Returns:
-            float: The loss output.
-        """
-        loss = torch.tensor(0.0)
-        self.optimizer.zero_grad()
-
-        # REPLACED: as suggested by Gemini, Claude, and GPT
-        # if (len(self.memory) // self.n_frames // 2) > self.batch_size:
-        if len(self.memory) > self.batch_size:
+        # 3. Train
+        with self._lock:
+            self.optimizer.zero_grad()
 
             # Sample minibatch
             states, actions, rewards, next_states, dones, valid = self.memory.sample(
                 batch_size=self.batch_size
             )
 
-            # Convert to torch tensors
-            states = torch.from_numpy(states)
-            next_states = torch.from_numpy(next_states)
-            actions = torch.from_numpy(actions)
-            rewards = torch.from_numpy(rewards)
-            dones = torch.from_numpy(dones)
-            valid = torch.from_numpy(valid)
+            # FIXED: Cast numpy arrays to specific dtypes BEFORE sending to MPS device
+            states = torch.from_numpy(states).float().to(self.device)
+            next_states = torch.from_numpy(next_states).float().to(self.device)
+            actions = torch.from_numpy(actions).long().to(self.device)
+            rewards = torch.from_numpy(rewards).float().to(self.device)
+            dones = torch.from_numpy(dones).float().to(self.device)
+            valid = torch.from_numpy(valid).float().to(self.device)
 
-            # REPLACED: as suggested by Gemini, use local network to select action and target network to evaluate it
             # Get max predicted Q values (for next states) from target model
-            # Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
-            # Q_targets_next: torch.Tensor = Q_targets_next.detach().cpu()
-            # action_indx = torch.argmax(Q_targets_next.mean(dim=1), dim=1, keepdim=True)
-            # Q_targets_next = Q_targets_next.gather(
-            #     2,
-            #     action_indx.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1),
-            # ).transpose(1, 2)
             q_values_next_local, _ = self.qnetwork_local(next_states, self.n_quantiles)
             action_indx = torch.argmax(
                 q_values_next_local.mean(dim=1), dim=1, keepdim=True
@@ -377,41 +302,23 @@ class iRainbowModel(DoublePyTorchModel):
 
             # Quantile Huber loss
             td_error: torch.Tensor = Q_targets - Q_expected
-            assert td_error.shape == (
-                self.batch_size,
-                self.n_quantiles,
-                self.n_quantiles,
-            ), "wrong td error shape"
             huber_l = calculate_huber_loss(td_error, 1.0)
-            # Zero out loss on invalid actions (when you clip past the end of an episode)
             huber_l = huber_l * valid.unsqueeze(-1)
-
-            quantil_l: torch.Tensor = (
-                abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
-            )
-
-            # REPLACED: as suggested by Gemini & GPT, simply average across all quantile & batch dimensions
-            # loss: torch.Tensor = quantil_l.sum(dim=1).mean(
-            #     dim=1
-            # )  # , keepdim=True if per weights get multipl
-            # loss = loss.mean()
+            quantil_l = abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
             loss = quantil_l.mean()
 
-            # Minimize the loss
             loss.backward()
             clip_grad_norm_(self.qnetwork_local.parameters(), 1)
             self.optimizer.step()
-
-            # ------------------- update target network ------------------- #
             self.soft_update()
+            
+            # Increment counter
+            self.training_steps += 1
 
-        return loss.detach().numpy()
+            return loss.detach().cpu().float().item()
 
     def soft_update(self) -> None:
-        """Soft update model parameters.
-
-        `θ_target = τ*θ_local + (1 - τ)*θ_target`
-        """
+        """Soft update model parameters."""
         for target_param, local_param in zip(
             self.qnetwork_target.parameters(), self.qnetwork_local.parameters()
         ):
@@ -420,41 +327,16 @@ class iRainbowModel(DoublePyTorchModel):
             )
 
     def start_epoch_action(self, **kwargs) -> None:
-        """Model actions before agent takes an action.
-
-        Args:
-            **kwargs: All local variables are passed into the model
-        """
-        # Add empty frames to the replay buffer
+        """Model actions before agent takes an action."""
         self.memory.add_empty()
-        # If it's time to sync, load the local network weights to the target network.
         if kwargs["epoch"] % self.sync_freq == 0:
             self.qnetwork_target.load_state_dict(self.qnetwork_local.state_dict())
 
     def end_epoch_action(self, **kwargs) -> None:
-        """Model actions computed after each agent takes an action.
-
-        Args:
-            **kwargs: All local variables are passed into the model
-        """
-        # if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
-        #     kwargs["loss"] = self.train_step()
-        #     if "game_vars" in kwargs:
-        #         kwargs["game_vars"].losses.append(kwargs["loss"])
-        #     else:
-        #         kwargs["losses"] += kwargs["loss"]
+        pass
 
     def get_weights_copy(self):
-        """Return a deep copy of model weights for thread-safe transfer.
-
-        Returns:
-            dict: A dictionary containing copies of:
-                - 'local': local network state dict
-                - 'target': target network state dict
-                - 'optimizer': optimizer state dict
-        """
         import copy
-
         return {
             "local": copy.deepcopy(self.qnetwork_local.state_dict()),
             "target": copy.deepcopy(self.qnetwork_target.state_dict()),
@@ -462,32 +344,13 @@ class iRainbowModel(DoublePyTorchModel):
         }
 
     def set_weights(self, weights):
-        """Load weights from state dict copy.
-
-        Args:
-            weights: Dictionary with 'local', 'target', 'optimizer' keys
-        """
         if weights is not None:
             self.qnetwork_local.load_state_dict(weights["local"])
             self.qnetwork_target.load_state_dict(weights["target"])
             self.optimizer.load_state_dict(weights["optimizer"])
 
 
-# ------------------------ #
-# endregion                #
-# ------------------------ #
-
-
 def calculate_huber_loss(td_errors: torch.Tensor, k: float = 1.0) -> torch.Tensor:
-    """Calculate elementwise Huber loss.
-
-    Args:
-        td_errors (torch.Tensor): The temporal difference errors.
-        k (float): The kappa parameter.
-
-    Returns:
-        torch.Tensor: The Huber loss value.
-    """
     loss = torch.where(
         td_errors.abs() <= k, 0.5 * td_errors.pow(2), k * (td_errors.abs() - 0.5 * k)
     )

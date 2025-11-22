@@ -1,13 +1,18 @@
 from datetime import datetime
 from pathlib import Path
 
+
 from sorrel.examples.iowa.entities import EmptyEntity
 from sorrel.examples.iowa.env import GamblingEnv
 from sorrel.examples.iowa.world import GamblingWorld
+from sorrel.models.pytorch.device_utils import resolve_device
 from sorrel.utils.logging import TensorboardLogger
 
 # begin main
 if __name__ == "__main__":
+
+    current_device = str(resolve_device(None))
+    print(f"Running experiment on device: {current_device}")
 
     # object configurations
     config = {
@@ -23,7 +28,7 @@ if __name__ == "__main__":
             "parameters": {
                 "layer_size": 250,
                 "epsilon": 0.5,
-                "device": "cpu",
+                "device": current_device,
                 "n_frames": 5,
             },
         },

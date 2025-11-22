@@ -61,7 +61,6 @@ class TagEnv(Environment[Gridworld]):
                 action_space=action_spec.n_actions,
                 layer_size=250,
                 epsilon=0.7,
-                device="cpu",
                 seed=torch.random.seed(),
                 n_frames=5,
                 n_step=3,

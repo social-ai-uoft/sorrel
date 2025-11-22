@@ -48,7 +48,7 @@ class AsyncTrainer:
         self.lock = threading.Lock()  # For thread-safe operations
 
         self.total_steps = 0
-        self.total_loss = 0.0
+        self.total_loss = 0.0  # Keep as Python float for logging
         self._last_step_time = 0.0
 
     def start(self) -> None:

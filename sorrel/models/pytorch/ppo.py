@@ -16,6 +16,7 @@ from torch.distributions import Categorical
 
 from sorrel.buffers import Buffer
 from sorrel.models.pytorch.pytorch_base import PyTorchModel
+from sorrel.models.pytorch.device_utils import resolve_device
 
 
 class RolloutBuffer(Buffer):
@@ -112,22 +113,23 @@ class ActorCritic(nn.Module):
             nn.Linear(layer_size, 1),
         )
 
-        self.double()
+        # REMOVED: This forces Float64, which crashes MPS
+        # self.double()
 
     def forward(self):
         raise NotImplementedError
 
-    def act(self, state: np.ndarray) -> tuple[Tensor, Tensor]:
+    def act(self, state: torch.Tensor) -> tuple[Tensor, Tensor]:
         """Get action and log probability of the action.
 
         Args:
-          state: The observation of the agent.
+          state: The observation of the agent (already a Tensor).
 
         Returns:
           tuple[Tensor, Tensor]: The action and action log probability.
         """
-        state_ = torch.tensor(state)
-        action_probs = self.actor(state_)
+        # Input state is assumed to be on the correct device and float32
+        action_probs = self.actor(state)
         dist = Categorical(action_probs)
 
         action = dist.sample()
@@ -150,6 +152,8 @@ class ActorCritic(nn.Module):
         """
         action_probs = self.actor(state)
         dist = Categorical(action_probs)
+        
+        # Action must be indices (long/int) for Categorical
         action_logprobs = dist.log_prob(action)
         dist_entropy = dist.entropy()
         state_values = self.critic(state)
@@ -176,11 +180,15 @@ class PyTorchPPO(PyTorchModel):
         max_turns: int,
         seed: int | None = None,
     ):
-
+        # Auto-detect optimal device if not specified
+        device = resolve_device(device)
+        
         super().__init__(input_size, action_space, layer_size, epsilon, device, seed)
         ac_input_size = int(np.prod(input_size))
-        # Actor-critic network
-        self.policy = ActorCritic(ac_input_size, action_space, layer_size)
+        
+        # Actor-critic network - Move to device immediately
+        self.policy = ActorCritic(ac_input_size, action_space, layer_size).to(device)
+        
         # Set up optimizers for actor and critic
         self.optimizer = torch.optim.Adam(
             [
@@ -207,18 +215,31 @@ class PyTorchPPO(PyTorchModel):
 
         This should truncate the memory based on the length of the game.
         """
-        index_to_truncate = np.nonzero(self.memory.dones)[0][0]
-        self.memory.states = self.memory.states[0 : index_to_truncate + 1]
-        self.memory.actions = self.memory.actions[0 : index_to_truncate + 1]
-        self.memory.log_probs = self.memory.log_probs[0 : index_to_truncate + 1]  # type: ignore
-        self.memory.rewards = self.memory.rewards[0 : index_to_truncate + 1]
-        self.memory.dones = self.memory.dones[0 : index_to_truncate + 1]
+        if len(np.nonzero(self.memory.dones)[0]) > 0:
+            index_to_truncate = np.nonzero(self.memory.dones)[0][0]
+            self.memory.states = self.memory.states[0 : index_to_truncate + 1]
+            self.memory.actions = self.memory.actions[0 : index_to_truncate + 1]
+            self.memory.log_probs = self.memory.log_probs[0 : index_to_truncate + 1]  # type: ignore
+            self.memory.rewards = self.memory.rewards[0 : index_to_truncate + 1]
+            self.memory.dones = self.memory.dones[0 : index_to_truncate + 1]
 
-    def take_action(self, state: np.ndarray) -> tuple:  # type: ignore
+    def take_action(self, state: np.ndarray) -> tuple:
+        """Select action using the policy.
+        
+        Returns:
+            tuple: (action_index [int], log_probability [float])
+        """
         with torch.no_grad():
-            action, log_prob = self.policy.act(state)
+            # 1. Prepare state: Numpy -> Tensor -> Float32 -> Device
+            state_tensor = torch.from_numpy(state).float().to(self.device)
+            
+            # 2. Get action from policy
+            action, log_prob = self.policy.act(state_tensor)
 
-        return action, log_prob
+        # 3. CRITICAL FIX: Use .item() to convert PyTorch Tensors to Python scalars
+        # tensor(2) -> 2
+        # tensor(-0.54) -> -0.54
+        return action.item(), log_prob.item()
 
     def train_step(self):
 
@@ -234,23 +255,23 @@ class PyTorchPPO(PyTorchModel):
             rewards.insert(0, discounted_reward)
 
         # Normalize the rewards
-        rewards = torch.tensor(rewards, dtype=torch.float64).to(self.device)
+        # FIXED: explicit float32 cast
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # Convert to tensors and move to device
         assert isinstance(self.memory, RolloutBuffer), "PPO supports only RolloutBuffer"
-        old_states = torch.tensor(self.memory.states, dtype=torch.float64).to(
-            self.device
-        )
-        old_actions = torch.tensor(self.memory.actions, dtype=torch.float64).to(
-            self.device
-        )
-        old_log_probs = torch.tensor(self.memory.log_probs, dtype=torch.float64).to(
-            self.device
-        )
+        
+        # FIXED: Explicit float32 casting for MPS compatibility
+        old_states = torch.tensor(self.memory.states, dtype=torch.float32).to(self.device)
+        
+        # FIXED: Actions must be Long (int64) for Categorical indexing
+        old_actions = torch.tensor(self.memory.actions, dtype=torch.long).to(self.device)
+        
+        old_log_probs = torch.tensor(self.memory.log_probs, dtype=torch.float32).to(self.device)
 
         # Initial loss value
-        loss = torch.tensor(0.0)
+        loss = torch.tensor(0.0, device=self.device)
 
         # Optimize the policy for k epochs
         for _ in range(self.k_epochs):
@@ -283,7 +304,7 @@ class PyTorchPPO(PyTorchModel):
             loss.mean().backward()
             self.optimizer.step()
 
-        return loss.mean().detach().numpy()
+        return loss.mean().detach().cpu().float().item()
 
     def save(self, file_path: str | os.PathLike) -> None:
         torch.save(

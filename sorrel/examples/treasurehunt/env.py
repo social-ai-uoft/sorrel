@@ -67,7 +67,6 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 action_space=action_spec.n_actions,
                 layer_size=250,
                 epsilon=0.6,
-                device="cpu",
                 seed=torch.random.seed(),
                 n_frames=5,
                 n_step=3,
