@@ -86,10 +86,11 @@ class AsyncTrainer:
                     time.sleep(self.train_interval)
                 
                 # Check if model has enough samples in memory
-                # PyTorch models typically need batch_size samples
+                # Require at least 2x batch_size to avoid sampling errors
                 skip_training = False
                 if hasattr(self.model, 'memory') and hasattr(self.model, 'batch_size'):
-                    if len(self.model.memory) < self.model.batch_size:
+                    min_samples = max(self.model.batch_size * 2, 100)  # At least 2x batch or 100
+                    if len(self.model.memory) < min_samples:
                         skip_training = True
                         time.sleep(0.01)  # Short sleep if not enough samples yet
                 

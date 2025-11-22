@@ -10,12 +10,13 @@ def run_benchmark(mode_name, simultaneous, async_training, epochs=300):
     
     # Construct command
     # Note: Cooking uses hydra, so we pass args differently
+    # Use + prefix to add new keys not in config struct
     cmd = [
         "poetry", "run", "python", "sorrel/examples/cooking/main.py",
         f"experiment.epochs={epochs}",
         f"experiment.record_period=10",
-        f"simultaneous_moves={simultaneous}",
-        f"async_training={async_training}"
+        f"+simultaneous_moves={simultaneous}",
+        f"+async_training={async_training}"
     ]
     
     start_time = time.time()
