@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -63,7 +64,7 @@ class Buffer:
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
                 A tuple containing the states, actions, rewards, next states, dones, and
-                invalid (meaning stacked frmaes cross episode boundary).
+                invalid (meaning stacked frames cross episode boundary).
         """
         indices = np.random.choice(
             max(1, self.size - self.n_frames - 1), batch_size, replace=False
@@ -137,3 +138,61 @@ class StrBuffer(Buffer):
             fill_value=empty_state_sentinel,
             dtype=f"<U{(obs_shape[0] + 1)*obs_shape[1] + 100}",
         )
+
+class TransformerBuffer(Buffer):
+    """Buffer class equivalent to the base class with the exception that
+    actions also include a time dimension in the same way that states are."""
+
+    def sample(self, batch_size: int):
+        """Sample a batch of experiences from the replay buffer.
+
+        Args:
+            batch_size (int): The number of experiences to sample.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                A tuple containing the states, actions, next states, next actions, dones, and invalid (meaning stacked frames cross episode boundary).
+        """
+        indices = np.random.choice(
+            max(1, self.size - self.n_frames - 1), batch_size, replace=False
+        )
+        indices = indices[:, np.newaxis]
+        indices = indices + np.arange(self.n_frames)
+
+        states = self.states[indices].reshape(batch_size, -1)
+        next_states = self.states[indices + 1].reshape(batch_size, -1)
+        actions = self.actions[indices].reshape(batch_size, -1)
+        next_actions = self.rewards[indices + 1].reshape(batch_size, -1)
+        dones = self.dones[indices[:, -1]].reshape(batch_size, -1)
+        valid = (1.0 - np.any(self.dones[indices[:, :-1]], axis=-1)).reshape(
+            batch_size, -1
+        )
+
+        return states, actions, next_actions, next_states, dones, valid
+
+
+class SavedGames(Buffer):
+    """A buffer used for saving games to and loading from disk."""
+
+    def save(self, output_file: str | Path) -> None:
+        output_file = Path(output_file)
+        np.savez_compressed(output_file, states=self.states, actions=self.actions, rewards=self.rewards, dones=self.dones, n_frames=self.n_frames, idx=self.idx)
+
+    @classmethod
+    def load(cls, input_file: str | Path) -> SavedGames:
+        input_file = Path(input_file)
+        with np.load(input_file) as data:
+            states = data["states"]
+            actions = data["actions"]
+            rewards = data["rewards"]
+            dones = data["dones"]
+            n_frames = data["n_frames"]
+            idx = data["idx"]
+        output = cls(capacity=len(actions), obs_shape = states.shape[1:], n_frames = n_frames)
+        # Overwrite the default values for the buffer.
+        output.states = states
+        output.actions = actions
+        output.rewards = rewards
+        output.dones = dones
+        output.idx = idx
+        return output

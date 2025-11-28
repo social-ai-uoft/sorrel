@@ -627,6 +627,18 @@ files = [
 ]
 
 [[package]]
+name = "einops"
+version = "0.8.1"
+description = "A new flavour of deep learning operations"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "einops-0.8.1-py3-none-any.whl", hash = "sha256:919387eb55330f5757c6bea9165c5ff5cfe63a642682ea788a6d472576d81737"},
+    {file = "einops-0.8.1.tar.gz", hash = "sha256:de5d960a7a761225532e0f1959e5315ebeafc0cd43394732f103ca44b9837e84"},
+]
+
+[[package]]
 name = "etils"
 version = "1.13.0"
 description = "Collection of common python utils"
@@ -4928,4 +4940,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12.0"
-content-hash = "5b3d167a066e69fc72c6af4b34aa6efcaf0cb71d0f30d0f1b7f95ef857f88eac"
+content-hash = "36ed54210263e46a96e177fe7ccc2b07c24b94ba9c777bd1f6c2db7a4b669ea6"
