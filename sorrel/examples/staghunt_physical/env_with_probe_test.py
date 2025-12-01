@@ -53,9 +53,10 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
                 epoch % self.config.experiment.record_period == 0
             )
 
-            # Start epoch action for each agent model (reuse existing logic)
+            # Start epoch action for each agent model (only spawned agents)
             for agent in self.agents:
-                agent.model.start_epoch_action(epoch=epoch)
+                if agent.agent_id in self.spawned_agent_ids:
+                    agent.model.start_epoch_action(epoch=epoch)
 
             # Run the environment for the specified number of turns (reuse existing logic)
             while not self.turn >= self.config.experiment.max_turns:
@@ -71,18 +72,21 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
                     output_dir = Path(os.getcwd()) / "./data/"
                 renderer.save_gif(epoch, output_dir)
 
-            # End epoch action for each agent model (reuse existing logic)
+            # End epoch action for each agent model (only spawned agents)
             for agent in self.agents:
-                agent.model.end_epoch_action(epoch=epoch)
+                if agent.agent_id in self.spawned_agent_ids:
+                    agent.model.end_epoch_action(epoch=epoch)
 
-            # Train the agents (reuse existing logic)
+            # Train the agents (only spawned agents)
             total_loss = 0
             for agent in self.agents:
-                total_loss += agent.model.train_step()
+                if agent.agent_id in self.spawned_agent_ids:
+                    total_loss += agent.model.train_step()
 
-            # Update epsilon for all agents (exactly as in base Environment class)
+            # Update epsilon for all agents (only spawned agents)
             for agent in self.agents:
-                agent.model.epsilon_decay(self.config.model.epsilon_decay)
+                if agent.agent_id in self.spawned_agent_ids:
+                    agent.model.epsilon_decay(self.config.model.epsilon_decay)
 
             # Log the information (reuse existing logic)
             if logging:

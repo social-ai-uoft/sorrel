@@ -52,6 +52,10 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         # plumbing to bridge between the agent and environment logic.
         world.environment = self  # type: ignore[attr-defined]
         super().__init__(world, config)
+        
+        # Track which agents are spawned in the current epoch
+        # This allows us to spawn only a subset of agents while keeping all agents initialized
+        self.spawned_agent_ids: list[int] = []
 
     def setup_agents(self) -> None:
         """Create and configure the agents for the stag hunt experiment.
@@ -281,6 +285,20 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 ):
                     terrain_entity.resource_type = resource_type
 
+        # Determine how many agents to spawn
+        # Get num_agents_to_spawn from config (defaults to num_agents for backward compatibility)
+        if hasattr(self.config, "world"):
+            world_cfg = self.config.world
+        else:
+            world_cfg = self.config.get("world", {})
+        
+        num_agents_to_spawn = world_cfg.get("num_agents_to_spawn", len(self.agents))
+        # Ensure num_agents_to_spawn doesn't exceed total agents
+        num_agents_to_spawn = min(num_agents_to_spawn, len(self.agents))
+        
+        # Randomly select which agents to spawn this epoch
+        self.spawned_agent_ids = sorted(random.sample(range(len(self.agents)), num_agents_to_spawn))
+        
         # choose initial agent positions
         if world.random_agent_spawning:
             # Find all valid spawn locations (not walls, not resources, not fixed spawn points)
@@ -297,18 +315,20 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                             if hasattr(terrain_entity, 'passable') and terrain_entity.passable:
                                 valid_spawn_locations.append(dynamic)
             
-            # Randomly select spawn locations for agents
-            if len(valid_spawn_locations) < len(self.agents):
+            # Randomly select spawn locations for the selected agents
+            if len(valid_spawn_locations) < num_agents_to_spawn:
                 # Fallback: use agent_spawn_points if not enough valid locations
-                print(f"Warning: Only {len(valid_spawn_locations)} valid random locations found for {len(self.agents)} agents. Using fixed spawn points.")
-                chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
+                print(f"Warning: Only {len(valid_spawn_locations)} valid random locations found for {num_agents_to_spawn} agents. Using fixed spawn points.")
+                chosen_positions = random.sample(world.agent_spawn_points, num_agents_to_spawn)
             else:
-                chosen_positions = random.sample(valid_spawn_locations, len(self.agents))
+                chosen_positions = random.sample(valid_spawn_locations, num_agents_to_spawn)
         else:
             # Original behavior: use fixed spawn points
-            chosen_positions = random.sample(world.agent_spawn_points, len(self.agents))
+            chosen_positions = random.sample(world.agent_spawn_points, num_agents_to_spawn)
         
-        for loc, agent in zip(chosen_positions, self.agents):
+        # Spawn only the selected agents at the chosen positions
+        spawned_agents = [self.agents[agent_id] for agent_id in self.spawned_agent_ids]
+        for loc, agent in zip(chosen_positions, spawned_agents):
             # dynamic layer coordinate for agent
             dynamic = (loc[0], loc[1], world.dynamic_layer)
             world.add(dynamic, agent)
@@ -427,22 +447,35 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 if (y, x) not in map_data.wall_locations:
                     world.add((y, x, layer), Empty())
 
-        # Place agents - use deterministic placement if spawn points were manually set (probe test),
-        # otherwise use random placement (training)
-        # Use min to handle cases where num_spawn_points < num_agents (e.g., test_intention mode)
-        num_spawn_needed = min(len(world.agent_spawn_points), len(self.agents))
+        # Determine how many agents to spawn
+        # Get num_agents_to_spawn from config (defaults to num_agents for backward compatibility)
+        if hasattr(self.config, "world"):
+            world_cfg = self.config.world
+        else:
+            world_cfg = self.config.get("world", {})
+        
+        num_agents_to_spawn = world_cfg.get("num_agents_to_spawn", len(self.agents))
+        # Ensure num_agents_to_spawn doesn't exceed total agents or available spawn points
+        num_agents_to_spawn = min(num_agents_to_spawn, len(self.agents), len(world.agent_spawn_points))
         
         # If spawn points were manually set (probe test), use deterministic order
-        # Otherwise use random placement for training
+        # Otherwise use random selection for training
         if manually_set_spawn_points is not None:
             # Deterministic: assign agents to spawn points in order (preserve manual order)
             # Use the manually set spawn points, not the world's (which may have been reset)
-            chosen_positions = manually_set_spawn_points[:num_spawn_needed]
+            chosen_positions = manually_set_spawn_points[:num_agents_to_spawn]
+            # For probe tests, spawn agents in order (0, 1, 2, ...)
+            self.spawned_agent_ids = list(range(num_agents_to_spawn))
         else:
-            # Random: use random sampling for training
-            chosen_positions = random.sample(world.agent_spawn_points, num_spawn_needed)
+            # Random: randomly select which agents to spawn this epoch
+            import random
+            self.spawned_agent_ids = sorted(random.sample(range(len(self.agents)), num_agents_to_spawn))
+            # Randomly select spawn positions
+            chosen_positions = random.sample(world.agent_spawn_points, num_agents_to_spawn)
         
-        for loc, agent in zip(chosen_positions, self.agents[:num_spawn_needed]):
+        # Spawn only the selected agents at the chosen positions
+        spawned_agents = [self.agents[agent_id] for agent_id in self.spawned_agent_ids]
+        for loc, agent in zip(chosen_positions, spawned_agents):
             world.add(loc, agent)
     
     def _parse_orientation_reference(self, file_path: str) -> dict:
@@ -585,15 +618,13 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             if x.has_transitions and not isinstance(x, Agent):
                 x.transition(self.world)
         
-        # Handle agent transitions - SKIP removed agents
-        # Get active agents and randomize order if configured
-        # Create a new list to avoid modifying self.agents
-        active_agents = [agent for agent in self.agents if agent.can_act()]
-        if self.config.experiment.get("randomize_agent_order", False):
-            random.shuffle(active_agents)  # Only shuffles the local list, not self.agents
-        
-        for agent in active_agents:
-            agent.transition(self.world)
+        # Handle agent transitions - SKIP removed agents AND non-spawned agents
+        for agent in self.agents:
+            # Skip agents that are not spawned this epoch
+            if agent.agent_id not in self.spawned_agent_ids:
+                continue
+            if agent.can_act():  # Only process agents that can act
+                agent.transition(self.world)
         
         # Collect metrics for this step
         self.collect_metrics_for_step()
@@ -618,6 +649,9 @@ class StagHuntEnv(Environment[StagHuntWorld]):
     def update_agent_states(self) -> None:
         """Update all agent removal and respawn states."""
         for agent in self.agents:
+            # Skip agents that are not spawned this epoch
+            if agent.agent_id not in self.spawned_agent_ids:
+                continue
             if hasattr(agent, "update_removal_state"):
                 agent.update_removal_state()
 

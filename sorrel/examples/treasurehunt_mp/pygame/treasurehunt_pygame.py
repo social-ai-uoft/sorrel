@@ -14,9 +14,9 @@ import numpy as np
 import pygame
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.examples.treasurehunt.agents import TreasurehuntAgent
-from sorrel.examples.treasurehunt.entities import EmptyEntity, Gem, Sand, Wall
-from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_mp.agents import TreasurehuntAgent
+from sorrel.examples.treasurehunt_mp.entities import EmptyEntity, Gem, Sand, Wall
+from sorrel.examples.treasurehunt_mp.world import TreasurehuntWorld
 from sorrel.observation.observation_spec import OneHotObservationSpec
 
 

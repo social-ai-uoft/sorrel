@@ -6,4 +6,3 @@ from sorrel.examples.treasurehunt_mp.mp.mp_system import MARLMultiprocessingSyst
 __all__ = ['MPConfig', 'MARLMultiprocessingSystem']
 
 
-

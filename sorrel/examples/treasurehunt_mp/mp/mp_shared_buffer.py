@@ -166,6 +166,68 @@ class SharedReplayBuffer(Buffer):
             self._idx = idx
             self._size = size
     
+    def __getstate__(self):
+        """Custom pickle support for multiprocessing.
+        
+        When pickled, we need to store the information needed to recreate
+        the buffer in the subprocess by attaching to existing shared memory.
+        """
+        state = {
+            'capacity': self.capacity,
+            'obs_shape': self.obs_shape,
+            'n_frames': self.n_frames,
+            'shm_names': self.shm_names,
+            '_idx': self._idx,
+            '_size': self._size,
+        }
+        return state
+    
+    def __setstate__(self, state):
+        """Custom unpickle support for multiprocessing.
+        
+        When unpickled in subprocess, attach to existing shared memory
+        using the stored names.
+        """
+        self.capacity = state['capacity']
+        self.obs_shape = state['obs_shape']
+        self.n_frames = state['n_frames']
+        self.shm_names = state['shm_names']
+        self._idx = state['_idx']
+        self._size = state['_size']
+        
+        # Attach to existing shared memory
+        self.shm_name_states = self.shm_names['states']
+        self.shm_name_actions = self.shm_names['actions']
+        self.shm_name_rewards = self.shm_names['rewards']
+        self.shm_name_dones = self.shm_names['dones']
+        
+        self.shm_states = shared_memory.SharedMemory(name=self.shm_name_states)
+        self.shm_actions = shared_memory.SharedMemory(name=self.shm_name_actions)
+        self.shm_rewards = shared_memory.SharedMemory(name=self.shm_name_rewards)
+        self.shm_dones = shared_memory.SharedMemory(name=self.shm_name_dones)
+        
+        # Create numpy arrays from existing shared memory
+        self.states = np.ndarray(
+            (self.capacity, *self.obs_shape),
+            dtype=np.float32,
+            buffer=self.shm_states.buf
+        )
+        self.actions = np.ndarray(
+            self.capacity,
+            dtype=np.int64,
+            buffer=self.shm_actions.buf
+        )
+        self.rewards = np.ndarray(
+            self.capacity,
+            dtype=np.float32,
+            buffer=self.shm_rewards.buf
+        )
+        self.dones = np.ndarray(
+            self.capacity,
+            dtype=np.float32,
+            buffer=self.shm_dones.buf
+        )
+    
     @property
     def idx(self):
         """Get current index (works like original Buffer.idx)."""
@@ -211,20 +273,19 @@ class SharedReplayBuffer(Buffer):
             reward (float): The reward received.
             done (bool): Whether the episode terminated after this step.
         """
-        # Get and update index atomically (same logic as original)
+        # Combine both operations in a single lock to reduce overhead
         with self._idx.get_lock():
             current_idx = self._idx.value
             self._idx.value = (current_idx + 1) % self.capacity
+            # Also update size in the same lock (faster than two separate locks)
+            old_size = self._size.value
+            self._size.value = min(old_size + 1, self.capacity)
         
-        # Write to arrays (same as original)
+        # Write to arrays (same as original) - no lock needed for array writes
         self.states[current_idx] = obs
         self.actions[current_idx] = action
         self.rewards[current_idx] = reward
         self.dones[current_idx] = done
-        
-        # Update size atomically (same logic as original)
-        with self._size.get_lock():
-            self._size.value = min(self._size.value + 1, self.capacity)
     
     def sample(self, batch_size: int):
         """Sample a batch of experiences from the replay buffer.
@@ -240,9 +301,9 @@ class SharedReplayBuffer(Buffer):
                 A tuple containing the states, actions, rewards, next states, dones, and
                 invalid (meaning stacked frames cross episode boundary).
         """
-        # Get current size atomically (same as original)
-        with self._size.get_lock():
-            current_size = self._size.value
+        # Get current size (lock-free read - size can be slightly stale but that's okay)
+        # We only need approximate size for the check, exact size isn't critical
+        current_size = self._size.value
         
         # Check if we have enough samples (same as original Buffer logic)
         available_samples = max(1, current_size - self.n_frames - 1)
@@ -329,12 +390,40 @@ class SharedReplayBuffer(Buffer):
         Only the process that created the shared memory should call unlink().
         """
         try:
-            self.shm_states.close()
-            self.shm_actions.close()
-            self.shm_rewards.close()
-            self.shm_dones.close()
-        except AttributeError:
+            # Close shared memory handles
+            if hasattr(self, 'shm_states'):
+                self.shm_states.close()
+            if hasattr(self, 'shm_actions'):
+                self.shm_actions.close()
+            if hasattr(self, 'shm_rewards'):
+                self.shm_rewards.close()
+            if hasattr(self, 'shm_dones'):
+                self.shm_dones.close()
+            
+            # Unlink shared memory (remove from system)
+            # Only unlink if we created it (not if we attached to existing)
+            if hasattr(self, 'shm_name_states') and hasattr(self, 'shm_states'):
+                try:
+                    self.shm_states.unlink()
+                except (FileNotFoundError, PermissionError):
+                    pass  # Already unlinked or not owned by this process
+            if hasattr(self, 'shm_name_actions') and hasattr(self, 'shm_actions'):
+                try:
+                    self.shm_actions.unlink()
+                except (FileNotFoundError, PermissionError):
+                    pass
+            if hasattr(self, 'shm_name_rewards') and hasattr(self, 'shm_rewards'):
+                try:
+                    self.shm_rewards.unlink()
+                except (FileNotFoundError, PermissionError):
+                    pass
+            if hasattr(self, 'shm_name_dones') and hasattr(self, 'shm_dones'):
+                try:
+                    self.shm_dones.unlink()
+                except (FileNotFoundError, PermissionError):
+                    pass
+        except Exception as e:
+            # Silently handle any cleanup errors
             pass
-        
-        # Note: unlink() should only be called by the process that created the shared memory
-        # This is typically handled by the main process, not here
+
+

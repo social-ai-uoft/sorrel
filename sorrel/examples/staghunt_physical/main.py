@@ -54,12 +54,12 @@ def run_stag_hunt() -> None:
     config = {
         "experiment": {
             # number of episodes/epochs to run
-            "epochs": 3000000,
+            "epochs": 600000,
             # maximum number of turns per episode
-            "max_turns": 2,
+            "max_turns": 100,
             # recording period for animation (unused here)
             "record_period": 1000,
-            "run_name": "test_probe_test_changes", # "staghunt_small_room_size7_regen1_v2_test_interval10"
+            "run_name": "Nov19_not_all_can_hunt_test_partial_agent_spawning_max_turns5_epsilon0_random_map", # "staghunt_small_room_size7_regen1_v2_test_interval10"
             # Model saving configuration
             "save_models": False,  # Enable model saving
             "save_interval": 1000,  # Save models every X epochs
@@ -70,7 +70,7 @@ def run_stag_hunt() -> None:
             # Test mode: "default" or "test_intention"
             "test_mode": "test_intention",
             # Run probe test every X epochs
-            "test_interval": 10,
+            "test_interval": 100,
             # Only save PNG visualizations for the first N probe tests (None = save all)
             "save_png_for_first_n_tests": 3,  # Only save PNGs for first 3 probe tests
             # Maximum steps for each probe test
@@ -84,9 +84,10 @@ def run_stag_hunt() -> None:
             # Example: [0, 1] tests only agents 0 and 1
             # NEW: Agent kind specifications for probe tests
             "focus_agent_kind": None,  # None = use original agent's kind
-            "partner_agent_kinds": ["AgentKindA", "AgentKindB"],  # List of partner kinds to test
+            "partner_agent_kinds": ["no_partner", "AgentKindA", "AgentKindB"],  # List of partner kinds to test
+            # "no_partner" means no partner agent is spawned (focal agent alone)
             # None means use focus agent's kind (both agents same kind)
-            # Example: [None, "AgentKindA", "AgentKindB"] tests with same kind, KindA, and KindB
+            # Example: ["no_partner", None, "AgentKindA", "AgentKindB"] tests with no partner, same kind, KindA, and KindB
             "partner_agent_attributes": {  # Attributes for partner agent in tests
                 "can_hunt": True,  # Default partner can hunt
             },
@@ -115,35 +116,38 @@ def run_stag_hunt() -> None:
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
             "agent_vision_radius": 4,
             # epsilon decay hyperparameter for the IQN model
-            "epsilon_decay": 0.0001,
+            "epsilon_decay": 0.001, # 0.0001
             "epsilon_min": 0.05,
             # model architecture parameters
             "layer_size": 250,
-            "epsilon": 1,
+            "epsilon": 0,
             "n_frames": 1,
             "n_step": 3,
             "sync_freq": 200,
             "model_update_freq": 4,
             "batch_size": 64,
             "memory_size": 1024,
-            "LR": 0.00025,
+            "LR": 0.00025, # 0.00025
             "TAU": 0.001,
             "GAMMA": 0.99,
             "n_quantiles": 12,
         },
         "world": {
             # map generation mode
-            "generation_mode": "ascii_map",  # "random" or "ascii_map"
+            "generation_mode": "random",  # "random" or "ascii_map"
             "ascii_map_file": "test_intention_full.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
             "height": 9, # 13
             "width": 9,
             # number of players in the game
             "num_agents": 3,
+            # number of agents to spawn per epoch (defaults to num_agents if not set)
+            # Only the spawned agents will act and learn in each epoch
+            "num_agents_to_spawn": 2,  # Spawn 2 out of 3 agents each epoch
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
             # If True in random mode, agents spawn randomly in valid locations instead of fixed spawn points
-            "random_agent_spawning": False,
+            "random_agent_spawning": True,
             # If True, movement actions automatically change orientation to face movement direction
             "simplified_movement": True,
             # If True, attack only hits tiles directly in front of agent (number controlled by attack_range)
