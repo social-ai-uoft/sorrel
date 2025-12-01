@@ -11,9 +11,10 @@ def create_config(
     use_multi_env_composite: bool = False,
     simple_foraging: bool = False,
     use_random_policy: bool = False,
-    fixed_punishment_level: float = 0.2,
+    fixed_punishment_level: float = 0.0,
     punishment_level_accessible: bool = False,
     use_probabilistic_punishment: bool = False,
+    use_predefined_punishment_schedule: bool = False,
     social_harm_accessible: bool = False,
     map_size: int = 10,
     num_resources: int = 8,
@@ -71,11 +72,11 @@ def create_config(
             }
     else:
         social_harm_config = {
-            "A": 0, # 2.16666667
+            "A": 3, # 2.16666667
             "B": 0, # 2.86
-            "C": 1.2, # 4.99546667
-            "D": 3.5, # 11.572704
-            "E": 7.5, # 31.83059499
+            "C": 0, # 4.99546667
+            "D": 0, # 11.572704
+            "E": 0, # 31.83059499
         }
 
     # flexible parameters
@@ -161,6 +162,7 @@ def create_config(
             "fixed_punishment_level": fixed_punishment_level,
             "punishment_level_accessible": punishment_level_accessible,
             "use_probabilistic_punishment": use_probabilistic_punishment,
+            "use_predefined_punishment_schedule": use_predefined_punishment_schedule,
             "social_harm_accessible": social_harm_accessible,
             "save_models_every": save_models_every,
             "delayed_punishment": delayed_punishment,
@@ -189,14 +191,14 @@ def create_config(
             "width": map_size,
             "num_resources": num_resources,
             "spawn_prob": respawn_prob,
-            "a_value": 2.9,  # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
-            "b_value": 3.316,
-            "c_value": 4.59728,
-            "d_value": 8.5436224,
-            "e_value": 20.69835699,
+            "a_value": 25,  # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
+            "b_value": 10,
+            "c_value": 10,
+            "d_value": 10,
+            "e_value": 10,
             "social_harm": social_harm_config,
             "init_punishment_prob": 0.0,
-            "punishment_magnitude": 48.0,
+            "punishment_magnitude": 20.0,
             "change_per_vote": 0.1,
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},

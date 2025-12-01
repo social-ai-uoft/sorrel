@@ -132,6 +132,10 @@ def parse_arguments():
         help="Whether to use probabilistic punishment system"
     )
     parser.add_argument(
+        "--use_predefined_punishment_schedule", action="store_true",
+        help="Use predefined punishment schedule instead of compiled values"
+    )
+    parser.add_argument(
         "--social_harm_accessible", action="store_true",
         help="Whether agents can access social harm information"
     )
@@ -365,6 +369,7 @@ def run_experiment(args):
         fixed_punishment_level=args.fixed_punishment,
         punishment_level_accessible=args.punishment_level_accessible,
         use_probabilistic_punishment=args.use_probabilistic_punishment,
+        use_predefined_punishment_schedule=args.use_predefined_punishment_schedule,
         social_harm_accessible=args.social_harm_accessible,
         map_size=args.map_size,
         num_resources=args.num_resources,
@@ -397,8 +402,8 @@ def run_experiment(args):
         randomize_agent_order=args.randomize_agent_order,
     )
 
-    # Print expected rewards
-    print_expected_rewards(config, args.fixed_punishment)
+    # Print expected rewards (use config value, not CLI arg, so it reflects the actual config)
+    print_expected_rewards(config, None)  # None means use config["experiment"]["fixed_punishment_level"]
 
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -407,7 +412,7 @@ def run_experiment(args):
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_debug" / run_folder
+    log_dir = Path(__file__).parent / "runs_simple_params" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder

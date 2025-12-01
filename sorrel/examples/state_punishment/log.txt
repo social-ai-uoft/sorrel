@@ -1,1 +1,19 @@
 Before folder Nov16, average punishment was inccorctly recorded as current punishment.
+
+
+default parameters:
+
+social_harm_config = {
+                "A": 0, # 2.16666667
+                "B": 0, # 2.86
+                "C": 1.2, # 4.99546667
+                "D": 3.5, # 11.572704
+                "E": 7.5, # 31.83059499
+            }
+
+"a_value": 2.9,  # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
+            "b_value": 3.316,
+            "c_value": 4.59728,
+            "d_value": 8.5436224,
+            "e_value": 20.69835699,
+"punishment_magnitude": 48.0,

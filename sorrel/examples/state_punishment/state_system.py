@@ -7,6 +7,18 @@ from typing import Dict, List
 import numpy as np
 import random
 
+predefined_punishment_probs = np.array([
+    [0.50, 0.00, 0.00, 0.00, 0.00],  # s = 0
+    [0.55, 0.05, 0.00, 0.00, 0.00],  # s = 1
+    [0.60, 0.10, 0.00, 0.00, 0.00],  # s = 2
+    [0.65, 0.10, 0.05, 0.00, 0.00],  # s = 3
+    [0.70, 0.10, 0.10, 0.00, 0.00],  # s = 4
+    [0.75, 0.10, 0.10, 0.05, 0.00],  # s = 5
+    [0.80, 0.10, 0.10, 0.10, 0.00],  # s = 6
+    [0.85, 0.15, 0.10, 0.10, 0.05],  # s = 7
+    [0.90, 0.15, 0.15, 0.10, 0.10],  # s = 8
+    [0.95, 0.20, 0.15, 0.15, 0.10],  # s = 9
+])
 
 def generate_exponential_function(intercept: float, base: float):
     """
@@ -77,6 +89,7 @@ class StateSystem:
         resource_punishment_is_ambiguous: bool = False,
         only_punish_taboo: bool = True,
         use_probabilistic_punishment: bool = True,
+        use_predefined_punishment_schedule: bool = False,
     ):
         """Initialize the state system.
 
@@ -92,6 +105,12 @@ class StateSystem:
             resource_punishment_is_ambiguous: Whether punishment is ambiguous
             only_punish_taboo: Whether to only punish taboo resources
             use_probabilistic_punishment: Whether to use probabilistic punishment (True) or deterministic (False)
+            use_predefined_punishment_schedule: If True, use the predefined_punishment_probs
+                array from this module. The array must have shape (num_steps, num_resources).
+                If False (default), use compile_punishment_vals() to generate schedules.
+        
+        Raises:
+            ValueError: If predefined schedule dimensions don't match num_steps/num_resources.
         """
         self.prob = init_prob
         self.init_prob = init_prob
@@ -110,10 +129,31 @@ class StateSystem:
         self.only_punish_taboo = only_punish_taboo
         self.use_probabilistic_punishment = use_probabilistic_punishment
 
-        # Generate complex punishment probability matrices
-        self.punishments_prob_matrix = compile_punishment_vals(
-            num_resources, num_steps, exponentialness, intercept_increase_speed
-        )
+        # Select punishment schedule based on parameter
+        if use_predefined_punishment_schedule:
+            # Use predefined punishment schedule
+            # predefined_punishment_probs shape: (num_steps, num_resources) = (10, 5)
+            # Need to transpose to (num_resources, num_steps) = (5, 10)
+            
+            # Validate predefined array dimensions match config
+            if predefined_punishment_probs.shape[0] != num_steps:
+                raise ValueError(
+                    f"Predefined schedule has {predefined_punishment_probs.shape[0]} steps, "
+                    f"but num_steps={num_steps}. Expected {num_steps} steps."
+                )
+            if predefined_punishment_probs.shape[1] != num_resources:
+                raise ValueError(
+                    f"Predefined schedule has {predefined_punishment_probs.shape[1]} resources, "
+                    f"but num_resources={num_resources}. Expected {num_resources} resources."
+                )
+            
+            # Transpose to match expected format: (num_resources, num_steps)
+            self.punishments_prob_matrix = predefined_punishment_probs.T
+        else:
+            # Use compiled punishment values (existing behavior)
+            self.punishments_prob_matrix = compile_punishment_vals(
+                num_resources, num_steps, exponentialness, intercept_increase_speed
+            )
 
         # Resource-specific punishment schedules
         self.resource_schedules = self._generate_resource_schedules()

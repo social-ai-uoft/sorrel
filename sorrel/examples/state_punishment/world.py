@@ -45,6 +45,7 @@ class StatePunishmentWorld(Gridworld):
             change_per_vote=config.world.change_per_vote,
             taboo_resources=config.world.taboo_resources,
             use_probabilistic_punishment=config.experiment.get("use_probabilistic_punishment", True),
+            use_predefined_punishment_schedule=config.experiment.get("use_predefined_punishment_schedule", False),
         )
 
         # Social harm tracking (shared across all agents)
