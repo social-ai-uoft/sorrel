@@ -1,4 +1,5 @@
 import os
+import random
 from abc import abstractmethod
 from multiprocessing import Pool
 from pathlib import Path
@@ -81,7 +82,14 @@ class Environment[W: Gridworld]:
             x: Entity
             if x.has_transitions and not isinstance(x, Agent):
                 x.transition(self.world)
-        for agent in self.agents:
+        
+        # Randomize agent order if configured
+        # Create a copy of self.agents to avoid modifying the original list
+        agents_to_process = list(self.agents)
+        if hasattr(self.config, "experiment") and self.config.experiment.get("randomize_agent_order", False):
+            random.shuffle(agents_to_process)  # Only shuffles the local copy, not self.agents
+        
+        for agent in agents_to_process:
             agent.transition(self.world)
 
     # TODO: ability to save/load?

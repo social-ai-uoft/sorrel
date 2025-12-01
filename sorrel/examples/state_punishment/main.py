@@ -5,6 +5,7 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
+import torch
 import yaml
 
 from sorrel.examples.state_punishment.config import (
@@ -15,6 +16,72 @@ from sorrel.examples.state_punishment.environment_setup import setup_environment
 from sorrel.examples.state_punishment.logger import StatePunishmentLogger
 from sorrel.examples.state_punishment.probe_test import ProbeTestLogger
 from sorrel.utils.helpers import set_seed
+
+
+def validate_device(device: str) -> str:
+    """Validate that the specified device exists and is available.
+    
+    Args:
+        device: Device string (e.g., "cpu", "cuda", "cuda:0", "mps")
+        
+    Returns:
+        Validated device string
+        
+    Raises:
+        ValueError: If device is not available or invalid
+    """
+    device_lower = device.lower().strip()
+    
+    # CPU is always available
+    if device_lower == "cpu":
+        return "cpu"
+    
+    # Check MPS devices (Apple Silicon GPU)
+    if device_lower.startswith("mps"):
+        if not torch.backends.mps.is_available():
+            raise ValueError(
+                f"MPS (Metal Performance Shaders) is not available on this system. "
+                f"Please use 'cpu' instead of '{device}'. "
+                f"MPS requires macOS with Apple Silicon (M1/M2/M3) and PyTorch >= 1.12."
+            )
+        # MPS doesn't use device indices like CUDA, just return "mps"
+        return "mps"
+    
+    # Check CUDA devices
+    if device_lower.startswith("cuda"):
+        if not torch.cuda.is_available():
+            raise ValueError(
+                f"CUDA is not available on this system. "
+                f"Please use 'cpu' instead of '{device}'."
+            )
+        
+        # Parse device index if specified (e.g., "cuda:0")
+        if ":" in device_lower:
+            try:
+                device_idx = int(device_lower.split(":")[1])
+                if device_idx < 0:
+                    raise ValueError(f"Invalid device index: {device_idx}. Must be >= 0")
+                if device_idx >= torch.cuda.device_count():
+                    raise ValueError(
+                        f"CUDA device {device_idx} does not exist. "
+                        f"Only {torch.cuda.device_count()} CUDA device(s) available (0-{torch.cuda.device_count()-1})."
+                    )
+                return f"cuda:{device_idx}"
+            except ValueError as e:
+                if "invalid literal" in str(e).lower():
+                    raise ValueError(
+                        f"Invalid device index in '{device}'. Expected format: 'cuda:0', 'cuda:1', etc."
+                    )
+                raise
+        else:
+            # Just "cuda" - use default device (cuda:0)
+            return "cuda:0"
+    
+    # Unknown device type
+    raise ValueError(
+        f"Unknown device type: '{device}'. "
+        f"Supported devices: 'cpu', 'cuda', 'cuda:0', 'cuda:1', 'mps', etc."
+    )
 
 
 def parse_arguments():
@@ -121,6 +188,10 @@ def parse_arguments():
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
     parser.add_argument("--memory_size", type=int, default=1024, help="Memory size")
     parser.add_argument("--save_models_every", type=int, default=1000, help="Save models every X epochs")
+    parser.add_argument(
+        "--device", type=str, default="cpu",
+        help="Device to use for training (default: 'cpu', use 'cuda'/'cuda:0' for NVIDIA GPU, 'mps' for Apple Silicon GPU)"
+    )
 
     # Logging
     parser.add_argument(
@@ -145,7 +216,7 @@ def parse_arguments():
         help="Number of agents to replace per epoch (default: 0)"
     )
     parser.add_argument(
-        "--replacement_start_epoch", type=int, default=0,
+        "--replacement_start_epoch", type=int, default=100000,
         help="First epoch when replacement can occur (default: 0)"
     )
     parser.add_argument(
@@ -157,7 +228,7 @@ def parse_arguments():
         help="Comma-separated list of agent IDs to replace (e.g., '0,1,2'). Only used with --replacement_selection_mode=specified_ids"
     )
     parser.add_argument(
-        "--replacement_selection_mode", type=str, default="first_n",
+        "--replacement_selection_mode", type=str, default="probability",
         choices=["first_n", "random", "specified_ids", "probability"],
         help="Mode for selecting agents to replace: first_n, random, specified_ids, or probability (default: first_n)"
     )
@@ -168,6 +239,14 @@ def parse_arguments():
     parser.add_argument(
         "--new_agent_model_path", type=str, default=None,
         help="Path to pretrained model checkpoint for replaced agents (None = fresh random model, default: None)"
+    )
+    parser.add_argument(
+        "--replacement_min_epochs_between", type=int, default=0,
+        help="Minimum number of epochs between two replacements (default: 0, no minimum)"
+    )
+    parser.add_argument(
+        "--randomize_agent_order", default=True, type=bool,
+        help="Randomize the order in which agents take turns (default: False)"
     )
 
     return parser.parse_args()
@@ -240,6 +319,22 @@ Parsed Arguments:
 
 def run_experiment(args):
     """Run the state punishment experiment."""
+    # Validate device before proceeding
+    try:
+        validated_device = validate_device(args.device)
+        if validated_device != args.device:
+            print(f"Device '{args.device}' adjusted to '{validated_device}'")
+        args.device = validated_device
+        print(f"Using device: {validated_device}")
+        if validated_device.startswith("cuda"):
+            device_idx = int(validated_device.split(':')[1]) if ':' in validated_device else 0
+            print(f"  CUDA device name: {torch.cuda.get_device_name(device_idx)}")
+        elif validated_device == "mps":
+            print(f"  MPS (Metal Performance Shaders) - Apple Silicon GPU")
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        raise
+    
     # Set random seed for reproducibility if provided
     if args.seed is not None:
         set_seed(args.seed)
@@ -297,6 +392,9 @@ def run_experiment(args):
         replacement_selection_mode=args.replacement_selection_mode,
         replacement_probability=args.replacement_probability,
         new_agent_model_path=args.new_agent_model_path,
+        replacement_min_epochs_between=args.replacement_min_epochs_between,
+        device=args.device,
+        randomize_agent_order=args.randomize_agent_order,
     )
 
     # Print expected rewards
@@ -385,6 +483,7 @@ def run_experiment(args):
             print(f"  - New agent model path: {args.new_agent_model_path}")
         else:
             print(f"  - New agents: fresh random models")
+        print(f"  - Minimum epochs between replacements: {args.replacement_min_epochs_between}")
     print("-" * 50)
 
     multi_agent_env.run_experiment(

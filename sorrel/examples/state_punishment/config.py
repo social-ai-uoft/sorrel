@@ -45,6 +45,9 @@ def create_config(
     replacement_selection_mode: str = "first_n",
     replacement_probability: float = 0.1,
     new_agent_model_path: Optional[str] = None,
+    replacement_min_epochs_between: int = 0,
+    device: str = "cpu",
+    randomize_agent_order: bool = True,
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -111,12 +114,36 @@ def create_config(
     else:
         appearance_tag = "noapp"
     
+    # Agent replacement tags
+    if enable_agent_replacement:
+        # Build replacement tag with key parameters
+        replacement_mode_tag = replacement_selection_mode[:4]  # first 4 chars: "firs", "rand", "spec", "prob"
+        replacement_tag_parts = [f"rep{replacement_mode_tag}"]
+        
+        if replacement_selection_mode == "probability":
+            replacement_tag_parts.append(f"p{replacement_probability:.2f}".replace(".", ""))
+        elif agents_to_replace_per_epoch > 0:
+            replacement_tag_parts.append(f"n{agents_to_replace_per_epoch}")
+        
+        if replacement_min_epochs_between > 0:
+            replacement_tag_parts.append(f"min{replacement_min_epochs_between}")
+        
+        if replacement_start_epoch > 0:
+            replacement_tag_parts.append(f"start{replacement_start_epoch}")
+        
+        if replacement_end_epoch is not None:
+            replacement_tag_parts.append(f"end{replacement_end_epoch}")
+        
+        replacement_tag = "_".join(replacement_tag_parts)
+    else:
+        replacement_tag = "norep"
+    
     if simple_foraging:
         run_name = (
-            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
         )
     else:
-        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
 
     return {
         "experiment": {
@@ -154,6 +181,8 @@ def create_config(
             "replacement_selection_mode": replacement_selection_mode,
             "replacement_probability": replacement_probability,
             "new_agent_model_path": new_agent_model_path,
+            "replacement_min_epochs_between": replacement_min_epochs_between,
+            "randomize_agent_order": randomize_agent_order,
         },
         "world": {
             "height": map_size,
@@ -189,7 +218,7 @@ def create_config(
             "TAU": 0.001,
             "GAMMA": 0.95,
             "n_quantiles": 12, # 12
-            "device": "cpu",
+            "device": device,
             "target_update_frequency": target_update_frequency,
         },
     }

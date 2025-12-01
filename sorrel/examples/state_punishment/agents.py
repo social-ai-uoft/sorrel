@@ -86,6 +86,9 @@ class StatePunishmentAgent(Agent):
 
         # Delayed punishment cache system
         self.pending_punishment = 0.0  # Punishment to be applied next turn
+        
+        # Track punishment from previous step (for immediate punishment mode observation)
+        self.was_punished_last_step = False
 
         # Simplified - no complex composite state tracking needed
 
@@ -120,7 +123,12 @@ class StatePunishmentAgent(Agent):
         
         # Third feature: punishment observable or random noise
         if self.punishment_observable:
-            third_feature = 1.0 if self.pending_punishment > 0 else 0.0
+            if self.delayed_punishment:
+                # Delayed mode: show pending punishment (future)
+                third_feature = 1.0 if self.pending_punishment > 0 else 0.0
+            else:
+                # Immediate mode: show if punished in last step (past)
+                third_feature = 1.0 if self.was_punished_last_step else 0.0
         else:
             third_feature = np.random.random()
 
@@ -149,7 +157,12 @@ class StatePunishmentAgent(Agent):
         
         # Third feature: punishment observable or random noise
         if self.punishment_observable:
-            third_feature = 1.0 if self.pending_punishment > 0 else 0.0
+            if self.delayed_punishment:
+                # Delayed mode: show pending punishment (future)
+                third_feature = 1.0 if self.pending_punishment > 0 else 0.0
+            else:
+                # Immediate mode: show if punished in last step (past)
+                third_feature = 1.0 if self.was_punished_last_step else 0.0
         else:
             third_feature = np.random.random()
 
@@ -185,6 +198,11 @@ class StatePunishmentAgent(Agent):
         Returns:
             Reward from the action, or (reward, info_dict) if return_info=True
         """
+        # Clear punishment flag from previous step (for immediate punishment mode)
+        # This happens after observation generation but before action execution
+        if not self.delayed_punishment:
+            self.was_punished_last_step = False
+        
         # Track action frequency
         if 0 <= action < len(self.action_names):
             action_name = self.action_names[action]
@@ -219,7 +237,13 @@ class StatePunishmentAgent(Agent):
             voting_action = action // 4  # 0-2 for voting
         else:
             movement_action = action if action < 4 else -1  # Only movement if < 4
-            voting_action = action - 4 if action >= 4 else 0  # Voting starts at 4
+            # Voting actions: action 4 = vote_increase (1), action 5 = vote_decrease (2), others = no vote (0)
+            if action == 4:
+                voting_action = 1  # vote_increase
+            elif action == 5:
+                voting_action = 2  # vote_decrease
+            else:
+                voting_action = 0  # no vote
 
         # Execute movement (if valid and not simple foraging with non-movement action)
         if movement_action >= 0 and not (self.simple_foraging and action >= 4):
@@ -316,6 +340,8 @@ class StatePunishmentAgent(Agent):
             else:
                 # Apply punishment immediately
                 reward -= punishment
+                # Set flag for next step's observation (clear any previous flag first)
+                self.was_punished_last_step = (punishment > 0)
 
             # Update social harm for all other agents (always applied immediately)
             if hasattr(target_object, "social_harm") and social_harm_dict is not None:
@@ -388,6 +414,9 @@ class StatePunishmentAgent(Agent):
 
         # Reset delayed punishment cache
         self.pending_punishment = 0.0
+        
+        # Reset punishment tracking flag
+        self.was_punished_last_step = False
         
         # Reset epoch-specific tracking
         self.reset_epoch_tracking()

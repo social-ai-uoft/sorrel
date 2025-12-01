@@ -1,5 +1,6 @@
 """Environment for the state punishment game."""
 
+import random
 from pathlib import Path
 from typing import List, override, Dict
 
@@ -224,6 +225,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         self.punishment_tracker = None
         if any(env.config.experiment.get("observe_other_punishments", False) for env in individual_envs):
             self.punishment_tracker = PunishmentTracker(len(individual_envs))
+        
+        # Track last replacement epoch for minimum epochs between replacements
+        self.last_replacement_epoch = -1
 
     @override
     def take_turn(self) -> None:
@@ -261,6 +265,17 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             for agent in env.agents:
                 all_agents.append(agent)
                 all_envs.append(env)
+
+        # Randomize agent order if configured (maintain agent-env pairing)
+        # Note: all_agents and all_envs are local lists, so shuffling doesn't modify
+        # env.agents or any other persistent state - only affects processing order
+        if self.config.experiment.get("randomize_agent_order", False):
+            # Pair agents with their environments, shuffle, then unzip
+            paired = list(zip(all_agents, all_envs))
+            random.shuffle(paired)  # Only shuffles the local paired list
+            all_agents, all_envs = zip(*paired)
+            all_agents = list(all_agents)
+            all_envs = list(all_envs)
 
         # Check if any environment uses composite views
         use_composite = any(env.use_composite_views for env in self.individual_envs)
@@ -692,6 +707,11 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 
                 # Get selection mode to determine if we should check replacement conditions
                 selection_mode = replacement_config.get("replacement_selection_mode", "first_n")
+                min_epochs_between = replacement_config.get("replacement_min_epochs_between", 0)
+                
+                # Check if enough epochs have passed since last replacement
+                epochs_since_last_replacement = epoch - self.last_replacement_epoch if self.last_replacement_epoch >= 0 else float('inf')
+                enough_epochs_passed = epochs_since_last_replacement >= min_epochs_between
                 
                 # For probability mode, check probability > 0 instead of agents_to_replace > 0
                 if selection_mode == "probability":
@@ -699,14 +719,16 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     should_replace = (
                         replacement_prob > 0.0 and
                         epoch >= start_epoch and
-                        (end_epoch is None or epoch <= end_epoch)
+                        (end_epoch is None or epoch <= end_epoch) and
+                        enough_epochs_passed
                     )
                 else:
                     # For other modes, check agents_to_replace > 0
                     should_replace = (
                         agents_to_replace > 0 and
                         epoch >= start_epoch and
-                        (end_epoch is None or epoch <= end_epoch)
+                        (end_epoch is None or epoch <= end_epoch) and
+                        enough_epochs_passed
                     )
                 
                 if should_replace:
@@ -735,12 +757,21 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                         # Replace selected agents
                         if agent_ids:
                             self.replace_agents(agent_ids, model_path)
+                            self.last_replacement_epoch = epoch  # Update last replacement epoch
                             print(f"Epoch {epoch}: Replaced {len(agent_ids)} agent(s) "
                                   f"(IDs: {agent_ids}, mode: {selection_mode})")
                         
                     except (ValueError, FileNotFoundError, RuntimeError) as e:
                         # If replacement fails, log and continue
                         print(f"Epoch {epoch}: Agent replacement skipped - {e}")
+                elif not enough_epochs_passed and min_epochs_between > 0:
+                    # Only log if we're in the replacement window but skipped due to minimum epochs
+                    if (epoch >= start_epoch and (end_epoch is None or epoch <= end_epoch)):
+                        epochs_needed = min_epochs_between - epochs_since_last_replacement
+                        # Only print occasionally to avoid spam (every 100 epochs)
+                        if epoch % 100 == 0:
+                            print(f"Epoch {epoch}: Replacement skipped - need {epochs_needed} more epoch(s) "
+                                  f"(minimum {min_epochs_between} epochs between replacements)")
             # ============================================================
             # END AGENT REPLACEMENT LOGIC
             # ============================================================

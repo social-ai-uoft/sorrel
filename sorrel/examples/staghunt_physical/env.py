@@ -586,9 +586,14 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 x.transition(self.world)
         
         # Handle agent transitions - SKIP removed agents
-        for agent in self.agents:            
-            if agent.can_act():  # Only process agents that can act
-                agent.transition(self.world)
+        # Get active agents and randomize order if configured
+        # Create a new list to avoid modifying self.agents
+        active_agents = [agent for agent in self.agents if agent.can_act()]
+        if self.config.experiment.get("randomize_agent_order", False):
+            random.shuffle(active_agents)  # Only shuffles the local list, not self.agents
+        
+        for agent in active_agents:
+            agent.transition(self.world)
         
         # Collect metrics for this step
         self.collect_metrics_for_step()

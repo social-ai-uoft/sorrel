@@ -151,7 +151,8 @@ v2_det_nocharm_immed_important_pnoobs_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_p
 | Condition | Third Feature Value | Description |
 |-----------|-------------------|-------------|
 | `punishment_observable=False` | `random()` | Random noise [0, 1] |
-| `punishment_observable=True` | `1.0 if pending_punishment > 0 else 0.0` | Binary indicator |
+| `punishment_observable=True` + `delayed_punishment=True` | `1.0 if pending_punishment > 0 else 0.0` | Binary indicator (future punishment) |
+| `punishment_observable=True` + `delayed_punishment=False` | `1.0 if was_punished_last_step else 0.0` | Binary indicator (past punishment) |
 
 ## Punishment Behavior
 
@@ -165,7 +166,9 @@ v2_det_nocharm_immed_important_pnoobs_sf_r0.005_v4_m10_cvFalse_meFalse_3a_p0.2_p
 
 ### Delayed vs Immediate Punishment
 - **Immediate**: Punishment applied to reward immediately when consuming taboo resource
+  - With `punishment_observable`: Shows if agent was punished in previous step
 - **Delayed**: Punishment stored in `pending_punishment` and applied at start of next turn
+  - With `punishment_observable`: Shows if agent has pending punishment (future)
 
 ## Social Harm Behavior
 - **Always applied immediately** regardless of delayed punishment mode
@@ -211,6 +214,12 @@ python main.py --observe_other_punishments --num_agents 3
 
 # Punishment observation with disabled info (comparison)
 python main.py --observe_other_punishments --disable_punishment_info --num_agents 3
+
+# Self-punishment observation in immediate mode (shows past punishment)
+python main.py --punishment_observable --num_agents 3
+
+# Self-punishment observation in delayed mode (shows future punishment)
+python main.py --delayed_punishment --punishment_observable --num_agents 3
 
 # Full configuration with punishment observation
 python main.py --delayed_punishment --important_rule --punishment_observable --observe_other_punishments --punishment_level_accessible --social_harm_accessible --num_agents 3 --epochs 1000
