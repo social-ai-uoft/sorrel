@@ -233,8 +233,8 @@ def parse_arguments():
     )
     parser.add_argument(
         "--replacement_selection_mode", type=str, default="probability",
-        choices=["first_n", "random", "specified_ids", "probability"],
-        help="Mode for selecting agents to replace: first_n, random, specified_ids, or probability (default: first_n)"
+        choices=["first_n", "random", "specified_ids", "probability", "random_with_tenure"],  # NEW: Add mode
+        help="Mode for selecting agents to replace: first_n, random, specified_ids, probability, or random_with_tenure (default: probability)"
     )
     parser.add_argument(
         "--replacement_probability", type=float, default=0.1,
@@ -247,6 +247,14 @@ def parse_arguments():
     parser.add_argument(
         "--replacement_min_epochs_between", type=int, default=0,
         help="Minimum number of epochs between two replacements (default: 0, no minimum)"
+    )
+    parser.add_argument(
+        "--replacement_initial_agents_count", type=int, default=0,
+        help="Number of initial agents with special handling (used with random_with_tenure mode, default: 0)"
+    )
+    parser.add_argument(
+        "--replacement_minimum_tenure_epochs", type=int, default=10,
+        help="Minimum epochs an agent must stay before being eligible for replacement (used with random_with_tenure mode, default: 10)"
     )
     parser.add_argument(
         "--randomize_agent_order", default=True, type=bool,
@@ -398,6 +406,8 @@ def run_experiment(args):
         replacement_probability=args.replacement_probability,
         new_agent_model_path=args.new_agent_model_path,
         replacement_min_epochs_between=args.replacement_min_epochs_between,
+        replacement_initial_agents_count=args.replacement_initial_agents_count,  # NEW
+        replacement_minimum_tenure_epochs=args.replacement_minimum_tenure_epochs,  # NEW
         device=args.device,
         randomize_agent_order=args.randomize_agent_order,
     )

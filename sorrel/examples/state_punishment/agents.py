@@ -30,6 +30,7 @@ class StatePunishmentAgent(Agent):
         action_spec: ActionSpec,
         model: PyTorchIQN,
         agent_id: int = 0,
+        agent_name: int = None,
         use_composite_views: bool = False,
         use_composite_actions: bool = False,
         simple_foraging: bool = False,
@@ -48,6 +49,7 @@ class StatePunishmentAgent(Agent):
             action_spec: Specification for actions
             model: The neural network model
             agent_id: Unique identifier for this agent
+            agent_name: Unique name for this agent (separate from agent_id)
             use_composite_views: Whether to use composite state observations
             use_composite_actions: Whether to use composite actions (movement + voting)
             simple_foraging: Whether to use simple foraging mode
@@ -60,6 +62,7 @@ class StatePunishmentAgent(Agent):
         """
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
+        self.agent_name = agent_name
         self.use_composite_views = use_composite_views
         self.use_composite_actions = use_composite_actions
         self.simple_foraging = simple_foraging
@@ -233,8 +236,15 @@ class StatePunishmentAgent(Agent):
 
         # Determine movement and voting actions based on mode
         if self.use_composite_actions:
-            movement_action = action % 4  # 0-3 for movement
-            voting_action = action // 4  # 0-2 for voting
+            # Composite mode: 13 actions (0-12)
+            # Actions 0-11: 4 movements × 3 voting options
+            # Action 12: noop (do nothing)
+            if action == 12:  # noop action
+                movement_action = -1  # No movement
+                voting_action = 0  # No vote
+            else:
+                movement_action = action % 4  # 0-3 for movement
+                voting_action = action // 4  # 0-2 for voting
         else:
             movement_action = action if action < 4 else -1  # Only movement if < 4
             # Voting actions: action 4 = vote_increase (1), action 5 = vote_decrease (2), others = no vote (0)

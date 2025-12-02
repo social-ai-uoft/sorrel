@@ -47,6 +47,8 @@ def create_config(
     replacement_probability: float = 0.1,
     new_agent_model_path: Optional[str] = None,
     replacement_min_epochs_between: int = 0,
+    replacement_initial_agents_count: int = 0,  # NEW: Number of initial agents (for reference/tracking only)
+    replacement_minimum_tenure_epochs: int = 10,  # NEW: Minimum epochs before replacement
     device: str = "cpu",
     randomize_agent_order: bool = True,
 ) -> Dict[str, Any]:
@@ -118,7 +120,10 @@ def create_config(
     # Agent replacement tags
     if enable_agent_replacement:
         # Build replacement tag with key parameters
-        replacement_mode_tag = replacement_selection_mode[:4]  # first 4 chars: "firs", "rand", "spec", "prob"
+        if replacement_selection_mode == "random_with_tenure":
+            replacement_mode_tag = "rten"  # Special tag for random_with_tenure
+        else:
+            replacement_mode_tag = replacement_selection_mode[:4]  # first 4 chars: "firs", "rand", "spec", "prob"
         replacement_tag_parts = [f"rep{replacement_mode_tag}"]
         
         if replacement_selection_mode == "probability":
@@ -134,6 +139,13 @@ def create_config(
         
         if replacement_end_epoch is not None:
             replacement_tag_parts.append(f"end{replacement_end_epoch}")
+        
+        # Add tenure-related tags for random_with_tenure mode
+        if replacement_selection_mode == "random_with_tenure":
+            if replacement_minimum_tenure_epochs > 0:
+                replacement_tag_parts.append(f"ten{replacement_minimum_tenure_epochs}")
+            if replacement_initial_agents_count > 0:
+                replacement_tag_parts.append(f"init{replacement_initial_agents_count}")
         
         replacement_tag = "_".join(replacement_tag_parts)
     else:
@@ -184,6 +196,8 @@ def create_config(
             "replacement_probability": replacement_probability,
             "new_agent_model_path": new_agent_model_path,
             "replacement_min_epochs_between": replacement_min_epochs_between,
+            "replacement_initial_agents_count": replacement_initial_agents_count,  # NEW
+            "replacement_minimum_tenure_epochs": replacement_minimum_tenure_epochs,  # NEW
             "randomize_agent_order": randomize_agent_order,
         },
         "world": {

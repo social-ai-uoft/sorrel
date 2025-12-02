@@ -228,6 +228,127 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         
         # Track last replacement epoch for minimum epochs between replacements
         self.last_replacement_epoch = -1
+        
+        # NEW: Agent name management
+        self._max_agent_name = -1  # Will be initialized based on initial agents
+        self._agent_name_map = {}  # Maps agent_id -> agent_name
+        self._initialize_agent_names()  # Initialize names for existing agents
+        
+        # NEW: Track agent creation/replacement epochs for tenure-based replacement
+        # Maps agent_id -> epoch when agent was created/replaced
+        self._agent_creation_epochs = {}
+        
+        # Initialize creation epochs for all initial agents (epoch 0)
+        for i, env in enumerate(self.individual_envs):
+            self._agent_creation_epochs[i] = 0
+
+    def _initialize_agent_names(self) -> None:
+        """Initialize agent names for all existing agents.
+        
+        When replacement is disabled: names are 0 to num_agents-1
+        When replacement is enabled: names continue from max_agent_name
+        """
+        replacement_enabled = self.config.experiment.get("enable_agent_replacement", False)
+        
+        if not replacement_enabled:
+            # Without replacement: names are 0 to X-1
+            for i, env in enumerate(self.individual_envs):
+                agent = env.agents[0]
+                agent.agent_name = i
+                self._agent_name_map[agent.agent_id] = i
+                self._max_agent_name = max(self._max_agent_name, i)
+        else:
+            # With replacement: continue from max_agent_name
+            for i, env in enumerate(self.individual_envs):
+                agent = env.agents[0]
+                if agent.agent_name is None:
+                    # Assign new name
+                    self._max_agent_name += 1
+                    agent.agent_name = self._max_agent_name
+                    self._agent_name_map[agent.agent_id] = self._max_agent_name
+                else:
+                    # Preserve existing name
+                    self._agent_name_map[agent.agent_id] = agent.agent_name
+                    self._max_agent_name = max(self._max_agent_name, agent.agent_name)
+
+    def _setup_agent_name_recording(self, output_dir: Path = None) -> Path:
+        """Set up directory for agent name recording.
+        
+        Args:
+            output_dir: Base output directory (if None, uses current directory)
+        
+        Returns:
+            Path to agent_generation_reference directory
+        """
+        if output_dir is None:
+            output_dir = Path("./data/")
+        
+        agent_ref_dir = output_dir / "agent_generation_reference"
+        agent_ref_dir.mkdir(parents=True, exist_ok=True)
+        
+        return agent_ref_dir
+
+    def _record_agent_names(self, epoch: int, output_dir: Path = None) -> None:
+        """Record all agent names for the current epoch.
+        
+        Args:
+            epoch: Current epoch number
+            output_dir: Base output directory
+        """
+        import pandas as pd
+        
+        # Set up recording directory
+        agent_ref_dir = self._setup_agent_name_recording(output_dir)
+        
+        # Collect all agent names for this epoch
+        agent_data = []
+        for env in self.individual_envs:
+            agent = env.agents[0]
+            agent_data.append({
+                'Name': agent.agent_name,
+                'Epoch': epoch
+            })
+        
+        # Create DataFrame
+        df = pd.DataFrame(agent_data)
+        
+        # Determine filename (append mode or create new)
+        filename = agent_ref_dir / "agent_names.csv"
+        
+        # Append to existing file or create new
+        if filename.exists():
+            existing_df = pd.read_csv(filename)
+            df = pd.concat([existing_df, df], ignore_index=True)
+        
+        # Save to CSV
+        df.to_csv(filename, index=False)
+
+    def get_agent_name(self, agent_id: int) -> int:
+        """Get the name for a given agent ID.
+        
+        Args:
+            agent_id: Agent ID
+        
+        Returns:
+            Agent name
+        """
+        return self._agent_name_map.get(agent_id, None)
+
+    def get_all_agent_names(self) -> Dict[int, int]:
+        """Get all agent ID to name mappings.
+        
+        Returns:
+            Dictionary mapping agent_id -> agent_name
+        """
+        return self._agent_name_map.copy()
+
+    def get_current_agent_names(self) -> List[int]:
+        """Get list of all current agent names.
+        
+        Returns:
+            List of agent names in order of individual_envs
+        """
+        return [env.agents[0].agent_name for env in self.individual_envs]
 
     @override
     def take_turn(self) -> None:
@@ -386,12 +507,14 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         self,
         agent_id: int,
         model_path: str = None,
+        replacement_epoch: int = None,  # NEW: Track when replacement happens
     ) -> None:
         """Replace an agent's model and memory buffer, resetting all tracking attributes.
         
         Args:
             agent_id: ID of the agent to replace
             model_path: Path to pretrained model checkpoint. If None, creates fresh model.
+            replacement_epoch: Epoch when replacement occurs (for tenure tracking)
         
         Raises:
             ValueError: If agent_id is invalid
@@ -409,6 +532,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         observation_spec = old_agent.observation_spec
         action_spec = old_agent.action_spec
         agent_id_value = old_agent.agent_id  # Keep the same agent_id
+        old_agent_name = old_agent.agent_name  # NEW: Preserve agent name
         
         # Store all configuration flags
         use_composite_views = old_agent.use_composite_views
@@ -486,6 +610,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             action_spec=action_spec,
             model=new_model,
             agent_id=agent_id_value,
+            agent_name=old_agent_name,  # NEW: Preserve name
             use_composite_views=use_composite_views,
             use_composite_actions=use_composite_actions,
             simple_foraging=simple_foraging,
@@ -515,17 +640,23 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         # Reset shared_social_harm for this agent (if it exists)
         if agent_id in self.shared_social_harm:
             self.shared_social_harm[agent_id] = 0.0
+        
+        # NEW: Record replacement epoch for tenure tracking
+        if replacement_epoch is not None:
+            self._agent_creation_epochs[agent_id] = replacement_epoch
 
     def replace_agents(
         self,
         agent_ids: List[int],
         model_path: str = None,
+        replacement_epoch: int = None,  # NEW: Track when replacement happens
     ) -> None:
         """Replace multiple agents' models and memory buffers.
         
         Args:
             agent_ids: List of agent IDs to replace
             model_path: Path to pretrained model checkpoint. If None, creates fresh models.
+            replacement_epoch: Epoch when replacement occurs (for tenure tracking)
         
         Raises:
             ValueError: If any agent_id is invalid or list is empty
@@ -542,7 +673,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         
         # Replace each agent
         for agent_id in agent_ids:
-            self.replace_agent_model(agent_id, model_path)
+            self.replace_agent_model(agent_id, model_path, replacement_epoch)
 
     def select_agents_to_replace(
         self,
@@ -550,14 +681,16 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         selection_mode: str = "first_n",
         specified_ids: List[int] = None,
         replacement_probability: float = 0.1,
+        current_epoch: int = 0,  # NEW: Current epoch for tenure calculation
     ) -> List[int]:
         """Select which agents to replace based on selection mode.
         
         Args:
             num_agents: Number of agents to select (ignored for "probability" mode)
-            selection_mode: "first_n", "random", "specified_ids", or "probability"
+            selection_mode: "first_n", "random", "specified_ids", "probability", or "random_with_tenure"
             specified_ids: List of agent IDs (used when selection_mode is "specified_ids")
             replacement_probability: Probability of each agent being replaced (used when selection_mode is "probability")
+            current_epoch: Current epoch number (used for tenure calculation in "random_with_tenure" mode)
         
         Returns:
             List of agent IDs to replace
@@ -619,10 +752,56 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             # Return up to num_agents from specified_ids
             return specified_ids[:num_agents]
         
+        elif selection_mode == "random_with_tenure":
+            # NEW: Random selection with minimum tenure constraint
+            if num_agents is None:
+                raise ValueError("num_agents must be provided when selection_mode is 'random_with_tenure'")
+            
+            if num_agents <= 0:
+                return []
+            
+            # Get configuration parameters
+            initial_agents_count = self.config.experiment.get("replacement_initial_agents_count", 0)
+            minimum_tenure = self.config.experiment.get("replacement_minimum_tenure_epochs", 10)
+            replacement_start_epoch = self.config.experiment.get("replacement_start_epoch", 0)
+            
+            # Find eligible agents (those that can be replaced)
+            # Eligibility rule: agent can be replaced when:
+            #   current_epoch >= max(replacement_start_epoch, creation_epoch + minimum_tenure_epochs)
+            # This ensures both conditions are met:
+            #   1. Replacement has started (current_epoch >= replacement_start_epoch)
+            #   2. Agent has minimum tenure (current_epoch >= creation_epoch + minimum_tenure_epochs)
+            eligible_agent_ids = []
+            
+            for agent_id in range(total_agents):
+                # Get when this agent was created/replaced
+                creation_epoch = self._agent_creation_epochs.get(agent_id, 0)
+                
+                # Calculate minimum epoch when this agent can be replaced
+                # Must wait for: (1) replacement to start, (2) minimum tenure to pass
+                earliest_replacement_epoch = max(
+                    replacement_start_epoch,  # When replacement feature starts
+                    creation_epoch + minimum_tenure  # When minimum tenure is met
+                )
+                
+                # Agent is eligible if current epoch >= earliest replacement epoch
+                if current_epoch >= earliest_replacement_epoch:
+                    eligible_agent_ids.append(agent_id)
+            
+            # Check if we have enough eligible agents
+            if len(eligible_agent_ids) < num_agents:
+                # Not enough eligible agents - return all eligible ones (or empty list)
+                import random
+                return random.sample(eligible_agent_ids, min(len(eligible_agent_ids), num_agents)) if eligible_agent_ids else []
+            
+            # Randomly select from eligible agents
+            import random
+            return random.sample(eligible_agent_ids, num_agents)
+        
         else:
             raise ValueError(
                 f"Invalid selection_mode: {selection_mode}. "
-                f"Must be 'first_n', 'random', 'specified_ids', or 'probability'"
+                f"Must be 'first_n', 'random', 'specified_ids', 'probability', or 'random_with_tenure'"
             )
 
     @override
@@ -745,6 +924,14 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                                 num_agents=None,
                                 selection_mode=selection_mode,
                                 replacement_probability=replacement_prob,
+                                current_epoch=epoch,  # NEW: Pass current epoch
+                            )
+                        elif selection_mode == "random_with_tenure":
+                            # NEW: Handle random_with_tenure mode
+                            agent_ids = self.select_agents_to_replace(
+                                num_agents=agents_to_replace,
+                                selection_mode=selection_mode,
+                                current_epoch=epoch,  # NEW: Pass current epoch
                             )
                         else:
                             # Other modes: use num_agents
@@ -752,11 +939,12 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                                 num_agents=agents_to_replace,
                                 selection_mode=selection_mode,
                                 specified_ids=specified_ids,
+                                current_epoch=epoch,  # NEW: Pass current epoch
                             )
                         
                         # Replace selected agents
                         if agent_ids:
-                            self.replace_agents(agent_ids, model_path)
+                            self.replace_agents(agent_ids, model_path, replacement_epoch=epoch)  # NEW: Pass epoch
                             self.last_replacement_epoch = epoch  # Update last replacement epoch
                             print(f"Epoch {epoch}: Replaced {len(agent_ids)} agent(s) "
                                   f"(IDs: {agent_ids}, mode: {selection_mode})")
@@ -893,6 +1081,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             # Save models every X epochs
             if epoch > 0 and epoch % self.config.experiment.save_models_every == 0:
                 self._save_models(epoch)
+
+            # NEW: Record agent names for this epoch
+            self._record_agent_names(epoch, output_dir)
 
             # Print progress
             if epoch % 100 == 0:
