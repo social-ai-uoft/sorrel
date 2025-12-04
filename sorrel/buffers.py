@@ -218,8 +218,6 @@ class SavedGames(Buffer):
         ), "Cannot add from a buffer with different state shapes."
         # If the buffer is too long to add to the existing saved game buffer, truncate it
         buffer_slice_point = min(self.capacity - self.idx, buffer.size)
-        print(self.capacity - self.idx)
-        print(buffer.size)
         # Add the S, A, R, D, to the saved game buffer
         self.states[self.idx : self.idx + buffer_slice_point] = buffer.states[
             :buffer_slice_point

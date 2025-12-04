@@ -53,7 +53,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 vision_radius=self.config.model.agent_vision_radius,
             )
             observation_spec.override_input_size(
-                np.array(observation_spec.input_size).reshape(1, -1).tolist()
+                (int(np.prod(observation_spec.input_size)), )
             )
 
             # create the action spec

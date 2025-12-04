@@ -8,6 +8,7 @@ from numpy import ndenumerate
 from omegaconf import DictConfig, OmegaConf
 
 from sorrel.agents import Agent
+from sorrel.buffers import SavedGames
 from sorrel.entities import Entity
 from sorrel.utils.logging import ConsoleLogger, Logger
 from sorrel.utils.visualization import ImageRenderer
@@ -194,3 +195,94 @@ class Environment[W: Gridworld]:
                         output_dir
                         / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
                     )
+
+    def generate_memories(
+        self,
+        num_games: int = 1000,
+        animate: bool = False,
+        output_dir: Path | None = None,
+    ) -> None:
+        """Using the existing models, generate a memory buffer for the specified number of games."""
+        if output_dir is None:
+            if hasattr(self.config.experiment, "output_dir"):
+                output_dir = Path(self.config.experiment.output_dir)
+            else:
+                output_dir = Path(__file__).parent / "./data/"
+            assert isinstance(output_dir, Path)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        self.setup_agents()
+        
+        saved_games: list[SavedGames] = []
+
+        for agent in self.agents:
+            if hasattr(agent.model, "n_frames"):
+                n_frames = agent.model.n_frames #type: ignore
+            else:
+                n_frames = 1
+            agent_saved_games = SavedGames(
+                capacity=num_games * self.config.experiment.max_turns,
+                obs_shape=agent.observation_spec.input_size,
+                n_frames=n_frames
+            )
+            if hasattr(agent.model, "eval"):
+                agent.model.eval() #type: ignore
+            saved_games.append(agent_saved_games)
+
+        # Setup renderer
+        renderer = None
+        if output_dir is None:
+            if hasattr(self.config.experiment, "output_dir"):
+                output_dir = Path(self.config.experiment.output_dir)
+            else:
+                output_dir = Path(__file__).parent / "./data/"
+            assert isinstance(output_dir, Path)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        if animate:
+            renderer = ImageRenderer(
+                experiment_name=self.__class__.__name__,
+                record_period=self.config.experiment.record_period,
+                num_turns=self.config.experiment.max_turns,
+            )
+
+        for game in range(num_games):
+            self.reset()
+            # Determine whether to animate this turn.
+            animate_this_turn = animate and (
+                game % self.config.experiment.record_period == 0
+            )
+
+            # start epoch action for each agent model
+            for agent in self.agents:
+                agent.model.start_epoch_action(epoch=game)
+
+            # run the environment for the specified number of turns
+            while not self.turn >= self.config.experiment.max_turns:
+                # renderer should never be None if animate is true; this is just written for pyright to not complain
+                if animate_this_turn and renderer is not None:
+                    renderer.add_image(self.world)
+                self.take_turn()
+
+                if self.world.is_done and self.stop_if_done:
+                    break
+
+            self.world.is_done = True
+
+            # generate the gif if animation was done
+            if animate_this_turn and renderer is not None:
+                renderer.save_gif(game, output_dir / "./gifs/")
+
+            # end epoch action for each agent model
+            for agent, agent_saved_games in zip(self.agents, saved_games):
+                agent.model.end_epoch_action(epoch=game)
+                agent_saved_games.add_from_buffer(agent.model.memory)
+
+        for i, agent_saved_games in enumerate(saved_games):
+            os.makedirs(output_dir / f"./memories/", exist_ok=True)
+            agent_saved_games.save(output_dir / f"./memories/agent{i}.npz")
+
+
+
+        
