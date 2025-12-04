@@ -168,6 +168,8 @@ class TransformerBuffer(Buffer):
             batch_size, -1
         )
 
+        next_actions = np.array(next_actions, dtype=np.float32) # cast it to be compatible with reward shape for now
+
         return states, actions, next_actions, next_states, dones, valid
 
 

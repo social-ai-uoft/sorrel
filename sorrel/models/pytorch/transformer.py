@@ -535,16 +535,18 @@ class VisionTransformer(nn.Module):
         # Get from the buffer in the typical format
         # State size: (B, T, C, H, W)
         # Action size: (B, T, 1)
-        states, actions, _, next_states, _, _ = self.memory.sample(self.batch_size)
+        states, actions, next_actions, next_states, _, _ = self.memory.sample(self.batch_size)
+
+        next_actions = np.array(next_actions, dtype=np.int64) # cast them back
 
         # Inputs: action at t-1 and state. Remove the last action and the first 
         # state as they have no associated pairs.
-        action_inputs = torch.tensor(actions[:, :-1, :]).to(self.device)
-        state_inputs = torch.tensor(states[:, 1:, :, :, :]).to(self.device)
+        action_inputs = torch.tensor(actions).to(self.device)
+        state_inputs = torch.tensor(states).to(self.device)
         
         # Objective: Reconstruct action at t as well as next_state.
-        action_targets = torch.tensor(actions[:, 1:, :]).to(self.device)
-        state_targets = torch.tensor(next_states[:, 1:, :, :, :]).to(self.device)
+        action_targets = torch.tensor(next_actions).to(self.device)
+        state_targets = torch.tensor(next_states).to(self.device)
 
         return state_inputs, action_inputs, state_targets, action_targets
 
