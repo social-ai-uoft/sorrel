@@ -532,7 +532,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         observation_spec = old_agent.observation_spec
         action_spec = old_agent.action_spec
         agent_id_value = old_agent.agent_id  # Keep the same agent_id
-        old_agent_name = old_agent.agent_name  # NEW: Preserve agent name
+        
+        # NEW: Assign new name for replaced agent (increment max_agent_name)
+        self._max_agent_name += 1
+        new_agent_name = self._max_agent_name
         
         # Store all configuration flags
         use_composite_views = old_agent.use_composite_views
@@ -610,7 +613,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             action_spec=action_spec,
             model=new_model,
             agent_id=agent_id_value,
-            agent_name=old_agent_name,  # NEW: Preserve name
+            agent_name=new_agent_name,  # NEW: Assign new name for replaced agent
             use_composite_views=use_composite_views,
             use_composite_actions=use_composite_actions,
             simple_foraging=simple_foraging,
@@ -640,6 +643,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         # Reset shared_social_harm for this agent (if it exists)
         if agent_id in self.shared_social_harm:
             self.shared_social_harm[agent_id] = 0.0
+        
+        # NEW: Update agent name map with new name
+        self._agent_name_map[agent_id] = new_agent_name
         
         # NEW: Record replacement epoch for tenure tracking
         if replacement_epoch is not None:

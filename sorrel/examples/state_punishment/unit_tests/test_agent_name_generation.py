@@ -63,7 +63,7 @@ class TestAgentNameGeneration:
         assert multi_env._max_agent_name == 2
 
     def test_name_preservation_during_replacement(self):
-        """Test that agent names are preserved when agents are replaced."""
+        """Test that agent names get new names when agents are replaced."""
         config = create_config(
             num_agents=3,
             enable_agent_replacement=True
@@ -77,13 +77,14 @@ class TestAgentNameGeneration:
         # Replace agent 1
         multi_env.replace_agent_model(agent_id=1)
         
-        # Check that names are preserved
+        # Check that replaced agent gets a new name
         new_names = multi_env.get_current_agent_names()
-        assert new_names == [0, 1, 2]  # Names should be the same
+        assert new_names == [0, 3, 2]  # Agent 1 gets new name 3
         
-        # Verify agent 1 still has name 1
-        assert multi_env.individual_envs[1].agents[0].agent_name == 1
-        assert multi_env.get_agent_name(1) == 1
+        # Verify agent 1 has new name 3
+        assert multi_env.individual_envs[1].agents[0].agent_name == 3
+        assert multi_env.get_agent_name(1) == 3
+        assert multi_env._max_agent_name == 3
 
     def test_name_recording_creates_directory(self):
         """Test that recording creates the agent_generation_reference directory."""
@@ -248,11 +249,15 @@ class TestAgentNameGeneration:
             
             df = pd.read_csv(csv_file)
             
-            # Names should be preserved (0, 1) even after replacement
-            for epoch in df['Epoch'].unique():
-                epoch_data = df[df['Epoch'] == epoch]
-                assert set(epoch_data['Name'].values) == {0, 1}
-                assert len(epoch_data) == 2
+            # Epoch 0 should have names {0, 1}
+            epoch_0_data = df[df['Epoch'] == 0]
+            assert set(epoch_0_data['Name'].values) == {0, 1}
+            assert len(epoch_0_data) == 2
+            
+            # Epoch 1 should have names {2, 1} (agent 0 replaced with new name 2)
+            epoch_1_data = df[df['Epoch'] == 1]
+            assert set(epoch_1_data['Name'].values) == {2, 1}
+            assert len(epoch_1_data) == 2
 
     def test_name_recording_empty_output_dir(self):
         """Test that recording works with None output_dir (uses default)."""
@@ -275,7 +280,7 @@ class TestAgentNameGeneration:
             pass
 
     def test_multiple_replacements_preserve_names(self):
-        """Test that multiple replacements preserve names correctly."""
+        """Test that multiple replacements assign new names correctly."""
         config = create_config(
             num_agents=3,
             enable_agent_replacement=True
@@ -283,18 +288,23 @@ class TestAgentNameGeneration:
         multi_env, _, _ = setup_environments(config, False, 0.2, False)
         
         original_names = multi_env.get_current_agent_names()
+        assert original_names == [0, 1, 2]
         
-        # Replace multiple agents
+        # Replace multiple agents (0 and 2)
         multi_env.replace_agents([0, 2])
         
-        # Names should be preserved
+        # Replaced agents should get new names
         new_names = multi_env.get_current_agent_names()
-        assert new_names == original_names
+        assert new_names == [3, 1, 4]  # Agent 0 -> name 3, Agent 2 -> name 4
         
-        # Verify each agent still has correct name
-        for i in range(3):
-            assert multi_env.get_agent_name(i) == i
-            assert multi_env.individual_envs[i].agents[0].agent_name == i
+        # Verify each agent has correct name
+        assert multi_env.get_agent_name(0) == 3
+        assert multi_env.get_agent_name(1) == 1  # Not replaced, keeps original name
+        assert multi_env.get_agent_name(2) == 4
+        assert multi_env.individual_envs[0].agents[0].agent_name == 3
+        assert multi_env.individual_envs[1].agents[0].agent_name == 1
+        assert multi_env.individual_envs[2].agents[0].agent_name == 4
+        assert multi_env._max_agent_name == 4
 
 
 if __name__ == "__main__":
