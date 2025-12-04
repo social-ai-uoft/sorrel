@@ -6,7 +6,7 @@ ci:
 
 repos:
   - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: 25.9.0
+    rev: 25.11.0
     hooks:
       - id: black-jupyter
         language_version: python3.12
@@ -24,7 +24,7 @@ repos:
         additional_dependencies: [tomli]
         args: ["--in-place", "--config", "./pyproject.toml", "--black"]
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.0
+    rev: v3.21.2
     hooks:
       - id: pyupgrade
         # TODO: remove `--keep-runtime-typing` option
