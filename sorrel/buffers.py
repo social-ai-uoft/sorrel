@@ -162,7 +162,7 @@ class TransformerBuffer(Buffer):
         states = self.states[indices].reshape(batch_size, -1)
         next_states = self.states[indices + 1].reshape(batch_size, -1)
         actions = self.actions[indices].reshape(batch_size, -1)
-        next_actions = self.rewards[indices + 1].reshape(batch_size, -1)
+        next_actions = self.actions[indices + 1].reshape(batch_size, -1)
         dones = self.dones[indices[:, -1]].reshape(batch_size, -1)
         valid = (1.0 - np.any(self.dones[indices[:, :-1]], axis=-1)).reshape(
             batch_size, -1
