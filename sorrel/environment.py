@@ -212,7 +212,7 @@ class Environment[W: Gridworld]:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        self.setup_agents()
+        # self.setup_agents()
         
         saved_games: list[SavedGames] = []
 
