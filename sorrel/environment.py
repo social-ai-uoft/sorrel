@@ -202,7 +202,8 @@ class Environment[W: Gridworld]:
         animate: bool = False,
         output_dir: Path | None = None,
     ) -> None:
-        """Using the existing models, generate a memory buffer for the specified number of games."""
+        """Using the existing models, generate a memory buffer for the specified number
+        of games."""
         if output_dir is None:
             if hasattr(self.config.experiment, "output_dir"):
                 output_dir = Path(self.config.experiment.output_dir)
@@ -213,21 +214,21 @@ class Environment[W: Gridworld]:
             os.makedirs(output_dir)
 
         # self.setup_agents()
-        
+
         saved_games: list[SavedGames] = []
 
         for agent in self.agents:
             if hasattr(agent.model, "n_frames"):
-                n_frames = agent.model.n_frames #type: ignore
+                n_frames = agent.model.n_frames  # type: ignore
             else:
                 n_frames = 1
             agent_saved_games = SavedGames(
                 capacity=num_games * self.config.experiment.max_turns,
                 obs_shape=agent.observation_spec.input_size,
-                n_frames=n_frames
+                n_frames=n_frames,
             )
             if hasattr(agent.model, "eval"):
-                agent.model.eval() #type: ignore
+                agent.model.eval()  # type: ignore
             saved_games.append(agent_saved_games)
 
         # Setup renderer
@@ -282,7 +283,3 @@ class Environment[W: Gridworld]:
         for i, agent_saved_games in enumerate(saved_games):
             os.makedirs(output_dir / f"./memories/", exist_ok=True)
             agent_saved_games.save(output_dir / f"./memories/agent{i}.npz")
-
-
-
-        
