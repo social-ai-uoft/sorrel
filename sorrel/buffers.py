@@ -125,10 +125,18 @@ class Buffer:
 
     def __getitem__(self, idx):
         return (self.states[idx], self.actions[idx], self.rewards[idx], self.dones[idx])
-    
+
     def save(self, output_file: str | Path) -> None:
         output_file = Path(output_file)
-        np.savez_compressed(output_file, states=self.states, actions=self.actions, rewards=self.rewards, dones=self.dones, n_frames=self.n_frames, idx=self.idx)
+        np.savez_compressed(
+            output_file,
+            states=self.states,
+            actions=self.actions,
+            rewards=self.rewards,
+            dones=self.dones,
+            n_frames=self.n_frames,
+            idx=self.idx,
+        )
 
 
 class StrBuffer(Buffer):
@@ -143,9 +151,10 @@ class StrBuffer(Buffer):
             dtype=f"<U{(obs_shape[0] + 1)*obs_shape[1] + 100}",
         )
 
+
 class TransformerBuffer(Buffer):
-    """Buffer class equivalent to the base class with the exception that
-    actions also include a time dimension in the same way that states are."""
+    """Buffer class equivalent to the base class with the exception that actions also
+    include a time dimension in the same way that states are."""
 
     def sample(self, batch_size: int):
         """Sample a batch of experiences from the replay buffer.
@@ -172,7 +181,9 @@ class TransformerBuffer(Buffer):
             batch_size, -1
         )
 
-        next_actions = np.array(next_actions, dtype=np.float32) # cast it to be compatible with reward shape for now
+        next_actions = np.array(
+            next_actions, dtype=np.float32
+        )  # cast it to be compatible with reward shape for now
 
         return states, actions, next_actions, next_states, dones, valid
 
@@ -190,7 +201,9 @@ class SavedGames(Buffer):
             dones = data["dones"]
             n_frames = data["n_frames"]
             idx = data["idx"]
-        output = cls(capacity=len(actions), obs_shape = states.shape[1:], n_frames = n_frames)
+        output = cls(
+            capacity=len(actions), obs_shape=states.shape[1:], n_frames=n_frames
+        )
         # Overwrite the default values for the buffer.
         output.states = states
         output.actions = actions
@@ -198,16 +211,26 @@ class SavedGames(Buffer):
         output.dones = dones
         output.idx = idx
         return output
-    
+
     def add_from_buffer(self, buffer: Buffer) -> None:
-        assert self.obs_shape == buffer.obs_shape, "Cannot add from a buffer with different state shapes."
+        assert (
+            self.obs_shape == buffer.obs_shape
+        ), "Cannot add from a buffer with different state shapes."
         # If the buffer is too long to add to the existing saved game buffer, truncate it
         buffer_slice_point = min(self.capacity - self.idx, buffer.size)
         print(self.capacity - self.idx)
         print(buffer.size)
         # Add the S, A, R, D, to the saved game buffer
-        self.states[self.idx:self.idx + buffer_slice_point] = buffer.states[:buffer_slice_point]
-        self.actions[self.idx:self.idx + buffer_slice_point] = buffer.actions[:buffer_slice_point]
-        self.rewards[self.idx:self.idx + buffer_slice_point] = buffer.rewards[:buffer_slice_point]
-        self.dones[self.idx:self.idx + buffer_slice_point] = buffer.dones[:buffer_slice_point]
+        self.states[self.idx : self.idx + buffer_slice_point] = buffer.states[
+            :buffer_slice_point
+        ]
+        self.actions[self.idx : self.idx + buffer_slice_point] = buffer.actions[
+            :buffer_slice_point
+        ]
+        self.rewards[self.idx : self.idx + buffer_slice_point] = buffer.rewards[
+            :buffer_slice_point
+        ]
+        self.dones[self.idx : self.idx + buffer_slice_point] = buffer.dones[
+            :buffer_slice_point
+        ]
         self.idx = self.idx + buffer_slice_point
