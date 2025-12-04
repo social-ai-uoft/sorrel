@@ -125,6 +125,10 @@ class Buffer:
 
     def __getitem__(self, idx):
         return (self.states[idx], self.actions[idx], self.rewards[idx], self.dones[idx])
+    
+    def save(self, output_file: str | Path) -> None:
+        output_file = Path(output_file)
+        np.savez_compressed(output_file, states=self.states, actions=self.actions, rewards=self.rewards, dones=self.dones, n_frames=self.n_frames, idx=self.idx)
 
 
 class StrBuffer(Buffer):
@@ -175,10 +179,6 @@ class TransformerBuffer(Buffer):
 
 class SavedGames(Buffer):
     """A buffer used for saving games to and loading from disk."""
-
-    def save(self, output_file: str | Path) -> None:
-        output_file = Path(output_file)
-        np.savez_compressed(output_file, states=self.states, actions=self.actions, rewards=self.rewards, dones=self.dones, n_frames=self.n_frames, idx=self.idx)
 
     @classmethod
     def load(cls, input_file: str | Path) -> SavedGames:
