@@ -196,3 +196,16 @@ class SavedGames(Buffer):
         output.dones = dones
         output.idx = idx
         return output
+    
+    def add_from_buffer(self, buffer: Buffer) -> None:
+        assert self.obs_shape == buffer.obs_shape, "Cannot add from a buffer with different state shapes."
+        # If the buffer is too long to add to the existing saved game buffer, truncate it
+        buffer_slice_point = min(self.capacity - self.idx, buffer.size)
+        print(self.capacity - self.idx)
+        print(buffer.size)
+        # Add the S, A, R, D, to the saved game buffer
+        self.states[self.idx:self.idx + buffer_slice_point] = buffer.states[:buffer_slice_point]
+        self.actions[self.idx:self.idx + buffer_slice_point] = buffer.actions[:buffer_slice_point]
+        self.rewards[self.idx:self.idx + buffer_slice_point] = buffer.rewards[:buffer_slice_point]
+        self.dones[self.idx:self.idx + buffer_slice_point] = buffer.dones[:buffer_slice_point]
+        self.idx = self.idx + buffer_slice_point
