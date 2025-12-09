@@ -39,7 +39,6 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
             entity_list = [
                 "EmptyEntity",
                 "Wall",
-                "Sand",
                 "Gem",
                 "Bone",
                 "Food",
@@ -101,7 +100,9 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
 
         for index in np.ndindex(self.world.map.shape):
             y, x, z = index
-            if y in [0, self.world.height - 1] or x in [0, self.world.width - 1]:
+            if (y in [0, self.world.height - 1] or x in [0, self.world.width - 1]) and (
+                z == 1
+            ):
                 # Add walls around the edge of the world (when indices are first or last)
                 self.world.add(index, Wall())
             elif z == 0:  # if location is on the bottom layer, put sand there

@@ -560,12 +560,28 @@ class VisionTransformer(nn.Module):
 
         # Inputs: action at t-1 and state. Remove the last action and the first
         # state as they have no associated pairs.
-        action_inputs = torch.tensor(actions).to(self.device)
-        state_inputs = torch.tensor(states).to(self.device)
+        action_inputs = (
+            torch.tensor(actions)
+            .to(self.device)
+            .view(self.batch_size, self.num_frames, 1)
+        )
+        state_inputs = (
+            torch.tensor(states)
+            .to(self.device)
+            .view(self.batch_size, self.num_frames, *self.state_size)
+        )
 
         # Objective: Reconstruct action at t as well as next_state.
-        action_targets = torch.tensor(next_actions).to(self.device)
-        state_targets = torch.tensor(next_states).to(self.device)
+        action_targets = (
+            torch.tensor(next_actions)
+            .to(self.device)
+            .view(self.batch_size, self.num_frames, 1)
+        )
+        state_targets = (
+            torch.tensor(next_states)
+            .to(self.device)
+            .view(self.batch_size, self.num_frames, *self.state_size)
+        )
 
         return state_inputs, action_inputs, state_targets, action_targets
 
@@ -587,7 +603,7 @@ class VisionTransformer(nn.Module):
             state_inputs, action_inputs
         )
 
-        state_loss = self.state_loss(state_predictions, state_targets / 255)
+        state_loss = self.state_loss(state_predictions, state_targets)
         action_loss = self.action_loss(action_predictions, action_targets)
 
         loss = state_loss + action_loss
@@ -623,7 +639,7 @@ class VisionTransformer(nn.Module):
         state_targets = state_targets.detach()
         state_predictions = state_predictions.squeeze().view(T, C, H, W).detach()
 
-        return state_predictions, state_targets / 255
+        return state_predictions, state_targets
 
     def save(self, file_path: Union[str, os.PathLike]) -> None:
         """Save the model weights and parameters to disk."""
@@ -662,19 +678,19 @@ class ViTOneHot(VisionTransformer):
         device: Union[str, torch.device],
         seed: int,
     ):
-        super(VisionTransformer, self).__init__(
-            state_size,
-            action_space,
-            layer_size,
-            patch_size,
-            num_frames,
-            batch_size,
-            num_layers,
-            num_heads,
-            memory,
-            LR,
-            device,
-            seed,
+        super().__init__(
+            state_size=state_size,
+            action_space=action_space,
+            layer_size=layer_size,
+            patch_size=patch_size,
+            num_frames=num_frames,
+            batch_size=batch_size,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            memory=memory,
+            LR=LR,
+            device=device,
+            seed=seed,
         )
 
         # Alternate output: for each channel, output a positive and negative classification weight.
@@ -722,7 +738,9 @@ class ViTOneHot(VisionTransformer):
             # Softmax along the channel dimension to give yes/no probability
             state_prediction = F.softmax(state_prediction, dim=2)
             # Cat on the last dimension to create a six-dimensional array (B, T, 2, H, W, C)
-            torch.cat((state_predictions, state_prediction.unsqueeze(-1)), dim=-1)
+            state_predictions = torch.cat(
+                (state_predictions, state_prediction.unsqueeze(-1)), dim=-1
+            )
 
         return state_predictions, action_prediction
 
@@ -767,7 +785,10 @@ class ViTOneHot(VisionTransformer):
 
         # Rearrange: 2 T C H W, then select positive probability (channel 1)
         state_predictions = (
-            state_predictions.permute(0, 1, 4, 2, 3)[1, :, :, :, :].squeeze().detach()
+            state_predictions.squeeze()
+            .permute(1, 0, 4, 2, 3)[1, :, :, :, :]
+            .squeeze()
+            .detach()
         )
 
-        return state_predictions, state_targets / 255
+        return state_predictions, state_targets
