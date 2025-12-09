@@ -129,6 +129,9 @@ class Location(tuple):
                 + " with a Location."
             )
 
+    def __hash__(self):
+        return hash((self.x, self.y, self.z))
+
     def __len__(self):
         """Return the dimension of this Location."""
         return self.dims
