@@ -12,6 +12,7 @@ from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
 from sorrel.models.pytorch import PyTorchIQN
+from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
 from sorrel.observation.observation_spec import OneHotObservationSpec
 from sorrel.utils.logging import Logger
 from sorrel.utils.visualization import ImageRenderer
@@ -569,26 +570,57 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         else:
             flattened_size = base_flattened_size
         
+        # Get model type from config
+        model_type = env.config.model.get("type", "iqn")
+        
         # Create new model with same architecture
-        new_model = PyTorchIQN(
-            input_size=(flattened_size,),
-            action_space=action_spec.n_actions,
-            layer_size=env.config.model.layer_size,
-            epsilon=env.config.model.epsilon,
-            epsilon_min=env.config.model.epsilon_min,
-            device=env.config.model.device,
-            seed=torch.random.seed(),  # Fresh random seed
-            n_frames=env.config.model.n_frames,
-            n_step=env.config.model.n_step,
-            sync_freq=env.config.model.sync_freq,
-            model_update_freq=env.config.model.model_update_freq,
-            batch_size=env.config.model.batch_size,
-            memory_size=env.config.model.memory_size,
-            LR=env.config.model.LR,
-            TAU=env.config.model.TAU,
-            GAMMA=env.config.model.GAMMA,
-            n_quantiles=env.config.model.n_quantiles,
-        )
+        if model_type == "ppo":
+            use_dual_head = env.config.model.get("use_dual_head", True)
+            obs_dim = (
+                observation_spec.input_size[0],
+                observation_spec.input_size[1],
+                observation_spec.input_size[2],
+            )
+            new_model = DualHeadRecurrentPPO(
+                input_size=(flattened_size,),
+                action_space=action_spec.n_actions,
+                layer_size=env.config.model.layer_size,
+                epsilon=env.config.model.epsilon,
+                epsilon_min=env.config.model.epsilon_min,
+                device=env.config.model.device,
+                seed=torch.random.seed(),  # Fresh random seed
+                use_dual_head=use_dual_head,
+                obs_dim=obs_dim,
+                n_move_actions=4,
+                n_vote_actions=3 if old_agent.use_composite_actions else 2,
+                gamma=env.config.model.GAMMA,
+                lr=env.config.model.LR,
+                clip_param=0.2,
+                K_epochs=4,
+                batch_size=env.config.model.batch_size,
+                use_composite_actions=old_agent.use_composite_actions,
+                rollout_length=50,  # Target rollout length (training happens at end of epoch regardless)
+            )
+        else:
+            new_model = PyTorchIQN(
+                input_size=(flattened_size,),
+                action_space=action_spec.n_actions,
+                layer_size=env.config.model.layer_size,
+                epsilon=env.config.model.epsilon,
+                epsilon_min=env.config.model.epsilon_min,
+                device=env.config.model.device,
+                seed=torch.random.seed(),  # Fresh random seed
+                n_frames=env.config.model.n_frames,
+                n_step=env.config.model.n_step,
+                sync_freq=env.config.model.sync_freq,
+                model_update_freq=env.config.model.model_update_freq,
+                batch_size=env.config.model.batch_size,
+                memory_size=env.config.model.memory_size,
+                LR=env.config.model.LR,
+                TAU=env.config.model.TAU,
+                GAMMA=env.config.model.GAMMA,
+                n_quantiles=env.config.model.n_quantiles,
+            )
         
         # Load pretrained model if path is specified
         if model_path is not None and model_path != "":
@@ -607,7 +639,23 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     f"Failed to load model from {model_path} for agent {agent_id}: {e}"
                 )
         
+        # Extract norm enforcer config (same as in setup_agents)
+        norm_enforcer_config = None
+        if env.config.get("norm_enforcer", {}).get("enabled", False):
+            norm_enforcer_config = {
+                "decay_rate": env.config.norm_enforcer.get("decay_rate", 0.995),
+                "internalization_threshold": env.config.norm_enforcer.get("internalization_threshold", 5.0),
+                "max_norm_strength": env.config.norm_enforcer.get("max_norm_strength", 10.0),
+                "intrinsic_scale": env.config.norm_enforcer.get("intrinsic_scale", -0.5),
+                "use_state_punishment": env.config.norm_enforcer.get("use_state_punishment", True),
+                "harmful_resources": env.config.norm_enforcer.get("harmful_resources", ["A", "B", "C", "D", "E"]),
+                "device": env.config.norm_enforcer.get("device", env.config.model.device),
+            }
+        
         # Create new agent with same configuration but new model
+        # NOTE: New agent gets a fresh norm enforcer (norm_strength = 0.0) since
+        # a new NormEnforcer instance is created during agent initialization.
+        # This ensures replaced agents start with no internalized norms.
         new_agent = StatePunishmentAgent(
             observation_spec=observation_spec,
             action_spec=action_spec,
@@ -624,7 +672,15 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             important_rule=important_rule,
             punishment_observable=punishment_observable,
             disable_punishment_info=disable_punishment_info,
+            use_norm_enforcer=env.config.get("norm_enforcer", {}).get("enabled", False),
+            norm_enforcer_config=norm_enforcer_config,
         )
+        
+        # Explicitly reset norm enforcer for replaced agent (redundant but explicit)
+        # Since a new agent is created, it already has a fresh norm enforcer,
+        # but we reset it here to be explicit about the intent.
+        if new_agent.norm_enforcer is not None:
+            new_agent.norm_enforcer.reset()
         
         # Preserve agent location in the world
         old_location = None
@@ -1017,14 +1073,23 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             loss_count = 0
             for env in self.individual_envs:
                 for agent in env.agents:
-                    if (
-                        hasattr(agent.model, "train_step")
-                        and len(agent.model.memory) >= agent.model.batch_size
-                    ):
-                        loss = agent.model.train_step()
-                        if loss is not None:
-                            total_loss += float(loss)
-                            loss_count += 1
+                    if hasattr(agent.model, "train_step"):
+                        # Check if it's a PPO model (uses rollout_memory) or IQN model (uses memory)
+                        from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
+                        if isinstance(agent.model, DualHeadRecurrentPPO):
+                            # PPO: train if we have any data (train_step handles the rest)
+                            if len(agent.model.rollout_memory["states"]) > 0:
+                                loss = agent.model.train_step()
+                                if loss is not None and loss != 0.0:
+                                    total_loss += float(loss)
+                                    loss_count += 1
+                        else:
+                            # IQN: check memory length against batch_size
+                            if len(agent.model.memory) >= agent.model.batch_size:
+                                loss = agent.model.train_step()
+                                if loss is not None:
+                                    total_loss += float(loss)
+                                    loss_count += 1
 
             # Log results
             if logging and logger is not None:
@@ -1060,6 +1125,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             if (probe_test_logger is not None and 
                 probe_test_env is not None and
                 epoch > 0 and 
+                PROBE_TEST_CONFIG.get("frequency", 0) > 0 and
                 epoch % PROBE_TEST_CONFIG["frequency"] == 0):
                 
                 print(f"\n--- Running Probe Test at Training Epoch {epoch} ---")
@@ -1264,26 +1330,74 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 flattened_size = base_flattened_size * self.config.experiment.num_agents
             else:
                 flattened_size = base_flattened_size
-            model = PyTorchIQN(
-                input_size=(flattened_size,),
-                action_space=action_spec.n_actions,
-                layer_size=self.config.model.layer_size,
-                epsilon=self.config.model.epsilon,
-                epsilon_min=self.config.model.epsilon_min,
-                device=self.config.model.device,
-                seed=torch.random.seed(),
-                n_frames=self.config.model.n_frames,
-                n_step=self.config.model.n_step,
-                sync_freq=self.config.model.sync_freq,
-                model_update_freq=self.config.model.model_update_freq,
-                batch_size=self.config.model.batch_size,
-                memory_size=self.config.model.memory_size,
-                LR=self.config.model.LR,
-                TAU=self.config.model.TAU,
-                GAMMA=self.config.model.GAMMA,
-                n_quantiles=self.config.model.n_quantiles,
-            )
+            
+            # Get model type from config
+            model_type = self.config.model.get("type", "iqn")
+            
+            if model_type == "ppo":
+                # PPO model
+                use_dual_head = self.config.model.get("use_dual_head", True)
+                # Derive obs_dim from observation spec
+                obs_dim = (
+                    observation_spec.input_size[0],  # C
+                    observation_spec.input_size[1],  # H
+                    observation_spec.input_size[2],  # W
+                )
+                model = DualHeadRecurrentPPO(
+                    input_size=(flattened_size,),
+                    action_space=action_spec.n_actions,
+                    layer_size=self.config.model.layer_size,
+                    epsilon=self.config.model.epsilon,
+                    epsilon_min=self.config.model.epsilon_min,
+                    device=self.config.model.device,
+                    seed=torch.random.seed(),
+                    use_dual_head=use_dual_head,
+                    obs_dim=obs_dim,
+                    n_move_actions=4,
+                    n_vote_actions=3 if self.use_composite_actions else 2,
+                    gamma=self.config.model.GAMMA,
+                    lr=self.config.model.LR,
+                    clip_param=0.2,
+                    K_epochs=4,
+                    batch_size=self.config.model.batch_size,
+                    use_composite_actions=self.use_composite_actions,
+                    rollout_length=50,  # Target rollout length (training happens at end of epoch regardless)
+                )
+            else:
+                # IQN model (default)
+                model = PyTorchIQN(
+                    input_size=(flattened_size,),
+                    action_space=action_spec.n_actions,
+                    layer_size=self.config.model.layer_size,
+                    epsilon=self.config.model.epsilon,
+                    epsilon_min=self.config.model.epsilon_min,
+                    device=self.config.model.device,
+                    seed=torch.random.seed(),
+                    n_frames=self.config.model.n_frames,
+                    n_step=self.config.model.n_step,
+                    sync_freq=self.config.model.sync_freq,
+                    model_update_freq=self.config.model.model_update_freq,
+                    batch_size=self.config.model.batch_size,
+                    memory_size=self.config.model.memory_size,
+                    LR=self.config.model.LR,
+                    TAU=self.config.model.TAU,
+                    GAMMA=self.config.model.GAMMA,
+                    n_quantiles=self.config.model.n_quantiles,
+                )
 
+            # Extract norm enforcer config
+            norm_enforcer_config = None
+            if self.config.get("norm_enforcer", {}).get("enabled", False):
+                norm_enforcer_config = {
+                    "decay_rate": self.config.norm_enforcer.get("decay_rate", 0.995),
+                    "internalization_threshold": self.config.norm_enforcer.get("internalization_threshold", 5.0),
+                    "max_norm_strength": self.config.norm_enforcer.get("max_norm_strength", 10.0),
+                    "intrinsic_scale": self.config.norm_enforcer.get("intrinsic_scale", -0.5),
+                    "use_state_punishment": self.config.norm_enforcer.get("use_state_punishment", True),
+                    "harmful_resources": self.config.norm_enforcer.get("harmful_resources", ["A", "B", "C", "D", "E"]),
+                    "device": self.config.norm_enforcer.get("device", self.config.model.device),
+                }
+            
             agents.append(
                 StatePunishmentAgent(
                     observation_spec=observation_spec,
@@ -1300,6 +1414,8 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     important_rule=self.config.experiment.get("important_rule", False),
                     punishment_observable=self.config.experiment.get("punishment_observable", False),
                     disable_punishment_info=self.config.experiment.get("disable_punishment_info", False),
+                    use_norm_enforcer=self.config.get("norm_enforcer", {}).get("enabled", False),
+                    norm_enforcer_config=norm_enforcer_config,
                 )
             )
 

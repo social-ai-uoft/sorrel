@@ -25,6 +25,34 @@ This document provides a comprehensive mapping between experiment tags and their
 | `--shuffle_constraint` | Shuffling constraint: no_fixed=no entity stays same + unique targets, allow_fixed=any mapping allowed | no_fixed |
 | `--csv_logging` | Enable CSV logging of entity appearance mappings | False |
 | `--mapping_file_path` | Path to file containing pre-generated mappings (optional) | None |
+| `--model_type` | Model type to use: 'iqn' or 'ppo' | iqn |
+| `--ppo_use_dual_head` | Use dual-head mode for PPO (separate move/vote heads) | True |
+| `--ppo_single_head` | Use single-head mode for PPO (combined action head, like IQN). Overrides --ppo_use_dual_head | False |
+| `--fixed_punishment` | Fixed punishment level | 0.2 |
+| `--num_resources` | Number of resources | 8 |
+| `--map_size` | Size of the world map | 10 |
+| `--epochs` | Number of training epochs | 10000 |
+| `--epsilon` | Initial epsilon value for exploration | 0.0 |
+| `--batch_size` | Batch size | 64 |
+| `--memory_size` | Memory size | 1024 |
+| `--device` | Device to use for training (cpu, cuda, mps) | cpu |
+| `--seed` | Random seed for reproducibility | None |
+| `--save_models_every` | Save models every X epochs | 1000 |
+| `--enable_agent_replacement` | Enable agent replacement during training | False |
+| `--agents_to_replace_per_epoch` | Number of agents to replace per epoch | 0 |
+| `--replacement_start_epoch` | First epoch when replacement can occur | 100000 |
+| `--replacement_end_epoch` | Last epoch when replacement can occur (None = no limit) | None |
+| `--replacement_agent_ids` | Comma-separated list of agent IDs to replace (e.g., '0,1,2') | None |
+| `--replacement_selection_mode` | Mode for selecting agents: first_n, random, specified_ids, probability, random_with_tenure | probability |
+| `--replacement_probability` | Probability of each agent being replaced per epoch | 0.1 |
+| `--new_agent_model_path` | Path to pretrained model checkpoint for replaced agents | None |
+| `--replacement_min_epochs_between` | Minimum number of epochs between two replacements | 0 |
+| `--replacement_initial_agents_count` | Number of initial agents with special handling (random_with_tenure mode) | 0 |
+| `--replacement_minimum_tenure_epochs` | Minimum epochs an agent must stay before being eligible for replacement | 10 |
+| `--randomize_agent_order` | Randomize the order in which agents take turns | True |
+| `--use_predefined_punishment_schedule` | Use predefined punishment schedule instead of compiled values | False |
+| `--disable_probe_test` | Disable probe test functionality | False |
+| `--experiment_name` | Custom experiment name | None |
 
 ## Run Name Tags
 
@@ -66,17 +94,97 @@ This document provides a comprehensive mapping between experiment tags and their
 | `ext` | `simple_foraging=False` | Extended mode |
 | `sp` | `simple_foraging=False` | State punishment mode |
 
+### Agent Replacement Tags
+
+| Tag | Condition | Description |
+|-----|-----------|-------------|
+| `norep` | `enable_agent_replacement=False` | No agent replacement |
+| `rep{mode}` | `enable_agent_replacement=True` | Agent replacement enabled with mode tag |
+| `repfirs` | Replacement mode: `first_n` | Replace first N agents |
+| `reprand` | Replacement mode: `random` | Replace random agents |
+| `repspec` | Replacement mode: `specified_ids` | Replace specified agent IDs |
+| `repprob` | Replacement mode: `probability` | Replace agents with probability |
+| `reprten` | Replacement mode: `random_with_tenure` | Random replacement with tenure requirement |
+| `p{prob}` | Probability mode with value | e.g., `p010` for probability 0.10 |
+| `n{count}` | Number of agents to replace | e.g., `n2` for 2 agents per epoch |
+| `min{epochs}` | Minimum epochs between replacements | e.g., `min10` for 10 epochs |
+| `start{epoch}` | Replacement start epoch | e.g., `start1000` |
+| `end{epoch}` | Replacement end epoch | e.g., `end5000` |
+| `ten{epochs}` | Minimum tenure epochs (random_with_tenure mode) | e.g., `ten10` |
+| `init{count}` | Initial agents count (random_with_tenure mode) | e.g., `init2` |
+
+**Examples:**
+- `norep` - No replacement
+- `repprob_p010` - Probability mode, 10% replacement probability
+- `repfirs_n2_min10_start1000` - First N mode, 2 agents, min 10 epochs between, starts at epoch 1000
+- `reprten_ten10_init2` - Random with tenure, 10 epoch minimum tenure, 2 initial agents
+
+### Model Type Tags
+
+| Tag | Condition | Description |
+|-----|-----------|-------------|
+| `cv{True/False}` | `use_composite_views` | Composite views enabled/disabled (included in run name) |
+| `me{True/False}` | `use_multi_env_composite` | Multi-environment composite enabled/disabled (included in run name) |
+| `composite_actions` | `use_composite_actions=True` | **Note**: This parameter affects action space but is NOT included in run name tags |
+
+**Important Notes:**
+- `composite_actions` is a valid command-line parameter that affects the action space (7 actions vs 13 actions)
+- However, `composite_actions` is **NOT included in the run name** for historical/compatibility reasons
+- The action space is determined by the model configuration but not encoded in the run name tag
+- `composite_views` and `multi_env_composite` are included in run names as `cv{value}` and `me{value}` tags
+
+### Model Type Parameters
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `model_type` | `iqn`, `ppo` | Model architecture to use |
+| `ppo_use_dual_head` | `True`, `False` | PPO dual-head mode (separate move/vote heads) |
+| `ppo_single_head` | `True`, `False` | PPO single-head mode (combined action head, like IQN) |
+
+**Model Type Behavior:**
+- **IQN (Implicit Quantile Network)**: Off-policy DQN variant with quantile regression
+  - Single action head
+  - Uses experience replay buffer
+  - Action space: 7 actions (simple) or 13 actions (composite)
+  
+- **PPO (Proximal Policy Optimization)**: On-policy actor-critic with GRU
+  - **Dual-head mode** (`ppo_use_dual_head=True`): Separate policy heads for move and vote actions
+    - Action space: 7 actions (simple) or 13 actions (composite) after conversion
+    - Two independent policy heads: `actor_move` (4 actions) and `actor_vote` (3 actions)
+  - **Single-head mode** (`ppo_single_head=True`): Combined action head (similar to IQN)
+    - Action space: 7 actions (simple) or 13 actions (composite)
+    - Single policy head: `actor_combined`
+  - Uses recurrent GRU for temporal memory
+  - On-policy training with rollout memory
+
+**Note**: Model type and PPO mode are stored in the configuration file but are **NOT included in run name tags** for compatibility reasons.
+
 ## Run Name Structure
 
 ### Simple Foraging Mode
 ```
-v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sf_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_p{punishment_level}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
+v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_sf_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_p{punishment_level}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
 ```
 
 ### Extended Mode
 ```
-v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sp_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
+v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_sp_r{respawn_prob}_v{vision_radius}_m{map_size}_cv{composite_views}_me{multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}
 ```
+
+### Parameters NOT Included in Run Name
+
+The following parameters affect experiment behavior but are **NOT encoded in the run name tags**:
+- `composite_actions` - Affects action space (7 vs 13 actions) but not included in run name
+- `model_type` - Model type (IQN vs PPO) - stored in config but not in run name
+- `ppo_use_dual_head` / `ppo_single_head` - PPO mode selection - stored in config but not in run name
+- `epsilon` - Exploration rate - stored in config but not in run name
+- `batch_size`, `memory_size` - Training hyperparameters - stored in config but not in run name
+- `device` - Compute device - stored in config but not in run name
+- `seed` - Random seed - stored in config metadata but not in run name
+- `num_resources` - Number of resources - stored in config but not in run name
+- Agent replacement parameters - Stored in config but encoded as `{replacement_tag}` in run name
+
+**Note**: These parameters are still saved in the configuration YAML file and command-line argument files for full reproducibility.
 
 ## Example Run Names
 
@@ -223,6 +331,24 @@ python main.py --delayed_punishment --punishment_observable --num_agents 3
 
 # Full configuration with punishment observation
 python main.py --delayed_punishment --important_rule --punishment_observable --observe_other_punishments --punishment_level_accessible --social_harm_accessible --num_agents 3 --epochs 1000
+
+# Using PPO with dual-head mode (default)
+python main.py --model_type ppo --num_agents 3 --epochs 1000
+
+# Using PPO with single-head mode
+python main.py --model_type ppo --ppo_single_head --num_agents 3 --epochs 1000
+
+# Using composite actions (affects action space but not run name)
+python main.py --composite_actions --num_agents 3
+
+# Using composite views (included in run name as cvTrue)
+python main.py --composite_views --num_agents 3
+
+# Agent replacement with probability mode
+python main.py --enable_agent_replacement --replacement_selection_mode probability --replacement_probability 0.1 --num_agents 3
+
+# Agent replacement with random_with_tenure mode
+python main.py --enable_agent_replacement --replacement_selection_mode random_with_tenure --replacement_minimum_tenure_epochs 10 --replacement_initial_agents_count 2 --num_agents 3
 ```
 
 ### Configuration Examples
@@ -250,6 +376,36 @@ config = create_config(
 config = create_config(
     observe_other_punishments=True,
     disable_punishment_info=True,
+    num_agents=3
+)
+
+# PPO with dual-head mode
+config = create_config(
+    model_type="ppo",
+    ppo_use_dual_head=True,
+    num_agents=3
+)
+
+# PPO with single-head mode
+config = create_config(
+    model_type="ppo",
+    ppo_use_dual_head=False,  # or use ppo_single_head=True
+    num_agents=3
+)
+
+# Composite actions (affects action space)
+config = create_config(
+    use_composite_actions=True,
+    num_agents=3
+)
+
+# Agent replacement configuration
+config = create_config(
+    enable_agent_replacement=True,
+    replacement_selection_mode="probability",
+    replacement_probability=0.1,
+    replacement_start_epoch=1000,
+    replacement_end_epoch=5000,
     num_agents=3
 )
 ```
@@ -286,9 +442,13 @@ state_punishment/
 ```
 
 ## Notes
-- All boolean parameters default to `False` except `no_collective_harm=True`
+- All boolean parameters default to `False` except `no_collective_harm=True` and `ppo_use_dual_head=True`
 - Run names are automatically generated based on parameter combinations
 - Tags are designed to be concise while remaining readable
 - The third observation feature provides binary information about pending punishment when `punishment_observable=True`
 - Punishment observation features are added to the observation vector when `observe_other_punishments=True`
 - The `disable_punishment_info` parameter allows controlled comparison studies by disabling punishment information while maintaining the same observation space
+- **`composite_actions`** affects the action space (7 vs 13 actions) but is NOT included in run name tags for historical reasons
+- **`model_type`** and **`ppo_use_dual_head`** determine the model architecture and training method but are NOT included in run name tags
+- All parameters are saved in the configuration YAML file and command-line argument files for full reproducibility, even if not encoded in run name tags
+- Agent replacement parameters are encoded as `{replacement_tag}` in the run name when enabled

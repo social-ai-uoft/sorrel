@@ -261,6 +261,57 @@ def parse_arguments():
         help="Randomize the order in which agents take turns (default: False)"
     )
 
+    # Model type and mode selection
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        choices=["iqn", "ppo"],
+        default="iqn",
+        help="Model type to use: 'iqn' or 'ppo' (default: iqn)"
+    )
+    parser.add_argument(
+        "--ppo_use_dual_head",
+        action="store_true",
+        default=True,  # Default to dual-head mode
+        help="Use dual-head mode for PPO (separate move/vote heads). If False, uses single-head mode."
+    )
+    parser.add_argument(
+        "--ppo_single_head",
+        action="store_true",
+        help="Use single-head mode for PPO (combined action head, like IQN). Overrides --ppo_use_dual_head."
+    )
+
+    # Norm enforcer parameters
+    parser.add_argument(
+        "--use_norm_enforcer",
+        action="store_true",
+        help="Enable norm enforcer for intrinsic penalties (guilt-based reward shaping)"
+    )
+    parser.add_argument(
+        "--norm_enforcer_decay_rate",
+        type=float,
+        default=0.99,
+        help="Norm strength decay rate per step when no punishment occurs (default: 0.995)"
+    )
+    parser.add_argument(
+        "--norm_enforcer_internalization_threshold",
+        type=float,
+        default=5.0,
+        help="Threshold above which guilt penalties activate (default: 5.0)"
+    )
+    parser.add_argument(
+        "--norm_enforcer_max_norm_strength",
+        type=float,
+        default=10.0,
+        help="Upper bound on norm strength (default: 10.0)"
+    )
+    parser.add_argument(
+        "--norm_enforcer_intrinsic_scale",
+        type=float,
+        default=-0.5,
+        help="Scale factor for intrinsic penalty once threshold is exceeded (default: -0.5)"
+    )
+
     return parser.parse_args()
 
 
@@ -365,6 +416,14 @@ def run_experiment(args):
         except ValueError:
             raise ValueError(f"Invalid --replacement_agent_ids format: {args.replacement_agent_ids}. Expected comma-separated integers (e.g., '0,1,2')")
 
+    # Determine PPO mode
+    use_dual_head = True  # Default
+    if args.model_type == "ppo":
+        if args.ppo_single_head:
+            use_dual_head = False
+        else:
+            use_dual_head = args.ppo_use_dual_head
+
     # Create configuration
     config = create_config(
         num_agents=args.num_agents,
@@ -410,6 +469,13 @@ def run_experiment(args):
         replacement_minimum_tenure_epochs=args.replacement_minimum_tenure_epochs,  # NEW
         device=args.device,
         randomize_agent_order=args.randomize_agent_order,
+        model_type=args.model_type,  # NEW: pass model type
+        ppo_use_dual_head=use_dual_head,  # NEW: pass mode
+        use_norm_enforcer=args.use_norm_enforcer,  # NEW: pass norm enforcer flag
+        norm_enforcer_decay_rate=args.norm_enforcer_decay_rate,  # NEW: pass decay rate
+        norm_enforcer_internalization_threshold=args.norm_enforcer_internalization_threshold,  # NEW: pass threshold
+        norm_enforcer_max_norm_strength=args.norm_enforcer_max_norm_strength,  # NEW: pass max strength
+        norm_enforcer_intrinsic_scale=args.norm_enforcer_intrinsic_scale,  # NEW: pass intrinsic scale
     )
 
     # Print expected rewards (use config value, not CLI arg, so it reflects the actual config)
@@ -418,11 +484,11 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f"epsilon{args.epsilon}_{base_run_name}_{timestamp}"
+    run_folder = f"with_norm_enforcer_simple_params_epsilon{args.epsilon}_{base_run_name}_{timestamp}"
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_simple_params" / run_folder
+    log_dir = Path(__file__).parent / "runs_debug2" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder

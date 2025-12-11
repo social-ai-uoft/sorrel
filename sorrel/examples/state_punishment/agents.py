@@ -1,7 +1,7 @@
 """Agents for the state punishment game."""
 
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 try:
     from typing import override
@@ -17,6 +17,7 @@ import torch
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.models.pytorch import PyTorchIQN
+from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
 from sorrel.observation.observation_spec import OneHotObservationSpec
 
 
@@ -41,6 +42,8 @@ class StatePunishmentAgent(Agent):
         important_rule: bool = False,
         punishment_observable: bool = False,
         disable_punishment_info: bool = False,
+        use_norm_enforcer: bool = False,
+        norm_enforcer_config: Optional[Dict] = None,
     ):
         """Initialize the state punishment agent.
 
@@ -59,6 +62,8 @@ class StatePunishmentAgent(Agent):
             delayed_punishment: Whether to defer punishments to the next turn
             important_rule: Whether to use important rule mode (entity A never punished)
             punishment_observable: Whether to show pending punishment in third observation feature
+            use_norm_enforcer: Whether to enable norm enforcer for intrinsic penalties
+            norm_enforcer_config: Configuration dict for norm enforcer (optional)
         """
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
@@ -74,6 +79,23 @@ class StatePunishmentAgent(Agent):
         self.punishment_observable = punishment_observable
         self.disable_punishment_info = disable_punishment_info
         self.sprite = Path(__file__).parent / "./assets/hero.png"
+        
+        # Initialize norm enforcer if enabled
+        if use_norm_enforcer:
+            from sorrel.models.pytorch.norm_enforcer import NormEnforcer
+            
+            config = norm_enforcer_config or {}
+            self.norm_enforcer = NormEnforcer(
+                decay_rate=config.get("decay_rate", 0.995),
+                internalization_threshold=config.get("internalization_threshold", 5.0),
+                max_norm_strength=config.get("max_norm_strength", 10.0),
+                intrinsic_scale=config.get("intrinsic_scale", -0.5),
+                use_state_punishment=config.get("use_state_punishment", True),
+                harmful_resources=config.get("harmful_resources", None),
+                device=config.get("device", "cpu"),
+            )
+        else:
+            self.norm_enforcer = None
 
         # Track encounters and rewards
         self.encounters = {}
@@ -104,13 +126,43 @@ class StatePunishmentAgent(Agent):
         if self.use_random_policy:
             return np.random.randint(0, self.action_spec.n_actions)
 
-        # Use the provided state (composite views are handled by environment)
-        prev_states = self.model.memory.current_state()
-        stacked_states = np.vstack((prev_states, state))
-
-        model_input = stacked_states.reshape(1, -1)
-        action = self.model.take_action(model_input)
-        return action
+        # For PPO: handle differently (no frame stacking needed)
+        if isinstance(self.model, DualHeadRecurrentPPO):
+            # PPO uses GRU for temporal memory, no frame stacking needed
+            # PPO handles state conversion internally
+            # Works for both dual-head and single-head modes
+            action = self.model.take_action(state)
+            return action
+        else:
+            # IQN: use frame stacking (stateless model needs temporal context)
+            prev_states = self.model.memory.current_state()
+            stacked_states = np.vstack((prev_states, state))
+            model_input = stacked_states.reshape(1, -1)
+            action = self.model.take_action(model_input)
+            return action
+    
+    def add_memory(
+        self, state: np.ndarray, action: int, reward: float, done: bool
+    ) -> None:
+        """Add an experience to the memory.
+        
+        For PPO models, this calls add_memory_ppo which uses the pending
+        transition stored during take_action().
+        
+        Args:
+            state: the state to be added.
+            action: the action taken by the agent.
+            reward: the reward received by the agent.
+            done: whether the episode terminated after this experience.
+        """
+        if isinstance(self.model, DualHeadRecurrentPPO):
+            # PPO: use special method that uses pending transition
+            self.model.add_memory_ppo(reward, done)
+        else:
+            # IQN: use standard memory.add
+            if state.ndim == 2 and state.shape[0] == 1:
+                state = state.flatten()
+            self.model.memory.add(state, action, reward, done)
 
     # Note: pov method removed - use generate_single_view directly
 
@@ -363,6 +415,27 @@ class StatePunishmentAgent(Agent):
         # Move the agent to the new location
         world.move(self, new_location)
         
+        # Update norm enforcer if enabled
+        if self.norm_enforcer is not None:
+            # Use state-based detection for state punishment
+            info_dict = {
+                'is_punished': is_punished,
+                'resource_collected': target_object.kind if hasattr(target_object, 'kind') else None,
+            }
+            self.norm_enforcer.update(
+                observation=None,  # Could pass observation if needed
+                action=movement_action,
+                info=info_dict,
+                use_state_detection=True,
+            )
+            
+            # Apply intrinsic penalty to reward (based on resource collected)
+            resource_kind = target_object.kind if hasattr(target_object, 'kind') else None
+            intrinsic_penalty = self.norm_enforcer.get_intrinsic_penalty(
+                resource_collected=resource_kind,
+            )
+            reward += intrinsic_penalty  # penalty is negative, so this subtracts
+        
         if return_info:
             info = {
                 'is_punished': is_punished,
@@ -412,7 +485,12 @@ class StatePunishmentAgent(Agent):
 
     @override
     def reset(self) -> None:
-        """Reset the agent state."""
+        """Reset the agent state.
+        
+        Note: Norm enforcer is NOT reset here to allow norm internalization
+        to persist across epochs. The norm enforcer represents internalized
+        moral values that should persist as the agent continues learning.
+        """
         # Reset individual score and encounters
         self.individual_score = 0.0
         self.encounters = {}
@@ -430,6 +508,12 @@ class StatePunishmentAgent(Agent):
         
         # Reset epoch-specific tracking
         self.reset_epoch_tracking()
+        
+        # NOTE: Norm enforcer is NOT reset here - it persists across epochs
+        # to model internalized norms. It only resets when:
+        # 1. Agent is first created (initialized to 0.0)
+        # 2. Agent is replaced (new agent gets fresh norm enforcer)
+        # 3. Explicitly reset via norm_enforcer.reset() if needed
 
         # Reset debug counter
         if hasattr(self, "_debug_turn_count"):

@@ -51,6 +51,13 @@ def create_config(
     replacement_minimum_tenure_epochs: int = 10,  # NEW: Minimum epochs before replacement
     device: str = "cpu",
     randomize_agent_order: bool = True,
+    model_type: str = "iqn",  # NEW: Model type selection ("iqn" or "ppo")
+    ppo_use_dual_head: bool = True,  # NEW: PPO mode selection (dual-head vs single-head)
+    use_norm_enforcer: bool = False,  # NEW: Enable norm enforcer for intrinsic penalties
+    norm_enforcer_decay_rate: float = 0.995,  # NEW: Norm strength decay rate
+    norm_enforcer_internalization_threshold: float = 5.0,  # NEW: Threshold for guilt penalties
+    norm_enforcer_max_norm_strength: float = 10.0,  # NEW: Maximum norm strength
+    norm_enforcer_intrinsic_scale: float = -0.5,  # NEW: Scale factor for intrinsic penalty
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -74,11 +81,11 @@ def create_config(
             }
     else:
         social_harm_config = {
-            "A": 3, # 2.16666667
-            "B": 0, # 2.86
-            "C": 0, # 4.99546667
-            "D": 0, # 11.572704
-            "E": 0, # 31.83059499
+            "A": 3, 
+            "B": 0, 
+            "C": 0, 
+            "D": 0, 
+            "E": 0, 
         }
 
     # flexible parameters
@@ -151,12 +158,44 @@ def create_config(
     else:
         replacement_tag = "norep"
     
+    # Norm enforcer tags
+    if use_norm_enforcer:
+        # Build norm enforcer tag with key parameters
+        norm_enforcer_tag_parts = ["ne"]  # "ne" for norm enforcer
+        # Add threshold (rounded to 1 decimal)
+        norm_enforcer_tag_parts.append(f"th{norm_enforcer_internalization_threshold:.1f}".replace(".", ""))
+        # Add decay rate (rounded to 3 decimals, remove leading 0)
+        decay_str = f"{norm_enforcer_decay_rate:.3f}".replace(".", "").lstrip("0")
+        if decay_str:
+            norm_enforcer_tag_parts.append(f"dr{decay_str}")
+        # Add intrinsic scale (rounded to 1 decimal, include negative sign)
+        scale_str = f"{abs(norm_enforcer_intrinsic_scale):.1f}".replace(".", "")
+        if norm_enforcer_intrinsic_scale < 0:
+            norm_enforcer_tag_parts.append(f"is-{scale_str}")
+        else:
+            norm_enforcer_tag_parts.append(f"is{scale_str}")
+        # Add max norm strength if different from default
+        if norm_enforcer_max_norm_strength != 10.0:
+            norm_enforcer_tag_parts.append(f"max{norm_enforcer_max_norm_strength:.1f}".replace(".", ""))
+        norm_enforcer_tag = "_".join(norm_enforcer_tag_parts)
+    else:
+        norm_enforcer_tag = "none"
+    
+    # Model type tags
+    model_type_tag = model_type  # "iqn" or "ppo"
+    if model_type == "ppo":
+        # Add PPO-specific mode tag
+        if ppo_use_dual_head:
+            model_type_tag = "ppo_dual"
+        else:
+            model_type_tag = "ppo_single"
+    
     if simple_foraging:
         run_name = (
-            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
         )
     else:
-        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
 
     return {
         "experiment": {
@@ -206,13 +245,13 @@ def create_config(
             "num_resources": num_resources,
             "spawn_prob": respawn_prob,
             "a_value": 25,  # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
-            "b_value": 10,
+            "b_value": 10, # 25, 10, 10, 10, 10
             "c_value": 10,
             "d_value": 10,
             "e_value": 10,
             "social_harm": social_harm_config,
             "init_punishment_prob": 0.0,
-            "punishment_magnitude": 20.0,
+            "punishment_magnitude": 20.0, # 20.0 48
             "change_per_vote": 0.1,
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
@@ -236,6 +275,18 @@ def create_config(
             "n_quantiles": 12, # 12
             "device": device,
             "target_update_frequency": target_update_frequency,
+            "type": model_type,  # NEW: Model type ("iqn" or "ppo")
+            "use_dual_head": ppo_use_dual_head if model_type == "ppo" else None,  # NEW: PPO mode
+        },
+        "norm_enforcer": {
+            "enabled": use_norm_enforcer,
+            "decay_rate": norm_enforcer_decay_rate,
+            "internalization_threshold": norm_enforcer_internalization_threshold,
+            "max_norm_strength": norm_enforcer_max_norm_strength,
+            "intrinsic_scale": norm_enforcer_intrinsic_scale,
+            "use_state_punishment": True,  # Always use state-based detection for state_punishment
+            "harmful_resources": ["A", "B", "C", "D", "E"],  # Taboo resources
+            "device": device,
         },
     }
 
@@ -272,10 +323,38 @@ def print_expected_rewards(
         "E": config["world"]["e_value"],
     }
 
+    # Get state system parameters
+    state_system = temp_world.state_system
+    num_steps = state_system.num_steps
+    magnitude = state_system.magnitude
+    use_probabilistic = state_system.use_probabilistic_punishment
+    only_punish_taboo = state_system.only_punish_taboo
+    taboo_resources = state_system.taboo_resources
+
+    # Calculate current punishment level (0 to num_steps-1)
+    current_level = min(
+        round(fixed_punishment_level * (num_steps - 1)), num_steps - 1
+    )
+
     for resource, value in resource_values.items():
-        punishment = temp_world.state_system.calculate_punishment(resource)
-        net_reward = value - punishment
+        # Get punishment probability from schedule
+        if resource in state_system.resource_schedules:
+            # Check if resource should be punished
+            if only_punish_taboo and resource not in taboo_resources:
+                punishment_prob = 0.0
+            else:
+                punishment_prob = state_system.resource_schedules[resource][current_level]
+        else:
+            punishment_prob = 0.0
+        
+        # Calculate expected punishment value
+        # For both probabilistic and deterministic: expected = probability * magnitude
+        # (For probabilistic, it's E[punishment] = prob * magnitude + (1-prob) * 0 = prob * magnitude)
+        # (For deterministic, it's directly prob * magnitude)
+        expected_punishment = abs(punishment_prob * magnitude)  # magnitude is negative, so use abs for display
+        
+        net_reward = value - expected_punishment
         print(
-            f"Resource {resource}: value={value:.1f}, punishment={punishment:.1f}, net_reward={net_reward:.1f}"
+            f"Resource {resource}: value={value:.1f}, punishment={expected_punishment:.1f}, net_reward={net_reward:.1f}"
         )
     print("=" * 50 + "\n")
