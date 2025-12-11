@@ -63,7 +63,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             # This will be set when observe() is called
             self.input_size = (
                 1,
-                len(entity_list) * 0
+                (len(entity_list) + 1) * 0 # YQ CHANGED (ADDED 1)
                 + 4
                 + (4 * self.embedding_size)
                 # + 2,  # Extra features + absolute position embedding (x, y)
@@ -72,7 +72,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             self.input_size = (
                 1,
                 (
-                    len(entity_list)
+                    (len(entity_list) + 1) # YQ CHANGED (ADDED 1)
                     * (2 * self.vision_radius + 1)
                     * (2 * self.vision_radius + 1)
                 )
@@ -97,12 +97,32 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             raise ValueError("Location must be provided for StagHuntObservation")
 
         # Get the base visual observation
-        visual_field = super().observe(world, location).flatten()
+        # YQ CHANGED - START
+        base_grid = super().observe(world, location)
+        C, H, W = base_grid.shape
+
+        emotion_channel = np.zeros((1, H, W), dtype=np.float64)
+
+        for (i, j), entity in np.ndenumerate(world.map):
+            if entity.kind == "StagHuntAgent": # YQ: MAKE SURE THIS IS WHAT THE ENTITY IS CALLED
+                # convert world coords to local view coords
+                dy = i - location[0]
+                dx = j - location[1]
+                
+                # ignore if outside vision window
+                if abs(dy) <= self.vision_radius and abs(dx) <= self.vision_radius:
+                    vi = dy + self.vision_radius
+                    vj = dx + self.vision_radius
+                    emotion_channel[0, vi, vj] = entity.emotion
+        
+        base_grid = np.concatenate([base_grid, emotion_channel], axis=0)
+
+        visual_field = base_grid.flatten()
 
         # Calculate expected size for a perfect square observation
         expected_side_length = 2 * self.vision_radius + 1
         expected_visual_size = (
-            len(self.entity_list) * expected_side_length * expected_side_length
+            (len(self.entity_list)+1) * expected_side_length * expected_side_length # YQ: ADDED 1 HERE
         )
 
         # Pad visual field to expected size if it's smaller (due to world boundaries)
@@ -119,12 +139,12 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             remaining_size = expected_visual_size - visual_field.shape[0]
 
             # Calculate how many cells we need to pad
-            cells_to_pad = remaining_size // len(self.entity_list)
+            cells_to_pad = remaining_size // (len(self.entity_list)+1) # YQ: ADDED 1 HERE
 
             # Fill each padded cell with wall representation
             for i in range(cells_to_pad):
-                start_idx = visual_field.shape[0] + i * len(self.entity_list)
-                end_idx = start_idx + len(self.entity_list)
+                start_idx = visual_field.shape[0] + i * (len(self.entity_list)+1) # YQ: ADDED 1 HERE
+                end_idx = start_idx + (len(self.entity_list)+1) # YQ: ADDED 1 HERE
                 if end_idx <= expected_visual_size:
                     padded_visual[start_idx + wall_entity_index] = 1.0
 
@@ -132,6 +152,8 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         elif visual_field.shape[0] > expected_visual_size:
             # This shouldn't happen, but truncate if it does
             visual_field = visual_field[:expected_visual_size]
+        
+        # YQ CHANGED - END
 
         # Get the agent at this location to extract inventory and ready state
         agent = None
@@ -247,6 +269,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.received_interaction_reward: bool = False
         self.respawn_timer: int = 0
         self._removed_from_world: bool = False
+        self.emotion = 0. # YQ CHANGED
         
         # Health system
         self.max_health = max_health
@@ -355,6 +378,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             # Normal case: stack previous states with current state
             stacked_states = np.vstack((prev_states, state))
             model_input = stacked_states.reshape(1, -1)
+        
+        self.update_emotion(model_input) # YQ CHANGED
 
         action = self.model.take_action(model_input)
         return action
@@ -410,6 +435,18 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             state = state.flatten()
 
         self.model.memory.add(state, action, reward, done)
+
+    # YQ CHANGED - START
+
+    def update_emotion(self, state: np.ndarray) -> None:
+        """Update the agent's emotion based on its state value approximation.
+        
+        Args:
+            state: The observed input.
+        """
+        self.emotion = self.model.state_value(state) #type: ignore
+
+    # YQ CHANGED - END
 
     def act(self, world: StagHuntWorld, action: int) -> float:
         """Execute the chosen action in the environment and return the reward.
