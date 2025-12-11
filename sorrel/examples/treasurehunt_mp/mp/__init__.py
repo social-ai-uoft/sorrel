@@ -3,7 +3,4 @@
 from sorrel.examples.treasurehunt_mp.mp.mp_config import MPConfig
 from sorrel.examples.treasurehunt_mp.mp.mp_system import MARLMultiprocessingSystem
 
-__all__ = ['MPConfig', 'MARLMultiprocessingSystem']
-
-
-
+__all__ = ["MPConfig", "MARLMultiprocessingSystem"]

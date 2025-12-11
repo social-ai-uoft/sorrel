@@ -25,12 +25,12 @@ import numpy as np
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.examples.staghunt_physical.entities import (
+    AttackBeam,
     Empty,
     HareResource,
     InteractionBeam,
-    StagResource,
-    AttackBeam,
     PunishBeam,
+    StagResource,
 )
 from sorrel.examples.staghunt_physical.world import StagHuntWorld
 from sorrel.location import Location, Vector
@@ -63,21 +63,21 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             # This will be set when observe() is called
             self.input_size = (
                 1,
-                (len(entity_list) + 1) * 0 # YQ CHANGED (ADDED 1)
+                (len(entity_list) + 1) * 0  # YQ CHANGED (ADDED 1)
                 + 4
-                + (4 * self.embedding_size)
+                + (4 * self.embedding_size),
                 # + 2,  # Extra features + absolute position embedding (x, y)
             )  # Placeholder, will be updated
         else:
             self.input_size = (
                 1,
                 (
-                    (len(entity_list) + 1) # YQ CHANGED (ADDED 1)
+                    (len(entity_list) + 1)  # YQ CHANGED (ADDED 1)
                     * (2 * self.vision_radius + 1)
                     * (2 * self.vision_radius + 1)
                 )
                 + 4  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
-                + (4 * self.embedding_size)
+                + (4 * self.embedding_size),
                 # + 2,  # Absolute position embedding: x, y coordinates
             )
 
@@ -103,18 +103,20 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
 
         emotion_channel = np.zeros((1, H, W), dtype=np.float64)
 
-        for (i, j), entity in np.ndenumerate(world.map):
-            if entity.kind == "StagHuntAgent": # YQ: MAKE SURE THIS IS WHAT THE ENTITY IS CALLED
+        for (i, j, k), entity in np.ndenumerate(world.map):
+            if (
+                entity.kind == "StagHuntAgent"
+            ):  # YQ: MAKE SURE THIS IS WHAT THE ENTITY IS CALLED
                 # convert world coords to local view coords
                 dy = i - location[0]
                 dx = j - location[1]
-                
+
                 # ignore if outside vision window
                 if abs(dy) <= self.vision_radius and abs(dx) <= self.vision_radius:
                     vi = dy + self.vision_radius
                     vj = dx + self.vision_radius
                     emotion_channel[0, vi, vj] = entity.emotion
-        
+
         base_grid = np.concatenate([base_grid, emotion_channel], axis=0)
 
         visual_field = base_grid.flatten()
@@ -122,7 +124,9 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         # Calculate expected size for a perfect square observation
         expected_side_length = 2 * self.vision_radius + 1
         expected_visual_size = (
-            (len(self.entity_list)+1) * expected_side_length * expected_side_length # YQ: ADDED 1 HERE
+            (len(self.entity_list) + 1)
+            * expected_side_length
+            * expected_side_length  # YQ: ADDED 1 HERE
         )
 
         # Pad visual field to expected size if it's smaller (due to world boundaries)
@@ -139,12 +143,16 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             remaining_size = expected_visual_size - visual_field.shape[0]
 
             # Calculate how many cells we need to pad
-            cells_to_pad = remaining_size // (len(self.entity_list)+1) # YQ: ADDED 1 HERE
+            cells_to_pad = remaining_size // (
+                len(self.entity_list) + 1
+            )  # YQ: ADDED 1 HERE
 
             # Fill each padded cell with wall representation
             for i in range(cells_to_pad):
-                start_idx = visual_field.shape[0] + i * (len(self.entity_list)+1) # YQ: ADDED 1 HERE
-                end_idx = start_idx + (len(self.entity_list)+1) # YQ: ADDED 1 HERE
+                start_idx = visual_field.shape[0] + i * (
+                    len(self.entity_list) + 1
+                )  # YQ: ADDED 1 HERE
+                end_idx = start_idx + (len(self.entity_list) + 1)  # YQ: ADDED 1 HERE
                 if end_idx <= expected_visual_size:
                     padded_visual[start_idx + wall_entity_index] = 1.0
 
@@ -152,7 +160,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         elif visual_field.shape[0] > expected_visual_size:
             # This shouldn't happen, but truncate if it does
             visual_field = visual_field[:expected_visual_size]
-        
+
         # YQ CHANGED - END
 
         # Get the agent at this location to extract inventory and ready state
@@ -211,22 +219,22 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         2: (1, 0),  # south (down)
         3: (0, -1),  # west (left)
     }
-    
+
     # Reverse mapping: from vector (dy, dx) to orientation
     VECTOR_TO_ORIENTATION: Dict[Tuple[int, int], int] = {
         (-1, 0): 0,  # north
-        (0, 1): 1,   # east
-        (1, 0): 2,   # south
+        (0, 1): 1,  # east
+        (1, 0): 2,  # south
         (0, -1): 3,  # west
     }
 
     def _get_orientation_from_move(self, dy: int, dx: int) -> int:
         """Get orientation from movement vector (dy, dx).
-        
+
         Args:
             dy: Change in y direction
             dx: Change in x direction
-            
+
         Returns:
             Orientation value (0=north, 1=east, 2=south, 3=west)
         """
@@ -244,7 +252,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         super().__init__(observation_spec, action_spec, model)
         # assign a default sprite; can be overridden externally
         self._base_sprite = Path(__file__).parent / "./assets/hero.png"
-        
+
         # assign unique agent ID
         self.agent_id = agent_id
 
@@ -269,8 +277,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.received_interaction_reward: bool = False
         self.respawn_timer: int = 0
         self._removed_from_world: bool = False
-        self.emotion = 0. # YQ CHANGED
-        
+        self.emotion = 0.0  # YQ CHANGED
+
         # Health system
         self.max_health = max_health
         self.health = max_health
@@ -344,7 +352,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.is_removed = False
         self.respawn_timer = 0
         self._removed_from_world = False
-        
+
         # Reset health system
         self.health = self.max_health
         self.update_agent_kind()  # Initialize agent kind based on orientation
@@ -378,27 +386,27 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             # Normal case: stack previous states with current state
             stacked_states = np.vstack((prev_states, state))
             model_input = stacked_states.reshape(1, -1)
-        
-        self.update_emotion(model_input) # YQ CHANGED
+
+        self.update_emotion(model_input)  # YQ CHANGED
 
         action = self.model.take_action(model_input)
         return action
-    
+
     def get_action_with_qvalues(self, state: np.ndarray) -> tuple[int, np.ndarray]:
         """Get action and Q-values for all actions.
-        
+
         Args:
             state: Current state observation
-            
+
         Returns:
             Tuple of (action_index, q_values_array)
         """
         prev_states = self.model.memory.current_state()
-        
+
         # Ensure state has the same shape as individual states in prev_states
         if state.ndim == 2 and state.shape[0] == 1:
             state = state.flatten()  # Convert from (1, features) to (features,)
-        
+
         # Use only current state if memory is empty, otherwise stack with previous states
         if prev_states.shape[0] == 0:
             model_input = state.reshape(1, -1)
@@ -406,17 +414,17 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             # Normal case: stack previous states with current state
             stacked_states = np.vstack((prev_states, state))
             model_input = stacked_states.reshape(1, -1)
-        
+
         # Get Q-values for all actions
-        if hasattr(self.model, 'get_all_qvalues'):
+        if hasattr(self.model, "get_all_qvalues"):
             q_values = self.model.get_all_qvalues(model_input)
         else:
             # Fallback: can't get Q-values, return zeros
             q_values = np.zeros(self.action_spec.n_actions)
-        
+
         # Get action (use take_action for consistency)
         action = self.model.take_action(model_input)
-        
+
         return action, q_values
 
     def add_memory(
@@ -440,11 +448,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
     def update_emotion(self, state: np.ndarray) -> None:
         """Update the agent's emotion based on its state value approximation.
-        
+
         Args:
             state: The observed input.
         """
-        self.emotion = self.model.state_value(state) #type: ignore
+        self.emotion = self.model.state_value(state)  # type: ignore
 
     # YQ CHANGED - END
 
@@ -479,7 +487,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         elif action_name == "FORWARD" or action_name == "BACKWARD":
             # Check if simplified_movement is enabled
             simplified_movement = getattr(world, "simplified_movement", False)
-            
+
             dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
             # invert direction for backward movement
             if action_name == "BACKWARD":
@@ -504,7 +512,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # handle sidestep movements
         elif action_name == "STEP_LEFT" or action_name == "STEP_RIGHT":
             simplified_movement = getattr(world, "simplified_movement", False)
-            
+
             dy, dx = StagHuntAgent.ORIENTATION_VECTORS[self.orientation]
             # calculate perpendicular vectors for sidestep
             if action_name == "STEP_LEFT":
@@ -525,7 +533,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     world.move(self, new_pos)
                     # In simplified movement mode, change orientation to face movement direction
                     if simplified_movement:
-                        self.orientation = self._get_orientation_from_move(step_dy, step_dx)
+                        self.orientation = self._get_orientation_from_move(
+                            step_dy, step_dx
+                        )
                         self.update_agent_kind()
                 else:
                     # target is not passable (e.g., resource, wall) - movement blocked
@@ -544,13 +554,15 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 # Deduct attack cost
                 attack_cost = getattr(world, "attack_cost", 0.05)
                 reward -= attack_cost
-                
+
                 # Record attack cost metrics
-                if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                if hasattr(world, "environment") and hasattr(
+                    world.environment, "metrics_collector"
+                ):
                     world.environment.metrics_collector.collect_agent_cost_metrics(
                         self, attack_cost=attack_cost
                     )
-                
+
                 # spawn the visual beam and get beam locations
                 beam_locs = self.spawn_attack_beam(world)
 
@@ -562,7 +574,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                         entity = world.observe(target)
                         if isinstance(entity, (StagResource, HareResource)):
                             # Record attack metrics
-                            if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                            if hasattr(world, "environment") and hasattr(
+                                world.environment, "metrics_collector"
+                            ):
                                 # Explicitly determine target type - must be either stag or hare
                                 # (guaranteed by the isinstance check above)
                                 if isinstance(entity, StagResource):
@@ -572,16 +586,20 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                                 world.environment.metrics_collector.collect_attack_metrics(
                                     self, target_type, entity
                                 )
-                            
+
                             # Attack the resource
                             defeated = entity.on_attack(world, world.current_turn)
                             if defeated:
                                 # Handle reward sharing for defeated resource
-                                shared_reward = self.handle_resource_defeat(entity, world)
+                                shared_reward = self.handle_resource_defeat(
+                                    entity, world
+                                )
                                 reward += shared_reward
 
                                 # Record resource defeat metrics with resource type
-                                if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                                if hasattr(world, "environment") and hasattr(
+                                    world.environment, "metrics_collector"
+                                ):
                                     # Explicitly determine resource type - must be either stag or hare
                                     # (guaranteed by the isinstance check above)
                                     if isinstance(entity, StagResource):
@@ -600,13 +618,15 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 # Deduct punish cost
                 punish_cost = getattr(world, "punish_cost", 0.1)
                 reward -= punish_cost
-                
+
                 # Record punish cost metrics
-                if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                if hasattr(world, "environment") and hasattr(
+                    world.environment, "metrics_collector"
+                ):
                     world.environment.metrics_collector.collect_agent_cost_metrics(
                         self, punish_cost=punish_cost
                     )
-                
+
                 # spawn the visual beam and get beam locations
                 beam_locs = self.spawn_punish_beam(world)
 
@@ -618,21 +638,23 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                         entity = world.observe(target)
                         if isinstance(entity, StagHuntAgent):
                             # Record punishment metrics
-                            if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                            if hasattr(world, "environment") and hasattr(
+                                world.environment, "metrics_collector"
+                            ):
                                 world.environment.metrics_collector.collect_punishment_metrics(
                                     self, entity
                                 )
-                            
+
                             # Punish the agent
                             entity.on_punishment_hit()
-                            
+
                             # # Force immediate removal if agent should be removed
                             # if entity.is_removed and not entity._removed_from_world:
                             #     # Remove agent from world immediately
                             #     world.remove(entity.location)
                             #     entity._removed_from_world = True
                             #     entity.location = None
-                            
+
                             break  # Only punish one agent per beam
 
                 # set cooldown timer after using punish beam
@@ -642,18 +664,24 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.update_cooldown()
 
         # Record reward metrics
-        if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
-            world.environment.metrics_collector.collect_agent_reward_metrics(self, reward)
+        if hasattr(world, "environment") and hasattr(
+            world.environment, "metrics_collector"
+        ):
+            world.environment.metrics_collector.collect_agent_reward_metrics(
+                self, reward
+            )
 
         # return accumulated reward from this action
         return reward
 
-    def spawn_interaction_beam(self, world: StagHuntWorld) -> list[tuple[int, int, int]]:
+    def spawn_interaction_beam(
+        self, world: StagHuntWorld
+    ) -> list[tuple[int, int, int]]:
         """Generate an interaction beam extending in front of the agent.
 
         Args:
             world: The world to spawn the beam in.
-            
+
         Returns:
             List of beam locations that were spawned.
         """
@@ -703,7 +731,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             if world.valid_location(terrain_loc) and world.map[terrain_loc].passable:
                 world.add(loc, InteractionBeam())
                 valid_beam_locs.append(loc)
-        
+
         return valid_beam_locs
 
     def spawn_attack_beam(self, world: StagHuntWorld) -> list[tuple[int, int, int]]:
@@ -711,7 +739,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
         Args:
             world: The world to spawn the beam in.
-            
+
         Returns:
             List of beam locations that were spawned.
         """
@@ -720,7 +748,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
         # Get beam radius from world config (default to 3 if not set)
         beam_radius = getattr(world, "beam_radius", 3)
-        
+
         # Check if single-tile beam mode or area attack mode is enabled
         single_tile_attack = getattr(world, "single_tile_attack", False)
         area_attack = getattr(world, "area_attack", False)
@@ -734,11 +762,15 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             # Calculate perpendicular vectors for left/right
             right_dy, right_dx = -dx, dy  # 90 degrees clockwise
             left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
-            
+
             # The 3x3 area is centered 1 tile forward from the agent
             # Generate all 9 tiles in the 3x3 grid
-            for i in range(-1, 2):  # -1, 0, 1 (back, center, forward relative to center tile)
-                for j in range(-1, 2):  # -1, 0, 1 (left, center, right relative to center tile)
+            for i in range(
+                -1, 2
+            ):  # -1, 0, 1 (back, center, forward relative to center tile)
+                for j in range(
+                    -1, 2
+                ):  # -1, 0, 1 (left, center, right relative to center tile)
                     # Center tile is 1 tile forward: (y + dy, x + dx)
                     # Offset by i tiles forward and j tiles to the side
                     target_y = y + dy + (i * dy) + (j * left_dy)
@@ -777,7 +809,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     beam_locs.append(right_target)
 
                 # Left side
-                left_target = (y + left_dy + dy * i, x + left_dx + dx * i, world.beam_layer)
+                left_target = (
+                    y + left_dy + dy * i,
+                    x + left_dx + dx * i,
+                    world.beam_layer,
+                )
                 if world.valid_location(left_target):
                     beam_locs.append(left_target)
 
@@ -788,7 +824,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             if world.valid_location(terrain_loc) and world.map[terrain_loc].passable:
                 world.add(loc, AttackBeam())
                 valid_beam_locs.append(loc)
-        
+
         return valid_beam_locs
 
     def spawn_punish_beam(self, world: StagHuntWorld) -> list[tuple[int, int, int]]:
@@ -796,7 +832,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
         Args:
             world: The world to spawn the beam in.
-            
+
         Returns:
             List of beam locations that were spawned.
         """
@@ -821,8 +857,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             # 3x3 area attack: covers a 3x3 region in front of the agent
             # The 3x3 area is centered 1 tile forward from the agent
             # Generate all 9 tiles in the 3x3 grid
-            for i in range(-1, 2):  # -1, 0, 1 (back, center, forward relative to center tile)
-                for j in range(-1, 2):  # -1, 0, 1 (left, center, right relative to center tile)
+            for i in range(
+                -1, 2
+            ):  # -1, 0, 1 (back, center, forward relative to center tile)
+                for j in range(
+                    -1, 2
+                ):  # -1, 0, 1 (left, center, right relative to center tile)
                     # Center tile is 1 tile forward: (y + dy, x + dx)
                     # Offset by i tiles forward and j tiles to the side
                     target_y = y + dy + (i * dy) + (j * left_dy)
@@ -849,7 +889,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     beam_locs.append(right_target)
 
                 # Left side
-                left_target = (y + left_dy + dy * i, x + left_dx + dx * i, world.beam_layer)
+                left_target = (
+                    y + left_dy + dy * i,
+                    x + left_dx + dx * i,
+                    world.beam_layer,
+                )
                 if world.valid_location(left_target):
                     beam_locs.append(left_target)
 
@@ -860,52 +904,54 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             if world.valid_location(terrain_loc) and world.map[terrain_loc].passable:
                 world.add(loc, PunishBeam())
                 valid_beam_locs.append(loc)
-        
+
         return valid_beam_locs
 
     def handle_resource_defeat(self, resource, world: StagHuntWorld) -> float:
         """Handle reward sharing when a resource is defeated.
-        
-        Returns the reward this agent receives from the defeated resource.
-        Also delivers shared rewards to other agents in the sharing radius.
+
+        Returns the reward this agent receives from the defeated resource. Also delivers
+        shared rewards to other agents in the sharing radius.
         """
         # Find all agents within reward sharing radius
         sharing_radius = getattr(world, "reward_sharing_radius", 3)
         agents_in_radius = []
-        
+
         for agent in world.environment.agents:
             if agent != self and not agent.is_removed:
                 # Calculate distance
                 dx = abs(agent.location[0] - resource.location[0])
                 dy = abs(agent.location[1] - resource.location[1])
                 distance = max(dx, dy)  # Chebyshev distance
-                
+
                 if distance <= sharing_radius:
                     agents_in_radius.append(agent)
-        
+
         # Include the defeating agent
         agents_in_radius.append(self)
         total_agents = len(agents_in_radius)
-        
+
         # Share reward among all agents in radius
         shared_reward = resource.value / total_agents if total_agents > 0 else 0
-        
+
         # Deliver shared rewards to other agents via pending_reward
         for agent in agents_in_radius:
             if agent != self:  # Don't give pending reward to attacking agent
                 agent.pending_reward += shared_reward
                 # Record shared reward metrics for other agents
-                if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                if hasattr(world, "environment") and hasattr(
+                    world.environment, "metrics_collector"
+                ):
                     world.environment.metrics_collector.collect_shared_reward_metrics(
                         agent, shared_reward
                     )
-        
+
         # Note: Do NOT add resource.value directly to world.total_reward here.
         # The rewards are already accumulated correctly through Agent.transition():
         # - The attacking agent's reward (shared_reward) is added when they act
         # - Other agents' pending_reward is added when they act on their next turn
         # Adding resource.value here would cause double-counting.
-        
+
         # Return the attacking agent's immediate reward
         return shared_reward
 

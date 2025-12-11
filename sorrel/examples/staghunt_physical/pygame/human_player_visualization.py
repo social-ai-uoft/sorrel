@@ -4,91 +4,95 @@ Human Player Visualization - A pygame interface for testing the staghunt_physica
 This script provides a pure visualization interface similar to the human_player_test.ipynb notebook.
 """
 
-import pygame
-import numpy as np
-import sys
 import os
+import sys
 from pathlib import Path
+
+import numpy as np
+import pygame
 from omegaconf import OmegaConf
 
 # Add the project root to the path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "../../.."))
 
+from sorrel.action.action_spec import ActionSpec
+from sorrel.examples.staghunt_physical.agents_v2 import (
+    StagHuntAgent,
+    StagHuntObservation,
+)
 from sorrel.examples.staghunt_physical.entities import Empty, entity_list
 from sorrel.examples.staghunt_physical.env import StagHuntEnv
 from sorrel.examples.staghunt_physical.world import StagHuntWorld
-from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent, StagHuntObservation
-from sorrel.action.action_spec import ActionSpec
-from sorrel.models.human_player import HumanPlayer, HumanObservation
+from sorrel.models.human_player import HumanObservation, HumanPlayer
 
 
 class StagHuntHumanVisualization:
-    """
-    A pygame-based visualization interface for human player testing.
+    """A pygame-based visualization interface for human player testing.
+
     Similar to human_player_test.ipynb but as a standalone pygame application.
     """
 
     def __init__(self, config_path="configs/config_ascii_map.yaml"):
         """Initialize the visualization with the given config."""
         pygame.init()
-        
+
         # Load configuration
         self.config = OmegaConf.load(config_path)
-        
+
         # Create world and environment
         self.world = StagHuntWorld(config=self.config, default_entity=Empty())
         self.env = StagHuntEnv(self.world, self.config)
-        
+
         # Display settings
         self.tile_size = 32
         self.fps = 10
         self.clock = pygame.time.Clock()
-        
+
         # Calculate display size
         self.display_width = self.world.width * self.tile_size
         self.display_height = self.world.height * self.tile_size
-        
+
         # Create display
         self.screen = pygame.display.set_mode((self.display_width, self.display_height))
         pygame.display.set_caption("Stag Hunt Physical - Human Player Visualization")
-        
+
         # Colors
         self.colors = {
-            'background': (50, 50, 50),
-            'wall': (100, 100, 100),
-            'sand': (194, 178, 128),
-            'spawn': (0, 255, 0),
-            'stag': (139, 69, 19),
-            'hare': (255, 165, 0),
-            'agent_north': (0, 0, 255),
-            'agent_east': (255, 0, 0),
-            'agent_south': (0, 255, 0),
-            'agent_west': (255, 255, 0),
-            'empty': (0, 0, 0),
-            'attack_beam': (255, 0, 0),
-            'punish_beam': (255, 255, 0),
-            'text': (255, 255, 255),
+            "background": (50, 50, 50),
+            "wall": (100, 100, 100),
+            "sand": (194, 178, 128),
+            "spawn": (0, 255, 0),
+            "stag": (139, 69, 19),
+            "hare": (255, 165, 0),
+            "agent_north": (0, 0, 255),
+            "agent_east": (255, 0, 0),
+            "agent_south": (0, 255, 0),
+            "agent_west": (255, 255, 0),
+            "empty": (0, 0, 0),
+            "attack_beam": (255, 0, 0),
+            "punish_beam": (255, 255, 0),
+            "text": (255, 255, 255),
         }
-        
+
         # Font
         self.font = pygame.font.Font(None, 24)
         self.small_font = pygame.font.Font(None, 16)
-        
+
         # Game state
         self.running = True
         self.current_turn = 0
         self.turn_action_taken = False
-        
+
         # Create human player agent
         self.setup_human_player()
-        
+
         # Game info
         self.game_info = {
-            'turn': 0,
-            'agent_health': 5,
-            'attack_cooldown': 0,
-            'punish_cooldown': 0,
-            'total_reward': 0.0,
+            "turn": 0,
+            "agent_health": 5,
+            "attack_cooldown": 0,
+            "punish_cooldown": 0,
+            "total_reward": 0.0,
         }
 
     def setup_human_player(self):
@@ -99,20 +103,32 @@ class StagHuntHumanVisualization:
             full_view=True,
             env_dims=(self.world.height, self.world.width),
         )
-        
+
         # Create action spec
-        action_spec = ActionSpec([
-            "NOOP", "FORWARD", "BACKWARD", "STEP_LEFT", "STEP_RIGHT",
-            "TURN_LEFT", "TURN_RIGHT", "ATTACK", "PUNISH"
-        ])
-        
+        action_spec = ActionSpec(
+            [
+                "NOOP",
+                "FORWARD",
+                "BACKWARD",
+                "STEP_LEFT",
+                "STEP_RIGHT",
+                "TURN_LEFT",
+                "TURN_RIGHT",
+                "ATTACK",
+                "PUNISH",
+            ]
+        )
+
         # Create custom human player
         class StagHuntHumanPlayer(HumanPlayer):
             def __init__(self, input_size, action_space, memory_size):
                 super().__init__(input_size, action_space, memory_size)
                 self.visual_size = (
-                    input_size[0] * input_size[1] * input_size[2] * 
-                    (self.tile_size**2) * self.num_channels
+                    input_size[0]
+                    * input_size[1]
+                    * input_size[2]
+                    * (self.tile_size**2)
+                    * self.num_channels
                 )
                 self.total_input_size = self.visual_size + 3
 
@@ -127,13 +143,15 @@ class StagHuntHumanVisualization:
             action_space=action_spec.n_actions,
             memory_size=1,
         )
-        
+
         # Create custom agent
         class StagHuntHumanAgent(StagHuntAgent):
             def get_action(self, state: np.ndarray) -> int:
                 return self.model.take_action(state)
 
-            def add_memory(self, state: np.ndarray, action: int, reward: float, done: bool) -> None:
+            def add_memory(
+                self, state: np.ndarray, action: int, reward: float, done: bool
+            ) -> None:
                 pass
 
             def can_act(self) -> bool:
@@ -145,7 +163,7 @@ class StagHuntHumanVisualization:
             action_spec=action_spec,
             model=self.human_player,
         )
-        
+
         # Override agents in environment
         self.env.override_agents([self.agent])
 
@@ -190,33 +208,46 @@ class StagHuntHumanVisualization:
 
         # Get current state
         state = self.get_current_state()
-        
+
         # Perform action
         reward = self.agent.act(self.world, action)
-        
+
         # Update game info
-        self.game_info['total_reward'] += reward
-        self.game_info['turn'] = self.world.current_turn
-        self.game_info['agent_health'] = getattr(self.agent, 'health', 5)
-        self.game_info['attack_cooldown'] = getattr(self.agent, 'attack_cooldown_timer', 0)
-        self.game_info['punish_cooldown'] = getattr(self.agent, 'punish_cooldown_timer', 0)
-        
+        self.game_info["total_reward"] += reward
+        self.game_info["turn"] = self.world.current_turn
+        self.game_info["agent_health"] = getattr(self.agent, "health", 5)
+        self.game_info["attack_cooldown"] = getattr(
+            self.agent, "attack_cooldown_timer", 0
+        )
+        self.game_info["punish_cooldown"] = getattr(
+            self.agent, "punish_cooldown_timer", 0
+        )
+
         self.turn_action_taken = True
-        
+
         # Print action result
-        action_names = ["NOOP", "FORWARD", "BACKWARD", "STEP_LEFT", "STEP_RIGHT", 
-                       "TURN_LEFT", "TURN_RIGHT", "ATTACK", "PUNISH"]
+        action_names = [
+            "NOOP",
+            "FORWARD",
+            "BACKWARD",
+            "STEP_LEFT",
+            "STEP_RIGHT",
+            "TURN_LEFT",
+            "TURN_RIGHT",
+            "ATTACK",
+            "PUNISH",
+        ]
         print(f"Action: {action_names[action]}, Reward: {reward:.2f}")
 
     def end_turn(self):
         """End the current turn and advance the game."""
         self.world.current_turn += 1
         self.turn_action_taken = False
-        
+
         # Update agent cooldowns
-        if hasattr(self.agent, 'update_cooldown'):
+        if hasattr(self.agent, "update_cooldown"):
             self.agent.update_cooldown()
-        
+
         print(f"Turn {self.world.current_turn} completed")
 
     def get_current_state(self):
@@ -230,42 +261,44 @@ class StagHuntHumanVisualization:
             return
 
         entity_type = type(entity).__name__
-        
+
         # Draw based on entity type
         if entity_type == "Wall":
-            color = self.colors['wall']
+            color = self.colors["wall"]
         elif entity_type == "Sand":
-            color = self.colors['sand']
+            color = self.colors["sand"]
         elif entity_type == "Spawn":
-            color = self.colors['spawn']
+            color = self.colors["spawn"]
         elif entity_type == "StagResource":
-            color = self.colors['stag']
+            color = self.colors["stag"]
         elif entity_type == "HareResource":
-            color = self.colors['hare']
+            color = self.colors["hare"]
         elif entity_type == "Empty":
-            color = self.colors['empty']
+            color = self.colors["empty"]
         elif "StagHuntAgent" in entity_type:
             # Color based on orientation
             if "North" in entity_type:
-                color = self.colors['agent_north']
+                color = self.colors["agent_north"]
             elif "East" in entity_type:
-                color = self.colors['agent_east']
+                color = self.colors["agent_east"]
             elif "South" in entity_type:
-                color = self.colors['agent_south']
+                color = self.colors["agent_south"]
             elif "West" in entity_type:
-                color = self.colors['agent_west']
+                color = self.colors["agent_west"]
             else:
-                color = self.colors['agent_north']
+                color = self.colors["agent_north"]
         else:
-            color = self.colors['empty']
+            color = self.colors["empty"]
 
         # Draw entity rectangle
         pygame.draw.rect(self.screen, color, (x, y, self.tile_size, self.tile_size))
-        pygame.draw.rect(self.screen, (255, 255, 255), (x, y, self.tile_size, self.tile_size), 1)
+        pygame.draw.rect(
+            self.screen, (255, 255, 255), (x, y, self.tile_size, self.tile_size), 1
+        )
 
     def draw_health_bar(self, entity, x, y):
         """Draw a health bar for entities with health."""
-        if not hasattr(entity, 'health') or not hasattr(entity, 'max_health'):
+        if not hasattr(entity, "health") or not hasattr(entity, "max_health"):
             return
 
         health_ratio = entity.health / entity.max_health
@@ -275,41 +308,45 @@ class StagHuntHumanVisualization:
         bar_y = y + self.tile_size - 6
 
         # Background
-        pygame.draw.rect(self.screen, (255, 0, 0), (bar_x, bar_y, bar_width, bar_height))
+        pygame.draw.rect(
+            self.screen, (255, 0, 0), (bar_x, bar_y, bar_width, bar_height)
+        )
         # Health
         health_width = int(bar_width * health_ratio)
-        pygame.draw.rect(self.screen, (0, 255, 0), (bar_x, bar_y, health_width, bar_height))
+        pygame.draw.rect(
+            self.screen, (0, 255, 0), (bar_x, bar_y, health_width, bar_height)
+        )
 
     def draw_world(self):
         """Draw the entire world."""
-        self.screen.fill(self.colors['background'])
-        
+        self.screen.fill(self.colors["background"])
+
         # Draw all layers
         for y in range(self.world.height):
             for x in range(self.world.width):
                 screen_x = x * self.tile_size
                 screen_y = y * self.tile_size
-                
+
                 # Draw terrain layer
                 terrain_entity = self.world.observe((y, x, self.world.terrain_layer))
                 self.draw_entity(terrain_entity, screen_x, screen_y)
-                
+
                 # Draw dynamic layer
                 dynamic_entity = self.world.observe((y, x, self.world.dynamic_layer))
                 if dynamic_entity and type(dynamic_entity).__name__ != "Empty":
                     self.draw_entity(dynamic_entity, screen_x, screen_y)
                     self.draw_health_bar(dynamic_entity, screen_x, screen_y)
-                
+
                 # Draw beam layer
                 beam_entity = self.world.observe((y, x, self.world.beam_layer))
                 if beam_entity and type(beam_entity).__name__ != "Empty":
                     if "Attack" in type(beam_entity).__name__:
-                        color = self.colors['attack_beam']
+                        color = self.colors["attack_beam"]
                     elif "Punish" in type(beam_entity).__name__:
-                        color = self.colors['punish_beam']
+                        color = self.colors["punish_beam"]
                     else:
                         color = (255, 255, 255)
-                    
+
                     # Draw beam as a semi-transparent overlay
                     beam_surface = pygame.Surface((self.tile_size, self.tile_size))
                     beam_surface.set_alpha(128)
@@ -326,10 +363,10 @@ class StagHuntHumanVisualization:
             f"Punish CD: {self.game_info['punish_cooldown']}",
             f"Reward: {self.game_info['total_reward']:.2f}",
         ]
-        
+
         y_offset = 10
         for text in info_text:
-            surface = self.font.render(text, True, self.colors['text'])
+            surface = self.font.render(text, True, self.colors["text"])
             self.screen.blit(surface, (10, y_offset))
             y_offset += 25
 
@@ -337,17 +374,17 @@ class StagHuntHumanVisualization:
         controls = [
             "Controls:",
             "W - Forward, S - Backward",
-            "A - Step Left, D - Step Right", 
+            "A - Step Left, D - Step Right",
             "Q - Turn Left, E - Turn Right",
             "R - Attack, P - Punish",
             "SPACE - Noop, ENTER - End Turn",
-            "ESC - Quit"
+            "ESC - Quit",
         ]
-        
+
         x_offset = self.display_width - 200
         y_offset = 10
         for text in controls:
-            surface = self.small_font.render(text, True, self.colors['text'])
+            surface = self.small_font.render(text, True, self.colors["text"])
             self.screen.blit(surface, (x_offset, y_offset))
             y_offset += 20
 
@@ -356,42 +393,45 @@ class StagHuntHumanVisualization:
         print("Stag Hunt Physical - Human Player Visualization")
         print("Use the controls shown on screen to play the game.")
         print("Position yourself near resources and use R to attack!")
-        
+
         while self.running:
             self.handle_events()
             self.draw_world()
             self.draw_ui()
-            
+
             pygame.display.flip()
             self.clock.tick(self.fps)
-        
+
         pygame.quit()
 
 
 def main():
     """Main function."""
     import argparse
-    
-    parser = argparse.ArgumentParser(description="Stag Hunt Physical Human Player Visualization")
-    parser.add_argument("--config", default="configs/config_ascii_map.yaml", 
-                       help="Path to config file")
-    parser.add_argument("--tile-size", type=int, default=32, 
-                       help="Size of each tile in pixels")
-    parser.add_argument("--fps", type=int, default=10, 
-                       help="Frames per second")
-    
+
+    parser = argparse.ArgumentParser(
+        description="Stag Hunt Physical Human Player Visualization"
+    )
+    parser.add_argument(
+        "--config", default="configs/config_ascii_map.yaml", help="Path to config file"
+    )
+    parser.add_argument(
+        "--tile-size", type=int, default=32, help="Size of each tile in pixels"
+    )
+    parser.add_argument("--fps", type=int, default=10, help="Frames per second")
+
     args = parser.parse_args()
-    
+
     # Create and run the visualization
     game = StagHuntHumanVisualization(args.config)
     game.tile_size = args.tile_size
     game.fps = args.fps
-    
+
     # Recalculate display size
     game.display_width = game.world.width * game.tile_size
     game.display_height = game.world.height * game.tile_size
     game.screen = pygame.display.set_mode((game.display_width, game.display_height))
-    
+
     try:
         game.run()
     except KeyboardInterrupt:
@@ -399,9 +439,9 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 if __name__ == "__main__":
     main()
-

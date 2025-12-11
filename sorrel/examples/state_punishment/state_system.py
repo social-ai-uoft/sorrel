@@ -1,11 +1,11 @@
 """State system for managing punishment levels and voting in the state punishment
 game."""
 
+import random
 from copy import deepcopy
 from typing import Dict, List
 
 import numpy as np
-import random
 
 
 def generate_exponential_function(intercept: float, base: float):

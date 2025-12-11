@@ -47,7 +47,11 @@ def create_shared_social_harm(num_agents: int) -> Dict[int, float]:
 
 
 def create_individual_environments(
-    config, num_agents: int, simple_foraging: bool, use_random_policy: bool, run_folder: str = None
+    config,
+    num_agents: int,
+    simple_foraging: bool,
+    use_random_policy: bool,
+    run_folder: str = None,
 ) -> List[StatePunishmentEnv]:
     """Create individual environments for each agent.
 
@@ -71,7 +75,7 @@ def create_individual_environments(
         agent_config = OmegaConf.create(dict(config))
         agent_config.experiment.num_agents = 1  # Each environment has only one agent
         agent_config.model.n_frames = 1  # Single frame per observation
-        
+
         # Store the total number of agents for punishment observation calculation
         agent_config.experiment.total_num_agents = num_agents
 

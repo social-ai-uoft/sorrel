@@ -2,20 +2,20 @@ from datetime import datetime
 from pathlib import Path
 
 from sorrel.examples.treasurehunt.entities import EmptyEntity
-from sorrel.examples.treasurehunt_mp.env import TreasurehuntEnv
 from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_mp.env import TreasurehuntEnv
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 
 class CombinedLogger(Logger):
     """A logger that combines console and tensorboard logging."""
-    
+
     def __init__(self, max_epochs: int, log_dir: str | Path, *args):
         super().__init__(max_epochs, *args)
         self.console_logger = ConsoleLogger(max_epochs, *args)
         # TensorboardLogger takes (max_epochs, log_dir, *args)
         self.tensorboard_logger = TensorboardLogger(max_epochs, log_dir, *args)
-    
+
     def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
         # Log to both console and tensorboard
         self.console_logger.record_turn(epoch, loss, reward, epsilon)
@@ -24,6 +24,7 @@ class CombinedLogger(Logger):
         # Note: We don't call super().record_turn() to avoid assertion error
         # The parent Logger requires pre-declaring additional fields, but TensorBoard
         # logger handles kwargs dynamically
+
 
 # begin main
 if __name__ == "__main__":
@@ -64,18 +65,21 @@ if __name__ == "__main__":
     env = TreasurehuntWorld(config=config, default_entity=EmptyEntity())
     # construct the environment
     experiment = TreasurehuntEnv(env, config)
-    
+
     # Set up logging directory with timestamp
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_dir = Path(config.get("multiprocessing", {}).get("log_dir", "./logs")) / f"treasurehunt_mp_{timestamp}"
+    log_dir = (
+        Path(config.get("multiprocessing", {}).get("log_dir", "./logs"))
+        / f"treasurehunt_mp_{timestamp}"
+    )
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create logger (TensorBoard logger accepts kwargs directly, no need to pre-declare)
     logger = CombinedLogger(
         max_epochs=config["experiment"]["epochs"],
         log_dir=log_dir,
     )
-    
+
     # Run experiment with or without multiprocessing
     if config.get("multiprocessing", {}).get("enabled", False):
         # Use multiprocessing mode

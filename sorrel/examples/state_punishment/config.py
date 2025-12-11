@@ -18,11 +18,11 @@ def create_config(
     map_size: int = 10,
     num_resources: int = 8,
     learning_rate: float = 0.00025,
-    batch_size: int = 64, #64
-    memory_size: int = 1024, #1024
+    batch_size: int = 64,  # 64
+    memory_size: int = 1024,  # 1024
     target_update_frequency: int = 200,
-    exploration_rate: float = 0, # 0.9 #1.0
-    exploration_decay: float = 0.0001, 
+    exploration_rate: float = 0,  # 0.9 #1.0
+    exploration_decay: float = 0.0001,
     # 0.001
     exploration_min: float = 0.05,
     no_collective_harm: bool = True,
@@ -52,19 +52,19 @@ def create_config(
             }
         else:
             social_harm_config = {
-                "A": 0, # 2.16666667
-                "B": 0, # 2.86
-                "C": 1.2, # 4.99546667
-                "D": 3.5, # 11.572704
-                "E": 7.5, # 31.83059499
+                "A": 0,  # 2.16666667
+                "B": 0,  # 2.86
+                "C": 1.2,  # 4.99546667
+                "D": 3.5,  # 11.572704
+                "E": 7.5,  # 31.83059499
             }
     else:
         social_harm_config = {
-            "A": 0, # 2.16666667
-            "B": 0, # 2.86
-            "C": 1.2, # 4.99546667
-            "D": 3.5, # 11.572704
-            "E": 7.5, # 31.83059499
+            "A": 0,  # 2.16666667
+            "B": 0,  # 2.86
+            "C": 1.2,  # 4.99546667
+            "D": 3.5,  # 11.572704
+            "E": 7.5,  # 31.83059499
         }
 
     # flexible parameters
@@ -80,7 +80,7 @@ def create_config(
     delayed_punishment_tag = "delayed" if delayed_punishment else "immed"
     rule_type_tag = "important" if important_rule else "silly"
     punishment_obs_tag = "pobs" if punishment_observable else "pnoobs"
-    
+
     # Generate other punishment observation tag
     if observe_other_punishments:
         if disable_punishment_info:
@@ -89,7 +89,7 @@ def create_config(
             other_punishment_obs_tag = "pothobs"
     else:
         other_punishment_obs_tag = "pothnoobs"
-    
+
     # Appearance shuffling tags
     if enable_appearance_shuffling:
         appearance_shuffle_tag = f"shuffle{shuffle_frequency}"
@@ -102,11 +102,9 @@ def create_config(
         appearance_tag = f"app{constraint_tag}_{appearance_shuffle_tag}"
     else:
         appearance_tag = "noapp"
-    
+
     if simple_foraging:
-        run_name = (
-            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
-        )
+        run_name = f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
     else:
         run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
 
@@ -172,7 +170,7 @@ def create_config(
             "LR": learning_rate,
             "TAU": 0.001,
             "GAMMA": 0.95,
-            "n_quantiles": 12, # 12
+            "n_quantiles": 12,  # 12
             "device": "cpu",
             "target_update_frequency": target_update_frequency,
         },

@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from typing import Dict
+
 
 class ActionSpec:
     """A class that specifies the possible actions that can be taken by an agent.

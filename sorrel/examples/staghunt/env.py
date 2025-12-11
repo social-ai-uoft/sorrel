@@ -111,7 +111,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     "STEP_RIGHT",
                     "TURN_LEFT",
                     "TURN_RIGHT",
-                    "INTERACT"]
+                    "INTERACT",
+                ]
             )
             # create a simple IQN model; hyperparameters can be tuned via config
             model = PyTorchIQN(

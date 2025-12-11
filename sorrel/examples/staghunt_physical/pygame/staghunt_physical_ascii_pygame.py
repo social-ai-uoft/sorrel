@@ -1,5 +1,6 @@
-"""Enhanced Pygame implementation of Stag Hunt Physical that uses the exact same sprites and
-ASCII maps as the original Sorrel framework, with ATTACK/PUNISH actions and health system."""
+"""Enhanced Pygame implementation of Stag Hunt Physical that uses the exact same sprites
+and ASCII maps as the original Sorrel framework, with ATTACK/PUNISH actions and health
+system."""
 
 import os
 import sys
@@ -13,12 +14,15 @@ import pygame
 from PIL import Image
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent, StagHuntObservation
+from sorrel.examples.staghunt_physical.agents_v2 import (
+    StagHuntAgent,
+    StagHuntObservation,
+)
 from sorrel.examples.staghunt_physical.entities import (
+    AttackBeam,
     Empty,
     HareResource,
     InteractionBeam,
-    AttackBeam,
     PunishBeam,
     Sand,
     Spawn,
@@ -29,7 +33,8 @@ from sorrel.examples.staghunt_physical.world import StagHuntWorld
 
 
 class StagHuntPhysicalASCIIPygame:
-    """Enhanced pygame class for Stag Hunt Physical with ASCII maps and health system."""
+    """Enhanced pygame class for Stag Hunt Physical with ASCII maps and health
+    system."""
 
     def __init__(self, config=None):
         # Initialize pygame
@@ -306,24 +311,40 @@ class StagHuntPhysicalASCIIPygame:
             if resource_type == "stag":
                 world.add(
                     dynamic_loc,
-                    StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown),
+                    StagResource(
+                        world.stag_reward,
+                        world.stag_health,
+                        regeneration_cooldown=world.stag_regeneration_cooldown,
+                    ),
                 )
             elif resource_type == "hare":
                 world.add(
                     dynamic_loc,
-                    HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown),
+                    HareResource(
+                        world.hare_reward,
+                        world.hare_health,
+                        regeneration_cooldown=world.hare_regeneration_cooldown,
+                    ),
                 )
             elif resource_type == "random":
                 # Use stag_probability parameter for random resource type selection
                 if np.random.random() < world.stag_probability:
                     world.add(
                         dynamic_loc,
-                        StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown),
+                        StagResource(
+                            world.stag_reward,
+                            world.stag_health,
+                            regeneration_cooldown=world.stag_regeneration_cooldown,
+                        ),
                     )
                 else:
                     world.add(
                         dynamic_loc,
-                        HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown),
+                        HareResource(
+                            world.hare_reward,
+                            world.hare_health,
+                            regeneration_cooldown=world.hare_regeneration_cooldown,
+                        ),
                     )
 
         # Place empty entities on dynamic layer for non-resource, non-spawn locations
@@ -383,13 +404,9 @@ class StagHuntPhysicalASCIIPygame:
             dynamic = (y, x, world.dynamic_layer)
             # choose resource type based on stag_probability parameter
             if np.random.random() < world.stag_probability:
-                world.add(
-                    dynamic, StagResource(world.stag_reward, world.stag_health)
-                )
+                world.add(dynamic, StagResource(world.stag_reward, world.stag_health))
             else:
-                world.add(
-                    dynamic, HareResource(world.hare_reward, world.hare_health)
-                )
+                world.add(dynamic, HareResource(world.hare_reward, world.hare_health))
 
     def create_agents(self):
         """Create multiple agents for the game."""
@@ -456,7 +473,7 @@ class StagHuntPhysicalASCIIPygame:
                 action_spec=action_spec,
                 model=DummyModel(),
                 interaction_reward=self.config["world"]["interaction_reward"],
-                max_health=self.config["world"]["agent_health"]
+                max_health=self.config["world"]["agent_health"],
             )
 
             # Set the agent kind based on orientation
@@ -522,8 +539,8 @@ class StagHuntPhysicalASCIIPygame:
             pygame.K_q: "TURN_LEFT",
             pygame.K_e: "TURN_RIGHT",
             pygame.K_SPACE: "ATTACK",  # Changed from INTERACT to ATTACK
-            pygame.K_p: "PUNISH",      # New PUNISH action
-            pygame.K_r: "ATTACK",      # Alternative key for ATTACK
+            pygame.K_p: "PUNISH",  # New PUNISH action
+            pygame.K_r: "ATTACK",  # Alternative key for ATTACK
             pygame.K_RETURN: "END_TURN",  # Enter key to end turn manually
             pygame.K_ESCAPE: "QUIT",
         }
@@ -704,14 +721,14 @@ class StagHuntPhysicalASCIIPygame:
         screen_y = y * self.tile_size - 10
 
         # Background (red)
-        pygame.draw.rect(self.screen, (255, 0, 0), 
-                        (screen_x, screen_y, width, height))
-        
+        pygame.draw.rect(self.screen, (255, 0, 0), (screen_x, screen_y, width, height))
+
         # Health (green)
         health_width = int(width * current_health / max_health)
         if health_width > 0:
-            pygame.draw.rect(self.screen, (0, 255, 0), 
-                           (screen_x, screen_y, health_width, height))
+            pygame.draw.rect(
+                self.screen, (0, 255, 0), (screen_x, screen_y, health_width, height)
+            )
 
     def draw(self):
         """Draw the game world using exact same rendering as Sorrel."""

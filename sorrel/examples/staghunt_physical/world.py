@@ -121,11 +121,15 @@ class StagHuntWorld(Gridworld):
         self.hare_reward: float = float(get_world_param("hare_reward", 0.1))
         # Legacy parameter for backward compatibility
         self.taste_reward: float = float(get_world_param("taste_reward", 0.1))
-        self.destroyable_health: int = int(get_world_param("destroyable_health", 3))  # Legacy parameter
+        self.destroyable_health: int = int(
+            get_world_param("destroyable_health", 3)
+        )  # Legacy parameter
         self.respawn_lag: int = int(get_world_param("respawn_lag", 10))
         self.beam_length: int = int(get_world_param("beam_length", 3))
         self.beam_radius: int = int(get_world_param("beam_radius", 1))
-        self.beam_cooldown: int = int(get_world_param("beam_cooldown", 3))  # Legacy parameter
+        self.beam_cooldown: int = int(
+            get_world_param("beam_cooldown", 3)
+        )  # Legacy parameter
         self.attack_cooldown: int = int(get_world_param("attack_cooldown", 3))
         self.attack_cost: float = float(get_world_param("attack_cost", 0.05))
         self.punish_cooldown: int = int(get_world_param("punish_cooldown", 5))
@@ -134,23 +138,39 @@ class StagHuntWorld(Gridworld):
         self.payoff_matrix: list[list[int]] = [
             list(row) for row in get_world_param("payoff_matrix", [[4, 0], [2, 2]])
         ]
-        
+
         # New health system parameters
         self.stag_health: int = int(get_world_param("stag_health", 12))
         self.hare_health: int = int(get_world_param("hare_health", 3))
         self.agent_health: int = int(get_world_param("agent_health", 5))
-        self.health_regeneration_rate: float = float(get_world_param("health_regeneration_rate", 0.1))
-        self.stag_regeneration_cooldown: int = int(get_world_param("stag_regeneration_cooldown", 1))
-        self.hare_regeneration_cooldown: int = int(get_world_param("hare_regeneration_cooldown", 1))
-        self.reward_sharing_radius: int = int(get_world_param("reward_sharing_radius", 3))
+        self.health_regeneration_rate: float = float(
+            get_world_param("health_regeneration_rate", 0.1)
+        )
+        self.stag_regeneration_cooldown: int = int(
+            get_world_param("stag_regeneration_cooldown", 1)
+        )
+        self.hare_regeneration_cooldown: int = int(
+            get_world_param("hare_regeneration_cooldown", 1)
+        )
+        self.reward_sharing_radius: int = int(
+            get_world_param("reward_sharing_radius", 3)
+        )
         self.stag_probability: float = float(get_world_param("stag_probability", 0.2))
-        self.random_agent_spawning: bool = bool(get_world_param("random_agent_spawning", False))
-        self.simplified_movement: bool = bool(get_world_param("simplified_movement", False))
-        self.single_tile_attack: bool = bool(get_world_param("single_tile_attack", False))
+        self.random_agent_spawning: bool = bool(
+            get_world_param("random_agent_spawning", False)
+        )
+        self.simplified_movement: bool = bool(
+            get_world_param("simplified_movement", False)
+        )
+        self.single_tile_attack: bool = bool(
+            get_world_param("single_tile_attack", False)
+        )
         # Number of tiles to attack in front when single_tile_attack is True (default: 2)
         self.attack_range: int = int(get_world_param("attack_range", 2))
         self.area_attack: bool = bool(get_world_param("area_attack", False))
-        self.skip_spawn_validation: bool = bool(get_world_param("skip_spawn_validation", False))
+        self.skip_spawn_validation: bool = bool(
+            get_world_param("skip_spawn_validation", False)
+        )
         self.current_turn: int = 0  # Track current turn for regeneration
 
         # record spawn points; to be populated by the environment

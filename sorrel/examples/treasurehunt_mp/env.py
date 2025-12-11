@@ -116,45 +116,47 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
         for loc, agent in zip(agent_locations, self.agents):
             loc = tuple(loc)
             self.world.add(loc, agent)
-    
+
     def run_experiment_mp(
         self,
         animate: bool = True,
         logging: bool = True,
-        logger = None,
+        logger=None,
         output_dir: Path | None = None,
     ) -> None:
         """Run experiment with multiprocessing support.
-        
+
         This is an alternative to run_experiment() that uses multiprocessing.
         Original run_experiment() remains unchanged for backward compatibility.
-        
+
         Args:
             animate: Whether to animate the experiment. Defaults to True.
             logging: Whether to log the experiment. Defaults to True.
             logger: The logger to use. Defaults to None.
             output_dir: The directory to save outputs. Defaults to None.
         """
-        from sorrel.examples.treasurehunt_mp.mp.mp_system import MARLMultiprocessingSystem
         from sorrel.examples.treasurehunt_mp.mp.mp_config import MPConfig
-        
+        from sorrel.examples.treasurehunt_mp.mp.mp_system import (
+            MARLMultiprocessingSystem,
+        )
+
         # Create MP config from experiment config
         mp_config = MPConfig.from_experiment_config(self.config)
-        
+
         # Override with function arguments if provided
         mp_config.logging = logging
         if output_dir:
             mp_config.log_dir = str(output_dir)
         # Note: Animation is handled within ActorProcess based on config
-        
+
         # Initialize and run MP system
         mp_system = MARLMultiprocessingSystem(
             env=self,
             agents=self.agents,
             config=mp_config,
-            logger=logger if logging else None
+            logger=logger if logging else None,
         )
-        
+
         try:
             mp_system.start()
             mp_system.run()

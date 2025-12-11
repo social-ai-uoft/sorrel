@@ -158,7 +158,9 @@ class IngroupBiasMapGenerator:
             empty_locations=empty_locations,
         )
 
-    def validate_map_for_agents(self, map_data: IngroupBiasMapData, num_agents: int) -> None:
+    def validate_map_for_agents(
+        self, map_data: IngroupBiasMapData, num_agents: int
+    ) -> None:
         """Validate that the map has sufficient spawn points for the number of agents.
 
         Args:
@@ -188,9 +190,9 @@ class IngroupBiasMapGenerator:
 
         # Combine all resource locations for comparison
         all_resource_locations = (
-            map_data.red_resource_locations +
-            map_data.green_resource_locations +
-            map_data.blue_resource_locations
+            map_data.red_resource_locations
+            + map_data.green_resource_locations
+            + map_data.blue_resource_locations
         )
 
         # Check all possible overlaps
@@ -323,9 +325,9 @@ class IngroupBiasMapGenerator:
             "green_resources": len(map_data.green_resource_locations),
             "blue_resources": len(map_data.blue_resource_locations),
             "total_resources": (
-                len(map_data.red_resource_locations) +
-                len(map_data.green_resource_locations) +
-                len(map_data.blue_resource_locations)
+                len(map_data.red_resource_locations)
+                + len(map_data.green_resource_locations)
+                + len(map_data.blue_resource_locations)
             ),
             "empty_spaces": len(map_data.empty_locations),
         }

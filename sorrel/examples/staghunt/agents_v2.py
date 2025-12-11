@@ -60,9 +60,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             # This will be set when observe() is called
             self.input_size = (
                 1,
-                len(entity_list) * 0
-                + 4
-                + (4 * self.embedding_size)
+                len(entity_list) * 0 + 4 + (4 * self.embedding_size),
                 # + 2,  # Extra features + absolute position embedding (x, y)
             )  # Placeholder, will be updated
         else:
@@ -74,7 +72,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                     * (2 * self.vision_radius + 1)
                 )
                 + 4  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
-                + (4 * self.embedding_size)
+                + (4 * self.embedding_size),
                 # + 2,  # Absolute position embedding: x, y coordinates
             )
 

@@ -57,82 +57,113 @@ def parse_arguments():
         "--fixed_punishment", type=float, default=0.2, help="Fixed punishment level"
     )
     parser.add_argument(
-        "--punishment_level_accessible", action="store_true", 
-        help="Whether agents can access punishment level information"
+        "--punishment_level_accessible",
+        action="store_true",
+        help="Whether agents can access punishment level information",
     )
     parser.add_argument(
-        "--use_probabilistic_punishment", action="store_true",
-        help="Whether to use probabilistic punishment system"
+        "--use_probabilistic_punishment",
+        action="store_true",
+        help="Whether to use probabilistic punishment system",
     )
     parser.add_argument(
-        "--social_harm_accessible", action="store_true",
-        help="Whether agents can access social harm information"
+        "--social_harm_accessible",
+        action="store_true",
+        help="Whether agents can access social harm information",
     )
 
     parser.add_argument(
         "--no_collective_harm", action="store_true", help="no collective harm"
     )
     parser.add_argument(
-        "--delayed_punishment", action="store_true", help="Use delayed punishment mode (defer punishment to next turn)"
+        "--delayed_punishment",
+        action="store_true",
+        help="Use delayed punishment mode (defer punishment to next turn)",
     )
     parser.add_argument(
-        "--important_rule", action="store_true", help="Use important rule mode (entity A never punished, others normal)"
+        "--important_rule",
+        action="store_true",
+        help="Use important rule mode (entity A never punished, others normal)",
     )
     parser.add_argument(
-        "--punishment_observable", action="store_true", help="Make pending punishment observable in third feature"
+        "--punishment_observable",
+        action="store_true",
+        help="Make pending punishment observable in third feature",
     )
 
     # Appearance shuffling parameters
     parser.add_argument(
-        "--shuffle_frequency", type=int, default=20000, 
-        help="Frequency of entity appearance shuffling (every X epochs)"
+        "--shuffle_frequency",
+        type=int,
+        default=20000,
+        help="Frequency of entity appearance shuffling (every X epochs)",
     )
     parser.add_argument(
-        "--enable_appearance_shuffling", action="store_true", 
-        help="Enable entity appearance shuffling in observations"
+        "--enable_appearance_shuffling",
+        action="store_true",
+        help="Enable entity appearance shuffling in observations",
     )
     parser.add_argument(
-        "--shuffle_constraint", type=str, default="no_fixed", 
+        "--shuffle_constraint",
+        type=str,
+        default="no_fixed",
         choices=["no_fixed", "allow_fixed"],
-        help="Shuffling constraint: no_fixed=no entity stays same + unique targets, allow_fixed=any mapping allowed"
+        help="Shuffling constraint: no_fixed=no entity stays same + unique targets, allow_fixed=any mapping allowed",
     )
     parser.add_argument(
-        "--csv_logging", action="store_true", 
-        help="Enable CSV logging of entity appearance mappings"
+        "--csv_logging",
+        action="store_true",
+        help="Enable CSV logging of entity appearance mappings",
     )
     parser.add_argument(
-        "--mapping_file_path", type=str, default=None,
-        help="Path to file containing pre-generated mappings (optional)"
+        "--mapping_file_path",
+        type=str,
+        default=None,
+        help="Path to file containing pre-generated mappings (optional)",
     )
 
     # Punishment observation parameters
     parser.add_argument(
-        "--observe_other_punishments", action="store_true",
-        help="Enable agents to observe whether other agents were punished in the last turn"
+        "--observe_other_punishments",
+        action="store_true",
+        help="Enable agents to observe whether other agents were punished in the last turn",
     )
     parser.add_argument(
-        "--disable_punishment_info", action="store_true",
-        help="Disable punishment information in observations (keeps channel but sets to 0)"
+        "--disable_punishment_info",
+        action="store_true",
+        help="Disable punishment information in observations (keeps channel but sets to 0)",
     )
 
     # Model parameters
     # parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
-    parser.add_argument("--epsilon", type=float, default=0.0, help="Initial epsilon value for exploration (default: 0.0)")
+    parser.add_argument(
+        "--epsilon",
+        type=float,
+        default=0.0,
+        help="Initial epsilon value for exploration (default: 0.0)",
+    )
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
     parser.add_argument("--memory_size", type=int, default=1024, help="Memory size")
-    parser.add_argument("--save_models_every", type=int, default=1000, help="Save models every X epochs")
+    parser.add_argument(
+        "--save_models_every", type=int, default=1000, help="Save models every X epochs"
+    )
 
     # Logging
     parser.add_argument(
         "--experiment_name", type=str, default=None, help="Experiment name"
     )
     parser.add_argument(
-        "--disable_probe_test", action="store_true", help="Disable probe test functionality"
+        "--disable_probe_test",
+        action="store_true",
+        help="Disable probe test functionality",
     )
 
     # Random seed for reproducibility
     parser.add_argument(
-        "--seed", type=int, default=None, help="Random seed for reproducibility (if not set, uses default random state)"
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for reproducibility (if not set, uses default random state)",
     )
 
     return parser.parse_args()
@@ -140,7 +171,7 @@ def parse_arguments():
 
 def save_config(config, config_dir, run_folder, seed=None):
     """Save the configuration to a YAML file.
-    
+
     Args:
         config: Configuration dictionary
         config_dir: Directory to save config file
@@ -149,7 +180,7 @@ def save_config(config, config_dir, run_folder, seed=None):
     """
     # config_dir already includes the run_folder subdirectory, so no need to create it again
     config_file = config_dir / f"{run_folder}.yaml"
-    
+
     # Convert config to a serializable format
     config_dict = dict(config)
 
@@ -159,11 +190,11 @@ def save_config(config, config_dir, run_folder, seed=None):
         "run_folder": run_folder,
         "description": "Configuration used for state punishment experiment",
     }
-    
+
     # Add seed to metadata if available
     if seed is not None:
         metadata["seed"] = seed
-    
+
     config_dict["_metadata"] = metadata
 
     with open(config_file, "w") as f:
@@ -176,11 +207,12 @@ def save_config(config, config_dir, run_folder, seed=None):
 def save_command_line(log_dir, run_folder, args):
     """Save the command line arguments to a text file."""
     command_file = log_dir / f"{run_folder}_command.txt"
-    
+
     # Get the original command line arguments
     import sys
+
     command_line = " ".join(sys.argv)
-    
+
     # Create detailed command information
     command_info = f"""Command Line Arguments for Run: {run_folder}
 Generated at: {datetime.now().isoformat()}
@@ -190,15 +222,15 @@ Full Command:
 
 Parsed Arguments:
 """
-    
+
     # Add all arguments with their values
     for arg_name, arg_value in vars(args).items():
         command_info += f"  --{arg_name}: {arg_value}\n"
-    
+
     # Write to file
     with open(command_file, "w") as f:
         f.write(command_info)
-    
+
     print(f"Command line saved to: {command_file.absolute()}")
     return command_file
 
@@ -212,9 +244,11 @@ def run_experiment(args):
         # Store seed for later use in config saving
         run_experiment._seed = args.seed
     else:
-        print("No random seed specified - using default random state (not reproducible)")
+        print(
+            "No random seed specified - using default random state (not reproducible)"
+        )
         run_experiment._seed = None
-    
+
     # Create configuration
     config = create_config(
         num_agents=args.num_agents,
@@ -254,7 +288,9 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f"extended_random_exploration_L_n_tau_nstep5_{base_run_name}_{timestamp}"
+    run_folder = (
+        f"extended_random_exploration_L_n_tau_nstep5_{base_run_name}_{timestamp}"
+    )
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
@@ -272,15 +308,19 @@ def run_experiment(args):
 
     # Save the configuration
     config_file = save_config(config, config_dir, run_folder, seed=run_experiment._seed)
-    
+
     # Save the command line arguments in separate argv folder
     command_file = save_command_line(argv_dir, run_folder, args)
 
     # Set up environments
     multi_agent_env, shared_state_system, shared_social_harm = setup_environments(
-        config, args.simple_foraging, args.fixed_punishment, args.random_policy, run_folder
+        config,
+        args.simple_foraging,
+        args.fixed_punishment,
+        args.random_policy,
+        run_folder,
     )
-    
+
     # Add args to multi_agent_env for probe test access
     multi_agent_env.args = args
     # Add run_folder to args for probe test access
@@ -291,7 +331,7 @@ def run_experiment(args):
         max_epochs=args.epochs, log_dir=log_dir, experiment_name=experiment_name
     )
     logger.set_multi_agent_env(multi_agent_env)
-    
+
     # Create probe test logger (optional)
     probe_test_logger = None
     if not args.disable_probe_test:
@@ -319,7 +359,9 @@ def run_experiment(args):
     print(f"Composite actions: {args.composite_actions}")
     print(f"Simple foraging: {args.simple_foraging}")
     print(f"Random policy: {args.random_policy}")
-    print(f"Random seed: {args.seed if args.seed is not None else 'Not set (not reproducible)'}")
+    print(
+        f"Random seed: {args.seed if args.seed is not None else 'Not set (not reproducible)'}"
+    )
     print(f"Probe test: {'disabled' if args.disable_probe_test else 'enabled'}")
     print("-" * 50)
 

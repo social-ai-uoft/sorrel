@@ -21,16 +21,21 @@ from pathlib import Path
 import yaml
 
 from sorrel.examples.staghunt_physical.entities import Empty
-from sorrel.examples.staghunt_physical.env_with_probe_test import StagHuntEnvWithProbeTest
-from sorrel.examples.staghunt_physical.world import StagHuntWorld
+from sorrel.examples.staghunt_physical.env_with_probe_test import (
+    StagHuntEnvWithProbeTest,
+)
 from sorrel.examples.staghunt_physical.metrics_collector import StagHuntMetricsCollector
+from sorrel.examples.staghunt_physical.world import StagHuntWorld
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 
 class CombinedLogger(Logger):
-    """A logger that combines console and tensorboard logging with integrated metrics."""
+    """A logger that combines console and tensorboard logging with integrated
+    metrics."""
 
-    def __init__(self, max_epochs: int, log_dir: str | Path, experiment_env=None, *args):
+    def __init__(
+        self, max_epochs: int, log_dir: str | Path, experiment_env=None, *args
+    ):
         super().__init__(max_epochs, *args)
         self.console_logger = ConsoleLogger(max_epochs, *args)
         self.tensorboard_logger = TensorboardLogger(max_epochs, log_dir, *args)
@@ -42,9 +47,9 @@ class CombinedLogger(Logger):
         self.tensorboard_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
         # Also call parent to store data
         super().record_turn(epoch, loss, reward, epsilon, **kwargs)
-        
+
         # Log metrics for this epoch if experiment environment is available
-        if self.experiment_env and hasattr(self.experiment_env, 'metrics_collector'):
+        if self.experiment_env and hasattr(self.experiment_env, "metrics_collector"):
             self.experiment_env.log_epoch_metrics(epoch, self.tensorboard_logger.writer)
 
 
@@ -59,7 +64,7 @@ def run_stag_hunt() -> None:
             "max_turns": 100,
             # recording period for animation (unused here)
             "record_period": 200,
-            "run_name": "test_vis4_area_attack_3a_Nov04_with_epsilon1", # "staghunt_small_room_size7_regen1_v2_test_interval10"
+            "run_name": "test_vis4_area_attack_3a_Nov04_with_epsilon1",  # "staghunt_small_room_size7_regen1_v2_test_interval10"
             # Model saving configuration
             "save_models": True,  # Enable model saving
             "save_interval": 1000,  # Save models every X epochs
@@ -98,7 +103,7 @@ def run_stag_hunt() -> None:
             "epsilon_min": 0.05,
             # model architecture parameters
             "layer_size": 250,
-            "epsilon": 1,
+            "epsilon": 0,
             "n_frames": 1,
             "n_step": 3,
             "sync_freq": 200,
@@ -162,10 +167,9 @@ def run_stag_hunt() -> None:
             "interaction_reward": 1.0,
             # agent respawn parameters
             "respawn_delay": 10,  # Y: number of frames before agent respawns after removal
-            
             # New health system parameters
             "stag_health": 2,  # Health points for stags (requires coordination)
-            "hare_health": 1,   # Health points for hares (solo defeatable)
+            "hare_health": 1,  # Health points for hares (solo defeatable)
             "agent_health": 5,  # Health points for agents
             "health_regeneration_rate": 1,  # How fast resources regenerate health
             "reward_sharing_radius": 2,  # Radius for reward sharing when resources are defeated
@@ -175,34 +179,36 @@ def run_stag_hunt() -> None:
     # save config to YAML file with experiment name prefix
     config_dir = Path(__file__).parent / "configs"
     config_dir.mkdir(parents=True, exist_ok=True)  # ensure folder exists
-    
+
     # Create filename with experiment name prefix and timestamp
     experiment_name = config["experiment"]["run_name"]
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     config_filename = f"{experiment_name}_{timestamp}.yaml"
-    
+
     config_path = config_dir / config_filename
     with open(config_path, "w") as f:
         yaml.safe_dump(config, f, default_flow_style=False)
-    
+
     print(f"Configuration saved to: {config_path}")
 
     # construct the world; we pass our own Empty entity as the default
     world = StagHuntWorld(config=config, default_entity=Empty())
     # construct the environment with probe testing capability
     experiment = StagHuntEnvWithProbeTest(world, config)
-    
+
     # Add timestamp to config for model saving
     experiment.timestamp = timestamp
-    
+
     # Initialize metrics collection (no separate tracker needed)
     metrics_collector = StagHuntMetricsCollector()
-    
+
     # Add metrics collector to environment for agent access
     experiment.metrics_collector = metrics_collector
-    
-    print(f"Metrics tracking enabled - metrics will be integrated into main TensorBoard logs")
-    
+
+    print(
+        f"Metrics tracking enabled - metrics will be integrated into main TensorBoard logs"
+    )
+
     # run the experiment with both console and tensorboard logging
     experiment.run_experiment(
         logger=CombinedLogger(
@@ -211,11 +217,16 @@ def run_stag_hunt() -> None:
             / f'runs/{config["experiment"]["run_name"]}_{timestamp}',
             experiment_env=experiment,
         ),
-        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}',
+        output_dir=Path(__file__).parent
+        / f'data/{config["experiment"]["run_name"]}_{timestamp}',
     )
-    
-    print(f"Metrics tracking completed - all metrics integrated into main TensorBoard logs")
-    print(f"To view metrics, run: tensorboard --logdir runs/{config['experiment']['run_name']}_{timestamp}")
+
+    print(
+        f"Metrics tracking completed - all metrics integrated into main TensorBoard logs"
+    )
+    print(
+        f"To view metrics, run: tensorboard --logdir runs/{config['experiment']['run_name']}_{timestamp}"
+    )
 
 
 if __name__ == "__main__":

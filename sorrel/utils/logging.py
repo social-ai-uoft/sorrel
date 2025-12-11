@@ -163,7 +163,7 @@ class TensorboardLogger(Logger):
         """
         super().__init__(max_epochs=max_epochs, *args)
         if not os.path.exists(log_dir):
-            os.mkdir(log_dir)
+            os.makedirs(log_dir, exist_ok=True)
         self.writer = SummaryWriter(log_dir=log_dir)
 
     def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):

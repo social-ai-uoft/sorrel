@@ -1,7 +1,7 @@
 """Environment for the state punishment game."""
 
 from pathlib import Path
-from typing import List, override, Dict
+from typing import Dict, List, override
 
 import numpy as np
 import torch
@@ -23,34 +23,36 @@ from .world import StatePunishmentWorld
 
 class PunishmentTracker:
     """Minimal punishment tracker that hooks into existing flow."""
-    
+
     def __init__(self, num_agents: int):
         self.num_agents = num_agents
         self.last_turn_punishments = {i: False for i in range(num_agents)}
         self.current_turn_punishments = {i: False for i in range(num_agents)}
-    
+
     def record_punishment(self, agent_id: int):
         """Record that an agent was punished this turn."""
         self.current_turn_punishments[agent_id] = True
-    
+
     def end_turn(self):
         """Move current turn data to last turn data."""
         self.last_turn_punishments = self.current_turn_punishments.copy()
         self.current_turn_punishments = {i: False for i in range(self.num_agents)}
-    
-    def get_other_punishments(self, agent_id: int, disable_info: bool = False) -> List[float]:
+
+    def get_other_punishments(
+        self, agent_id: int, disable_info: bool = False
+    ) -> List[float]:
         """Get punishment status of other agents from last turn.
-        
+
         Args:
             agent_id: ID of the current agent
             disable_info: If True, return zeros instead of actual punishment info
-            
+
         Returns:
             List of punishment status (1.0 if punished, 0.0 if not, or 0.0 if disabled)
         """
         if disable_info:
             return [0.0] * (self.num_agents - 1)
-        
+
         punishments = []
         for i in range(self.num_agents):
             if i != agent_id:
@@ -222,7 +224,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         # Initialize punishment tracker if needed
         self.punishment_tracker = None
-        if any(env.config.experiment.get("observe_other_punishments", False) for env in individual_envs):
+        if any(
+            env.config.experiment.get("observe_other_punishments", False)
+            for env in individual_envs
+        ):
             self.punishment_tracker = PunishmentTracker(len(individual_envs))
 
     @override
@@ -275,13 +280,15 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     composite_observations[i],
                     self.shared_state_system,
                     self.shared_social_harm,
-                    punishment_tracker=self.punishment_tracker
+                    punishment_tracker=self.punishment_tracker,
                 )
             else:
                 # Use single agent view
                 state = agent.generate_single_view(
-                    env.world, self.shared_state_system, self.shared_social_harm,
-                    punishment_tracker=self.punishment_tracker
+                    env.world,
+                    self.shared_state_system,
+                    self.shared_social_harm,
+                    punishment_tracker=self.punishment_tracker,
                 )
 
             # Execute agent transition
@@ -296,8 +303,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 # Single view for this agent
                 composite_observations.append(
                     agent.generate_single_view(
-                        env.world, self.shared_state_system, self.shared_social_harm,
-                        punishment_tracker=self.punishment_tracker
+                        env.world,
+                        self.shared_state_system,
+                        self.shared_social_harm,
+                        punishment_tracker=self.punishment_tracker,
                     )
                 )
                 continue
@@ -328,11 +337,15 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         if self.punishment_tracker is not None:
             # Use new interface with info return
             reward, info = agent.act(
-                env.world, action, self.shared_state_system, self.shared_social_harm, return_info=True
+                env.world,
+                action,
+                self.shared_state_system,
+                self.shared_social_harm,
+                return_info=True,
             )
-            
+
             # Track punishment if it occurred
-            if info.get('is_punished', False):
+            if info.get("is_punished", False):
                 self.punishment_tracker.record_punishment(agent.agent_id)
         else:
             # Use original interface (backward compatible)
@@ -370,7 +383,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         logging: bool = True,
         logger: Logger | None = None,
         output_dir: Path | None = None,
-        probe_test_logger = None,
+        probe_test_logger=None,
     ) -> None:
         """Run the multi-agent experiment with coordination and optional probe tests."""
         renderer = None
@@ -385,44 +398,61 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         # Initialize probe test environment if probe test logger is provided
         probe_test_env = None
         if probe_test_logger is not None:
-            from sorrel.examples.state_punishment.probe_test import setup_probe_test_environment, PROBE_TEST_CONFIG
+            from sorrel.examples.state_punishment.probe_test import (
+                PROBE_TEST_CONFIG,
+                setup_probe_test_environment,
+            )
+
             probe_test_env, _, _ = setup_probe_test_environment(
-                self.config, 
-                getattr(self, 'args', None), 
-                PROBE_TEST_CONFIG["use_important_rule"]
+                self.config,
+                getattr(self, "args", None),
+                PROBE_TEST_CONFIG["use_important_rule"],
             )
 
         for epoch in range(self.config.experiment.epochs + 1):
             # Check if entity appearance shuffling should occur
             shuffle_occurred = False
-            if (self.config.experiment.enable_appearance_shuffling and 
-                epoch > 0 and 
-                epoch % self.config.experiment.shuffle_frequency == 0):
-                
+            if (
+                self.config.experiment.enable_appearance_shuffling
+                and epoch > 0
+                and epoch % self.config.experiment.shuffle_frequency == 0
+            ):
+
                 # Shuffle entity appearances in all environments using shared mapping
-                if self.individual_envs and self.individual_envs[0].entity_map_shuffler is not None:
+                if (
+                    self.individual_envs
+                    and self.individual_envs[0].entity_map_shuffler is not None
+                ):
                     # Use the first environment's shuffler to generate the mapping
-                    shared_mapping = self.individual_envs[0].entity_map_shuffler.shuffle_appearances()
-                    
+                    shared_mapping = self.individual_envs[
+                        0
+                    ].entity_map_shuffler.shuffle_appearances()
+
                     # Apply the same mapping to all environments
                     for env in self.individual_envs:
                         if env.entity_map_shuffler is not None:
-                            env.entity_map_shuffler.current_mapping = shared_mapping.copy()
+                            env.entity_map_shuffler.current_mapping = (
+                                shared_mapping.copy()
+                            )
                             # Apply shuffled mapping to all agents' observation specs
                             for agent in env.agents:
-                                if hasattr(agent, 'observation_spec'):
-                                    agent.observation_spec.entity_map = env.entity_map_shuffler.apply_to_entity_map(
-                                        agent.observation_spec.entity_map
+                                if hasattr(agent, "observation_spec"):
+                                    agent.observation_spec.entity_map = (
+                                        env.entity_map_shuffler.apply_to_entity_map(
+                                            agent.observation_spec.entity_map
+                                        )
                                     )
-                    
+
                     shuffle_occurred = True
-                    print(f"Epoch {epoch}: Entity appearances shuffled: {shared_mapping}")
-            
+                    print(
+                        f"Epoch {epoch}: Entity appearances shuffled: {shared_mapping}"
+                    )
+
             # Log appearance mapping for this epoch (even if no shuffle) - only log once
             if self.config.experiment.csv_logging and self.individual_envs:
                 # Use the first environment's shuffler to log (they should all be the same)
                 self.individual_envs[0].log_entity_appearances(epoch, shuffle_occurred)
-            
+
             # Reset all environments
             self.reset()
 
@@ -513,31 +543,41 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     agent.model.epsilon_decay(self.config.model.epsilon_decay)
 
             # Run probe test at specified intervals
-            if (probe_test_logger is not None and 
-                probe_test_env is not None and
-                epoch > 0 and 
-                epoch % PROBE_TEST_CONFIG["frequency"] == 0):
-                
+            if (
+                probe_test_logger is not None
+                and probe_test_env is not None
+                and epoch > 0
+                and epoch % PROBE_TEST_CONFIG["frequency"] == 0
+            ):
+
                 print(f"\n--- Running Probe Test at Training Epoch {epoch} ---")
-                
+
                 # Run probe test
-                from sorrel.examples.state_punishment.probe_test import run_probe_test, save_probe_test_models
+                from sorrel.examples.state_punishment.probe_test import (
+                    run_probe_test,
+                    save_probe_test_models,
+                )
+
                 probe_results = run_probe_test(
                     self,  # training environment
                     probe_test_env,  # probe test environment
                     epoch,
-                    PROBE_TEST_CONFIG["epochs"]
+                    PROBE_TEST_CONFIG["epochs"],
                 )
-                
+
                 # Log probe test results
                 probe_test_logger.record_probe_test(epoch, probe_results)
-                
+
                 # Save model checkpoints if requested
                 if PROBE_TEST_CONFIG["save_models"]:
-                    experiment_name = self.config.experiment.get("run_name", "experiment")
+                    experiment_name = self.config.experiment.get(
+                        "run_name", "experiment"
+                    )
                     save_probe_test_models(probe_test_env, epoch, experiment_name)
-                
-                print(f"Probe test completed. Avg reward: {probe_results['avg_total_reward']:.2f}")
+
+                print(
+                    f"Probe test completed. Avg reward: {probe_results['avg_total_reward']:.2f}"
+                )
                 print("--- End Probe Test ---\n")
 
             # Save models every X epochs
@@ -561,36 +601,38 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         # Save final models at the end of training
         self._save_models(self.config.experiment.epochs)
-        
+
         # Save final probe test results if probe test logger was used
         if probe_test_logger is not None:
             probe_test_logger.save_probe_test_results()
 
     def _save_models(self, epoch: int) -> None:
         """Save all agent models to the models directory.
-        
+
         Args:
             epoch: Current epoch number (for logging purposes)
         """
         from pathlib import Path
-        
+
         # Create models directory if it doesn't exist
         models_dir = Path(__file__).parent / "models"
         models_dir.mkdir(exist_ok=True)
-        
+
         # Get experiment name from config
         experiment_name = self.config.experiment.get("run_name", "experiment")
-        
+
         # Save each agent's model (overwrite previous versions)
         for env_idx, env in enumerate(self.individual_envs):
             for agent_idx, agent in enumerate(env.agents):
                 # Create filename with experiment name, environment, and agent info (no epoch)
-                model_filename = f"{experiment_name}_env_{env_idx}_agent_{agent_idx}.pth"
+                model_filename = (
+                    f"{experiment_name}_env_{env_idx}_agent_{agent_idx}.pth"
+                )
                 model_path = models_dir / model_filename
-                
+
                 # Save the model (overwrites previous version)
                 agent.model.save(model_path)
-                
+
         print(f"Saved models for epoch {epoch} to {models_dir.absolute()}")
 
 
@@ -610,18 +652,25 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
             resource_entities = ["A", "B", "C", "D", "E"]
             # Create entity_mappings folder and use run_folder as prefix in filename
             # We'll get the run_folder from the main.py when it's passed to the environment
-            csv_file_path = Path(__file__).parent / "data" / "entity_mappings" / "entity_appearances.csv"
+            csv_file_path = (
+                Path(__file__).parent
+                / "data"
+                / "entity_mappings"
+                / "entity_appearances.csv"
+            )
             # Set up mapping file path if provided
             mapping_file_path = config.experiment.get("mapping_file_path")
             if mapping_file_path:
                 mapping_file_path = Path(mapping_file_path)
-            
+
             self.entity_map_shuffler = EntityMapShuffler(
                 resource_entities=resource_entities,
                 csv_file_path=csv_file_path,
                 enable_logging=config.experiment.get("csv_logging", False),
-                shuffle_constraint=config.experiment.get("shuffle_constraint", "no_fixed"),
-                mapping_file_path=mapping_file_path
+                shuffle_constraint=config.experiment.get(
+                    "shuffle_constraint", "no_fixed"
+                ),
+                mapping_file_path=mapping_file_path,
             )
 
         # Simplified - no complex coordination needed
@@ -658,7 +707,11 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
             # Apply shuffled entity map if shuffling is enabled
             if self.entity_map_shuffler is not None:
-                observation_spec.entity_map = self.entity_map_shuffler.apply_to_entity_map(observation_spec.entity_map)
+                observation_spec.entity_map = (
+                    self.entity_map_shuffler.apply_to_entity_map(
+                        observation_spec.entity_map
+                    )
+                )
 
             # Don't override input size - let the observation spec handle it naturally
 
@@ -703,11 +756,13 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 * observation_spec.input_size[2]
                 + 3
             )
-            
+
             # Add punishment observation features if enabled
             if self.config.experiment.get("observe_other_punishments", False):
                 # Add features for other agents' punishment status (total_num_agents - 1)
-                total_num_agents = self.config.experiment.get("total_num_agents", self.config.experiment.num_agents)
+                total_num_agents = self.config.experiment.get(
+                    "total_num_agents", self.config.experiment.num_agents
+                )
                 num_other_agents = total_num_agents - 1
                 base_flattened_size += num_other_agents
 
@@ -747,12 +802,22 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_composite_actions=self.use_composite_actions,
                     simple_foraging=self.simple_foraging,
                     use_random_policy=self.use_random_policy,
-                    punishment_level_accessible=self.config.experiment.get("punishment_level_accessible", False),
-                    social_harm_accessible=self.config.experiment.get("social_harm_accessible", False),
-                    delayed_punishment=self.config.experiment.get("delayed_punishment", False),
+                    punishment_level_accessible=self.config.experiment.get(
+                        "punishment_level_accessible", False
+                    ),
+                    social_harm_accessible=self.config.experiment.get(
+                        "social_harm_accessible", False
+                    ),
+                    delayed_punishment=self.config.experiment.get(
+                        "delayed_punishment", False
+                    ),
                     important_rule=self.config.experiment.get("important_rule", False),
-                    punishment_observable=self.config.experiment.get("punishment_observable", False),
-                    disable_punishment_info=self.config.experiment.get("disable_punishment_info", False),
+                    punishment_observable=self.config.experiment.get(
+                        "punishment_observable", False
+                    ),
+                    disable_punishment_info=self.config.experiment.get(
+                        "disable_punishment_info", False
+                    ),
                 )
             )
 
@@ -851,20 +916,26 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         """Shuffle entity appearances in observation specs."""
         if self.entity_map_shuffler is None:
             return
-        
+
         # Shuffle the appearance mapping
         self.entity_map_shuffler.shuffle_appearances()
-        
+
         # Apply shuffled mapping to all agents' observation specs
         for agent in self.agents:
-            if hasattr(agent, 'observation_spec'):
-                agent.observation_spec.entity_map = self.entity_map_shuffler.apply_to_entity_map(
-                    agent.observation_spec.entity_map
+            if hasattr(agent, "observation_spec"):
+                agent.observation_spec.entity_map = (
+                    self.entity_map_shuffler.apply_to_entity_map(
+                        agent.observation_spec.entity_map
+                    )
                 )
-        
-        print(f"Entity appearances shuffled: {self.entity_map_shuffler.get_current_mapping()}")
 
-    def log_entity_appearances(self, epoch: int, shuffle_occurred: bool = False) -> None:
+        print(
+            f"Entity appearances shuffled: {self.entity_map_shuffler.get_current_mapping()}"
+        )
+
+    def log_entity_appearances(
+        self, epoch: int, shuffle_occurred: bool = False
+    ) -> None:
         """Log current entity appearance mapping to CSV."""
         if self.entity_map_shuffler is not None:
             self.entity_map_shuffler.log_to_csv(epoch, shuffle_occurred)
