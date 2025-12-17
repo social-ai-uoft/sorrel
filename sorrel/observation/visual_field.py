@@ -28,7 +28,7 @@ def visual_field(
             fill the space with appearances of this entity. Defaults to "Wall".
 
     Returns:
-        An array with dtype float64 of shape
+        An array with dtype float32 of shape
         `(number of channels, 2 * vision + 1, 2 * vision + 1)`.
         Or if vision or location is None:
         `(number of channels, world.width, world.layers)`.
@@ -39,7 +39,7 @@ def visual_field(
 
     # Create an array of equivalent shape to the world map, with C appearance channels
     new = np.stack(
-        [np.zeros_like(world.map, dtype=np.float64) for _ in range(num_channels)],
+        [np.zeros_like(world.map, dtype=np.float32) for _ in range(num_channels)],
         axis=0,
     )
 
@@ -52,7 +52,7 @@ def visual_field(
 
     # If no location, return the full visual field
     if location is None or vision is None:
-        return new.astype(np.float64)
+        return new.astype(np.float32)
 
     # Otherwise...
     else:
@@ -93,7 +93,7 @@ def visual_field(
                 # ...replace the appearance with the appearance of the fill entity in this channel.
                 new[index] = entity_map[fill_entity_kind][C]
         # Return the agent's sliced observation space
-        new = new.astype(np.float64)
+        new = new.astype(np.float32)
         # ==rotate==#
         # if hasattr(world.map[location], "direction"):
         #     new = np.rot90(new, k=world.map[location].direction % 4, axes=(1, 2)).copy()

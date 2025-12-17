@@ -42,7 +42,7 @@ def positional_embedding(
         embedding.append(np.sin(freq_y * y))
         embedding.append(np.cos(freq_y * y))
 
-    return np.array(embedding)
+    return np.array(embedding, dtype=np.float32)
 
 
 def generate_positional_embedding(
@@ -58,7 +58,7 @@ def generate_positional_embedding(
         np.ndarray: An array of the embedding values for all points on the grid.
     """
     # Initialize positional embeddings matrix
-    embeddings = np.zeros((grid_size[0], grid_size[1], 2 * (scale[0] + scale[1])))
+    embeddings = np.zeros((grid_size[0], grid_size[1], 2 * (scale[0] + scale[1])), dtype=np.float32)
 
     # Generate positional encodings for each resolution
     for x in range(grid_size[0]):
@@ -109,7 +109,7 @@ def recover_coordinates(
     grid_positions = np.array(
         [(x, y) for x in range(grid_size[0]) for y in range(grid_size[1])]
     ).reshape(np.prod(grid_size), -1)
-    recovered_coordinates = np.zeros((grid_size[0], grid_size[1], 2))
+    recovered_coordinates = np.zeros((grid_size[0], grid_size[1], 2), dtype=np.float32)
 
     for each_embedding, (x, y) in zip(embedding, grid_positions):
         distances = np.linalg.norm(all_embeddings - each_embedding, axis=1)

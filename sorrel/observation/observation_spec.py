@@ -161,7 +161,7 @@ class OneHotObservationSpec(ObservationSpec[np.ndarray]):
         num_classes = len(entity_list)
         for i, x in enumerate(entity_list):
             if x == "EmptyEntity":
-                entity_map[x] = np.zeros(num_classes)
+                entity_map[x] = np.zeros(num_classes, dtype=np.float32)
             else:
                 entity_map[x] = one_hot_encode(value=i, num_classes=num_classes)
         return entity_map

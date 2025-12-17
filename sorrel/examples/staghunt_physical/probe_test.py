@@ -794,3 +794,372 @@ class TestIntentionProbeTest:
                                 weight_stag,
                                 weight_hare
                             ])
+
+
+class MultiStepProbeTest:
+    """Probe test for measuring agent attack preferences over multiple steps."""
+    
+    def __init__(self, original_env, test_config, output_dir):
+        """Initialize multi-step probe test.
+        
+        Args:
+            original_env: The original training environment
+            test_config: Configuration for the probe test
+            output_dir: Directory to save results
+        """
+        self.original_env = original_env
+        self.test_config = test_config
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Get partner agent kinds from config
+        self.partner_agent_kinds = test_config.get("partner_agent_kinds", ["no_partner", "AgentKindA", "AgentKindB"])
+        
+        # Get list of test maps (default to test_multi_step.txt)
+        self.test_maps = test_config.get("test_maps", ["test_multi_step.txt"])
+        
+        # Get max test steps
+        self.max_test_steps = test_config.get("max_test_steps", 20)
+        
+        # CSV headers
+        self.csv_headers = [
+            "epoch", "agent_id", "partner_kind", "first_attack_target", 
+            "result", "turn_of_first_attack"
+        ]
+    
+    def _setup_test_env(self, map_file_name: str):
+        """Set up the test environment with specified ASCII map layout.
+        
+        Args:
+            map_file_name: Name of the ASCII map file to use
+        """
+        # Create minimal test config for ProbeTestEnvironment
+        minimal_test_config = {
+            "layout": {
+                "generation_mode": "ascii_map",
+                "ascii_map_file": map_file_name
+            },
+            "max_test_steps": self.max_test_steps,
+            "num_agents": 2,  # Focal agent + 1 fake agent
+            "skip_spawn_validation": True  # Skip validation for probe test mode
+        }
+        
+        # Create probe test environment
+        self.probe_env = ProbeTestEnvironment(self.original_env, minimal_test_config)
+        
+        # Override world settings
+        self.probe_env.test_config_dict["world"]["simplified_movement"] = True
+        self.probe_env.test_config_dict["world"]["single_tile_attack"] = True
+        self.probe_env.test_world.simplified_movement = True
+        self.probe_env.test_world.single_tile_attack = True
+        
+        # Override num_agents to match test_multi_step.txt layout (2 spawn points)
+        self.probe_env.test_config_dict["world"]["num_agents"] = 2
+        self.probe_env.test_world.num_agents = 2
+    
+    def _create_fake_agent(self, partner_kind: str | None, original_agent, agent_id: int):
+        """Create a fake agent with specified kind.
+        
+        Args:
+            partner_kind: Kind for fake agent (None = use original agent's kind, "no_partner" = skip)
+            original_agent: Original agent to copy attributes from
+            agent_id: ID for the fake agent
+        
+        Returns:
+            StagHuntAgent instance with specified kind, or None if partner_kind is "no_partner"
+        """
+        if partner_kind == "no_partner":
+            return None
+        
+        from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent
+        
+        # Determine partner kind
+        if partner_kind is None:
+            # Use original agent's kind
+            partner_kind = getattr(original_agent, 'agent_kind', None)
+        
+        # Get partner attributes (can_hunt, etc.) - default to True
+        partner_attrs = self.test_config.get("partner_agent_attributes", {})
+        can_hunt = partner_attrs.get("can_hunt", True)
+        
+        fake_agent = StagHuntAgent(
+            observation_spec=original_agent.observation_spec,
+            action_spec=original_agent.action_spec,
+            model=original_agent.model,  # Use same model (dummy for fake agent)
+            interaction_reward=original_agent.interaction_reward,
+            max_health=original_agent.max_health,
+            agent_id=agent_id,
+            agent_kind=partner_kind,
+            can_hunt=can_hunt,
+        )
+        return fake_agent
+    
+    def _run_single_test(self, probe_agent, agent_id, epoch, partner_kind, map_name, should_save_png: bool = True):
+        """Run a single multi-step test for one agent/partner combination.
+        
+        Args:
+            probe_agent: The ProbeTestAgent instance (focal agent)
+            agent_id: ID of the agent being tested
+            epoch: Current training epoch
+            partner_kind: Kind of partner agents ("no_partner", "AgentKindA", "AgentKindB", or None)
+            map_name: Name of the map file
+            should_save_png: Whether to save PNG visualization (default: True)
+        
+        Returns:
+            Tuple of (first_attack_target, result, turn_of_first_attack)
+            - first_attack_target: "stag", "hare", or "none"
+            - result: 1.0 (stag), 0.0 (hare), or 0.5 (no attack)
+            - turn_of_first_attack: Turn number when first attack occurred (or max_test_steps if no attack)
+        """
+        # Get spawn points directly from parsed map data (not from world, which might be filtered)
+        map_data = self.probe_env.test_world.map_generator.parse_map()
+        
+        # Convert to world coordinates (add dynamic layer)
+        all_spawn_points = [
+            (y, x, self.probe_env.test_world.dynamic_layer) 
+            for y, x in map_data.spawn_points
+        ]
+        
+        # Sort by row, then column
+        spawn_points = sorted(
+            all_spawn_points,
+            key=lambda pos: (pos[0], pos[1])  # Sort by row, then column
+        )
+        
+        if len(spawn_points) < 2:
+            raise ValueError(
+                f"Expected at least 2 spawn points, got {len(spawn_points)}. "
+                f"Map {map_name} should have 2 'A' characters for agent spawn points (focal agent and fake agent)."
+            )
+        
+        # Identify spawn points: upper (row 4, index 3) and center (row 7, index 6)
+        # Sort by row to get upper, center
+        upper_spawn = spawn_points[0]  # Smallest row (top) - should be row 3 (4 in 1-indexed) - fake agent
+        center_spawn = spawn_points[1]  # Middle row (center) - should be row 6 (7 in 1-indexed) - focal agent
+        
+        # Verify center spawn is at row 6 (row 7 in 1-indexed, focal agent position)
+        if center_spawn[0] != 6:  # Row 7 is index 6 (0-indexed)
+            print(f"Warning: Center spawn point is at row {center_spawn[0]} (1-indexed: {center_spawn[0]+1}), "
+                  f"expected row 6 (7 in 1-indexed). Using it as center anyway.")
+        
+        # Check if we need to spawn fake agent
+        has_partner = partner_kind != "no_partner"
+        
+        if has_partner:
+            # Create single fake agent
+            fake_agent = self._create_fake_agent(partner_kind, probe_agent.agent, agent_id=1)
+            
+            # Set up environment with focal agent and fake agent
+            # Order: [focal_agent, fake_agent]
+            # Spawn points: [center, upper]
+            reordered_spawn_points = [center_spawn, upper_spawn]
+            self.probe_env.test_world.agent_spawn_points = reordered_spawn_points
+            self.probe_env.test_world._probe_test_spawn_points = reordered_spawn_points
+            
+            # Set up environment with all agents
+            self.probe_env.test_env.override_agents([probe_agent.agent, fake_agent])
+        else:
+            # No partner: only spawn focal agent
+            reordered_spawn_points = [center_spawn]
+            self.probe_env.test_world.agent_spawn_points = reordered_spawn_points
+            self.probe_env.test_world._probe_test_spawn_points = reordered_spawn_points
+            
+            # Set up environment with only focal agent
+            self.probe_env.test_env.override_agents([probe_agent.agent])
+        
+        # Reset environment (this will place agents at spawn points)
+        self.probe_env.test_env.reset()
+        
+        # Get focal agent
+        focal_agent = self.probe_env.test_env.agents[0]
+        
+        # Ensure focal agent has the correct agent_id
+        focal_agent.agent_id = agent_id
+        
+        # Set fake agent orientation to face towards stag (south, orientation 2)
+        # The stag is at row 5, fake agent is at row 4, so fake agent should face south (larger rows)
+        if has_partner:
+            fake_agent = self.probe_env.test_env.agents[1]
+            fake_agent.orientation = 2  # SOUTH - facing towards larger rows (where stag is)
+            # Update agent kind to reflect new orientation
+            if hasattr(fake_agent, 'update_agent_kind'):
+                fake_agent.update_agent_kind()
+        
+        # Initialize attack tracking - ensure metrics collector has entry for this agent_id
+        if agent_id not in self.probe_env.metrics_collector.agent_metrics:
+            # Initialize metrics for this agent if not present
+            from collections import defaultdict
+            self.probe_env.metrics_collector.agent_metrics[agent_id] = defaultdict(int)
+        
+        initial_stag_attacks = self.probe_env.metrics_collector.agent_metrics[agent_id]['attacks_to_stags']
+        initial_hare_attacks = self.probe_env.metrics_collector.agent_metrics[agent_id]['attacks_to_hares']
+        
+        first_attack_target = "none"
+        result = 0.5  # Default: no attack
+        turn_of_first_attack = self.max_test_steps
+        
+        # Save visualization of initial state (if requested)
+        if should_save_png:
+            unit_test_dir = self.output_dir / "unit_test"
+            unit_test_dir.mkdir(parents=True, exist_ok=True)
+            map_name_clean = map_name.replace('.txt', '')
+            partner_kind_name = partner_kind if partner_kind != "no_partner" else "no_partner"
+            viz_filename = (
+                f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
+                f"map_{map_name_clean}_partner_{partner_kind_name}_initial_state.png"
+            )
+            viz_path = unit_test_dir / viz_filename
+            
+            try:
+                from sorrel.utils.visualization import render_sprite, image_from_array
+                layers = render_sprite(self.probe_env.test_world, tile_size=[32, 32])
+                composited = image_from_array(layers)
+                composited.save(viz_path)
+                print(f"  Saved initial state visualization to: {viz_path}")
+            except Exception as e:
+                print(f"  Warning: Failed to save visualization: {e}")
+        
+        # Run the test for max_test_steps turns
+        for turn in range(self.max_test_steps):
+            # Update world turn counter
+            self.probe_env.test_world.current_turn += 1
+            
+            # Update agent states (frozen/respawn logic)
+            self.probe_env.test_env.update_agent_states()
+            
+            # Handle entity transitions (resource regeneration, etc.)
+            from numpy import ndenumerate
+            for _, x in ndenumerate(self.probe_env.test_world.map):
+                if x.has_transitions and not isinstance(x, type(focal_agent)):
+                    x.transition(self.probe_env.test_world)
+            
+            # Only get action and act for focal agent (agents[0])
+            # Skip fake agents - they don't act
+            if focal_agent.can_act():
+                state = focal_agent.pov(self.probe_env.test_world)
+                action = focal_agent.get_action(state)
+                focal_agent.act(self.probe_env.test_world, action)
+            
+            # Process focal agent transition (cooldowns, etc.)
+            if focal_agent.can_act():
+                focal_agent.transition(self.probe_env.test_world)
+            
+            # Collect metrics for this step
+            self.probe_env.test_env.collect_metrics_for_step()
+            
+            # Check if focal agent performed an attack this turn
+            current_stag_attacks = self.probe_env.metrics_collector.agent_metrics[agent_id]['attacks_to_stags']
+            current_hare_attacks = self.probe_env.metrics_collector.agent_metrics[agent_id]['attacks_to_hares']
+            
+            # Check if attack counters increased
+            if current_stag_attacks > initial_stag_attacks:
+                # First attack was to a stag
+                if first_attack_target == "none":
+                    first_attack_target = "stag"
+                    result = 1.0
+                    turn_of_first_attack = turn + 1  # Turn is 1-indexed for reporting
+                    break  # Found first attack, stop testing
+            elif current_hare_attacks > initial_hare_attacks:
+                # First attack was to a hare
+                if first_attack_target == "none":
+                    first_attack_target = "hare"
+                    result = 0.0
+                    turn_of_first_attack = turn + 1  # Turn is 1-indexed for reporting
+                    break  # Found first attack, stop testing
+            
+            # Update initial counters for next turn
+            initial_stag_attacks = current_stag_attacks
+            initial_hare_attacks = current_hare_attacks
+        
+        return first_attack_target, result, turn_of_first_attack
+    
+    def run_multi_step_test(self, agents, epoch):
+        """Run multi-step probe test for all agents with all partner kind combinations.
+        
+        Runs tests for each combination of:
+        - Agent ID
+        - Map (test_multi_step.txt)
+        - Partner condition (no_partner, AgentKindA, AgentKindB, etc.)
+        
+        Args:
+            agents: List of original training agents
+            epoch: Current training epoch
+        """
+        # Calculate probe test number (which probe test this is, starting from 1)
+        test_interval = self.test_config.get("test_interval", 100)
+        probe_test_number = epoch // test_interval if epoch > 0 else 0
+        
+        # Determine if we should save PNGs
+        save_png_limit = self.test_config.get("save_png_for_first_n_tests", None)
+        if save_png_limit is None:
+            # None means save all PNGs
+            should_save_png = True
+        else:
+            # Only save PNGs for the first N probe tests
+            should_save_png = probe_test_number <= save_png_limit
+        
+        # Get selected agent IDs from config (if specified)
+        selected_agent_ids = self.test_config.get("selected_agent_ids", None)
+        if selected_agent_ids is None:
+            # Test all agents
+            agent_ids_to_test = list(range(len(agents)))
+        else:
+            agent_ids_to_test = selected_agent_ids
+        
+        # Create unit_test directory
+        unit_test_dir = self.output_dir / "unit_test"
+        unit_test_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Loop over all test maps
+        for map_file_name in self.test_maps:
+            # Set up environment for this map
+            self._setup_test_env(map_file_name)
+            
+            # Clean map name for filenames (remove .txt extension)
+            map_name_clean = map_file_name.replace('.txt', '')
+            
+            for agent_id in agent_ids_to_test:
+                if agent_id >= len(agents):
+                    continue  # Skip if agent_id out of range
+                
+                original_agent = agents[agent_id]
+                probe_agent = ProbeTestAgent(original_agent)
+                
+                # Run tests for each partner agent kind
+                for partner_kind in self.partner_agent_kinds:
+                    # Determine partner kind name for filename
+                    if partner_kind == "no_partner":
+                        partner_kind_name = "no_partner"
+                    elif partner_kind is None:
+                        focus_kind = getattr(original_agent, 'agent_kind', None)
+                        partner_kind_name = focus_kind or "same"
+                    else:
+                        partner_kind_name = partner_kind
+                    
+                    # Run the test
+                    first_attack_target, result, turn_of_first_attack = self._run_single_test(
+                        probe_agent, agent_id, epoch, partner_kind, map_file_name, should_save_png
+                    )
+                    
+                    # Generate filename
+                    csv_filename = (
+                        f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
+                        f"map_{map_name_clean}_partner_{partner_kind_name}.csv"
+                    )
+                    csv_path = unit_test_dir / csv_filename
+                    
+                    # Save results
+                    with open(csv_path, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(self.csv_headers)
+                        writer.writerow([
+                            epoch,
+                            agent_id,
+                            partner_kind_name,
+                            first_attack_target,
+                            result,
+                            turn_of_first_attack
+                        ])
+                    
+                    print(f"  Multi-step probe test - Agent {agent_id}, Partner {partner_kind_name}: "
+                          f"First attack = {first_attack_target}, Result = {result}, Turn = {turn_of_first_attack}")

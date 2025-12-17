@@ -367,7 +367,7 @@ class iRainbowModel(DoublePyTorchModel):
             # Compute Q targets for current states
             Q_targets = rewards.unsqueeze(-1) + (
                 self.GAMMA**self.n_step
-                * Q_targets_next.to(self.device)
+                * Q_targets_next
                 * (1.0 - dones.unsqueeze(-1))
             )
 

@@ -54,27 +54,30 @@ def run_stag_hunt() -> None:
     config = {
         "experiment": {
             # number of episodes/epochs to run
-            "epochs": 600000,
+            "epochs": 3000000,
             # maximum number of turns per episode
-            "max_turns": 100,
+            "max_turns": 50,
+            # If True, randomly sample number of turns per epoch from [1, max_turns] instead of using fixed max_turns
+            "random_max_turns": True,
             # recording period for animation (unused here)
             "record_period": 1000,
-            "run_name": "Nov19_not_all_can_hunt_test_partial_agent_spawning_max_turns5_epsilon0_random_map", # "staghunt_small_room_size7_regen1_v2_test_interval10"
+            # Base run name (max_turns and epsilon will be automatically appended)
+            "run_name_base": "corrected_Dec17_all_can_hunt_test_full_agent_spawning_stag100_spawn_lag_10_test_multi_step_accurate_reward_allocation", # Base name without max_turns/epsilon
             # Model saving configuration
-            "save_models": False,  # Enable model saving
-            "save_interval": 1000,  # Save models every X epochs
+            "save_models": True,  # Enable model saving
+            "save_interval": 2000,  # Save models every X epochs
         },
         "probe_test": {
             # Enable probe testing
             "enabled": True,
             # Test mode: "default" or "test_intention"
-            "test_mode": "test_intention",
+            "test_mode": "multi_step",
             # Run probe test every X epochs
             "test_interval": 100,
             # Only save PNG visualizations for the first N probe tests (None = save all)
             "save_png_for_first_n_tests": 3,  # Only save PNGs for first 3 probe tests
             # Maximum steps for each probe test
-            "max_test_steps": 1,  # Only 1 turn for test_intention
+            "max_test_steps": 15,  # Only 1 turn for test_intention
             # Number of test epochs to run per probe test (for statistical reliability)
             "test_epochs": 1,
             # Whether to test agents individually (True) or together (False)
@@ -105,10 +108,11 @@ def run_stag_hunt() -> None:
             },
             # Multi-map probe test configuration (for test_intention mode)
             "test_maps": [
-                "test_intention_probe_test_1.txt",
-                "test_intention_probe_test_2.txt",
-                "test_intention_probe_test_3.txt",
-                "test_intention_probe_test_4.txt"
+                # "test_intention_probe_test_1.txt",
+                # "test_intention_probe_test_2.txt",
+                # "test_intention_probe_test_3.txt",
+                # "test_intention_probe_test_4.txt"
+                "test_multi_step.txt"
             ],
             "orientation_reference_file": "agent_init_orientation_reference_probe_test.txt",  # Path to orientation reference file
         },
@@ -131,19 +135,21 @@ def run_stag_hunt() -> None:
             "TAU": 0.001,
             "GAMMA": 0.99,
             "n_quantiles": 12,
+            # Device for model training: "auto" (auto-detect), "cpu", "cuda", "mps", or "cuda:0", "cuda:1", etc.
+            "device": "cpu",
         },
         "world": {
             # map generation mode
             "generation_mode": "random",  # "random" or "ascii_map"
-            "ascii_map_file": "test_intention_full.txt",  # only used when generation_mode is "ascii_map"
+            "ascii_map_file": "test_intention_onlystag.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 9, # 13
-            "width": 9,
+            "height": 13, # 13
+            "width": 13,
             # number of players in the game
             "num_agents": 3,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
             # Only the spawned agents will act and learn in each epoch
-            "num_agents_to_spawn": 2,  # Spawn 2 out of 3 agents each epoch
+            "num_agents_to_spawn": 3,  # Spawn 2 out of 3 agents each epoch
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
             # If True in random mode, agents spawn randomly in valid locations instead of fixed spawn points
@@ -162,7 +168,7 @@ def run_stag_hunt() -> None:
             # stag_probability + hare_probability = 1.0
             "stag_probability": 0.5,  # 20% stag, 80% hare
             # separate reward values for stag and hare
-            "stag_reward": 24,  # Higher reward for stag (requires coordination)
+            "stag_reward": 100,  # Higher reward for stag (requires coordination)
             "hare_reward": 3,  # Lower reward for hare (solo achievable)
             # regeneration cooldown parameters
             "stag_regeneration_cooldown": 1,  # Turns to wait before stag regenerates
@@ -194,6 +200,8 @@ def run_stag_hunt() -> None:
             "agent_health": 5,  # Health points for agents
             "health_regeneration_rate": 1,  # How fast resources regenerate health
             "reward_sharing_radius": 2,  # Radius for reward sharing when resources are defeated
+            # Accurate reward allocation mode
+            "accurate_reward_allocation": True,  # If True, only agents that attacked and damaged the resource receive rewards (instead of radius-based sharing)
             # Wounded stag mechanism
             "use_wounded_stag": False,  # If True, stags change kind to 'WoundedStagResource' when health < max_health
             # Agent configuration system
@@ -204,19 +212,34 @@ def run_stag_hunt() -> None:
                     0: {
                         "kind": "AgentKindA",
                         "can_hunt": True,  # If False, attacks don't harm resources
+                        "can_receive_shared_reward": True,  # If False, agent won't receive shared rewards
+                        "exclusive_reward": False,  # If True, only the agent who defeats gets reward
                     },
                     1: {
                         "kind": "AgentKindA",
                         "can_hunt": True,
+                        "can_receive_shared_reward": True,
+                        "exclusive_reward": False,
                     },
                     2: {
                         "kind": "AgentKindB",
-                        "can_hunt": False,
+                        "can_hunt": True,
+                        "can_receive_shared_reward": True,
+                        "exclusive_reward": False,
                     },
                 # ... etc
             },
         },
     }
+
+    # Automatically construct run_name from base name and key parameters
+    run_name_base = config["experiment"].get("run_name_base", "staghunt_experiment")
+    max_turns = config["experiment"]["max_turns"]
+    epsilon = config["model"]["epsilon"]
+    generation_mode = config["world"].get("generation_mode", "random")
+    
+    # Construct run_name with automatic max_turns and epsilon
+    config["experiment"]["run_name"] = f"{run_name_base}_max_turns{max_turns}_epsilon{epsilon}_{generation_mode}_map"
 
     # save config to YAML file with experiment name prefix
     config_dir = Path(__file__).parent / "configs"

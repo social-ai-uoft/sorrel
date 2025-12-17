@@ -5,6 +5,7 @@ during the main training loop.
 """
 
 import os
+import random
 from pathlib import Path
 
 from sorrel.utils.logging import Logger
@@ -48,6 +49,16 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
             # Reset the environment at the start of each epoch
             self.reset()
 
+            # Sample random max turns if random_max_turns is enabled
+            random_max_turns = self.config.experiment.get("random_max_turns", False)
+            if random_max_turns:
+                max_turns = self.config.experiment.max_turns
+                # Sample from [1, max_turns] inclusive
+                self.current_epoch_max_turns = random.randint(1, max_turns)
+            else:
+                # Use fixed max_turns
+                self.current_epoch_max_turns = self.config.experiment.max_turns
+
             # Determine whether to animate this turn (reuse existing logic)
             animate_this_turn = animate and (
                 epoch % self.config.experiment.record_period == 0
@@ -58,8 +69,9 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
                 if agent.agent_id in self.spawned_agent_ids:
                     agent.model.start_epoch_action(epoch=epoch)
 
-            # Run the environment for the specified number of turns (reuse existing logic)
-            while not self.turn >= self.config.experiment.max_turns:
+            # Run the environment for the specified number of turns
+            # Use current_epoch_max_turns which may be randomly sampled
+            while not self.turn >= self.current_epoch_max_turns:
                 if animate_this_turn and renderer is not None:
                     renderer.add_image(self.world)
                 self.take_turn()
@@ -114,27 +126,26 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
     def _save_agent_models(self, epoch: int, output_dir: Path | None) -> None:
         """Save agent models to disk.
         
+        Models are saved to a 'models' folder at the root of staghunt_physical.
+        Each agent has one model file that gets overwritten on each save (no epoch in filename).
+        
         Args:
-            epoch: Current epoch number
-            output_dir: Directory to save models to
+            epoch: Current epoch number (for logging purposes)
+            output_dir: Not used, kept for compatibility
         """
-        if output_dir is None:
-            output_dir = Path(os.getcwd()) / "./data/"
+        # Create models directory at the root of staghunt_physical
+        models_dir = Path(__file__).parent / "models"
+        models_dir.mkdir(exist_ok=True)
         
-        # Create models directory
-        models_dir = output_dir / "models"
-        models_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Get experiment name and timestamp for file naming
+        # Get experiment name for file naming
         experiment_name = self.config.experiment.get("run_name", "experiment")
-        timestamp = getattr(self, 'timestamp', 'unknown')
         
         print(f"Saving agent models at epoch {epoch}")
         
-        # Save each agent's model
+        # Save each agent's model (overwrite previous versions)
         for agent_id, agent in enumerate(self.agents):
-            # Create filename: experiment_name_timestamp_agent_X_epoch_Y.pth
-            model_filename = f"{experiment_name}_{timestamp}_agent_{agent_id}_epoch_{epoch}.pth"
+            # Create filename without epoch number so it overwrites old checkpoints
+            model_filename = f"{experiment_name}_agent_{agent_id}.pth"
             model_path = models_dir / model_filename
             
             try:
