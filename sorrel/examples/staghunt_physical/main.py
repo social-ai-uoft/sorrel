@@ -61,10 +61,10 @@ def run_stag_hunt() -> None:
             # number of episodes/epochs to run
             "epochs": 3000000,
             # maximum number of turns per episode
-            "max_turns": 100,
+            "max_turns": 500,
             # recording period for animation (unused here)
             "record_period": 200,
-            "run_name": "test_vis4_area_attack_3a_Nov04_with_epsilon1",  # "staghunt_small_room_size7_regen1_v2_test_interval10"
+            "run_name": f"test4_with_emotion_500maxturns_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}",
             # Model saving configuration
             "save_models": True,  # Enable model saving
             "save_interval": 1000,  # Save models every X epochs

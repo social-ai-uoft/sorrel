@@ -453,6 +453,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             state: The observed input.
         """
         self.emotion = self.model.state_value(state)  # type: ignore
+        #self.emotion = 0.0  # type: ignore # for zero-ing out emotion layer
 
     # YQ CHANGED - END
 
@@ -588,7 +589,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                                 )
 
                             # Attack the resource
-                            defeated = entity.on_attack(world, world.current_turn)
+                            defeated = entity.on_attack(world, world.current_turn, self)
                             if defeated:
                                 # Handle reward sharing for defeated resource
                                 shared_reward = self.handle_resource_defeat(
@@ -906,6 +907,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 valid_beam_locs.append(loc)
 
         return valid_beam_locs
+    
+    # YQ CHANGED: change handle_resource_defeat, so that agents that attacked the resource are rewarded,
+    # rather than attackers within the sharing radius
 
     def handle_resource_defeat(self, resource, world: StagHuntWorld) -> float:
         """Handle reward sharing when a resource is defeated.
@@ -913,29 +917,34 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         Returns the reward this agent receives from the defeated resource. Also delivers
         shared rewards to other agents in the sharing radius.
         """
+        # OLD CODE: uses reward sharing radius
         # Find all agents within reward sharing radius
-        sharing_radius = getattr(world, "reward_sharing_radius", 3)
-        agents_in_radius = []
+        # sharing_radius = getattr(world, "reward_sharing_radius", 3)
+        # agents_in_radius = []
 
-        for agent in world.environment.agents:
-            if agent != self and not agent.is_removed:
-                # Calculate distance
-                dx = abs(agent.location[0] - resource.location[0])
-                dy = abs(agent.location[1] - resource.location[1])
-                distance = max(dx, dy)  # Chebyshev distance
+        # for agent in world.environment.agents:
+        #     if agent != self and not agent.is_removed:
+        #         # Calculate distance
+        #         dx = abs(agent.location[0] - resource.location[0])
+        #         dy = abs(agent.location[1] - resource.location[1])
+        #         distance = max(dx, dy)  # Chebyshev distance
 
-                if distance <= sharing_radius:
-                    agents_in_radius.append(agent)
+        #         if distance <= sharing_radius:
+        #             agents_in_radius.append(agent)
 
-        # Include the defeating agent
-        agents_in_radius.append(self)
-        total_agents = len(agents_in_radius)
+        # # Include the defeating agent
+        # agents_in_radius.append(self)
+        # total_agents = len(agents_in_radius)
 
-        # Share reward among all agents in radius
+        # NEW CODE: YQ CHANGED: uses resource.attacked_by
+        agents_to_be_rewarded = resource.attacked_by
+        total_agents = len(agents_to_be_rewarded)
+
+        # Share reward among all agents to be rewarded
         shared_reward = resource.value / total_agents if total_agents > 0 else 0
 
         # Deliver shared rewards to other agents via pending_reward
-        for agent in agents_in_radius:
+        for agent in agents_to_be_rewarded:
             if agent != self:  # Don't give pending reward to attacking agent
                 agent.pending_reward += shared_reward
                 # Record shared reward metrics for other agents
@@ -945,6 +954,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     world.environment.metrics_collector.collect_shared_reward_metrics(
                         agent, shared_reward
                     )
+        
+        # YQ CHANGED: empty the attacked_by list for the resource
+        resource.attacked_by.clear()
 
         # Note: Do NOT add resource.value directly to world.total_reward here.
         # The rewards are already accumulated correctly through Agent.transition():

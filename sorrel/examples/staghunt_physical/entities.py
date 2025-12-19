@@ -230,7 +230,15 @@ class Resource(Entity["StagHuntWorld"]):
         self.has_transitions = True
         # sprite will be set in subclasses
 
-    def on_attack(self, world: StagHuntWorld, current_turn: int) -> bool:
+        # YQ CHANGED: add a list to track the agents that attacked this entity
+        self.attacked_by: list[Entity] = []
+        # add a list to track the agents and their attack scores, to be used internally
+        self._attacked_by_and_attack_score: list[tuple[Entity, float]] = []
+        # add a regeneration tracker, to keep track of how much regeneration has occured, to remove earliest attackers from attacked_by accordingly
+        self.regeneration_tracker = 0 
+
+# YQ CHANGED: pass in the agent that attacked this entity, to add to the attacked_by list
+    def on_attack(self, world: StagHuntWorld, current_turn: int, attacker: Entity) -> bool:
         """Handle an attack on this resource.
 
         Reduces health by one and updates last attacked turn. Returns True if resource
@@ -238,8 +246,12 @@ class Resource(Entity["StagHuntWorld"]):
         """
         self.health -= 1
         self.last_attacked_turn = current_turn
+        # YQ CHANGED: add attacker to the attacked_by list
+        self.attacked_by.append(attacker)
+        self._attacked_by_and_attack_score.append((attacker, 1)) # attack_score is always 1, since health decreases by 1
 
         if self.health <= 0:
+            self._attacked_by_and_attack_score = []
             # Mark the Sand entity below as not ready to respawn and remember this resource type
             terrain_location = (self.location[0], self.location[1], world.terrain_layer)
             if world.valid_location(terrain_location):
@@ -252,7 +264,7 @@ class Resource(Entity["StagHuntWorld"]):
                     terrain_entity.respawn_timer = 0
                     terrain_entity.resource_type = (
                         self.name
-                    )  # Remember the resource type
+                    )  # Remember the resource type # YQ ASK YIKAI: why do we remember the resource type? does the same entity always spawn in the same spot?
 
             # replace with empty cell (attributes inherited from terrain layer)
             world.add(self.location, Empty())
@@ -272,9 +284,21 @@ class Resource(Entity["StagHuntWorld"]):
 
             # Regenerate if enough time has passed since last attack
             if turns_since_attack >= self.regeneration_cooldown:
+                prev_health = self.health
                 self.health = min(
                     self.max_health, self.health + world.health_regeneration_rate
                 )
+                
+                # YQ CHANGED: remove earliest attacker, if regenerating health
+                # YQ NOTE: this assumes the resource is regenerating at the same rate as the attacks' lethality
+                regenerated_amount = self.health - prev_health
+                if regenerated_amount > 0:
+                    self.regeneration_tracker += regenerated_amount
+
+                    while self.attacked_by and self._attacked_by_and_attack_score and self.regeneration_tracker >= self._attacked_by_and_attack_score[0][1]:
+                        self.attacked_by.pop(0)
+                        _, attack_value = self._attacked_by_and_attack_score.pop(0)
+                        self.regeneration_tracker -= attack_value
 
 
 class StagResource(Resource):
