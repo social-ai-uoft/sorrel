@@ -45,6 +45,10 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
         probe_enabled = probe_config.get("enabled", False)
         test_interval = probe_config.get("test_interval", 1000)
         
+        # Track if first probe test export has been done (initialize on first call)
+        if not hasattr(self, 'first_probe_test_exported'):
+            self.first_probe_test_exported = False
+        
         for epoch in range(self.config.experiment.epochs + 1):
             # Reset the environment at the start of each epoch
             self.reset()
@@ -116,6 +120,27 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
             if probe_enabled and epoch > 0 and epoch % test_interval == 0:
                 if output_dir is None:
                     output_dir = Path(os.getcwd()) / "./data/"
+                
+                # Export identity codes on first probe test (before running probe test)
+                if not self.first_probe_test_exported:
+                    if hasattr(self, 'agents') and self.agents and len(self.agents) > 0:
+                        try:
+                            from sorrel.examples.staghunt_physical.env import export_agent_identity_codes
+                            export_agent_identity_codes(
+                                agents=self.agents,
+                                output_dir=output_dir,
+                                epoch=epoch,
+                                context="probe_test"
+                            )
+                        except ImportError:
+                            # Function not available (shouldn't happen, but handle gracefully)
+                            print(f"Warning: Could not import export_agent_identity_codes function")
+                        except Exception as e:
+                            # Any other error during export (log but don't stop probe test)
+                            print(f"Warning: Error exporting identity codes: {e}")
+                    self.first_probe_test_exported = True
+                
+                # Run probe test (existing functionality, unchanged)
                 run_probe_test(self, epoch, output_dir)
             
             # Save models if enabled and it's time (new functionality)

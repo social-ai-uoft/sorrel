@@ -62,7 +62,9 @@ def run_stag_hunt() -> None:
             # recording period for animation (unused here)
             "record_period": 1000,
             # Base run name (max_turns and epsilon will be automatically appended)
-            "run_name_base": "corrected_Dec17_all_can_hunt_test_full_agent_spawning_stag100_spawn_lag_10_test_multi_step_accurate_reward_allocation", # Base name without max_turns/epsilon
+            "run_name_base": "debug", #'
+            #"test_full_identity_system_individual_recognition_v0", 
+            # # Base name without max_turns/epsilon
             # Model saving configuration
             "save_models": True,  # Enable model saving
             "save_interval": 2000,  # Save models every X epochs
@@ -146,10 +148,10 @@ def run_stag_hunt() -> None:
             "height": 13, # 13
             "width": 13,
             # number of players in the game
-            "num_agents": 3,
+            "num_agents": 4,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
             # Only the spawned agents will act and learn in each epoch
-            "num_agents_to_spawn": 3,  # Spawn 2 out of 3 agents each epoch
+            "num_agents_to_spawn": 4,  # Spawn 2 out of 3 agents each epoch
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
             # If True in random mode, agents spawn randomly in valid locations instead of fixed spawn points
@@ -222,12 +224,27 @@ def run_stag_hunt() -> None:
                         "exclusive_reward": False,
                     },
                     2: {
+                        "kind": "AgentKindA",
+                        "can_hunt": False,
+                        "can_receive_shared_reward": True,
+                        "exclusive_reward": False,
+                    },
+                    3: {
                         "kind": "AgentKindB",
-                        "can_hunt": True,
+                        "can_hunt": False,
                         "can_receive_shared_reward": True,
                         "exclusive_reward": False,
                     },
                 # ... etc
+            },
+            # Agent identity system configuration
+            "agent_identity": {
+                "enabled": True,  # Set to True to enable identity channels
+                "mode": "unique_and_group",  # Options: "unique_onehot", "unique_and_group", "custom"
+                "agent_entity_mode": "generic",  # Options: "detailed" (separate entities per kind+orientation) or "generic" (single "Agent" entity)
+                # For custom mode, also provide:
+                # "custom_encoder": your_custom_encoder_function,
+                # "custom_encoder_size": 10,  # Size of custom encoder output
             },
         },
     }
@@ -269,7 +286,37 @@ def run_stag_hunt() -> None:
     
     # Add metrics collector to environment for agent access
     experiment.metrics_collector = metrics_collector
-    
+
+    # Export agent identity codes at simulation start
+    # Use the same output_dir path that will be passed to run_experiment()
+    output_dir = Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}'
+    if hasattr(experiment, 'agents') and experiment.agents and len(experiment.agents) > 0:
+        try:
+            from sorrel.examples.staghunt_physical.env import export_agent_identity_codes
+            export_agent_identity_codes(
+                agents=experiment.agents,
+                output_dir=output_dir,
+                epoch=None,
+                context="initialization",
+                world=experiment.world
+            )
+        except ImportError as e:
+            # Function not available (shouldn't happen, but handle gracefully)
+            print(f"Warning: Could not import export_agent_identity_codes function: {e}")
+        except Exception as e:
+            # Any other error during export (log but don't stop simulation)
+            print(f"Warning: Error exporting identity codes at initialization: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        # Debug: Check why export didn't run
+        if not hasattr(experiment, 'agents'):
+            print("Debug: experiment has no 'agents' attribute")
+        elif not experiment.agents:
+            print("Debug: experiment.agents is empty or None")
+        elif len(experiment.agents) == 0:
+            print("Debug: experiment.agents has length 0")
+
     print(f"Metrics tracking enabled - metrics will be integrated into main TensorBoard logs")
     
     # run the experiment with both console and tensorboard logging

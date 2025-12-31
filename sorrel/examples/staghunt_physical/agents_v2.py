@@ -39,12 +39,200 @@ from sorrel.observation import embedding, observation_spec
 from sorrel.worlds import Gridworld
 
 
+class AgentIdentityEncoder:
+    """Encodes agent identity into observation vectors."""
+    
+    def __init__(
+        self,
+        mode: str,
+        num_agents: int,
+        agent_kinds: list[str] | None = None,
+        custom_encoder: callable | None = None,
+        custom_encoder_size: int | None = None,
+    ):
+        self.mode = mode
+        self.num_agents = num_agents
+        self.agent_kinds = agent_kinds or []
+        self.custom_encoder = custom_encoder
+        
+        # Calculate encoding size
+        # Each component (agent_id, kind, orientation) now includes an N/A option (+1)
+        if mode == "unique_onehot":
+            # Agent ID component: num_agents + 1 (N/A option)
+            agent_id_size = num_agents + 1
+            # Agent Kind component: num_kinds + 1 (N/A option)
+            agent_kind_size = (len(set(agent_kinds)) + 1) if agent_kinds else 1  # At least 1 for N/A
+            # Orientation component: 4 + 1 (N/A option)
+            orientation_size = 4 + 1
+            self.encoding_size = agent_id_size + agent_kind_size + orientation_size
+        elif mode == "unique_and_group":
+            # Same structure as unique_onehot
+            unique_size = num_agents + 1
+            group_size = (len(set(agent_kinds)) + 1) if agent_kinds else 1
+            orientation_size = 4 + 1
+            self.encoding_size = unique_size + group_size + orientation_size
+        elif mode == "custom":
+            # Size must be provided explicitly for custom mode
+            if custom_encoder is None:
+                raise ValueError("custom_encoder function required for custom mode")
+            # Try to determine size: first use provided size, then try test encoding
+            if custom_encoder_size is not None:
+                self.encoding_size = custom_encoder_size
+            else:
+                try:
+                    test_output = custom_encoder(0, None, 0, None, None)  # agent_id=0, agent_kind=None, orientation=0, world=None, config=None
+                    if hasattr(test_output, '__len__'):
+                        self.encoding_size = len(test_output)
+                    else:
+                        self.encoding_size = None
+                except Exception:
+                    # If test encoding fails, encoding_size must be provided via config
+                    self.encoding_size = None
+        else:
+            raise ValueError(f"Unknown identity mode: {mode}")
+    
+    def encode(
+        self,
+        agent_id: int,
+        agent_kind: str | None,
+        orientation: int | None = None,
+        world: Gridworld | None = None,
+        config: dict | None = None,
+    ) -> np.ndarray:
+        """Encode agent identity into a vector.
+        
+        Each component (agent_id, kind, orientation) includes an N/A option.
+        For agents: N/A flag is set to 0 (not N/A)
+        For non-agents: N/A flag is set to 1 (N/A) - handled in observe() method
+        """
+        if self.mode == "unique_onehot":
+            # Agent ID component: [agent_id_onehot, N/A_flag]
+            agent_id_code = np.zeros(self.num_agents + 1, dtype=np.float32)
+            if 0 <= agent_id < self.num_agents:
+                agent_id_code[agent_id] = 1.0
+            else:
+                agent_id_code[-1] = 1.0  # N/A if invalid agent_id
+            identity_code = agent_id_code
+            
+            # Agent Kind component: [kind_onehot, N/A_flag]
+            if self.agent_kinds:
+                unique_kinds = sorted(set(self.agent_kinds))
+                kind_code = np.zeros(len(unique_kinds) + 1, dtype=np.float32)
+                if agent_kind and agent_kind in unique_kinds:
+                    kind_index = unique_kinds.index(agent_kind)
+                    kind_code[kind_index] = 1.0
+                else:
+                    kind_code[-1] = 1.0  # N/A if no kind or kind not in list
+                identity_code = np.concatenate([identity_code, kind_code])
+            else:
+                # No kinds specified: just N/A flag
+                kind_code = np.array([1.0], dtype=np.float32)  # N/A
+                identity_code = np.concatenate([identity_code, kind_code])
+            
+            # Orientation component: [orientation_onehot, N/A_flag]
+            orientation_code = np.zeros(4 + 1, dtype=np.float32)
+            if orientation is not None and 0 <= orientation < 4:
+                orientation_code[orientation] = 1.0
+            else:
+                orientation_code[-1] = 1.0  # N/A if no orientation or invalid
+            identity_code = np.concatenate([identity_code, orientation_code])
+            
+            return identity_code
+        
+        elif self.mode == "unique_and_group":
+            # Agent ID component: [agent_id_onehot, N/A_flag]
+            unique_code = np.zeros(self.num_agents + 1, dtype=np.float32)
+            if 0 <= agent_id < self.num_agents:
+                unique_code[agent_id] = 1.0
+            else:
+                unique_code[-1] = 1.0  # N/A
+            identity_code = unique_code
+            
+            # Group/Kind component: [kind_onehot, N/A_flag]
+            if self.agent_kinds:
+                unique_kinds = sorted(set(self.agent_kinds))
+                group_code = np.zeros(len(unique_kinds) + 1, dtype=np.float32)
+                if agent_kind and agent_kind in unique_kinds:
+                    kind_index = unique_kinds.index(agent_kind)
+                    group_code[kind_index] = 1.0
+                else:
+                    group_code[-1] = 1.0  # N/A
+                identity_code = np.concatenate([identity_code, group_code])
+            else:
+                group_code = np.array([1.0], dtype=np.float32)  # N/A
+                identity_code = np.concatenate([identity_code, group_code])
+            
+            # Orientation component: [orientation_onehot, N/A_flag]
+            orientation_code = np.zeros(4 + 1, dtype=np.float32)
+            if orientation is not None and 0 <= orientation < 4:
+                orientation_code[orientation] = 1.0
+            else:
+                orientation_code[-1] = 1.0  # N/A
+            identity_code = np.concatenate([identity_code, orientation_code])
+            
+            return identity_code
+        
+        elif self.mode == "custom":
+            if self.custom_encoder is None:
+                raise ValueError("Custom encoder function required for custom mode")
+            # For custom mode, assume the encoder handles its own structure
+            # If user wants N/A flags, they should include them in their custom encoder
+            identity_code = self.custom_encoder(agent_id, agent_kind, orientation, world, config)
+            return identity_code
+        
+        else:
+            raise ValueError(f"Unknown identity mode: {self.mode}")
+
+
 class StagHuntObservation(observation_spec.OneHotObservationSpec):
     """Custom observation function for the StagHunt agent class.
 
     This observation spec includes inventory, ready flag, and position embedding as
     extra features, similar to the cleanup example's positional embedding approach.
     """
+    
+    def _create_na_identity_code(self) -> np.ndarray:
+        """Create identity code with all components set to N/A.
+        
+        Returns:
+            Identity code vector where all components (agent_id, kind, orientation) 
+            have their N/A flags set to 1.
+            
+        Note:
+            For custom mode, returns all zeros (user's custom encoder should handle N/A).
+        """
+        if not self.identity_enabled:
+            return np.array([], dtype=np.float32)
+        
+        # For custom mode, we can't know the structure, so return zeros
+        # User's custom encoder should handle N/A flags if desired
+        if self.identity_encoder.mode == "custom":
+            identity_size = self.identity_encoder.encoding_size or self.identity_config.get("custom_encoder_size", 0)
+            return np.zeros(identity_size, dtype=np.float32)
+        
+        na_code = np.array([], dtype=np.float32)
+        
+        # Agent ID component: all zeros + N/A=1
+        agent_id_size = self.identity_encoder.num_agents + 1
+        agent_id_na = np.zeros(agent_id_size, dtype=np.float32)
+        agent_id_na[-1] = 1.0  # N/A flag
+        na_code = np.concatenate([na_code, agent_id_na])
+        
+        # Agent Kind component: all zeros + N/A=1
+        if self.identity_encoder.agent_kinds:
+            kind_size = len(set(self.identity_encoder.agent_kinds)) + 1
+        else:
+            kind_size = 1
+        kind_na = np.zeros(kind_size, dtype=np.float32)
+        kind_na[-1] = 1.0  # N/A flag
+        na_code = np.concatenate([na_code, kind_na])
+        
+        # Orientation component: all zeros + N/A=1
+        orientation_na = np.zeros(4 + 1, dtype=np.float32)
+        orientation_na[-1] = 1.0  # N/A flag
+        na_code = np.concatenate([na_code, orientation_na])
+        
+        return na_code
 
     def __init__(
         self,
@@ -53,32 +241,101 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         vision_radius: int | None = None,
         embedding_size: int = 3,
         env_dims: tuple[int, ...] | None = None,
+        identity_config: dict | None = None,
+        num_agents: int | None = None,
+        agent_kinds: list[str] | None = None,
     ):
         super().__init__(entity_list, full_view, vision_radius, env_dims)
         self.embedding_size = embedding_size
 
+        # Identity encoding setup
+        self.identity_config = identity_config or {}
+        self.identity_enabled = self.identity_config.get("enabled", False)
+        
+        if self.identity_enabled:
+            mode = self.identity_config.get("mode", "unique_onehot")
+            self.identity_encoder = AgentIdentityEncoder(
+                mode=mode,
+                num_agents=num_agents or 0,
+                agent_kinds=agent_kinds,
+                custom_encoder=self.identity_config.get("custom_encoder"),
+                custom_encoder_size=self.identity_config.get("custom_encoder_size"),
+            )
+            
+            # For custom mode, encoding_size might be None - use provided size or infer
+            if mode == "custom" and self.identity_encoder.encoding_size is None:
+                custom_size = self.identity_config.get("custom_encoder_size")
+                if custom_size is None:
+                    raise ValueError("custom_encoder_size must be provided for custom mode when encoder size cannot be inferred")
+                identity_size = custom_size
+            else:
+                identity_size = self.identity_encoder.encoding_size
+            
+            # PRE-GENERATE identity_map (similar to entity_map)
+            # Maps (agent_id, agent_kind, orientation) tuples to pre-computed identity codes
+            # This map will be used to populate agent.identity_code attributes
+            self.identity_map: dict[tuple[int, str | None, int], np.ndarray] = {}
+            
+            # Pre-compute identity codes for all possible agent configurations
+            # Include all combinations of agent_id, agent_kind, and orientation
+            orientations = [0, 1, 2, 3]  # North, East, South, West
+            
+            if mode == "unique_onehot" or mode == "unique_and_group":
+                # For these modes, identity depends on agent_id, agent_kind, and orientation
+                # Pre-generate identity codes for all combinations
+                # Build unique_kinds list: include all provided kinds + None (for agents without assigned kind)
+                if agent_kinds:
+                    unique_kinds = sorted(set(agent_kinds)) + [None]  # Include None for agents without kind
+                else:
+                    unique_kinds = [None]  # Only None if no kinds specified
+                
+                # Generate identity codes for all combinations
+                for agent_id in range(num_agents or 0):
+                    for agent_kind in unique_kinds:
+                        for orientation in orientations:
+                            identity_code = self.identity_encoder.encode(
+                                agent_id=agent_id,
+                                agent_kind=agent_kind,
+                                orientation=orientation,
+                                world=None,
+                                config=None,
+                            )
+                            self.identity_map[(agent_id, agent_kind, orientation)] = identity_code
+            elif mode == "custom":
+                # For custom mode, identity codes are generated on the fly (by design)
+                # identity_map remains empty - agents generate codes when update_agent_kind() is called
+                # This is the only mode that uses on-the-fly encoding
+                self.identity_map = {}
+        else:
+            self.identity_encoder = None
+            self.identity_map = {}
+            identity_size = 0
+
         # Calculate input size including extra features and position embedding
+        # Identity channels are added to visual field, not separately
+        # Visual field size increases: each cell gets identity_size additional channels
+        identity_channels_per_cell = identity_size if self.identity_enabled else 0
+        visual_field_size = (
+            (len(self.entity_list) + identity_channels_per_cell)
+            * (2 * self.vision_radius + 1)
+            * (2 * self.vision_radius + 1)
+        ) if not self.full_view else 0
+        
         if self.full_view:
             # For full view, we need to know the world dimensions
             # This will be set when observe() is called
             self.input_size = (
                 1,
-                len(entity_list) * 0
+                visual_field_size
                 + 4
                 + (4 * self.embedding_size)
-                # + 2,  # Extra features + absolute position embedding (x, y)
             )  # Placeholder, will be updated
         else:
             self.input_size = (
                 1,
-                (
-                    len(entity_list)
-                    * (2 * self.vision_radius + 1)
-                    * (2 * self.vision_radius + 1)
-                )
+                visual_field_size
                 + 4  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
-                + (4 * self.embedding_size)
-                # + 2,  # Absolute position embedding: x, y coordinates
+                + (4 * self.embedding_size)  # Positional embedding
             )
 
     def observe(
@@ -96,56 +353,175 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         if location is None:
             raise ValueError("Location must be provided for StagHuntObservation")
 
-        # Get the base visual observation
-        visual_field = super().observe(world, location).flatten()
-
-        # Calculate expected size for a perfect square observation
-        expected_side_length = 2 * self.vision_radius + 1
-        expected_visual_size = (
-            len(self.entity_list) * expected_side_length * expected_side_length
-        )
-
-        # Pad visual field to expected size if it's smaller (due to world boundaries)
-        if visual_field.shape[0] < expected_visual_size:
-            # Pad with wall representations
-            padded_visual = np.zeros(expected_visual_size, dtype=np.float32)
-            padded_visual[: visual_field.shape[0]] = visual_field
-
-            # Fill the remaining space with wall representations
-            # Each entity gets a one-hot encoding, so we need to set the wall bit
-            wall_entity_index = (
-                self.entity_list.index("Wall") if "Wall" in self.entity_list else 0
+        if not self.identity_enabled:
+            # Fallback to parent class if identity disabled
+            # Parent class returns 3D array, but we need to flatten it and add extra features
+            visual_field = super().observe(world, location).flatten()
+            
+            # Calculate expected size for a perfect square observation
+            expected_side_length = 2 * self.vision_radius + 1
+            expected_visual_size = (
+                len(self.entity_list) * expected_side_length * expected_side_length
             )
-            remaining_size = expected_visual_size - visual_field.shape[0]
 
-            # Calculate how many cells we need to pad
-            cells_to_pad = remaining_size // len(self.entity_list)
+            # Pad visual field to expected size if it's smaller (due to world boundaries)
+            if visual_field.shape[0] < expected_visual_size:
+                # Pad with wall representations
+                padded_visual = np.zeros(expected_visual_size, dtype=np.float32)
+                padded_visual[: visual_field.shape[0]] = visual_field
 
-            # Fill each padded cell with wall representation
-            for i in range(cells_to_pad):
-                start_idx = visual_field.shape[0] + i * len(self.entity_list)
-                end_idx = start_idx + len(self.entity_list)
-                if end_idx <= expected_visual_size:
-                    padded_visual[start_idx + wall_entity_index] = 1.0
+                # Fill the remaining space with wall representations
+                # Each entity gets a one-hot encoding, so we need to set the wall bit
+                wall_entity_index = (
+                    self.entity_list.index("Wall") if "Wall" in self.entity_list else 0
+                )
+                remaining_size = expected_visual_size - visual_field.shape[0]
 
-            visual_field = padded_visual
-        elif visual_field.shape[0] > expected_visual_size:
+                # Calculate how many cells we need to pad
+                cells_to_pad = remaining_size // len(self.entity_list)
+
+                # Fill each padded cell with wall representation
+                for i in range(cells_to_pad):
+                    start_idx = visual_field.shape[0] + i * len(self.entity_list)
+                    end_idx = start_idx + len(self.entity_list)
+                    if end_idx <= expected_visual_size:
+                        padded_visual[start_idx + wall_entity_index] = 1.0
+
+                visual_field = padded_visual
+            elif visual_field.shape[0] > expected_visual_size:
+                # This shouldn't happen, but truncate if it does
+                visual_field = visual_field[:expected_visual_size]
+
+            # Get the agent at this location to extract inventory and ready state
+            agent = None
+            if hasattr(world, "agents"):
+                for a in world.agents:
+                    if a.location == location:
+                        agent = a
+                        break
+
+            if agent is None:
+                # If no agent found, use default values
+                extra_features = np.array([0, 0, 0, 0], dtype=np.float32)
+            else:
+                # Extract inventory, ready flag, and interaction reward flag from the agent
+                inv_stag = agent.inventory.get("stag", 0)
+                inv_hare = agent.inventory.get("hare", 0)
+                ready_flag = 1 if agent.ready else 0
+                interaction_reward_flag = 1 if agent.received_interaction_reward else 0
+                extra_features = np.array(
+                    [inv_stag, inv_hare, ready_flag, interaction_reward_flag],
+                    dtype=np.float32,
+                )
+
+            # Generate positional embedding
+            pos_code = embedding.positional_embedding(
+                location, world, (self.embedding_size, self.embedding_size)
+            )
+            observation = np.concatenate((visual_field, extra_features, pos_code))
+            # Debug: verify observation size matches input_size
+            expected_size = self.input_size[1]
+            if observation.shape[0] != expected_size:
+                raise ValueError(
+                    f"Observation size mismatch: expected {expected_size}, got {observation.shape[0]}. "
+                    f"visual_field: {visual_field.shape[0]}, extra_features: {extra_features.shape[0]}, "
+                    f"pos_code: {pos_code.shape[0]}"
+                )
+            return observation
+
+        # Step 3.1: Get base visual field from parent class (preserves coordinate transformation)
+        # This handles: shift/crop operations, boundary handling, layer summation
+        base_visual_field = super().observe(world, location)  # Shape: (channels, height, width)
+        
+        # Step 3.2: Calculate dimensions
+        vision_radius = self.vision_radius
+        height = width = 2 * vision_radius + 1
+        num_entity_channels = len(self.entity_list)
+        identity_size = self.identity_encoder.encoding_size or self.identity_config.get("custom_encoder_size", 0)
+        total_channels = num_entity_channels + identity_size
+        
+        # Step 3.3: Reshape base visual field and add identity channels
+        # Reshape from (channels, height, width) to work with it
+        if base_visual_field.ndim == 3:
+            # Already in correct shape (channels, height, width)
+            entity_channels = base_visual_field
+        else:
+            # Reshape from flattened
+            entity_channels = base_visual_field.reshape(num_entity_channels, height, width)
+        
+        # Create identity channels tensor
+        identity_channels = np.zeros((identity_size, height, width), dtype=np.float32)
+        
+        # Step 3.4: Get observer's world coordinates
+        obs_y, obs_x = location[0:2]
+        
+        # Step 3.5: Iterate through visual field cells to add identity codes
+        # For each visual field cell, calculate the corresponding world coordinate
+        # The parent class's visual_field() shifts so observer is at center (vision_radius, vision_radius)
+        # So visual field cell (y, x) corresponds to world coordinate:
+        #   world_y = obs_y + (y - vision_radius)
+        #   world_x = obs_x + (x - vision_radius)
+        # Which simplifies to: world_y = obs_y - vision_radius + y
+        for y in range(height):
+            for x in range(width):
+                # Calculate world coordinate (matching parent class's transformation)
+                world_y = obs_y - vision_radius + y
+                world_x = obs_x - vision_radius + x
+                world_loc = (world_y, world_x, world.dynamic_layer)
+                
+                if world.valid_location(world_loc):
+                    # Get entity at this location
+                    entity = world.observe(world_loc)
+                    
+                    # Step 3.6.1: Set identity channels (uniform access pattern, same as entity channels)
+                    # Check if entity has identity_code attribute (agents only)
+                    if hasattr(entity, 'identity_code') and entity.identity_code is not None:
+                        # Agent: use pre-computed identity code (already has proper structure with N/A=0)
+                        identity_channels[:, y, x] = entity.identity_code
+                    else:
+                        # Non-agent entity (resource, wall, empty): create N/A code for all components
+                        na_code = self._create_na_identity_code()
+                        identity_channels[:, y, x] = na_code
+                else:
+                    # Out-of-bounds: treat as N/A
+                    na_code = self._create_na_identity_code()
+                    identity_channels[:, y, x] = na_code
+        
+        # Step 3.6: Concatenate entity channels and identity channels
+        visual_field = np.concatenate([entity_channels, identity_channels], axis=0)  # Shape: (total_channels, height, width)
+        
+        # Step 3.7: Flatten visual field: (channels * height * width,)
+        visual_field_flat = visual_field.flatten()
+        
+        # Step 3.8: Handle padding (preserve existing padding logic from parent class)
+        # Calculate expected size for a perfect square observation
+        expected_side_length = 2 * vision_radius + 1
+        expected_visual_size = (
+            total_channels * expected_side_length * expected_side_length
+        )
+        
+        # Pad visual field to expected size if it's smaller (due to world boundaries)
+        if visual_field_flat.shape[0] < expected_visual_size:
+            # Pad with zeros (identity channels are already zeros for out-of-bounds)
+            padded_visual = np.zeros(expected_visual_size, dtype=np.float32)
+            padded_visual[: visual_field_flat.shape[0]] = visual_field_flat
+            visual_field_flat = padded_visual
+        elif visual_field_flat.shape[0] > expected_visual_size:
             # This shouldn't happen, but truncate if it does
-            visual_field = visual_field[:expected_visual_size]
-
-        # Get the agent at this location to extract inventory and ready state
+            visual_field_flat = visual_field_flat[:expected_visual_size]
+        
+        # Step 3.9: Get the agent at observation location to extract inventory and ready state
         agent = None
         if hasattr(world, "agents"):
             for a in world.agents:
                 if a.location == location:
                     agent = a
                     break
-
+        
+        # Step 3.10: Extract extra features (existing code)
         if agent is None:
-            # If no agent found, use default values
             extra_features = np.array([0, 0, 0, 0], dtype=np.float32)
         else:
-            # Extract inventory, ready flag, and interaction reward flag from the agent
             inv_stag = agent.inventory.get("stag", 0)
             inv_hare = agent.inventory.get("hare", 0)
             ready_flag = 1 if agent.ready else 0
@@ -154,15 +530,14 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 [inv_stag, inv_hare, ready_flag, interaction_reward_flag],
                 dtype=np.float32,
             )
-
-        # Generate absolute position embedding
-        # pos_code = embedding.absolute_position_embedding(
-        #     location, world, normalize=True
-        # )
+        
+        # Step 3.11: Generate positional embedding (existing code)
         pos_code = embedding.positional_embedding(
             location, world, (self.embedding_size, self.embedding_size)
         )
-        return np.concatenate((visual_field, extra_features, pos_code))
+        
+        # Step 3.12: Concatenate final observation
+        return np.concatenate((visual_field_flat, extra_features, pos_code))
 
 
 class StagHuntAgent(Agent[StagHuntWorld]):
@@ -300,16 +675,60 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         return self._directional_sprites[self.orientation]
 
     def update_agent_kind(self) -> None:
-        """Update the agent's kind based on current orientation and base kind."""
+        """Update the agent's kind and identity code based on current orientation and base kind."""
         orientation_names = {0: "North", 1: "East", 2: "South", 3: "West"}
         orientation = orientation_names[self.orientation]
         
-        if self.agent_kind:
-            # Use the assigned base kind
-            self.kind = f"{self.agent_kind}{orientation}"
+        # Check if we're in generic mode (entity channels use "Agent" for all agents)
+        agent_entity_mode = "detailed"  # default
+        if hasattr(self.observation_spec, 'identity_config'):
+            agent_entity_mode = self.observation_spec.identity_config.get("agent_entity_mode", "detailed")
+        
+        if agent_entity_mode == "generic":
+            # Generic mode: use "Agent" for entity channels (kind/orientation info only in identity channels)
+            self.kind = "Agent"
         else:
-            # Fallback to default behavior
-            self.kind = f"StagHuntAgent{orientation}"
+            # Detailed mode: use full kind with orientation
+            if self.agent_kind:
+                # Use the assigned base kind
+                self.kind = f"{self.agent_kind}{orientation}"
+            else:
+                # Fallback to default behavior
+                self.kind = f"StagHuntAgent{orientation}"
+        
+        # NEW: Compute and store identity code if identity system is enabled
+        if hasattr(self.observation_spec, 'identity_enabled') and self.observation_spec.identity_enabled:
+            identity_key = (self.agent_id, self.agent_kind, self.orientation)
+            
+            # Get pre-computed identity code from identity_map
+            if identity_key in self.observation_spec.identity_map:
+                self.identity_code = self.observation_spec.identity_map[identity_key]
+            elif self.observation_spec.identity_encoder.mode == "custom":
+                # Custom mode: generate on the fly (identity_map is empty for custom mode)
+                try:
+                    self.identity_code = self.observation_spec.identity_encoder.encode(
+                        agent_id=self.agent_id,
+                        agent_kind=self.agent_kind,
+                        orientation=self.orientation,
+                        world=None,  # Not needed for encoding
+                        config=None,  # Not needed for encoding
+                    )
+                except Exception as e:
+                    # If encoding fails, raise error (configuration issue)
+                    raise ValueError(
+                        f"Failed to generate identity code for agent {self.agent_id} "
+                        f"(kind={self.agent_kind}, orientation={self.orientation}): {e}"
+                    )
+            else:
+                # Key not in identity_map and not custom mode: configuration error
+                raise ValueError(
+                    f"Identity code not found in identity_map for agent {self.agent_id} "
+                    f"(kind={self.agent_kind}, orientation={self.orientation}). "
+                    f"This indicates a configuration mismatch - ensure agent_kind is in the "
+                    f"agent_kinds list provided to StagHuntObservation."
+                )
+        else:
+            self.identity_code = None
 
     def update_cooldown(self) -> None:
         """Update the beam cooldown timers."""

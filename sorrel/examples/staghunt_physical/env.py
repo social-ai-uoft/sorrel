@@ -89,14 +89,15 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         agents = []
         
         # Generate entity list dynamically based on agent kinds
-        def _generate_entity_list(agent_kinds: list[str]) -> list[str]:
-            """Generate entity list including all agent kinds.
+        def _generate_entity_list(agent_kinds: list[str], agent_entity_mode: str) -> list[str]:
+            """Generate entity list with agent entities based on agent kinds and mode.
             
             Args:
                 agent_kinds: List of agent kind names (e.g., ["AgentKindA", "AgentKindB"])
+                agent_entity_mode: "detailed" or "generic" - controls how agents appear in entity channels
             
             Returns:
-                Complete entity list with all base entities and agent kind combinations
+                Complete entity list with all base entities and agent entities
             """
             base_entities = [
                 "Empty",
@@ -110,17 +111,22 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 "PunishBeam",
             ]
             
-            # Add agent kinds (with orientations for each kind)
+            # Add agent entities based on mode
             agent_entities = []
-            if agent_kinds:
-                # If agent kinds are specified, add all combinations
-                for kind in agent_kinds:
+            if agent_entity_mode == "generic":
+                # Generic mode: single "Agent" entity type
+                agent_entities = ["Agent"]
+            else:  # "detailed" mode (default)
+                # Detailed mode: separate entity types for each kind + orientation
+                if agent_kinds:
+                    # If agent kinds are specified, add all combinations
+                    for kind in agent_kinds:
+                        for orientation in ["North", "East", "South", "West"]:
+                            agent_entities.append(f"{kind}{orientation}")
+                else:
+                    # Default: use orientation-based kinds (backward compatibility)
                     for orientation in ["North", "East", "South", "West"]:
-                        agent_entities.append(f"{kind}{orientation}")
-            else:
-                # Default: use orientation-based kinds (backward compatibility)
-                for orientation in ["North", "East", "South", "West"]:
-                    agent_entities.append(f"StagHuntAgent{orientation}")
+                        agent_entities.append(f"StagHuntAgent{orientation}")
             
             return base_entities + agent_entities
         
@@ -129,8 +135,25 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         agent_kind_mapping = getattr(self.world, 'agent_kind_mapping', {})
         agent_attributes = getattr(self.world, 'agent_attributes', {})
         
-        # Generate entity list dynamically
-        entity_list = _generate_entity_list(agent_kinds)
+        # Get identity configuration from world config (set in main.py)
+        # If "agent_identity" key is missing, defaults to {} which results in enabled=False
+        identity_config = world_cfg.get("agent_identity", {})
+        
+        # Get agent entity mode from config (applies regardless of enabled status)
+        # This controls entity list generation even when identity is disabled
+        agent_entity_mode = identity_config.get("agent_entity_mode", "detailed")
+        
+        # Generate entity list based on mode
+        entity_list = _generate_entity_list(agent_kinds, agent_entity_mode)
+        
+        # NEW: Create agent information mapping for probe tests
+        # This stores agent ID and kind (orientation comes from probe test setup, not training)
+        # Example: {0: {"kind": "AgentKindA"}, 1: {"kind": "AgentKindA"}, ...}
+        agent_info: dict[int, dict] = {}
+        
+        # Also create kind-to-ID mapping for backward compatibility and filtering
+        agent_kind_to_ids: dict[str, list[int]] = {}
+        
         for agent_id in range(n_agents):
             # observation spec: uses partial view with specified vision radius
             vision_radius = int(model_cfg.get("agent_vision_radius", 5))
@@ -140,6 +163,9 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 full_view=False,
                 vision_radius=vision_radius,
                 embedding_size=embedding_size,
+                identity_config=identity_config,  # NEW: from config["world"]["agent_identity"] in main.py
+                num_agents=n_agents,  # NEW: needed for one-hot size
+                agent_kinds=agent_kinds,  # NEW: needed for group encoding
             )
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size
@@ -198,6 +224,21 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             can_receive_shared_reward = agent_attrs.get("can_receive_shared_reward", True)  # Default to True
             exclusive_reward = agent_attrs.get("exclusive_reward", False)  # Default to False
             
+            # Store agent information (only ID and kind - orientation set by probe test logic)
+            agent_info[agent_id] = {
+                "kind": assigned_kind,
+            }
+            
+            # Track which agent IDs have which kinds (for filtering if needed)
+            if assigned_kind:
+                if assigned_kind not in agent_kind_to_ids:
+                    agent_kind_to_ids[assigned_kind] = []
+                agent_kind_to_ids[assigned_kind].append(agent_id)
+            else:
+                if None not in agent_kind_to_ids:
+                    agent_kind_to_ids[None] = []
+                agent_kind_to_ids[None].append(agent_id)
+            
             agent = StagHuntAgent(
                 observation_spec=observation_spec,
                 action_spec=action_spec,
@@ -211,6 +252,13 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 exclusive_reward=exclusive_reward,  # NEW: pass exclusive_reward attribute
             )
             agents.append(agent)
+        
+        # Store mappings on both world and env for accessibility
+        self.world.agent_info = agent_info
+        self.world.agent_kind_to_ids = agent_kind_to_ids
+        self.agent_info = agent_info
+        self.agent_kind_to_ids = agent_kind_to_ids
+        
         self.agents = agents
 
     def populate_environment(self) -> None:
@@ -754,3 +802,217 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         """Log metrics for the current epoch."""
         if hasattr(self, 'metrics_collector') and self.metrics_collector:
             self.metrics_collector.log_epoch_metrics(self.agents, epoch, writer)
+
+
+def export_agent_identity_codes(
+    agents: list,
+    output_dir: Path,
+    epoch: int | None = None,
+    context: str = "initialization",
+    world: StagHuntWorld | None = None
+) -> None:
+    """Export all agents' identity codes to a text file.
+    
+    Args:
+        agents: List of agent objects
+        output_dir: Directory to save the export file
+        epoch: Epoch number (None for initialization)
+        context: Context string ("initialization" or "probe_test")
+        world: Optional world object (required for exporting all entities at initialization)
+    """
+    from datetime import datetime
+    
+    # Validate inputs
+    if not agents or len(agents) == 0:
+        print("Warning: No agents to export identity codes for.")
+        return
+    
+    # Create output directory if it doesn't exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Determine filename
+    if context == "initialization":
+        filename = "agent_identity_codes_initialization.txt"
+    elif context == "probe_test":
+        filename = f"agent_identity_codes_probe_test_epoch{epoch}.txt"
+    else:
+        filename = f"agent_identity_codes_{context}.txt"
+    
+    filepath = output_dir / filename
+    
+    # Get identity system configuration from first agent (if available)
+    identity_enabled = False
+    identity_mode = "N/A"
+    if agents and len(agents) > 0 and hasattr(agents[0], 'observation_spec'):
+        try:
+            identity_enabled = getattr(agents[0].observation_spec, 'identity_enabled', False)
+            if identity_enabled and hasattr(agents[0].observation_spec, 'identity_encoder'):
+                identity_mode = getattr(agents[0].observation_spec.identity_encoder, 'mode', 'N/A')
+        except (AttributeError, TypeError):
+            # Safe fallback if observation_spec structure is unexpected
+            identity_enabled = False
+            identity_mode = "N/A"
+    
+    # Write to file
+    with open(filepath, 'w') as f:
+        # Header
+        f.write("Agent Identity Codes Export\n")
+        f.write("=" * 50 + "\n")
+        f.write(f"Export Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if epoch is not None:
+            f.write(f"Epoch: {epoch}\n")
+        else:
+            f.write("Epoch: Initialization\n")
+        f.write(f"Identity System Enabled: {identity_enabled}\n")
+        if identity_enabled:
+            f.write(f"Identity Encoding Mode: {identity_mode}\n")
+        f.write("\n")
+        
+        # Agent information
+        f.write("Agent Information:\n")
+        f.write("-" * 50 + "\n")
+        
+        orientation_names = {0: "North", 1: "East", 2: "South", 3: "West"}
+        
+        for agent in agents:
+            agent_id = getattr(agent, 'agent_id', 'N/A')
+            agent_kind = getattr(agent, 'agent_kind', 'N/A')
+            orientation = getattr(agent, 'orientation', 'N/A')
+            identity_code = getattr(agent, 'identity_code', None)
+            entity_kind = getattr(agent, 'kind', None)  # Entity type (e.g., "AgentKindANorth" or "Agent")
+            
+            f.write(f"\nAgent {agent_id}:\n")
+            f.write(f"  Agent ID: {agent_id}\n")
+            f.write(f"  Agent Kind: {agent_kind}\n")
+            
+            if isinstance(orientation, int) and orientation in orientation_names:
+                f.write(f"  Orientation: {orientation} ({orientation_names[orientation]})\n")
+            else:
+                f.write(f"  Orientation: {orientation}\n")
+            
+            # Entity Code (one-hot encoding in entity channels)
+            entity_code = None
+            entity_code_index = None
+            if hasattr(agent, 'observation_spec') and hasattr(agent.observation_spec, 'entity_list'):
+                entity_list = agent.observation_spec.entity_list
+                if entity_kind and entity_kind in entity_list:
+                    entity_code_index = entity_list.index(entity_kind)
+                    entity_code = np.zeros(len(entity_list), dtype=np.float32)
+                    entity_code[entity_code_index] = 1.0
+                    entity_code_list = entity_code.tolist()
+                    f.write(f"  Entity Type: {entity_kind}\n")
+                    f.write(f"  Entity Code Index: {entity_code_index}\n")
+                    f.write(f"  Entity Code: {entity_code_list}\n")
+                    f.write(f"  Entity Code Size: {len(entity_code)}\n")
+                else:
+                    f.write(f"  Entity Type: {entity_kind}\n")
+                    f.write(f"  Entity Code: Not found in entity_list\n")
+            else:
+                f.write(f"  Entity Type: {entity_kind}\n")
+                f.write(f"  Entity Code: Unable to generate (observation_spec or entity_list not available)\n")
+            
+            # Identity Code
+            if identity_code is not None:
+                # Convert numpy array to list for readable output
+                if isinstance(identity_code, np.ndarray):
+                    code_list = identity_code.tolist()
+                    f.write(f"  Identity Code: {code_list}\n")
+                    f.write(f"  Identity Code Size: {len(identity_code)}\n")
+                else:
+                    f.write(f"  Identity Code: {identity_code}\n")
+            else:
+                f.write(f"  Identity Code: None (identity system disabled or not initialized)\n")
+        
+        # Export all entities' entity codes at initialization (if world is provided)
+        if context == "initialization" and world is not None:
+            f.write("\n")
+            f.write("=" * 50 + "\n")
+            f.write("All Entities' Entity Codes (Initialization)\n")
+            f.write("=" * 50 + "\n")
+            f.write("\n")
+            
+            # Get entity_list from first agent's observation_spec
+            entity_list = None
+            if agents and len(agents) > 0 and hasattr(agents[0], 'observation_spec'):
+                try:
+                    entity_list = getattr(agents[0].observation_spec, 'entity_list', None)
+                except (AttributeError, TypeError):
+                    entity_list = None
+            
+            if entity_list is None:
+                f.write("Note: Unable to retrieve entity_list from agents' observation_spec.\n")
+                f.write("Entity codes cannot be generated without entity_list.\n")
+            else:
+                # Collect all entities from the world
+                entity_counts = {}  # entity_type -> list of (location, entity)
+                entity_types_seen = set()
+                
+                for y, x, layer in np.ndindex(world.map.shape):
+                    entity = world.map[y, x, layer]
+                    entity_type = type(entity).__name__
+                    entity_types_seen.add(entity_type)
+                    
+                    # Get entity kind if available (for entities with kind attribute)
+                    entity_kind = getattr(entity, 'kind', entity_type)
+                    
+                    if entity_kind not in entity_counts:
+                        entity_counts[entity_kind] = []
+                    entity_counts[entity_kind].append(((y, x, layer), entity))
+                
+                # Write entity information grouped by type
+                f.write(f"Total Entity Types Found: {len(entity_types_seen)}\n")
+                f.write(f"Entity List Size: {len(entity_list)}\n")
+                f.write("\n")
+                
+                # Sort entity types for consistent output
+                sorted_entity_types = sorted(entity_counts.keys())
+                
+                for entity_kind in sorted_entity_types:
+                    entities_of_kind = entity_counts[entity_kind]
+                    count = len(entities_of_kind)
+                    
+                    f.write(f"\nEntity Type: {entity_kind}\n")
+                    f.write(f"  Count: {count}\n")
+                    
+                    # Generate entity code for this type
+                    if entity_kind in entity_list:
+                        entity_code_index = entity_list.index(entity_kind)
+                        entity_code = np.zeros(len(entity_list), dtype=np.float32)
+                        entity_code[entity_code_index] = 1.0
+                        entity_code_list = entity_code.tolist()
+                        f.write(f"  Entity Code Index: {entity_code_index}\n")
+                        f.write(f"  Entity Code: {entity_code_list}\n")
+                        f.write(f"  Entity Code Size: {len(entity_code)}\n")
+                    else:
+                        f.write(f"  Entity Code: Not found in entity_list\n")
+                        f.write(f"  Note: This entity type is not in the observation entity_list\n")
+                    
+                    # Show sample locations (first 5)
+                    f.write(f"  Sample Locations (first 5):\n")
+                    for i, ((y, x, layer), _) in enumerate(entities_of_kind[:5]):
+                        layer_name = ["Terrain", "Dynamic", "Beam"][layer] if layer < 3 else f"Layer{layer}"
+                        f.write(f"    Location ({y}, {x}, {layer_name})\n")
+                    if count > 5:
+                        f.write(f"    ... and {count - 5} more\n")
+        
+        f.write("\n")
+        f.write("Notes:\n")
+        f.write("- Entity codes are one-hot vectors indicating which entity channel an entity occupies\n")
+        f.write("- Entity codes are based on the entity's 'kind' attribute (or class name if kind is not available)\n")
+        f.write("- Entity code index shows the position in the entity_list where this entity type appears\n")
+        f.write("- Identity codes are numpy arrays encoding agent ID, kind, and orientation (agents only)\n")
+        f.write("- Format: [value1, value2, ...]\n")
+        f.write("- Orientation: 0=North, 1=East, 2=South, 3=West\n")
+        if context == "initialization" and world is not None:
+            f.write("- All entities section shows entity codes for all entities in the world at initialization\n")
+            f.write("- Entity types not in entity_list cannot be observed by agents\n")
+        if identity_enabled:
+            f.write(f"- Encoding mode: {identity_mode}\n")
+            if identity_mode == "unique_onehot":
+                f.write("- Identity code components: [agent_id_onehot, agent_kind_onehot, orientation_onehot]\n")
+            elif identity_mode == "unique_and_group":
+                f.write("- Identity code components: [agent_id_onehot, agent_kind_onehot, orientation_onehot]\n")
+            elif identity_mode == "custom":
+                f.write("- Identity code uses custom encoding function\n")
+    
+    print(f"Agent identity codes exported to: {filepath}")

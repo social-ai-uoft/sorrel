@@ -125,6 +125,38 @@ class ProbeTestEnvironment:
         self.metrics_collector = StagHuntMetricsCollector()
         self.test_env.metrics_collector = self.metrics_collector
         
+        # NEW: Inherit identity_map and identity_enabled from training environment
+        if original_env.agents:
+            first_agent = original_env.agents[0]
+            if hasattr(first_agent.observation_spec, 'identity_map'):
+                self.identity_map = first_agent.observation_spec.identity_map
+            else:
+                self.identity_map = {}
+            
+            # Get identity_enabled flag from observation spec
+            if hasattr(first_agent.observation_spec, 'identity_enabled'):
+                self.identity_enabled = first_agent.observation_spec.identity_enabled
+            else:
+                self.identity_enabled = False
+        else:
+            self.identity_map = {}
+            self.identity_enabled = False
+        
+        # NEW: Inherit agent_info and agent_kind_to_ids from training environment
+        if hasattr(original_env, 'agent_info'):
+            self.agent_info = original_env.agent_info
+        elif hasattr(original_env.world, 'agent_info'):
+            self.agent_info = original_env.world.agent_info
+        else:
+            self.agent_info = {}
+        
+        if hasattr(original_env, 'agent_kind_to_ids'):
+            self.agent_kind_to_ids = original_env.agent_kind_to_ids
+        elif hasattr(original_env.world, 'agent_kind_to_ids'):
+            self.agent_kind_to_ids = original_env.world.agent_kind_to_ids
+        else:
+            self.agent_kind_to_ids = {}
+        
     def run_individual_test(self, probe_agent, agent_id):
         """Run a test with a single agent.
         
@@ -211,12 +243,53 @@ class TestIntentionProbeTest:
         # Get list of test maps (default to single map for backward compatibility)
         self.test_maps = test_config.get("test_maps", ["test_intention.txt"])
         
-        # CSV headers (include map_name)
-        self.csv_headers = [
-            "epoch", "agent_id", "map_name", "partner_kind", "version",
-            "q_val_forward", "q_val_backward", "q_val_step_left", "q_val_step_right", "q_val_attack",
-            "weight_facing_stag", "weight_facing_hare"
-        ]
+        # NEW: Get identity_map, identity_enabled, agent_info, and agent_kind_to_ids from original_env
+        if original_env.agents:
+            first_agent = original_env.agents[0]
+            if hasattr(first_agent.observation_spec, 'identity_map'):
+                self.identity_map = first_agent.observation_spec.identity_map
+            else:
+                self.identity_map = {}
+            
+            # Get identity_enabled flag from observation spec
+            if hasattr(first_agent.observation_spec, 'identity_enabled'):
+                self.identity_enabled = first_agent.observation_spec.identity_enabled
+            else:
+                self.identity_enabled = False
+        else:
+            self.identity_map = {}
+            self.identity_enabled = False
+        
+        if hasattr(original_env, 'agent_info'):
+            self.agent_info = original_env.agent_info
+        elif hasattr(original_env.world, 'agent_info'):
+            self.agent_info = original_env.world.agent_info
+        else:
+            self.agent_info = {}
+        
+        if hasattr(original_env, 'agent_kind_to_ids'):
+            self.agent_kind_to_ids = original_env.agent_kind_to_ids
+        elif hasattr(original_env.world, 'agent_kind_to_ids'):
+            self.agent_kind_to_ids = original_env.world.agent_kind_to_ids
+        else:
+            self.agent_kind_to_ids = {}
+        
+        # CSV headers (include identity columns when enabled)
+        if self.identity_enabled:
+            self.csv_headers = [
+                "epoch", "agent_id", "map_name", "partner_kind", "version",
+                "partner_agent_id", "partner_agent_kind",  # NEW: ID and kind from training
+                # Note: orientation NOT included - it's determined by probe test setup
+                "q_val_forward", "q_val_backward", "q_val_step_left", "q_val_step_right", "q_val_attack",
+                "weight_facing_stag", "weight_facing_hare"
+            ]
+        else:
+            # Backward compatible: original headers when identity disabled
+            self.csv_headers = [
+                "epoch", "agent_id", "map_name", "partner_kind", "version",
+                "q_val_forward", "q_val_backward", "q_val_step_left", "q_val_step_right", "q_val_attack",
+                "weight_facing_stag", "weight_facing_hare"
+            ]
     
     def _parse_orientation_reference(self, file_path: str) -> dict:
         """Parse orientation reference file and extract mappings.
@@ -450,22 +523,40 @@ class TestIntentionProbeTest:
                 (y, x, self.probe_env.test_world.dynamic_layer) for y, x in map_data.spawn_points[:2]
             ]
     
-    def _create_partner_agent(self, partner_kind: str | None, original_agent):
-        """Create a partner agent with specified kind.
+    def _create_partner_agent(
+        self, 
+        partner_kind: str | None, 
+        original_agent,
+        partner_id: int | None = None,  # NEW: Partner agent ID from training
+        # Note: Orientation is NOT passed - it's set by probe test logic (orientation reference file)
+    ):
+        """Create a partner agent with specified kind and identity information.
         
         Args:
-            partner_kind: Kind for partner agent (None = use original agent's kind)
+            partner_kind: Kind for partner agent (None = use original agent's kind, "no_partner" = skip)
             original_agent: Original agent to copy attributes from
+            partner_id: Partner agent ID from training (when identity enabled)
+            # Note: Orientation is NOT passed - it's set by probe test logic (orientation reference file)
         
         Returns:
-            StagHuntAgent instance with specified kind
+            StagHuntAgent instance with specified kind and identity, or None if "no_partner"
         """
+        if partner_kind == "no_partner":
+            return None
+        
         from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent
         
         # Determine partner kind
         if partner_kind is None:
-            # Use original agent's kind
             partner_kind = getattr(original_agent, 'agent_kind', None)
+        
+        # Determine partner ID (orientation is set by probe test logic, not here)
+        if self.identity_enabled and partner_id is not None:
+            # Identity enabled: Use provided partner_id from training
+            partner_agent_id = partner_id
+        else:
+            # Identity disabled: Use backward compatible behavior
+            partner_agent_id = 1  # Current default
         
         # Get partner attributes (can_hunt, etc.) - default to True
         partner_attrs = self.test_config.get("partner_agent_attributes", {})
@@ -477,10 +568,15 @@ class TestIntentionProbeTest:
             model=original_agent.model,  # Use same model (dummy for partner)
             interaction_reward=original_agent.interaction_reward,
             max_health=original_agent.max_health,
-            agent_id=1,  # Partner always has ID 1 in test
+            agent_id=partner_agent_id,  # Use training agent ID when identity enabled
             agent_kind=partner_kind,
             can_hunt=can_hunt,
         )
+        
+        # Note: Orientation is NOT set here - it will be set by probe test logic
+        # (e.g., from orientation reference file in TestIntentionProbeTest)
+        # The test execution method will set orientation after agent creation
+        
         return partner_agent
     
     def _run_single_version(
@@ -494,7 +590,9 @@ class TestIntentionProbeTest:
         map_name: str,
         initial_orientation: int,
         orientation_facing_stag: int,
-        should_save_png: bool = True
+        should_save_png: bool = True,
+        partner_id: int | None = None,  # NEW: Partner agent ID from training
+        # Note: Orientation is NOT passed - it's set by probe test logic (orientation reference file)
     ):
         """Run a single version of test_intention with specified agent kinds.
         
@@ -539,8 +637,13 @@ class TestIntentionProbeTest:
         has_partner = partner_kind != "no_partner"
         
         if has_partner:
-            # Create partner agent with specified kind
-            partner_agent = self._create_partner_agent(partner_kind, probe_agent.agent)
+            # Create partner agent with identity information
+            # Note: partner_id comes from training, orientation will be set below from orientation reference file
+            partner_agent = self._create_partner_agent(
+                partner_kind=partner_kind,
+                original_agent=probe_agent.agent,
+                partner_id=partner_id,  # NEW: Pass partner ID from training
+            )
             
             # Reorder so desired spawn is first (for both agents)
             reordered_spawn_points = [desired_spawn, other_spawn]
@@ -614,14 +717,25 @@ class TestIntentionProbeTest:
                 partner_kind_name = focus_kind or "same"
             else:
                 partner_kind_name = partner_kind
-            viz_filename = (
-                f"test_intention_epoch_{epoch}_agent_{agent_id}_"
-                f"map_{map_name_clean}_partner_{partner_kind_name}_{version_name}_state.png"
-            )
+            
+            # NEW: Include partner_id in filename when identity is enabled to avoid overwrites
+            if self.identity_enabled and partner_id is not None:
+                # Identity enabled: Include partner_id to make filename unique
+                viz_filename = (
+                    f"test_intention_epoch_{epoch}_agent_{agent_id}_"
+                    f"map_{map_name_clean}_partner_{partner_kind_name}_id_{partner_id}_{version_name}_state.png"
+                )
+            else:
+                # Identity disabled: Use original filename format (backward compatible)
+                viz_filename = (
+                    f"test_intention_epoch_{epoch}_agent_{agent_id}_"
+                    f"map_{map_name_clean}_partner_{partner_kind_name}_{version_name}_state.png"
+                )
             viz_path = unit_test_dir / viz_filename
             
             try:
                 # Render the world state
+                from sorrel.utils.visualization import render_sprite, image_from_array
                 layers = render_sprite(self.probe_env.test_world, tile_size=[32, 32])
                 composited = image_from_array(layers)
                 
@@ -735,13 +849,51 @@ class TestIntentionProbeTest:
                 # Get focus agent kind
                 focus_kind = self.focus_agent_kind or getattr(original_agent, 'agent_kind', None)
                 
+                focal_agent_id = agent_id
+                
+                # NEW: Determine partner agent identities based on identity system status
+                if self.identity_enabled and self.agent_info:
+                    # Identity enabled: Loop through all other agent IDs from training
+                    all_agent_ids = list(self.agent_info.keys())
+                    other_agent_ids = [aid for aid in all_agent_ids if aid != focal_agent_id]
+                    
+                    if not other_agent_ids:
+                        print(f"Warning: No other agents found for focal agent {focal_agent_id}, skipping")
+                        continue
+                    
+                    # Create list of partner identities to test
+                    # Note: Orientation is NOT stored - it comes from probe test setup
+                    partner_identities = []
+                    for partner_id in other_agent_ids:
+                        partner_info = self.agent_info[partner_id]
+                        partner_identities.append({
+                            "agent_id": partner_id,
+                            "kind": partner_info["kind"],
+                            # Orientation NOT included - set by probe test logic
+                        })
+                    
+                    # Also include "no_partner" option
+                    partner_identities.append({"agent_id": None, "kind": "no_partner"})
+                else:
+                    # Identity disabled: Use current behavior (loop through partner_kinds)
+                    partner_identities = []
+                    for partner_kind in self.partner_agent_kinds:
+                        if partner_kind == "no_partner":
+                            partner_identities.append({"agent_id": None, "kind": "no_partner"})
+                        else:
+                            # For backward compatibility, use None for ID when identity disabled
+                            partner_identities.append({"agent_id": None, "kind": partner_kind})
+                
                 # Get action names for indices
                 action_names = list(probe_agent.agent.action_spec.actions.values())
                 step_left_idx = action_names.index("STEP_LEFT")
                 step_right_idx = action_names.index("STEP_RIGHT")
                 
-                # Run tests for each partner agent kind
-                for partner_kind in self.partner_agent_kinds:
+                # Run tests for each partner identity
+                for partner_identity in partner_identities:
+                    partner_kind = partner_identity["kind"]
+                    partner_id = partner_identity["agent_id"]
+                    # Note: partner_orientation is NOT from training - it's set by probe test logic
                     # Determine partner kind name for filename
                     if partner_kind == "no_partner":
                         partner_kind_name = "no_partner"
@@ -764,36 +916,68 @@ class TestIntentionProbeTest:
                         version_name = "ver1" if spawn_idx == 0 else "ver2"
                         
                         # Run the test
+                        # Note: partner_id comes from training, but orientation is set by probe test logic
                         q_values, weight_stag, weight_hare = self._run_single_version(
                             probe_agent, spawn_idx, agent_id, epoch, version_name, 
-                            partner_kind, map_file_name, initial_orient, stag_orient, should_save_png
+                            partner_kind, map_file_name, initial_orient, stag_orient, should_save_png,
+                            partner_id=partner_id,  # NEW: Pass partner ID from training
+                            # Orientation NOT passed - will be set by probe test logic (orientation reference file)
                         )
                         
-                        # Generate filename with map name and partner kind
-                        csv_filename = (
-                            f"test_intention_epoch_{epoch}_agent_{agent_id}_"
-                            f"map_{map_name_clean}_partner_{partner_kind_name}_{version_name}.csv"
-                        )
+                        # Generate filename - use partner_id when identity enabled, partner_kind otherwise
+                        if self.identity_enabled and partner_id is not None:
+                            # Identity enabled: Use partner_id only (exclude partner_kind)
+                            csv_filename = (
+                                f"test_intention_epoch_{epoch}_agent_{agent_id}_"
+                                f"map_{map_name_clean}_id_{partner_id}_{version_name}.csv"
+                            )
+                        else:
+                            # Identity disabled: Use original format with partner_kind (backward compatible)
+                            csv_filename = (
+                                f"test_intention_epoch_{epoch}_agent_{agent_id}_"
+                                f"map_{map_name_clean}_partner_{partner_kind_name}_{version_name}.csv"
+                            )
                         csv_path = unit_test_dir / csv_filename
                         
                         # Save results
                         with open(csv_path, 'w', newline='') as f:
                             writer = csv.writer(f)
                             writer.writerow(self.csv_headers)
-                            writer.writerow([
-                                epoch,
-                                agent_id,
-                                map_file_name,  # Map name
-                                partner_kind_name,  # Partner kind
-                                version_name,  # Version (upper/lower)
-                                q_values[0],  # FORWARD
-                                q_values[1],  # BACKWARD
-                                q_values[step_left_idx],  # STEP_LEFT
-                                q_values[step_right_idx],  # STEP_RIGHT
-                                q_values[-1],  # ATTACK (last action)
-                                weight_stag,
-                                weight_hare
-                            ])
+                            # When writing CSV, include identity columns if identity enabled
+                            if self.identity_enabled:
+                                writer.writerow([
+                                    epoch,
+                                    agent_id,
+                                    map_file_name,  # Map name
+                                    partner_kind_name,  # Partner kind
+                                    version_name,  # Version (upper/lower)
+                                    partner_id if partner_id is not None else "",  # NEW
+                                    partner_kind_name if partner_kind != "no_partner" else "",  # NEW
+                                    # Note: partner_orientation is NOT stored in CSV - it's determined by probe test setup
+                                    q_values[0],  # FORWARD
+                                    q_values[1],  # BACKWARD
+                                    q_values[step_left_idx],  # STEP_LEFT
+                                    q_values[step_right_idx],  # STEP_RIGHT
+                                    q_values[-1],  # ATTACK (last action)
+                                    weight_stag,
+                                    weight_hare
+                                ])
+                            else:
+                                # Backward compatible: original columns
+                                writer.writerow([
+                                    epoch,
+                                    agent_id,
+                                    map_file_name,  # Map name
+                                    partner_kind_name,  # Partner kind
+                                    version_name,  # Version (upper/lower)
+                                    q_values[0],  # FORWARD
+                                    q_values[1],  # BACKWARD
+                                    q_values[step_left_idx],  # STEP_LEFT
+                                    q_values[step_right_idx],  # STEP_RIGHT
+                                    q_values[-1],  # ATTACK (last action)
+                                    weight_stag,
+                                    weight_hare
+                                ])
 
 
 class MultiStepProbeTest:
@@ -821,11 +1005,51 @@ class MultiStepProbeTest:
         # Get max test steps
         self.max_test_steps = test_config.get("max_test_steps", 20)
         
-        # CSV headers
-        self.csv_headers = [
-            "epoch", "agent_id", "partner_kind", "first_attack_target", 
-            "result", "turn_of_first_attack"
-        ]
+        # NEW: Get identity_map, identity_enabled, agent_info, and agent_kind_to_ids from original_env
+        if original_env.agents:
+            first_agent = original_env.agents[0]
+            if hasattr(first_agent.observation_spec, 'identity_map'):
+                self.identity_map = first_agent.observation_spec.identity_map
+            else:
+                self.identity_map = {}
+            
+            # Get identity_enabled flag from observation spec
+            if hasattr(first_agent.observation_spec, 'identity_enabled'):
+                self.identity_enabled = first_agent.observation_spec.identity_enabled
+            else:
+                self.identity_enabled = False
+        else:
+            self.identity_map = {}
+            self.identity_enabled = False
+        
+        if hasattr(original_env, 'agent_info'):
+            self.agent_info = original_env.agent_info
+        elif hasattr(original_env.world, 'agent_info'):
+            self.agent_info = original_env.world.agent_info
+        else:
+            self.agent_info = {}
+        
+        if hasattr(original_env, 'agent_kind_to_ids'):
+            self.agent_kind_to_ids = original_env.agent_kind_to_ids
+        elif hasattr(original_env.world, 'agent_kind_to_ids'):
+            self.agent_kind_to_ids = original_env.world.agent_kind_to_ids
+        else:
+            self.agent_kind_to_ids = {}
+        
+        # CSV headers (include identity columns when enabled)
+        if self.identity_enabled:
+            self.csv_headers = [
+                "epoch", "agent_id", "partner_kind", "partner_agent_id", "partner_agent_kind",  # NEW: ID and kind from training
+                # Note: orientation NOT included - it's determined by probe test setup
+                "first_attack_target",
+                "result", "turn_of_first_attack"
+            ]
+        else:
+            # Backward compatible: original headers when identity disabled
+            self.csv_headers = [
+                "epoch", "agent_id", "partner_kind", "first_attack_target", 
+                "result", "turn_of_first_attack"
+            ]
     
     def _setup_test_env(self, map_file_name: str):
         """Set up the test environment with specified ASCII map layout.
@@ -857,16 +1081,25 @@ class MultiStepProbeTest:
         self.probe_env.test_config_dict["world"]["num_agents"] = 2
         self.probe_env.test_world.num_agents = 2
     
-    def _create_fake_agent(self, partner_kind: str | None, original_agent, agent_id: int):
-        """Create a fake agent with specified kind.
+    def _create_fake_agent(
+        self, 
+        partner_kind: str | None, 
+        original_agent, 
+        agent_id: int,  # Legacy parameter (used when identity disabled)
+        partner_id: int | None = None,  # NEW: Partner agent ID from training
+        # Note: Orientation is NOT passed - it's set by probe test logic
+    ):
+        """Create a fake agent with specified kind and identity information.
         
         Args:
             partner_kind: Kind for fake agent (None = use original agent's kind, "no_partner" = skip)
             original_agent: Original agent to copy attributes from
-            agent_id: ID for the fake agent
+            agent_id: Legacy ID hint (used when identity disabled)
+            partner_id: Partner agent ID from training (when identity enabled)
+            # Note: Orientation is NOT passed - it's set by probe test logic
         
         Returns:
-            StagHuntAgent instance with specified kind, or None if partner_kind is "no_partner"
+            StagHuntAgent instance with specified kind and identity, or None if "no_partner"
         """
         if partner_kind == "no_partner":
             return None
@@ -875,10 +1108,17 @@ class MultiStepProbeTest:
         
         # Determine partner kind
         if partner_kind is None:
-            # Use original agent's kind
             partner_kind = getattr(original_agent, 'agent_kind', None)
         
-        # Get partner attributes (can_hunt, etc.) - default to True
+        # Determine partner ID (orientation is set by probe test logic, not here)
+        if self.identity_enabled and partner_id is not None:
+            # Identity enabled: Use provided partner_id from training
+            partner_agent_id = partner_id
+        else:
+            # Identity disabled: Use backward compatible behavior
+            partner_agent_id = agent_id  # Use provided agent_id parameter
+        
+        # Get partner attributes
         partner_attrs = self.test_config.get("partner_agent_attributes", {})
         can_hunt = partner_attrs.get("can_hunt", True)
         
@@ -888,13 +1128,28 @@ class MultiStepProbeTest:
             model=original_agent.model,  # Use same model (dummy for fake agent)
             interaction_reward=original_agent.interaction_reward,
             max_health=original_agent.max_health,
-            agent_id=agent_id,
+            agent_id=partner_agent_id,  # Use training agent ID when identity enabled
             agent_kind=partner_kind,
             can_hunt=can_hunt,
         )
+        
+        # Note: Orientation is NOT set here - it will be set by probe test logic
+        # (e.g., hardcoded to SOUTH in MultiStepProbeTest)
+        # The test execution method will set orientation after agent creation
+        
         return fake_agent
     
-    def _run_single_test(self, probe_agent, agent_id, epoch, partner_kind, map_name, should_save_png: bool = True):
+    def _run_single_test(
+        self, 
+        probe_agent, 
+        agent_id, 
+        epoch, 
+        partner_kind, 
+        map_name, 
+        should_save_png: bool = True,
+        partner_id: int | None = None,  # NEW: Partner agent ID from training
+        # Note: Orientation is NOT passed - it's set by probe test logic
+    ):
         """Run a single multi-step test for one agent/partner combination.
         
         Args:
@@ -947,7 +1202,13 @@ class MultiStepProbeTest:
         
         if has_partner:
             # Create single fake agent
-            fake_agent = self._create_fake_agent(partner_kind, probe_agent.agent, agent_id=1)
+            # Note: partner_id comes from training, orientation will be set below by probe test logic
+            fake_agent = self._create_fake_agent(
+                partner_kind, 
+                probe_agent.agent, 
+                agent_id=1,  # Legacy parameter (used when identity disabled)
+                partner_id=partner_id,  # NEW: Pass partner ID from training
+            )
             
             # Set up environment with focal agent and fake agent
             # Order: [focal_agent, fake_agent]
@@ -1004,10 +1265,20 @@ class MultiStepProbeTest:
             unit_test_dir.mkdir(parents=True, exist_ok=True)
             map_name_clean = map_name.replace('.txt', '')
             partner_kind_name = partner_kind if partner_kind != "no_partner" else "no_partner"
-            viz_filename = (
-                f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
-                f"map_{map_name_clean}_partner_{partner_kind_name}_initial_state.png"
-            )
+            
+            # NEW: Include partner_id in filename when identity is enabled to avoid overwrites
+            if self.identity_enabled and partner_id is not None:
+                # Identity enabled: Include partner_id to make filename unique
+                viz_filename = (
+                    f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
+                    f"map_{map_name_clean}_partner_{partner_kind_name}_id_{partner_id}_initial_state.png"
+                )
+            else:
+                # Identity disabled: Use original filename format (backward compatible)
+                viz_filename = (
+                    f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
+                    f"map_{map_name_clean}_partner_{partner_kind_name}_initial_state.png"
+                )
             viz_path = unit_test_dir / viz_filename
             
             try:
@@ -1125,8 +1396,46 @@ class MultiStepProbeTest:
                 original_agent = agents[agent_id]
                 probe_agent = ProbeTestAgent(original_agent)
                 
-                # Run tests for each partner agent kind
-                for partner_kind in self.partner_agent_kinds:
+                focal_agent_id = agent_id
+                
+                # NEW: Determine partner agent identities based on identity system status
+                if self.identity_enabled and self.agent_info:
+                    # Identity enabled: Loop through all other agent IDs from training
+                    all_agent_ids = list(self.agent_info.keys())
+                    other_agent_ids = [aid for aid in all_agent_ids if aid != focal_agent_id]
+                    
+                    if not other_agent_ids:
+                        print(f"Warning: No other agents found for focal agent {focal_agent_id}, skipping")
+                        continue
+                    
+                    # Create list of partner identities to test
+                    # Note: Orientation is NOT stored - it comes from probe test setup
+                    partner_identities = []
+                    for partner_id in other_agent_ids:
+                        partner_info = self.agent_info[partner_id]
+                        partner_identities.append({
+                            "agent_id": partner_id,
+                            "kind": partner_info["kind"],
+                            # Orientation NOT included - set by probe test logic
+                        })
+                    
+                    # Also include "no_partner" option
+                    partner_identities.append({"agent_id": None, "kind": "no_partner"})
+                else:
+                    # Identity disabled: Use current behavior (loop through partner_kinds)
+                    partner_identities = []
+                    for partner_kind in self.partner_agent_kinds:
+                        if partner_kind == "no_partner":
+                            partner_identities.append({"agent_id": None, "kind": "no_partner"})
+                        else:
+                            partner_identities.append({"agent_id": None, "kind": partner_kind})
+                
+                # Run tests for each partner identity
+                for partner_identity in partner_identities:
+                    partner_kind = partner_identity["kind"]
+                    partner_id = partner_identity["agent_id"]
+                    # Note: partner_orientation is NOT from training - it's set by probe test logic
+                    
                     # Determine partner kind name for filename
                     if partner_kind == "no_partner":
                         partner_kind_name = "no_partner"
@@ -1137,29 +1446,55 @@ class MultiStepProbeTest:
                         partner_kind_name = partner_kind
                     
                     # Run the test
+                    # Note: partner_id comes from training, but orientation is set by probe test logic
                     first_attack_target, result, turn_of_first_attack = self._run_single_test(
-                        probe_agent, agent_id, epoch, partner_kind, map_file_name, should_save_png
+                        probe_agent, agent_id, epoch, partner_kind, map_file_name, should_save_png,
+                        partner_id=partner_id,  # NEW: Pass partner ID from training
+                        # Orientation NOT passed - will be set by probe test logic
                     )
                     
-                    # Generate filename
-                    csv_filename = (
-                        f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
-                        f"map_{map_name_clean}_partner_{partner_kind_name}.csv"
-                    )
+                    # Generate filename - use partner_id when identity enabled, partner_kind otherwise
+                    if self.identity_enabled and partner_id is not None:
+                        # Identity enabled: Use partner_id only (exclude partner_kind)
+                        csv_filename = (
+                            f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
+                            f"map_{map_name_clean}_id_{partner_id}.csv"
+                        )
+                    else:
+                        # Identity disabled: Use original format with partner_kind (backward compatible)
+                        csv_filename = (
+                            f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
+                            f"map_{map_name_clean}_partner_{partner_kind_name}.csv"
+                        )
                     csv_path = unit_test_dir / csv_filename
                     
                     # Save results
                     with open(csv_path, 'w', newline='') as f:
                         writer = csv.writer(f)
                         writer.writerow(self.csv_headers)
-                        writer.writerow([
-                            epoch,
-                            agent_id,
-                            partner_kind_name,
-                            first_attack_target,
-                            result,
-                            turn_of_first_attack
-                        ])
+                        # When writing CSV, include identity columns if identity enabled
+                        if self.identity_enabled:
+                            writer.writerow([
+                                epoch,
+                                agent_id,
+                                partner_kind_name,
+                                partner_id if partner_id is not None else "",  # NEW
+                                partner_kind_name if partner_kind != "no_partner" else "",  # NEW
+                                # Note: partner_orientation is NOT stored in CSV - it's determined by probe test setup
+                                first_attack_target,
+                                result,
+                                turn_of_first_attack
+                            ])
+                        else:
+                            # Backward compatible: original columns
+                            writer.writerow([
+                                epoch,
+                                agent_id,
+                                partner_kind_name,
+                                first_attack_target,
+                                result,
+                                turn_of_first_attack
+                            ])
                     
                     print(f"  Multi-step probe test - Agent {agent_id}, Partner {partner_kind_name}: "
                           f"First attack = {first_attack_target}, Result = {result}, Turn = {turn_of_first_attack}")
