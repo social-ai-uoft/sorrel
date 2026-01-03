@@ -53,7 +53,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 vision_radius=self.config.model.agent_vision_radius,
             )
             observation_spec.override_input_size(
-                np.array(observation_spec.input_size).reshape(1, -1).tolist()
+                (int(np.prod(observation_spec.input_size)),)
             )
 
             # create the action spec
@@ -101,7 +101,9 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
 
         for index in np.ndindex(self.world.map.shape):
             y, x, z = index
-            if y in [0, self.world.height - 1] or x in [0, self.world.width - 1]:
+            if (y in [0, self.world.height - 1] or x in [0, self.world.width - 1]) and (
+                z == 1
+            ):
                 # Add walls around the edge of the world (when indices are first or last)
                 self.world.add(index, Wall())
             elif z == 0:  # if location is on the bottom layer, put sand there

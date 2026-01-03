@@ -28,6 +28,7 @@ class Sand(Entity[TreasurehuntWorld]):
         # We technically don't need to make Sand passable here since it's on a different layer from Agent
         self.passable = True
         self.sprite = Path(__file__).parent / "./assets/sand.png"
+        self.kind = "EmptyEntity"
 
 
 class Gem(Entity[TreasurehuntWorld]):
