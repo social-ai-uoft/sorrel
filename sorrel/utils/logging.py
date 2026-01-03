@@ -175,7 +175,7 @@ class TensorboardLogger(Logger):
             log_dir (str | PathLike): Where the Tensorboard log files should be stored.
             *args: Additional optional values to be stored in a dictionary.
         """
-        super().__init__(max_epochs, *args)
+        super().__init__(max_epochs=max_epochs, *args)
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
         self.writer = SummaryWriter(log_dir=log_dir)

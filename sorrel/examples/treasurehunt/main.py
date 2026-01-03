@@ -23,12 +23,12 @@ if __name__ == "__main__":
             "epsilon_decay": 0.0005,
         },
         "world": {
-            "height": 21,
-            "width": 21,
+            "height": 20,
+            "width": 20,
             "gem_value": 10,
             "food_value": 5,
             "bone_value": -10,
-            "spawn_prob": 0.005,
+            "spawn_prob": 0.01,
         },
     }
 
