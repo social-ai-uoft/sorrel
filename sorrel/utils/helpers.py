@@ -142,7 +142,7 @@ def one_hot_encode(value: int, num_classes: int) -> np.ndarray:
     ), f"The maximum value of `value` is {num_classes - 1}."
 
     # Create a zero array of length num_classes
-    one_hot = np.zeros(num_classes)
+    one_hot = np.zeros(num_classes, dtype=np.float32)
 
     # Set the index corresponding to 'value' to 1
     one_hot[value] = 1

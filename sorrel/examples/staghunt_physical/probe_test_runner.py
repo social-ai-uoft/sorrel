@@ -24,7 +24,7 @@ def run_probe_test(experiment_env, epoch, output_dir):
     if not probe_config.get("enabled", False):
         return
     
-    # Check if using test_intention mode
+    # Check test mode
     test_mode = probe_config.get("test_mode", "default")
     
     if test_mode == "test_intention":
@@ -32,6 +32,13 @@ def run_probe_test(experiment_env, epoch, output_dir):
         test_intention = TestIntentionProbeTest(experiment_env, probe_config, output_dir)
         test_intention.run_test_intention(experiment_env.agents, epoch)
         print(f"Test intention probe test completed for epoch {epoch}")
+        return
+    
+    if test_mode == "multi_step":
+        from sorrel.examples.staghunt_physical.probe_test import MultiStepProbeTest
+        multi_step_test = MultiStepProbeTest(experiment_env, probe_config, output_dir)
+        multi_step_test.run_multi_step_test(experiment_env.agents, epoch)
+        print(f"Multi-step probe test completed for epoch {epoch}")
         return
     
     test_epochs = probe_config.get("test_epochs", 1)

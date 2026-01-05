@@ -56,6 +56,10 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         # Track which agents are spawned in the current epoch
         # This allows us to spawn only a subset of agents while keeping all agents initialized
         self.spawned_agent_ids: list[int] = []
+        
+        # Track the maximum number of turns for the current epoch (used when random_max_turns is enabled)
+        # Defaults to max_turns from config, will be updated at epoch start if random_max_turns is True
+        self.current_epoch_max_turns: int | None = None
 
     def setup_agents(self) -> None:
         """Create and configure the agents for the stag hunt experiment.
@@ -153,6 +157,19 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     # "PUNISH",
                     "ATTACK"]
             )
+            # Get device from config, with auto-detection support
+            device_config = model_cfg.get("device", "cpu")
+            if device_config == "auto":
+                # Auto-detect device: prefer CUDA if available, then MPS, fallback to CPU
+                if torch.cuda.is_available():
+                    device = "cuda"
+                elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                    device = "mps"
+                else:
+                    device = "cpu"
+            else:
+                device = device_config
+            
             # create a simple IQN model; hyperparameters can be tuned via config
             model = PyTorchIQN(
                 input_size=[full_input_dim],
@@ -160,7 +177,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 layer_size=int(model_cfg.get("layer_size", 250)),
                 epsilon=float(model_cfg.get("epsilon", 0.7)),
                 epsilon_min=float(model_cfg.get("epsilon_min", 0.1)),
-                device="cpu",
+                device=device,
                 seed=torch.random.seed(),
                 n_frames=int(model_cfg.get("n_frames", 5)),
                 n_step=int(model_cfg.get("n_step", 3)),
@@ -178,6 +195,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             assigned_kind = agent_kind_mapping.get(agent_id, None)
             agent_attrs = agent_attributes.get(agent_id, {})
             can_hunt = agent_attrs.get("can_hunt", True)  # Default to True
+            can_receive_shared_reward = agent_attrs.get("can_receive_shared_reward", True)  # Default to True
+            exclusive_reward = agent_attrs.get("exclusive_reward", False)  # Default to False
             
             agent = StagHuntAgent(
                 observation_spec=observation_spec,
@@ -188,6 +207,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 agent_id=agent_id,
                 agent_kind=assigned_kind,  # NEW: pass kind to agent
                 can_hunt=can_hunt,  # NEW: pass can_hunt attribute
+                can_receive_shared_reward=can_receive_shared_reward,  # NEW: pass can_receive_shared_reward attribute
+                exclusive_reward=exclusive_reward,  # NEW: pass exclusive_reward attribute
             )
             agents.append(agent)
         self.agents = agents
@@ -578,23 +599,32 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             try:
                 orientation_ref = self._parse_orientation_reference(orientation_ref_file)
                 
+                # Get spawn points from the world (only check agents at spawn points)
+                spawn_points_2d = {(row, col) for row, col, _ in world.agent_spawn_points}
+                
                 # Set agent orientations based on their spawn points
+                # Only check agents that are actually spawned in this epoch
                 for agent in self.agents:
+                    # Skip agents that are not spawned this epoch
+                    if agent.agent_id not in self.spawned_agent_ids:
+                        continue
                     if agent.location is not None:
                         # Extract row and col from location (location is (row, col, layer))
                         row, col = agent.location[0], agent.location[1]
                         
-                        if (row, col) in orientation_ref:
-                            initial_orientation, _ = orientation_ref[(row, col)]
-                            agent.orientation = initial_orientation
-                            # Update agent kind to reflect new orientation
-                            if hasattr(agent, 'update_agent_kind'):
-                                agent.update_agent_kind()
-                        else:
-                            print(
-                                f"Warning: Agent at (row={row}, col={col}) not found in orientation reference file. "
-                                f"Using default orientation."
-                            )
+                        # Only check orientation for agents at known spawn points
+                        if (row, col) in spawn_points_2d:
+                            if (row, col) in orientation_ref:
+                                initial_orientation, _ = orientation_ref[(row, col)]
+                                agent.orientation = initial_orientation
+                                # Update agent kind to reflect new orientation
+                                if hasattr(agent, 'update_agent_kind'):
+                                    agent.update_agent_kind()
+                            else:
+                                print(
+                                    f"Warning: Agent at spawn point (row={row}, col={col}) not found in orientation reference file. "
+                                    f"Using default orientation."
+                                )
             except FileNotFoundError as e:
                 print(f"Warning: Could not load orientation reference file: {e}")
                 print("Agents will use default orientations.")
@@ -619,12 +649,16 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 x.transition(self.world)
         
         # Handle agent transitions - SKIP removed agents AND non-spawned agents
-        for agent in self.agents:
-            # Skip agents that are not spawned this epoch
-            if agent.agent_id not in self.spawned_agent_ids:
-                continue
-            if agent.can_act():  # Only process agents that can act
-                agent.transition(self.world)
+        # Collect spawned agents that can act, then shuffle for random execution order
+        agents_to_execute = [
+            agent for agent in self.agents
+            if agent.agent_id in self.spawned_agent_ids and agent.can_act()
+        ]
+        random.shuffle(agents_to_execute)
+        
+        # Execute agents in randomized order
+        for agent in agents_to_execute:
+            agent.transition(self.world)
         
         # Collect metrics for this step
         self.collect_metrics_for_step()

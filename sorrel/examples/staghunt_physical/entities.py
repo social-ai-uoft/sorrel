@@ -212,16 +212,26 @@ class Resource(Entity["StagHuntWorld"]):
         # self.regeneration_rate = regeneration_rate
         self.regeneration_cooldown = regeneration_cooldown
         self.last_attacked_turn = 0
+        self.attack_history: list[int] = []  # Track agent IDs that have successfully damaged this resource
         self.has_transitions = True
         # sprite will be set in subclasses
 
-    def on_attack(self, world: StagHuntWorld, current_turn: int) -> bool:
+    def on_attack(self, world: StagHuntWorld, current_turn: int, attacker_id: int | None = None) -> bool:
         """Handle an attack on this resource.
 
         Reduces health by one and updates last attacked turn. Returns True if resource
         is defeated (health reaches zero), False otherwise.
+        
+        Args:
+            world: The game world
+            current_turn: Current turn number
+            attacker_id: Optional agent ID that performed the attack. Only added to attack_history
+                        if provided and the attack successfully decreases health.
         """
         self.health -= 1
+        # Add to attack history ONLY if attacker_id is provided and health actually decreased
+        if attacker_id is not None and attacker_id not in self.attack_history:
+            self.attack_history.append(attacker_id)
         self.last_attacked_turn = current_turn
         
         if self.health <= 0:
@@ -248,7 +258,9 @@ class Resource(Entity["StagHuntWorld"]):
         """Handle health regeneration over time.
         
         Resources regenerate health when they haven't been attacked recently.
+        When health regenerates, the attack history is reset.
         """
+        old_health = self.health
         # Only regenerate if not at max health and haven't been attacked recently
         if self.health < self.max_health:
             # Get current turn from world (assuming world has a turn counter)
@@ -258,6 +270,10 @@ class Resource(Entity["StagHuntWorld"]):
             # Regenerate if enough time has passed since last attack
             if turns_since_attack >= self.regeneration_cooldown:
                 self.health = min(self.max_health, self.health + world.health_regeneration_rate)
+        
+        # Reset attack history when health regenerates (resource "resets")
+        if self.health > old_health:
+            self.attack_history = []
 
 
 class StagResource(Resource):
@@ -281,13 +297,13 @@ class StagResource(Resource):
         else:
             self.kind = "StagResource"
     
-    def on_attack(self, world: StagHuntWorld, current_turn: int) -> bool:
+    def on_attack(self, world: StagHuntWorld, current_turn: int, attacker_id: int | None = None) -> bool:
         """Handle an attack on this resource.
         
         Updates kind to 'WoundedStagResource' if health < max_health (only if enabled).
         """
         # Call parent to handle health reduction
-        defeated = super().on_attack(world, current_turn)
+        defeated = super().on_attack(world, current_turn, attacker_id)
         
         # Update kind based on new health (if not defeated and feature enabled)
         if not defeated:

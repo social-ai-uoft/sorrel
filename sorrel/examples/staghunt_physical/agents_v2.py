@@ -108,7 +108,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         # Pad visual field to expected size if it's smaller (due to world boundaries)
         if visual_field.shape[0] < expected_visual_size:
             # Pad with wall representations
-            padded_visual = np.zeros(expected_visual_size, dtype=visual_field.dtype)
+            padded_visual = np.zeros(expected_visual_size, dtype=np.float32)
             padded_visual[: visual_field.shape[0]] = visual_field
 
             # Fill the remaining space with wall representations
@@ -143,7 +143,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
 
         if agent is None:
             # If no agent found, use default values
-            extra_features = np.array([0, 0, 0, 0], dtype=visual_field.dtype)
+            extra_features = np.array([0, 0, 0, 0], dtype=np.float32)
         else:
             # Extract inventory, ready flag, and interaction reward flag from the agent
             inv_stag = agent.inventory.get("stag", 0)
@@ -152,7 +152,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             interaction_reward_flag = 1 if agent.received_interaction_reward else 0
             extra_features = np.array(
                 [inv_stag, inv_hare, ready_flag, interaction_reward_flag],
-                dtype=visual_field.dtype,
+                dtype=np.float32,
             )
 
         # Generate absolute position embedding
@@ -220,6 +220,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         agent_id: int = 0,
         agent_kind: str | None = None,  # NEW: explicit kind assignment
         can_hunt: bool = True,  # NEW: whether agent can harm resources
+        can_receive_shared_reward: bool = True,  # NEW: whether agent can receive shared rewards
+        exclusive_reward: bool = False,  # NEW: whether only this agent gets reward when defeating resources
     ):
         super().__init__(observation_spec, action_spec, model)
         # assign a default sprite; can be overridden externally
@@ -229,6 +231,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.agent_id = agent_id
         self.agent_kind: str | None = agent_kind  # Store the base kind (e.g., "AgentKindA")
         self.can_hunt: bool = can_hunt  # NEW: whether attacks harm resources
+        self.can_receive_shared_reward = can_receive_shared_reward  # NEW: whether agent can receive shared rewards
+        self.exclusive_reward = exclusive_reward  # NEW: whether only this agent gets reward when defeating resources
 
         # orientation encoded as 0: north, 1: east, 2: south, 3: west
         self.orientation: int = 0
@@ -420,7 +424,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             q_values = self.model.get_all_qvalues(model_input)
         else:
             # Fallback: can't get Q-values, return zeros
-            q_values = np.zeros(self.action_spec.n_actions)
+            q_values = np.zeros(self.action_spec.n_actions, dtype=np.float32)
         
         # Get action (use take_action for consistency)
         action = self.model.take_action(model_input)
@@ -576,8 +580,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                             should_harm = not is_stag or self.can_hunt
                             
                             if should_harm:
-                                # Attack the resource
-                                defeated = entity.on_attack(world, world.current_turn)
+                                # Attack the resource - pass agent_id since attack will harm
+                                defeated = entity.on_attack(world, world.current_turn, self.agent_id)
                                 if defeated:
                                     # Handle reward sharing for defeated resource
                                     shared_reward = self.handle_resource_defeat(entity, world)
@@ -871,38 +875,97 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         """Handle reward sharing when a resource is defeated.
         
         Returns the reward this agent receives from the defeated resource.
-        Also delivers shared rewards to other agents in the sharing radius.
+        Also delivers shared rewards to other agents based on the reward allocation mode:
+        - If accurate_reward_allocation is True: only agents in attack_history get rewards
+        - If accurate_reward_allocation is False: agents within reward_sharing_radius get rewards
+        
+        The defeating agent always gets reward for defeating the resource, regardless of
+        can_receive_shared_reward. The can_receive_shared_reward parameter only affects
+        whether the agent receives shared rewards from OTHER agents' defeats.
         """
-        # Find all agents within reward sharing radius
-        sharing_radius = getattr(world, "reward_sharing_radius", 3)
-        agents_in_radius = []
+        if self.exclusive_reward:
+            # Only this agent gets the full reward, no sharing
+            return resource.value
         
-        for agent in world.environment.agents:
-            if agent != self and not agent.is_removed:
-                # Calculate distance
-                dx = abs(agent.location[0] - resource.location[0])
-                dy = abs(agent.location[1] - resource.location[1])
-                distance = max(dx, dy)  # Chebyshev distance
+        # Check if accurate reward allocation mode is enabled
+        # This parameter is set in world.py from config["world"]["accurate_reward_allocation"]
+        accurate_reward_allocation = world.accurate_reward_allocation
+        
+        if accurate_reward_allocation:
+            # Use attack history-based reward allocation
+            # Only reward agents that actually attacked and damaged the resource
+            contributing_agents = []
+            
+            # Get attack history from resource
+            attack_history = getattr(resource, "attack_history", [])
+            
+            # Find all agents in attack history that are still valid
+            for agent_id in attack_history:
+                # Find agent by ID
+                agent = None
+                for a in world.environment.agents:
+                    if a.agent_id == agent_id and not a.is_removed:
+                        agent = a
+                        break
                 
-                if distance <= sharing_radius:
-                    agents_in_radius.append(agent)
-        
-        # Include the defeating agent
-        agents_in_radius.append(self)
-        total_agents = len(agents_in_radius)
-        
-        # Share reward among all agents in radius
-        shared_reward = resource.value / total_agents if total_agents > 0 else 0
-        
-        # Deliver shared rewards to other agents via pending_reward
-        for agent in agents_in_radius:
-            if agent != self:  # Don't give pending reward to attacking agent
-                agent.pending_reward += shared_reward
-                # Record shared reward metrics for other agents
-                if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
-                    world.environment.metrics_collector.collect_shared_reward_metrics(
-                        agent, shared_reward
-                    )
+                # Only include if agent exists, is not removed, and can receive shared rewards
+                if agent is not None and agent.can_receive_shared_reward:
+                    contributing_agents.append(agent)
+            
+            # Always include the defeating agent (even if not in history due to edge cases)
+            if self not in contributing_agents:
+                contributing_agents.append(self)
+            
+            # If no contributing agents found (defensive fallback), use defeating agent only
+            if len(contributing_agents) == 0:
+                contributing_agents = [self]
+            
+            total_agents = len(contributing_agents)
+            shared_reward = resource.value / total_agents if total_agents > 0 else 0
+            
+            # Deliver shared rewards to other agents via pending_reward
+            for agent in contributing_agents:
+                if agent != self:  # Don't give pending reward to attacking agent
+                    agent.pending_reward += shared_reward
+                    # Record shared reward metrics for other agents
+                    if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                        world.environment.metrics_collector.collect_shared_reward_metrics(
+                            agent, shared_reward
+                        )
+        else:
+            # Use existing radius-based reward sharing
+            # Find all agents within reward sharing radius
+            sharing_radius = getattr(world, "reward_sharing_radius", 3)
+            agents_in_radius = []
+            
+            for agent in world.environment.agents:
+                if agent != self and not agent.is_removed:
+                    # Calculate distance
+                    dx = abs(agent.location[0] - resource.location[0])
+                    dy = abs(agent.location[1] - resource.location[1])
+                    distance = max(dx, dy)  # Chebyshev distance
+                    
+                    if distance <= sharing_radius:
+                        # Only include agents that can receive shared rewards
+                        if agent.can_receive_shared_reward:
+                            agents_in_radius.append(agent)
+            
+            # Include the defeating agent (always gets reward for defeating)
+            agents_in_radius.append(self)
+            total_agents = len(agents_in_radius)
+            
+            # Share reward among all agents in radius
+            shared_reward = resource.value / total_agents if total_agents > 0 else 0
+            
+            # Deliver shared rewards to other agents via pending_reward
+            for agent in agents_in_radius:
+                if agent != self:  # Don't give pending reward to attacking agent
+                    agent.pending_reward += shared_reward
+                    # Record shared reward metrics for other agents
+                    if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
+                        world.environment.metrics_collector.collect_shared_reward_metrics(
+                            agent, shared_reward
+                        )
         
         # Note: Do NOT add resource.value directly to world.total_reward here.
         # The rewards are already accumulated correctly through Agent.transition():
@@ -910,7 +973,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # - Other agents' pending_reward is added when they act on their next turn
         # Adding resource.value here would cause double-counting.
         
-        # Return the attacking agent's immediate reward
+        # Return the attacking agent's immediate reward (always gets its share)
         return shared_reward
 
     def is_done(self, world: StagHuntWorld) -> bool:
