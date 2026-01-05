@@ -91,9 +91,9 @@ class DualHeadRecurrentPPO(PyTorchModel):
         clip_param: float = 0.2,
         K_epochs: int = 4,
         batch_size: int = 64,
-        entropy_start: float = 0.05,
-        entropy_end: float = 0.001,
-        entropy_decay_steps: int = 50_000,
+        entropy_start: float = 0.01,
+        entropy_end: float = 0.01,
+        entropy_decay_steps: int = 0,  # 0 = fixed schedule (no decay)
         max_grad_norm: float = 0.5,
         gae_lambda: float = 0.95,
         use_composite_actions: bool = False,
@@ -331,15 +331,16 @@ class DualHeadRecurrentPPO(PyTorchModel):
 
     def _dual_action_to_single_simple(self, move_action: int, vote_action: int) -> int:
         """Convert dual actions to single action index (simple mode)."""
-        if move_action == -1:  # No movement
-            return 6  # noop
         # Mapping: move actions 0-3, vote actions 4-5, noop 6
-        if vote_action == 0:  # No vote
-            return move_action  # 0-3
-        elif vote_action == 1:  # Vote increase
+        # Priority: vote actions override movement actions
+        if vote_action == 1:  # Vote increase
             return 4
-        else:  # vote_action == 2, Vote decrease
+        elif vote_action == 2:  # Vote decrease
             return 5
+        elif move_action == -1:  # No movement and no vote
+            return 6  # noop
+        else:  # vote_action == 0, movement only
+            return move_action  # 0-3
 
     def _single_action_to_dual_simple(self, action: int) -> Tuple[int, int]:
         """Convert single action index to dual actions (simple mode)."""
@@ -440,6 +441,19 @@ class DualHeadRecurrentPPO(PyTorchModel):
             self._pending_action = (action_move, action_vote)
             self._pending_probs = (log_prob_combined, 0.0)  # Dummy vote prob
             return action.item()
+    
+    def get_dual_action(self) -> Optional[Tuple[int, int]]:
+        """
+        Get the most recently sampled dual action (move, vote).
+        
+        This method allows the agent to access dual actions directly without
+        needing to convert from single action index back to dual actions.
+        
+        Returns:
+            Tuple of (move_action, vote_action) if available, None otherwise.
+            Only valid immediately after take_action() is called.
+        """
+        return self._pending_action
     
     def add_memory_ppo(self, reward: float, done: bool) -> None:
         """

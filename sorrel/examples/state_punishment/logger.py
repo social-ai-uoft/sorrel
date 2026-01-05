@@ -115,9 +115,35 @@ class StatePunishmentLogger:
             encounter_data["Mean/mean_social_harm_received"] = total_social_harm_received / len(self.multi_agent_env.individual_envs)
             
             # Add total and mean action frequencies
+            # Note: Each agent takes one action per turn. If the epoch completes all max_turns,
+            # the sum of mean action frequencies should equal max_turns (typically 100).
+            # However, epochs can end early if world.is_done is True, in which case the sum
+            # will be less than max_turns. The sum represents the actual number of turns taken.
             for action_name in total_action_frequencies:
                 encounter_data[f"Total/total_action_freq_{action_name}"] = total_action_frequencies[action_name]
                 encounter_data[f"Mean/mean_action_freq_{action_name}"] = mean_action_frequencies[action_name] / len(self.multi_agent_env.individual_envs)
+            
+            # Calculate actual turns taken (sum of mean action frequencies)
+            # This equals max_turns if epoch completed all turns, or less if epoch ended early
+            sum_mean_frequencies = sum(encounter_data[f"Mean/mean_action_freq_{action_name}"] for action_name in total_action_frequencies)
+            expected_sum = self.multi_agent_env.config.experiment.max_turns
+            
+            # Log actual turns vs expected (for debugging early termination or over-counting)
+            if abs(sum_mean_frequencies - expected_sum) > 0.01:  # Allow small floating point errors
+                if sum_mean_frequencies < expected_sum - 1:  # More than 1 turn difference (early termination)
+                    print(f"INFO: Epoch {epoch} ended early - actual turns: {sum_mean_frequencies:.1f}, expected: {expected_sum} "
+                          f"(difference: {expected_sum - sum_mean_frequencies:.1f} turns)")
+                elif sum_mean_frequencies > expected_sum + 1:  # More than expected (potential bug!)
+                    print(f"WARNING: Epoch {epoch} - sum of mean action frequencies ({sum_mean_frequencies:.1f}) exceeds max_turns ({expected_sum})! "
+                          f"This may indicate actions are being counted multiple times or action_frequencies weren't reset properly.")
+                    # Debug: print individual agent totals
+                    for i, env in enumerate(self.multi_agent_env.individual_envs):
+                        agent = env.agents[0]
+                        agent_sum = sum(agent.action_frequencies.values())
+                        print(f"  Agent {i} total: {agent_sum:.1f} actions")
+            else:
+                # Epoch completed all turns - this is the normal case
+                pass
             
             # Add mean sigma weights across all agents
             if sigma_weights_ff1:

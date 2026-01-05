@@ -18,6 +18,7 @@ from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
+from sorrel.models.pytorch.recurrent_ppo_lstm_generic import RecurrentPPOLSTM
 from sorrel.observation.observation_spec import OneHotObservationSpec
 
 
@@ -106,6 +107,9 @@ class StatePunishmentAgent(Agent):
         self.action_frequencies = {}
         self.action_names = list(action_spec.actions.values())
         
+        # Store dual actions for PPO dual-head mode (avoids conversion)
+        self._last_dual_action: Optional[Tuple[int, int]] = None
+        
         # Track social harm received per epoch
         self.social_harm_received_epoch = 0.0
 
@@ -132,6 +136,17 @@ class StatePunishmentAgent(Agent):
             # PPO handles state conversion internally
             # Works for both dual-head and single-head modes
             action = self.model.take_action(state)
+            # Store dual action for direct access (avoids conversion)
+            if self.model.use_dual_head:
+                dual_action = self.model.get_dual_action()
+                if dual_action is not None:
+                    self._last_dual_action = dual_action
+            return action
+        elif isinstance(self.model, RecurrentPPOLSTM):
+            # PPO LSTM uses LSTM for temporal memory, no frame stacking needed
+            # PPO LSTM handles state conversion internally
+            # Single-head mode only (no dual actions)
+            action = self.model.take_action(state)
             return action
         else:
             # IQN: use frame stacking (stateless model needs temporal context)
@@ -155,8 +170,9 @@ class StatePunishmentAgent(Agent):
             reward: the reward received by the agent.
             done: whether the episode terminated after this experience.
         """
-        if isinstance(self.model, DualHeadRecurrentPPO):
+        if isinstance(self.model, (DualHeadRecurrentPPO, RecurrentPPOLSTM)):
             # PPO: use special method that uses pending transition
+            # Works for both GRU-based and LSTM-based PPO
             self.model.add_memory_ppo(reward, done)
         else:
             # IQN: use standard memory.add
@@ -286,26 +302,53 @@ class StatePunishmentAgent(Agent):
         reward = 0.0
         info = {'is_punished': False}
 
-        # Determine movement and voting actions based on mode
-        if self.use_composite_actions:
-            # Composite mode: 13 actions (0-12)
-            # Actions 0-11: 4 movements × 3 voting options
-            # Action 12: noop (do nothing)
-            if action == 12:  # noop action
-                movement_action = -1  # No movement
-                voting_action = 0  # No vote
+        # For PPO dual-head mode: use stored dual actions directly (avoids conversion)
+        # Try to get dual action directly from model if not already stored
+        is_dual_head_ppo = isinstance(self.model, DualHeadRecurrentPPO)
+        if is_dual_head_ppo and self.model.use_dual_head:
+            if self._last_dual_action is None:
+                # Try to get it directly from model (in case it wasn't stored)
+                dual_action = self.model.get_dual_action()
+                if dual_action is not None:
+                    self._last_dual_action = dual_action
+            
+            if self._last_dual_action is not None:
+                # Use dual actions directly - no conversion needed!
+                movement_action, voting_action = self._last_dual_action
+                # Clear after use (important: clear before executing to avoid reuse)
+                self._last_dual_action = None
             else:
-                movement_action = action % 4  # 0-3 for movement
-                voting_action = action // 4  # 0-2 for voting
+                # Dual action not available, fall through to conversion
+                movement_action = None
+                voting_action = None
         else:
-            movement_action = action if action < 4 else -1  # Only movement if < 4
-            # Voting actions: action 4 = vote_increase (1), action 5 = vote_decrease (2), others = no vote (0)
-            if action == 4:
-                voting_action = 1  # vote_increase
-            elif action == 5:
-                voting_action = 2  # vote_decrease
+            # Not dual-head mode, initialize for conversion
+            movement_action = None
+            voting_action = None
+        
+        # Determine movement and voting actions based on mode (fallback if dual action not used)
+        if movement_action is None or voting_action is None:
+            if self.use_composite_actions:
+                # Composite mode: 13 actions (0-12)
+                # Actions 0-11: 4 movements × 3 voting options
+                # Action 12: noop (do nothing)
+                # PPO uses: action = move_action * 3 + vote_action
+                if action == 12:  # noop action
+                    movement_action = -1  # No movement
+                    voting_action = 0  # No vote
+                else:
+                    movement_action = action // 3  # 0-3 for movement
+                    voting_action = action % 3  # 0-2 for voting
             else:
-                voting_action = 0  # no vote
+                # Simple mode: 7 actions (0-6)
+                movement_action = action if action < 4 else -1  # Only movement if < 4
+                # Voting actions: action 4 = vote_increase (1), action 5 = vote_decrease (2), others = no vote (0)
+                if action == 4:
+                    voting_action = 1  # vote_increase
+                elif action == 5:
+                    voting_action = 2  # vote_decrease
+                else:
+                    voting_action = 0  # no vote
 
         # Execute movement (if valid and not simple foraging with non-movement action)
         if movement_action >= 0 and not (self.simple_foraging and action >= 4):

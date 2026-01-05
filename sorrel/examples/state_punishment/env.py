@@ -13,6 +13,8 @@ from sorrel.agents import Agent
 from sorrel.environment import Environment
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
+from sorrel.models.pytorch.recurrent_ppo_lstm_generic import RecurrentPPOLSTM
+from sorrel.models.pytorch.recurrent_ppo_lstm_cpc import RecurrentPPOLSTMCPC
 from sorrel.observation.observation_spec import OneHotObservationSpec
 from sorrel.utils.logging import Logger
 from sorrel.utils.visualization import ImageRenderer
@@ -592,14 +594,51 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 use_dual_head=use_dual_head,
                 obs_dim=obs_dim,
                 n_move_actions=4,
-                n_vote_actions=3 if old_agent.use_composite_actions else 2,
+                n_vote_actions=3,  # Always 3: 0=no_vote, 1=vote_increase, 2=vote_decrease
                 gamma=env.config.model.GAMMA,
                 lr=env.config.model.LR,
-                clip_param=0.2,
-                K_epochs=4,
+                clip_param=env.config.model.ppo_clip_param,
+                K_epochs=env.config.model.ppo_k_epochs,
                 batch_size=env.config.model.batch_size,
+                entropy_start=env.config.model.ppo_entropy_start,
+                entropy_end=env.config.model.ppo_entropy_end,
+                entropy_decay_steps=env.config.model.ppo_entropy_decay_steps,
+                max_grad_norm=env.config.model.ppo_max_grad_norm,
+                gae_lambda=env.config.model.ppo_gae_lambda,
                 use_composite_actions=old_agent.use_composite_actions,
-                rollout_length=50,  # Target rollout length (training happens at end of epoch regardless)
+                rollout_length=env.config.model.ppo_rollout_length,
+            )
+        elif model_type == "ppo_lstm":
+            obs_dim = (
+                observation_spec.input_size[0],
+                observation_spec.input_size[1],
+                observation_spec.input_size[2],
+            )
+            new_model = RecurrentPPOLSTM(
+                input_size=(flattened_size,),
+                action_space=action_spec.n_actions,
+                layer_size=env.config.model.layer_size,
+                epsilon=env.config.model.epsilon,
+                epsilon_min=env.config.model.epsilon_min,
+                device=env.config.model.device,
+                seed=torch.random.seed(),  # Fresh random seed
+                # Observation processing - use "flattened" since we have extra scalar features
+                obs_type="flattened",
+                obs_dim=obs_dim,
+                # PPO hyperparameters
+                gamma=env.config.model.GAMMA,
+                lr=env.config.model.LR,
+                clip_param=env.config.model.ppo_clip_param,
+                K_epochs=env.config.model.ppo_k_epochs,
+                batch_size=env.config.model.batch_size,
+                entropy_start=env.config.model.ppo_entropy_start,
+                entropy_end=env.config.model.ppo_entropy_end,
+                entropy_decay_steps=env.config.model.ppo_entropy_decay_steps,
+                max_grad_norm=env.config.model.ppo_max_grad_norm,
+                gae_lambda=env.config.model.ppo_gae_lambda,
+                rollout_length=env.config.model.ppo_rollout_length,
+                # LSTM-specific parameters
+                hidden_size=256,
             )
         else:
             new_model = PyTorchIQN(
@@ -1076,7 +1115,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     if hasattr(agent.model, "train_step"):
                         # Check if it's a PPO model (uses rollout_memory) or IQN model (uses memory)
                         from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
-                        if isinstance(agent.model, DualHeadRecurrentPPO):
+                        from sorrel.models.pytorch.recurrent_ppo_lstm_generic import RecurrentPPOLSTM
+                        from sorrel.models.pytorch.recurrent_ppo_lstm_cpc import RecurrentPPOLSTMCPC
+                        if isinstance(agent.model, (DualHeadRecurrentPPO, RecurrentPPOLSTM, RecurrentPPOLSTMCPC)):
                             # PPO: train if we have any data (train_step handles the rest)
                             if len(agent.model.rollout_memory["states"]) > 0:
                                 loss = agent.model.train_step()
@@ -1335,7 +1376,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
             model_type = self.config.model.get("type", "iqn")
             
             if model_type == "ppo":
-                # PPO model
+                # PPO model (GRU-based)
                 use_dual_head = self.config.model.get("use_dual_head", True)
                 # Derive obs_dim from observation spec
                 obs_dim = (
@@ -1354,14 +1395,93 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_dual_head=use_dual_head,
                     obs_dim=obs_dim,
                     n_move_actions=4,
-                    n_vote_actions=3 if self.use_composite_actions else 2,
+                    n_vote_actions=3,  # Always 3: 0=no_vote, 1=vote_increase, 2=vote_decrease
                     gamma=self.config.model.GAMMA,
                     lr=self.config.model.LR,
-                    clip_param=0.2,
-                    K_epochs=4,
+                    clip_param=self.config.model.ppo_clip_param,
+                    K_epochs=self.config.model.ppo_k_epochs,
                     batch_size=self.config.model.batch_size,
+                    entropy_start=self.config.model.ppo_entropy_start,
+                    entropy_end=self.config.model.ppo_entropy_end,
+                    entropy_decay_steps=self.config.model.ppo_entropy_decay_steps,
+                    max_grad_norm=self.config.model.ppo_max_grad_norm,
+                    gae_lambda=self.config.model.ppo_gae_lambda,
                     use_composite_actions=self.use_composite_actions,
-                    rollout_length=50,  # Target rollout length (training happens at end of epoch regardless)
+                    rollout_length=self.config.model.ppo_rollout_length,
+                )
+            elif model_type == "ppo_lstm":
+                # PPO LSTM model (LSTM-based, single-head)
+                # Derive obs_dim from observation spec
+                obs_dim = (
+                    observation_spec.input_size[0],  # C
+                    observation_spec.input_size[1],  # H
+                    observation_spec.input_size[2],  # W
+                )
+                model = RecurrentPPOLSTM(
+                    input_size=(flattened_size,),
+                    action_space=action_spec.n_actions,
+                    layer_size=self.config.model.layer_size,
+                    epsilon=self.config.model.epsilon,
+                    epsilon_min=self.config.model.epsilon_min,
+                    device=self.config.model.device,
+                    seed=torch.random.seed(),
+                    # Observation processing - use "flattened" since we have extra scalar features
+                    obs_type="flattened",  # Process entire flattened vector with FC layers
+                    obs_dim=obs_dim,  # Still provide for reference, but won't be used in flattened mode
+                    # PPO hyperparameters
+                    gamma=self.config.model.GAMMA,
+                    lr=self.config.model.LR,
+                    clip_param=self.config.model.ppo_clip_param,
+                    K_epochs=self.config.model.ppo_k_epochs,
+                    batch_size=self.config.model.batch_size,
+                    entropy_start=self.config.model.ppo_entropy_start,
+                    entropy_end=self.config.model.ppo_entropy_end,
+                    entropy_decay_steps=self.config.model.ppo_entropy_decay_steps,
+                    max_grad_norm=self.config.model.ppo_max_grad_norm,
+                    gae_lambda=self.config.model.ppo_gae_lambda,
+                    rollout_length=self.config.model.ppo_rollout_length,
+                    # LSTM-specific parameters
+                    hidden_size=256,  # LSTM hidden size (can match layer_size if desired)
+                )
+            elif model_type == "ppo_lstm_cpc":
+                # PPO LSTM with CPC model (LSTM-based with Contrastive Predictive Coding)
+                # Derive obs_dim from observation spec
+                obs_dim = (
+                    observation_spec.input_size[0],  # C
+                    observation_spec.input_size[1],  # H
+                    observation_spec.input_size[2],  # W
+                )
+                model = RecurrentPPOLSTMCPC(
+                    input_size=(flattened_size,),
+                    action_space=action_spec.n_actions,
+                    layer_size=self.config.model.layer_size,
+                    epsilon=self.config.model.epsilon,
+                    epsilon_min=self.config.model.epsilon_min,
+                    device=self.config.model.device,
+                    seed=torch.random.seed(),
+                    # Observation processing - use "flattened" since we have extra scalar features
+                    obs_type="flattened",  # Process entire flattened vector with FC layers
+                    obs_dim=obs_dim,  # Still provide for reference, but won't be used in flattened mode
+                    # PPO hyperparameters
+                    gamma=self.config.model.GAMMA,
+                    lr=self.config.model.LR,
+                    clip_param=self.config.model.ppo_clip_param,
+                    K_epochs=self.config.model.ppo_k_epochs,
+                    batch_size=self.config.model.batch_size,
+                    entropy_start=self.config.model.ppo_entropy_start,
+                    entropy_end=self.config.model.ppo_entropy_end,
+                    entropy_decay_steps=self.config.model.ppo_entropy_decay_steps,
+                    max_grad_norm=self.config.model.ppo_max_grad_norm,
+                    gae_lambda=self.config.model.ppo_gae_lambda,
+                    rollout_length=self.config.model.ppo_rollout_length,
+                    # LSTM-specific parameters
+                    hidden_size=256,  # LSTM hidden size (can match layer_size if desired)
+                    # CPC-specific parameters
+                    use_cpc=self.config.model.get("use_cpc", True),
+                    cpc_horizon=self.config.model.get("cpc_horizon", 30),
+                    cpc_weight=self.config.model.get("cpc_weight", 1.0),
+                    cpc_projection_dim=self.config.model.get("cpc_projection_dim", None),
+                    cpc_temperature=self.config.model.get("cpc_temperature", 0.07),
                 )
             else:
                 # IQN model (default)
