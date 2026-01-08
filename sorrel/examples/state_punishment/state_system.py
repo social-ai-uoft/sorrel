@@ -131,6 +131,7 @@ class StateSystem:
         only_punish_taboo: bool = True,
         use_probabilistic_punishment: bool = True,
         use_predefined_punishment_schedule: bool = False,
+        reset_punishment_level_per_epoch: bool = True,  # NEW: Control punishment reset at epoch start
     ):
         """Initialize the state system.
 
@@ -155,11 +156,22 @@ class StateSystem:
         """
         self.prob = init_prob
         self.init_prob = init_prob
+        self.reset_punishment_level_per_epoch = reset_punishment_level_per_epoch  # NEW
         self.magnitude = magnitude
         self.change_per_vote = change_per_vote
         self.taboo_resources = taboo_resources or ["A", "B", "C", "D", "E"]
         self.vote_history = []
         self.punishment_history = []
+        
+        # Voting season tracking
+        self.voting_season_enabled = False
+        self.voting_season_interval = 10
+        self.voting_season_reset_per_epoch = True
+        self.voting_season_counter = 0  # Steps since last voting season (0 = voting season)
+        self.is_voting_season = False  # Current voting season status
+        
+        # Note: Counter starts at 0, so if voting season is enabled and reset_per_epoch=True,
+        # the first turn of each epoch will be a voting season (counter == 0).
 
         # Advanced punishment system parameters
         self.num_resources = num_resources
@@ -180,12 +192,14 @@ class StateSystem:
             if predefined_punishment_probs.shape[0] != num_steps:
                 raise ValueError(
                     f"Predefined schedule has {predefined_punishment_probs.shape[0]} steps, "
-                    f"but num_steps={num_steps}. Expected {num_steps} steps."
+                    f"but num_steps={num_steps}. Expected {num_steps} steps. "
+                    f"Either set num_steps={predefined_punishment_probs.shape[0]} or disable --use_predefined_punishment_schedule."
                 )
             if predefined_punishment_probs.shape[1] != num_resources:
                 raise ValueError(
                     f"Predefined schedule has {predefined_punishment_probs.shape[1]} resources, "
-                    f"but num_resources={num_resources}. Expected {num_resources} resources."
+                    f"but num_resources={num_resources}. Expected {num_resources} resources. "
+                    f"Either set --num_resources={predefined_punishment_probs.shape[1]} or disable --use_predefined_punishment_schedule."
                 )
             
             # Transpose to match expected format: (num_resources, num_steps)
@@ -326,8 +340,73 @@ class StateSystem:
             return entity.social_harm
         return 0.0
 
+    def set_voting_season_config(
+        self, 
+        enabled: bool, 
+        interval: int, 
+        reset_per_epoch: bool
+    ) -> None:
+        """Configure voting season parameters.
+        
+        Args:
+            enabled: Whether voting season mode is enabled
+            interval: Steps between voting seasons (must be > 0)
+            reset_per_epoch: Whether to reset counter at epoch start
+            
+        Raises:
+            ValueError: If interval <= 0
+        """
+        if interval <= 0:
+            raise ValueError(f"voting_season_interval must be > 0, got {interval}")
+        
+        self.voting_season_enabled = enabled
+        self.voting_season_interval = interval
+        self.voting_season_reset_per_epoch = reset_per_epoch
+        if not enabled:
+            self.is_voting_season = False
+            self.voting_season_counter = 0
+
+    def update_voting_season(self) -> None:
+        """Update voting season status based on step counter.
+        
+        Called at the start of each turn. If counter == 0, it's voting season.
+        After checking, increment counter. When counter reaches interval, reset to 0.
+        """
+        if not self.voting_season_enabled:
+            self.is_voting_season = False
+            return
+        
+        # Check if it's voting season (counter == 0 means voting time)
+        self.is_voting_season = (self.voting_season_counter == 0)
+        
+        # Increment counter for next turn
+        self.voting_season_counter += 1
+        
+        # Reset counter if interval reached (next turn will be voting season)
+        if self.voting_season_counter >= self.voting_season_interval:
+            self.voting_season_counter = 0
+
+    def reset_voting_season_counter(self) -> None:
+        """Reset voting season counter (called at epoch start if reset_per_epoch=True).
+        
+        This ensures that if reset_per_epoch=True, each epoch starts with a voting season
+        (counter = 0, is_voting_season = True).
+        """
+        if self.voting_season_reset_per_epoch:
+            self.voting_season_counter = 0
+            self.is_voting_season = True  # Start new epoch with voting season
+
     def reset_epoch(self) -> None:
-        """Reset epoch-specific tracking."""
+        """Reset epoch-specific tracking.
+        
+        This is called on shared_state_system at the start of each epoch in run_experiment().
+        Individual world state_systems are reset via world.reset() -> state_system.reset().
+        """
+        # Reset punishment level if configured to do so (for shared_state_system)
+        # This handles the case where shared_state_system.reset() is not called
+        if self.reset_punishment_level_per_epoch:
+            self.prob = self.init_prob
+        
         self.epoch_vote_up = 0
         self.epoch_vote_down = 0
         self.epoch_vote_history.append(
@@ -339,6 +418,10 @@ class StateSystem:
         )
         # Reset punishment level history for new epoch
         self.punishment_level_history = []
+        
+        # Reset voting season counter if configured
+        if self.voting_season_reset_per_epoch:
+            self.reset_voting_season_counter()
 
     def get_epoch_vote_stats(self) -> Dict:
         """Get vote statistics for the current epoch."""
@@ -364,8 +447,17 @@ class StateSystem:
         return stats
 
     def reset(self) -> None:
-        """Reset the state system to initial values."""
-        self.prob = self.init_prob
+        """Reset the state system to initial values.
+        
+        NOTE: For the shared_state_system used by agents, this method is rarely called.
+        Individual world state_systems call this, but agents use shared_state_system.
+        The shared_state_system is reset via reset_epoch() in run_experiment().
+        """
+        # Only reset punishment level if configured to do so
+        if self.reset_punishment_level_per_epoch:
+            self.prob = self.init_prob
+        
+        # Always reset these tracking variables
         self.vote_history = []
         self.punishment_history = []
         self.transgression_record = {resource: [] for resource in self.taboo_resources}

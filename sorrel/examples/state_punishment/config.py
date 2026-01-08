@@ -17,8 +17,8 @@ def create_config(
     use_predefined_punishment_schedule: bool = False,
     social_harm_accessible: bool = False,
     map_size: int = 10,
-    num_resources: int = 8,
-    learning_rate: float = 0.00010, # 0.00025
+    num_resources: int = 8,  # Initial number of resources to spawn in the world (can be any number)
+    learning_rate: float = 0.00025, # 0.00025
     batch_size: int = 64, #64
     memory_size: int = 1024, #1024
     target_update_frequency: int = 200,
@@ -73,6 +73,12 @@ def create_config(
     ppo_entropy_decay_steps: int = 0,  # Number of training steps for entropy annealing (0 = fixed schedule)
     ppo_max_grad_norm: float = 0.5,  # Max gradient norm for clipping
     ppo_gae_lambda: float = 0.95,  # GAE lambda parameter
+    # Voting season parameters
+    enable_voting_season: bool = False,  # Enable voting season mode
+    voting_season_interval: int = 10,    # Steps between voting seasons (X)
+    voting_season_reset_per_epoch: bool = True,  # Reset counter each epoch
+    # Punishment reset control
+    reset_punishment_level_per_epoch: bool = True,  # Reset punishment level at epoch start
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -259,6 +265,9 @@ def create_config(
             "replacement_initial_agents_count": replacement_initial_agents_count,  # NEW
             "replacement_minimum_tenure_epochs": replacement_minimum_tenure_epochs,  # NEW
             "randomize_agent_order": randomize_agent_order,
+            "enable_voting_season": enable_voting_season,
+            "voting_season_interval": voting_season_interval,
+            "voting_season_reset_per_epoch": voting_season_reset_per_epoch,
         },
         "world": {
             "height": map_size,
@@ -276,6 +285,7 @@ def create_config(
             "change_per_vote": 0.1,
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
+            "reset_punishment_level_per_epoch": reset_punishment_level_per_epoch,
         },
         "model": {
             "agent_vision_radius": vision_radius,

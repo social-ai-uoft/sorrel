@@ -356,6 +356,11 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
     @override
     def take_turn(self) -> None:
         """Coordinate turns across all individual environments."""
+        # Update voting season status BEFORE incrementing turn counter
+        # This ensures voting season status is set before agent actions
+        if hasattr(self.shared_state_system, 'update_voting_season'):
+            self.shared_state_system.update_voting_season()
+        
         # Increment the turn counter for the multi-agent environment
         self.turn += 1
 
@@ -553,11 +558,12 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         disable_punishment_info = old_agent.disable_punishment_info
         
         # Calculate model input size (same as old agent)
+        # NOTE: Scalar features are now 4: punishment_level, social_harm, third_feature, is_voting_season
         base_flattened_size = (
             observation_spec.input_size[0]
             * observation_spec.input_size[1]
             * observation_spec.input_size[2]
-            + 3  # punishment_level, social_harm, random_noise
+            + 4  # punishment_level, social_harm, third_feature, is_voting_season
         )
         
         # Add punishment observation features if enabled
@@ -1348,14 +1354,14 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
             action_spec = ActionSpec(action_names)
 
-            # Create the model with extra features (punishment_level, social_harm, random_noise)
+            # Create the model with extra features (punishment_level, social_harm, third_feature, is_voting_season)
             # The input_size should be a tuple representing the flattened dimensions
-            # We always add 3 extra features: punishment_level (accessible value or 0), social_harm, random_noise
+            # We always add 4 extra features: punishment_level (accessible value or 0), social_harm, third_feature, is_voting_season
             base_flattened_size = (
                 observation_spec.input_size[0]
                 * observation_spec.input_size[1]
                 * observation_spec.input_size[2]
-                + 3
+                + 4  # punishment_level, social_harm, third_feature, is_voting_season
             )
             
             # Add punishment observation features if enabled

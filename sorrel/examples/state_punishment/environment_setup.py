@@ -30,6 +30,15 @@ def create_shared_state_system(
     if simple_foraging:
         shared_state_system.prob = fixed_punishment_level
         shared_state_system.simple_foraging = True
+    
+    # Configure voting season if enabled
+    if hasattr(shared_state_system, 'set_voting_season_config'):
+        voting_config = config.experiment
+        shared_state_system.set_voting_season_config(
+            enabled=voting_config.get("enable_voting_season", False),
+            interval=voting_config.get("voting_season_interval", 10),
+            reset_per_epoch=voting_config.get("voting_season_reset_per_epoch", True)
+        )
 
     return shared_state_system
 

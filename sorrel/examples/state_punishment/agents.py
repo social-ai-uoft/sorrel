@@ -151,6 +151,18 @@ class StatePunishmentAgent(Agent):
         else:
             # IQN: use frame stacking (stateless model needs temporal context)
             prev_states = self.model.memory.current_state()
+            
+            # Handle shape mismatch if observation shape changed (e.g., voting season flag added)
+            if prev_states.shape[1] != state.shape[1]:
+                # Pad or truncate prev_states to match current state shape
+                if prev_states.shape[1] < state.shape[1]:
+                    # Old states are smaller - pad with zeros (assume new features were 0 before)
+                    pad_width = state.shape[1] - prev_states.shape[1]
+                    prev_states = np.pad(prev_states, ((0, 0), (0, pad_width)), mode='constant', constant_values=0)
+                else:
+                    # Old states are larger - truncate (shouldn't happen, but handle gracefully)
+                    prev_states = prev_states[:, :state.shape[1]]
+            
             stacked_states = np.vstack((prev_states, state))
             model_input = stacked_states.reshape(1, -1)
             action = self.model.take_action(model_input)
@@ -183,7 +195,13 @@ class StatePunishmentAgent(Agent):
     # Note: pov method removed - use generate_single_view directly
 
     def generate_single_view(self, world, state_system, social_harm_dict, punishment_tracker=None) -> np.ndarray:
-        """Generate observation from single agent perspective."""
+        """Generate observation from single agent perspective.
+        
+        Returns:
+            Observation array with shape (1, visual_field_size + 4 + num_other_agents).
+            Scalar features (4 total): [punishment_level, social_harm, third_feature, is_voting_season]
+            Note: If punishment_tracker is provided, other_punishments are concatenated after these 4 features.
+        """
         image = self.observation_spec.observe(world, self.location)
         # flatten the image to get the state
         visual_field = image.reshape(1, -1)
@@ -202,9 +220,21 @@ class StatePunishmentAgent(Agent):
                 third_feature = 1.0 if self.was_punished_last_step else 0.0
         else:
             third_feature = np.random.random()
+        
+        # Add voting season flag (4th scalar feature)
+        # Only include flag if voting season is enabled
+        if (state_system is not None and 
+            hasattr(state_system, 'voting_season_enabled') and 
+            state_system.voting_season_enabled and
+            hasattr(state_system, 'is_voting_season')):
+            is_voting_season = 1.0 if state_system.is_voting_season else 0.0
+        else:
+            is_voting_season = 0.0
 
+        # Add voting season flag to extra_features (as 4th feature)
+        # NOTE: Observation shape changed from 3 to 4 scalar features
         extra_features = np.array(
-            [punishment_level, social_harm, third_feature], dtype=visual_field.dtype
+            [punishment_level, social_harm, third_feature, is_voting_season], dtype=visual_field.dtype
         ).reshape(1, -1)
         
         # Add other agents' punishment status if enabled
@@ -221,7 +251,13 @@ class StatePunishmentAgent(Agent):
     def _add_scalars_to_composite_state(
         self, composite_state, state_system, social_harm_dict, punishment_tracker=None
     ) -> np.ndarray:
-        """Add agent-specific scalar features to composite state."""
+        """Add agent-specific scalar features to composite state.
+        
+        Returns:
+            Composite state with scalar features concatenated.
+            Scalar features (4 total): [punishment_level, social_harm, third_feature, is_voting_season]
+            Note: If punishment_tracker is provided, other_punishments are concatenated after these 4 features.
+        """
         # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and third feature
         punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
         social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
@@ -236,9 +272,20 @@ class StatePunishmentAgent(Agent):
                 third_feature = 1.0 if self.was_punished_last_step else 0.0
         else:
             third_feature = np.random.random()
+        
+        # Add voting season flag (4th scalar feature)
+        # Only include flag if voting season is enabled
+        if (state_system is not None and 
+            hasattr(state_system, 'voting_season_enabled') and 
+            state_system.voting_season_enabled and
+            hasattr(state_system, 'is_voting_season')):
+            is_voting_season = 1.0 if state_system.is_voting_season else 0.0
+        else:
+            is_voting_season = 0.0
 
+        # NOTE: Observation shape changed from 3 to 4 scalar features
         extra_features = np.array(
-            [punishment_level, social_harm, third_feature], dtype=composite_state.dtype
+            [punishment_level, social_harm, third_feature, is_voting_season], dtype=composite_state.dtype
         ).reshape(1, -1)
         
         # Add other agents' punishment status if enabled
@@ -349,6 +396,29 @@ class StatePunishmentAgent(Agent):
                     voting_action = 2  # vote_decrease
                 else:
                     voting_action = 0  # no vote
+
+        # Enforce voting season constraints AFTER action conversion
+        # Check voting season status (only apply constraints if voting season is enabled)
+        is_voting_season = False
+        if (state_system is not None and 
+            hasattr(state_system, 'voting_season_enabled') and 
+            state_system.voting_season_enabled and
+            hasattr(state_system, 'is_voting_season')):
+            is_voting_season = state_system.is_voting_season
+        
+        # Apply voting season constraints
+        if is_voting_season:
+            # During voting season: only allow voting, block movement
+            if movement_action >= 0:
+                # Movement attempted during voting season - block it
+                movement_action = -1  # No movement allowed
+                # Note: Agent can still vote if voting_action > 0
+        else:
+            # Outside voting season: only allow movement, block voting
+            if voting_action > 0:
+                # Voting attempted outside voting season - block it
+                voting_action = 0  # No vote allowed
+                # Note: Agent can still move if movement_action >= 0
 
         # Execute movement (if valid and not simple foraging with non-movement action)
         if movement_action >= 0 and not (self.simple_foraging and action >= 4):

@@ -97,7 +97,7 @@ def parse_arguments():
         "--map_size", type=int, default=10, help="Size of the world map"
     )
     parser.add_argument(
-        "--num_resources", type=int, default=8, help="Number of resources"
+        "--num_resources", type=int, default=5, help="Number of resources (default: 5, must match predefined schedule)"
     )
 
     # Mode flags
@@ -393,6 +393,31 @@ def parse_arguments():
         help="Temperature for InfoNCE loss in CPC (default: 0.07)"
     )
 
+    # Voting season parameters
+    parser.add_argument(
+        "--enable_voting_season",
+        action="store_true",
+        help="Enable voting season mode (agents can only vote during designated voting seasons)"
+    )
+    parser.add_argument(
+        "--voting_season_interval",
+        type=int,
+        default=10,
+        help="Steps between voting seasons (X steps, default: 10)"
+    )
+    parser.add_argument(
+        "--no_voting_season_reset_per_epoch",
+        action="store_true",
+        help="Disable resetting voting season counter at epoch start (counter persists across epochs, default: reset each epoch)"
+    )
+    
+    # Punishment reset control
+    parser.add_argument(
+        "--no_reset_punishment_level_per_epoch",
+        action="store_true",
+        help="Disable resetting punishment level at epoch start (punishment persists across epochs, default: reset each epoch)"
+    )
+
     return parser.parse_args()
 
 
@@ -505,6 +530,16 @@ def run_experiment(args):
         else:
             use_dual_head = args.ppo_use_dual_head
 
+    # Determine voting season reset flag
+    voting_season_reset = True  # Default
+    if args.no_voting_season_reset_per_epoch:
+        voting_season_reset = False
+    
+    # Determine punishment reset flag
+    punishment_reset = True  # Default
+    if args.no_reset_punishment_level_per_epoch:
+        punishment_reset = False
+
     # Create configuration
     config = create_config(
         num_agents=args.num_agents,
@@ -572,6 +607,12 @@ def run_experiment(args):
         cpc_weight=args.cpc_weight,
         cpc_projection_dim=args.cpc_projection_dim,
         cpc_temperature=args.cpc_temperature,
+        # Voting season parameters
+        enable_voting_season=args.enable_voting_season,
+        voting_season_interval=args.voting_season_interval,
+        voting_season_reset_per_epoch=voting_season_reset,
+        # Punishment reset control
+        reset_punishment_level_per_epoch=punishment_reset,
     )
 
     # Print expected rewards (use config value, not CLI arg, so it reflects the actual config)
@@ -580,7 +621,7 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f'validate_ppo_10agents_orginal_params_{base_run_name}_{timestamp}'
+    run_folder = f'voting_season_10steps_mode_iqn_orginal_params_{base_run_name}_{timestamp}'
     
     #f"validate_reward_structure_complex_para_3agents_epsilon{args.epsilon}_{base_run_name}_{timestamp}"
 
@@ -649,6 +690,11 @@ def run_experiment(args):
     print(f"Random policy: {args.random_policy}")
     print(f"Random seed: {args.seed if args.seed is not None else 'Not set (not reproducible)'}")
     print(f"Probe test: {'disabled' if args.disable_probe_test else 'enabled'}")
+    print(f"Voting season: {'enabled' if args.enable_voting_season else 'disabled'}")
+    if args.enable_voting_season:
+        print(f"  - Voting season interval: {args.voting_season_interval} steps")
+        print(f"  - Counter reset per epoch: {'yes' if voting_season_reset else 'no'}")
+    print(f"Punishment reset per epoch: {'yes' if punishment_reset else 'no'}")
     print(f"Agent replacement: {'enabled' if args.enable_agent_replacement else 'disabled'}")
     if args.enable_agent_replacement:
         print(f"  - Agents to replace per epoch: {args.agents_to_replace_per_epoch}")
