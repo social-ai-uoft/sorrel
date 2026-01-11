@@ -34,20 +34,27 @@ class NoisyLinear(nn.Linear):
             device: The device to perform computations on. Defaults to "cpu".
             dtype: The data type for tensors. Defaults to torch.float64.
         """
-        super().__init__(in_features, out_features, bias=bias, device=device, dtype=dtype)
+        super().__init__(
+            in_features, out_features, bias=bias, device=device, dtype=dtype
+        )
         self.sigma_weight = nn.Parameter(
-            torch.full((out_features, in_features), sigma_init, device=device, dtype=dtype)
+            torch.full(
+                (out_features, in_features), sigma_init, device=device, dtype=dtype
+            )
         )
         # Non-trainable tensor for this module
         self.register_buffer(
-            "epsilon_weight", torch.zeros(out_features, in_features, device=device, dtype=dtype)
+            "epsilon_weight",
+            torch.zeros(out_features, in_features, device=device, dtype=dtype),
         )
         if bias:
             # Add bias parameter for sigma and register buffer
             self.sigma_bias = nn.Parameter(
                 torch.full((out_features,), sigma_init, device=device, dtype=dtype)
             )
-            self.register_buffer("epsilon_bias", torch.zeros(out_features, device=device, dtype=dtype))
+            self.register_buffer(
+                "epsilon_bias", torch.zeros(out_features, device=device, dtype=dtype)
+            )
         self.reset_parameters()
 
     def reset_parameters(self) -> None:

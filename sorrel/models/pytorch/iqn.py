@@ -71,20 +71,33 @@ class IQN(nn.Module):
         self.n_cos = 64
         self.layer_size = layer_size
         self.pis = (
-            torch.tensor([np.pi * i for i in range(1, self.n_cos + 1)], dtype=torch.float32)
+            torch.tensor(
+                [np.pi * i for i in range(1, self.n_cos + 1)], dtype=torch.float32
+            )
             .view(1, 1, self.n_cos)
             .to(device)
         )
         self.device = device
 
         # Network architecture (pass device and dtype to layers for proper tensor placement)
-        self.head1 = nn.Linear(n_frames * self.input_shape.prod(), layer_size, device=device, dtype=torch.float32)
+        self.head1 = nn.Linear(
+            n_frames * self.input_shape.prod(),
+            layer_size,
+            device=device,
+            dtype=torch.float32,
+        )
 
-        self.cos_embedding = nn.Linear(self.n_cos, layer_size, device=device, dtype=torch.float32)
-        self.ff_1 = NoisyLinear(layer_size, layer_size, device=device, dtype=torch.float32)
+        self.cos_embedding = nn.Linear(
+            self.n_cos, layer_size, device=device, dtype=torch.float32
+        )
+        self.ff_1 = NoisyLinear(
+            layer_size, layer_size, device=device, dtype=torch.float32
+        )
         self.cos_layer_out = layer_size
 
-        self.advantage = NoisyLinear(layer_size, action_space, device=device, dtype=torch.float32)
+        self.advantage = NoisyLinear(
+            layer_size, action_space, device=device, dtype=torch.float32
+        )
         self.value = NoisyLinear(layer_size, 1, device=device, dtype=torch.float32)
 
     def calc_cos(
@@ -99,8 +112,10 @@ class IQN(nn.Module):
         Returns:
             tuple[torch.Tensor, torch.Tensor]: The cosine values and tau samples.
         """
-        taus = (
-            torch.rand(batch_size, n_tau, dtype=torch.float32, device=self.device).unsqueeze(-1)
+        taus = torch.rand(
+            batch_size, n_tau, dtype=torch.float32, device=self.device
+        ).unsqueeze(
+            -1
         )  # (batch_size, n_tau, 1)
         cos = torch.cos(taus * self.pis)
 
@@ -325,10 +340,16 @@ class iRainbowModel(DoublePyTorchModel):
 
             # Convert to torch tensors and move to device
             # Use get_dtype to automatically select float32 for MPS, float64 otherwise
-            states = torch.from_numpy(states).to(dtype=torch.float32, device=self.device)
-            next_states = torch.from_numpy(next_states).to(dtype=torch.float32, device=self.device)
+            states = torch.from_numpy(states).to(
+                dtype=torch.float32, device=self.device
+            )
+            next_states = torch.from_numpy(next_states).to(
+                dtype=torch.float32, device=self.device
+            )
             actions = torch.from_numpy(actions).long().to(self.device)
-            rewards = torch.from_numpy(rewards).to(dtype=torch.float32, device=self.device)
+            rewards = torch.from_numpy(rewards).to(
+                dtype=torch.float32, device=self.device
+            )
             dones = torch.from_numpy(dones).to(dtype=torch.float32, device=self.device)
             valid = torch.from_numpy(valid).to(dtype=torch.float32, device=self.device)
 

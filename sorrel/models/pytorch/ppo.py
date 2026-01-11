@@ -88,7 +88,9 @@ class ActorCritic(nn.Module):
         super().__init__()
 
         # Store device for use in act method
-        self.device = device if isinstance(device, torch.device) else torch.device(device)
+        self.device = (
+            device if isinstance(device, torch.device) else torch.device(device)
+        )
 
         # Dropout probability
         p = 0.2 if dropout else 0.0
@@ -118,7 +120,7 @@ class ActorCritic(nn.Module):
             nn.Linear(layer_size, 1),
         )
 
-        self.double() if device.type != "mps" else self.float()
+        self.double() if self.device.type != "mps" else self.float()
 
     def forward(self):
         raise NotImplementedError
@@ -132,8 +134,7 @@ class ActorCritic(nn.Module):
         Returns:
           tuple[Tensor, Tensor]: The action and action log probability.
         """
-        dtype = get_dtype(self.device)
-        state_ = torch.tensor(state, dtype=dtype).to(self.device)
+        state_ = torch.tensor(state).to(self.device)
         action_probs = self.actor(state_)
         dist = Categorical(action_probs)
 
@@ -243,7 +244,8 @@ class PyTorchPPO(PyTorchModel):
             rewards.insert(0, discounted_reward)
 
         # Use get_dtype_high_precision for float64 on CPU/CUDA, float32 on MPS
-        dtype = get_dtype_high_precision(self.device)
+        # Ensure we pass a torch.device (policy holds the resolved device)
+        dtype = get_dtype_high_precision(self.policy.device)
 
         # Normalize the rewards
         rewards = torch.tensor(rewards, dtype=dtype).to(self.device)
@@ -251,15 +253,9 @@ class PyTorchPPO(PyTorchModel):
 
         # Convert to tensors and move to device
         assert isinstance(self.memory, RolloutBuffer), "PPO supports only RolloutBuffer"
-        old_states = torch.tensor(self.memory.states, dtype=dtype).to(
-            self.device
-        )
-        old_actions = torch.tensor(self.memory.actions, dtype=dtype).to(
-            self.device
-        )
-        old_log_probs = torch.tensor(self.memory.log_probs, dtype=dtype).to(
-            self.device
-        )
+        old_states = torch.tensor(self.memory.states, dtype=dtype).to(self.device)
+        old_actions = torch.tensor(self.memory.actions, dtype=dtype).to(self.device)
+        old_log_probs = torch.tensor(self.memory.log_probs, dtype=dtype).to(self.device)
 
         # Initial loss value
         loss = torch.tensor(0.0)

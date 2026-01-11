@@ -30,7 +30,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from einops.layers.torch import Rearrange
+
+try:
+    from einops.layers.torch import Rearrange
+except Exception:  # fallback when einops is not installed
+    import warnings
+
+    warnings.warn(
+        "einops.layers.torch.Rearrange not available; using passthrough fallback."
+    )
+
+    class Rearrange(nn.Module):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x
+
 
 # Gem-specific packages
 from sorrel.buffers import Buffer as ReplayBuffer
@@ -155,7 +171,9 @@ class JointEmbedding(nn.Module):
         self.layer_size = layer_size
         self.patch_size = patch_size
         self.max_timesteps = max_timesteps
-        self.patch_embedding = PatchEmbedding(state_size, patch_size, layer_size, device=device)
+        self.patch_embedding = PatchEmbedding(
+            state_size, patch_size, layer_size, device=device
+        )
         self.action_embedding = ActionEmbedding(action_space, layer_size)
         self.temporal_embedding = nn.Parameter(
             torch.zeros(1, max_timesteps, layer_size, device=device)
