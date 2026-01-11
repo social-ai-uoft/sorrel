@@ -52,6 +52,7 @@ class PatchEmbedding(nn.Module):
         state_size: Sequence[int],
         patch_size: int,
         layer_size: int,
+        device: str | torch.device = "cpu",
     ):
         super().__init__()
         self.layer_size = layer_size
@@ -74,7 +75,7 @@ class PatchEmbedding(nn.Module):
 
         # Position embedding
         self.position_embedding = nn.Parameter(
-            torch.randn(1, h * w // p // p, layer_size)
+            torch.randn(1, h * w // p // p, layer_size, device=device)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -148,15 +149,16 @@ class JointEmbedding(nn.Module):
         action_space: int,
         layer_size: int,
         max_timesteps: int,
+        device: str | torch.device = "cpu",
     ):
         super().__init__()
         self.layer_size = layer_size
         self.patch_size = patch_size
         self.max_timesteps = max_timesteps
-        self.patch_embedding = PatchEmbedding(state_size, patch_size, layer_size)
+        self.patch_embedding = PatchEmbedding(state_size, patch_size, layer_size, device=device)
         self.action_embedding = ActionEmbedding(action_space, layer_size)
         self.temporal_embedding = nn.Parameter(
-            torch.zeros(1, max_timesteps, layer_size)
+            torch.zeros(1, max_timesteps, layer_size, device=device)
         )
         self.global_embedding = ConvolutionalEmbedding(state_size, layer_size)
 
@@ -425,13 +427,14 @@ class VisionTransformer(nn.Module):
         self.device = device
         self.seed = seed
 
-        # (S, A) embedding
+        # (S, A) embedding (pass device for proper tensor placement)
         self.token_embedding = JointEmbedding(
             state_size=state_size,
             patch_size=patch_size,
             action_space=action_space,
             layer_size=layer_size,
             max_timesteps=num_frames,
+            device=device,
         ).to(self.device)
 
         # Set dropout between the token embedding and the transformer blocks

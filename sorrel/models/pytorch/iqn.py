@@ -71,21 +71,21 @@ class IQN(nn.Module):
         self.n_cos = 64
         self.layer_size = layer_size
         self.pis = (
-            torch.FloatTensor([np.pi * i for i in range(1, self.n_cos + 1)])
+            torch.tensor([np.pi * i for i in range(1, self.n_cos + 1)], dtype=torch.float32)
             .view(1, 1, self.n_cos)
             .to(device)
         )
         self.device = device
 
-        # Network architecture
-        self.head1 = nn.Linear(n_frames * self.input_shape.prod(), layer_size)
+        # Network architecture (pass device and dtype to layers for proper tensor placement)
+        self.head1 = nn.Linear(n_frames * self.input_shape.prod(), layer_size, device=device, dtype=torch.float32)
 
-        self.cos_embedding = nn.Linear(self.n_cos, layer_size)
-        self.ff_1 = NoisyLinear(layer_size, layer_size)
+        self.cos_embedding = nn.Linear(self.n_cos, layer_size, device=device, dtype=torch.float32)
+        self.ff_1 = NoisyLinear(layer_size, layer_size, device=device, dtype=torch.float32)
         self.cos_layer_out = layer_size
 
-        self.advantage = NoisyLinear(layer_size, action_space)
-        self.value = NoisyLinear(layer_size, 1)
+        self.advantage = NoisyLinear(layer_size, action_space, device=device, dtype=torch.float32)
+        self.value = NoisyLinear(layer_size, 1, device=device, dtype=torch.float32)
 
     def calc_cos(
         self, batch_size: int, n_tau: int = 8
@@ -100,8 +100,8 @@ class IQN(nn.Module):
             tuple[torch.Tensor, torch.Tensor]: The cosine values and tau samples.
         """
         taus = (
-            torch.rand(batch_size, n_tau).unsqueeze(-1).to(self.device)
-        )  # (batch_size, n_tau, 1)  .to(self.device)
+            torch.rand(batch_size, n_tau, dtype=torch.float32, device=self.device).unsqueeze(-1)
+        )  # (batch_size, n_tau, 1)
         cos = torch.cos(taus * self.pis)
 
         assert cos.shape == (batch_size, n_tau, self.n_cos), "cos shape is incorrect"
@@ -253,7 +253,7 @@ class iRainbowModel(DoublePyTorchModel):
             n_quantiles,
             n_frames,
             device=device,
-        ).to(device)
+        ).to(device=device, dtype=torch.float32)
         self.qnetwork_target = IQN(
             input_size,
             action_space,
@@ -262,7 +262,7 @@ class iRainbowModel(DoublePyTorchModel):
             n_quantiles,
             n_frames,
             device=device,
-        ).to(device)
+        ).to(device=device, dtype=torch.float32)
 
         # Aliases for saving to disk
         self.models = {"local": self.qnetwork_local, "target": self.qnetwork_target}
@@ -290,7 +290,7 @@ class iRainbowModel(DoublePyTorchModel):
         # Epsilon-greedy action selection
         if random.random() > self.epsilon:
             torch_state = torch.from_numpy(state)
-            torch_state = torch_state.float().to(self.device)
+            torch_state = torch_state.to(device=self.device, dtype=torch.float32)
 
             self.qnetwork_local.eval()
             with torch.no_grad():
@@ -323,13 +323,14 @@ class iRainbowModel(DoublePyTorchModel):
                 batch_size=self.batch_size
             )
 
-            # Convert to torch tensors
-            states = torch.from_numpy(states)
-            next_states = torch.from_numpy(next_states)
-            actions = torch.from_numpy(actions)
-            rewards = torch.from_numpy(rewards)
-            dones = torch.from_numpy(dones)
-            valid = torch.from_numpy(valid)
+            # Convert to torch tensors and move to device
+            # Use get_dtype to automatically select float32 for MPS, float64 otherwise
+            states = torch.from_numpy(states).to(dtype=torch.float32, device=self.device)
+            next_states = torch.from_numpy(next_states).to(dtype=torch.float32, device=self.device)
+            actions = torch.from_numpy(actions).long().to(self.device)
+            rewards = torch.from_numpy(rewards).to(dtype=torch.float32, device=self.device)
+            dones = torch.from_numpy(dones).to(dtype=torch.float32, device=self.device)
+            valid = torch.from_numpy(valid).to(dtype=torch.float32, device=self.device)
 
             # REPLACED: as suggested by Gemini, use local network to select action and target network to evaluate it
             # Get max predicted Q values (for next states) from target model
@@ -393,7 +394,7 @@ class iRainbowModel(DoublePyTorchModel):
             # ------------------- update target network ------------------- #
             self.soft_update()
 
-        return loss.detach().numpy()
+        return loss.detach().cpu().numpy()
 
     def soft_update(self) -> None:
         """Soft update model parameters.

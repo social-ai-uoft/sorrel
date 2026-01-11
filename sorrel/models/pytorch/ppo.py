@@ -16,6 +16,7 @@ from torch.distributions import Categorical
 
 from sorrel.buffers import Buffer
 from sorrel.models.pytorch.pytorch_base import PyTorchModel
+from sorrel.utils.helpers import get_dtype_high_precision
 
 
 class RolloutBuffer(Buffer):
@@ -73,6 +74,7 @@ class ActorCritic(nn.Module):
         action_space: int,
         layer_size: int = 64,
         dropout: bool = False,
+        device: str | torch.device = "cpu",
     ):
         """Initialize the actor-critic module.
 
@@ -81,8 +83,12 @@ class ActorCritic(nn.Module):
           action_space: The number of actions that can be taken.
           layer_size: The multiplier for the hidden layer size.
           dropout: Whether to include dropout. Defaults to False.
+          device: The device to perform computations on. Defaults to "cpu".
         """
         super().__init__()
+
+        # Store device for use in act method
+        self.device = device if isinstance(device, torch.device) else torch.device(device)
 
         # Dropout probability
         p = 0.2 if dropout else 0.0
@@ -112,7 +118,7 @@ class ActorCritic(nn.Module):
             nn.Linear(layer_size, 1),
         )
 
-        self.double()
+        self.double() if device.type != "mps" else self.float()
 
     def forward(self):
         raise NotImplementedError
@@ -126,7 +132,8 @@ class ActorCritic(nn.Module):
         Returns:
           tuple[Tensor, Tensor]: The action and action log probability.
         """
-        state_ = torch.tensor(state)
+        dtype = get_dtype(self.device)
+        state_ = torch.tensor(state, dtype=dtype).to(self.device)
         action_probs = self.actor(state_)
         dist = Categorical(action_probs)
 
@@ -179,8 +186,10 @@ class PyTorchPPO(PyTorchModel):
 
         super().__init__(input_size, action_space, layer_size, epsilon, device, seed)
         ac_input_size = int(np.prod(input_size))
-        # Actor-critic network
-        self.policy = ActorCritic(ac_input_size, action_space, layer_size)
+        # Actor-critic network (pass device for tensor operations)
+        self.policy = ActorCritic(
+            ac_input_size, action_space, layer_size, device=device
+        ).to(device)
         # Set up optimizers for actor and critic
         self.optimizer = torch.optim.Adam(
             [
@@ -233,19 +242,22 @@ class PyTorchPPO(PyTorchModel):
             discounted_reward = reward + (self.gamma * discounted_reward)
             rewards.insert(0, discounted_reward)
 
+        # Use get_dtype_high_precision for float64 on CPU/CUDA, float32 on MPS
+        dtype = get_dtype_high_precision(self.device)
+
         # Normalize the rewards
-        rewards = torch.tensor(rewards, dtype=torch.float64).to(self.device)
+        rewards = torch.tensor(rewards, dtype=dtype).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # Convert to tensors and move to device
         assert isinstance(self.memory, RolloutBuffer), "PPO supports only RolloutBuffer"
-        old_states = torch.tensor(self.memory.states, dtype=torch.float64).to(
+        old_states = torch.tensor(self.memory.states, dtype=dtype).to(
             self.device
         )
-        old_actions = torch.tensor(self.memory.actions, dtype=torch.float64).to(
+        old_actions = torch.tensor(self.memory.actions, dtype=dtype).to(
             self.device
         )
-        old_log_probs = torch.tensor(self.memory.log_probs, dtype=torch.float64).to(
+        old_log_probs = torch.tensor(self.memory.log_probs, dtype=dtype).to(
             self.device
         )
 
@@ -283,7 +295,7 @@ class PyTorchPPO(PyTorchModel):
             loss.mean().backward()
             self.optimizer.step()
 
-        return loss.mean().detach().numpy()
+        return loss.mean().detach().cpu().numpy()
 
     def save(self, file_path: str | os.PathLike) -> None:
         torch.save(

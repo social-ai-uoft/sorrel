@@ -150,6 +150,56 @@ def one_hot_encode(value: int, num_classes: int) -> np.ndarray:
     return one_hot
 
 
+def get_device(device_str: str) -> torch.device:
+    r"""Returns a torch device based on the string passed in.
+
+    Args:
+        device_str: The device string, e.g., 'auto', 'cpu', 'cuda', 'cuda:0', 'mps', etc
+
+    Returns:
+        torch.device: The torch device.
+    """
+    if device_str == "auto":
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
+    elif device_str == "cuda" or device_str.startswith("cuda:"):
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA requested but not available.")
+        # If just "cuda" is passed, default to cuda:0
+        device = torch.device(device_str if ":" in device_str else "cuda:0")
+    elif device_str == "mps":
+        if not torch.backends.mps.is_available():
+            raise RuntimeError("MPS requested but not available.")
+        device = torch.device("mps")
+    elif device_str == "cpu":
+        device = torch.device("cpu")
+    else:
+        raise ValueError(f"Unknown device type: {device_str}")
+
+    return device
+
+
+def get_dtype_high_precision(device: torch.device) -> torch.dtype:
+    r"""Returns the appropriate float dtype for the given device.
+
+    MPS does not support float64, so float32 is used for MPS devices.
+    All other devices (CPU, CUDA) use float64 by default for maximum precision.
+
+    Args:
+        device: The torch device.
+
+    Returns:
+        torch.dtype: torch.float64 for CPU/CUDA, torch.float32 for MPS.
+    """
+    if device.type == "mps":
+        return torch.float32
+    return torch.float64
+
+
 # --------------------------- #
 # endregion                   #
 # --------------------------- #
