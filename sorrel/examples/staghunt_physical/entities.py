@@ -162,19 +162,30 @@ class Empty(Entity["StagHuntWorld"]):
                     stag_prob = getattr(world, 'stag_probability', 0.2)
                     res_cls = StagResource if np.random.random() < stag_prob else HareResource
 
-                # Use separate reward values for stag and hare
-                if res_cls == StagResource:
-                    reward_value = world.stag_reward
-                    health_value = world.stag_health
-                    cooldown_value = world.stag_regeneration_cooldown
-                else:  # HareResource
-                    reward_value = world.hare_reward
-                    health_value = world.hare_health
-                    cooldown_value = world.hare_regeneration_cooldown
+                # Step 3: Apply resource-specific spawn success rate filter
+                should_spawn = True
+                if getattr(world, 'dynamic_resource_density_enabled', False):
+                    if res_cls == StagResource:
+                        should_spawn = np.random.random() < world.current_stag_rate
+                    else:  # HareResource
+                        should_spawn = np.random.random() < world.current_hare_rate
                 
-                world.add(
-                    self.location, res_cls(reward_value, health_value, regeneration_cooldown=cooldown_value)
-                )
+                # Only spawn if Step 3 filter passes (or feature disabled)
+                if should_spawn:
+                    # Use separate reward values for stag and hare
+                    if res_cls == StagResource:
+                        reward_value = world.stag_reward
+                        health_value = world.stag_health
+                        cooldown_value = world.stag_regeneration_cooldown
+                    else:  # HareResource
+                        reward_value = world.hare_reward
+                        health_value = world.hare_health
+                        cooldown_value = world.hare_regeneration_cooldown
+                    
+                    world.add(
+                        self.location, res_cls(reward_value, health_value, regeneration_cooldown=cooldown_value)
+                    )
+                # else: filtered out by Step 3, don't spawn (Empty entity remains)
 
 
 class Spawn(Entity["StagHuntWorld"]):

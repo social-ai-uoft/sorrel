@@ -62,9 +62,11 @@ Rates start at 1.0 (100% spawn success) and adjust dynamically, allowing indepen
    - Configurable via: `world.dynamic_resource_density.stag_decrease_rate` and `world.dynamic_resource_density.hare_decrease_rate`
 
 3. **Apply bounds**: 
-   - `current_stag_rate = max(0.0, min(1.0, current_stag_rate))`
-   - `current_hare_rate = max(0.0, min(1.0, current_hare_rate))`
-   - Ensures rates stay within [0.0, 1.0]
+   - `current_stag_rate = max(minimum_rate, min(1.0, current_stag_rate))`
+   - `current_hare_rate = max(minimum_rate, min(1.0, current_hare_rate))`
+   - Ensures rates stay within [minimum_rate, 1.0]
+   - Default `minimum_rate`: `0.1` (configurable)
+   - **Important**: Minimum rate prevents rates from reaching 0.0, allowing recovery via multiplier
 
 ### Effective Density Model
 
@@ -91,6 +93,7 @@ Rates start at 1.0 (100% spawn success) and adjust dynamically, allowing indepen
     "rate_increase_multiplier": 1.1,  # Multiplier applied to rates each epoch
     "stag_decrease_rate": 0.02,  # Decrease per stag consumed (subtracted from stag_rate)
     "hare_decrease_rate": 0.02,  # Decrease per hare consumed (subtracted from hare_rate)
+    "minimum_rate": 0.1,  # Minimum rate (prevents rates from reaching 0.0, allows recovery)
     "initial_stag_rate": None,  # Optional: override starting stag rate (defaults to 1.0)
     "initial_hare_rate": None,  # Optional: override starting hare rate (defaults to 1.0)
 }
@@ -149,6 +152,10 @@ if self.dynamic_resource_density_enabled:
     )
     self.hare_decrease_rate: float = float(
         dynamic_cfg.get("hare_decrease_rate", 0.02)
+    )
+    # Minimum rate to prevent rates from reaching 0.0 (allows recovery)
+    self.minimum_rate: float = float(
+        dynamic_cfg.get("minimum_rate", 0.1)
     )
     # Initialize rates (start at 1.0 for 100% spawn success, or use initial values)
     initial_stag_rate = dynamic_cfg.get("initial_stag_rate", None)
@@ -283,9 +290,9 @@ def update_resource_density_at_epoch_start(self) -> None:
     self.current_stag_rate = min(1.0, self.current_stag_rate)
     self.current_hare_rate = min(1.0, self.current_hare_rate)
     
-    # Ensure non-negative
-    self.current_stag_rate = max(0.0, self.current_stag_rate)
-    self.current_hare_rate = max(0.0, self.current_hare_rate)
+    # Apply minimum floor (never go below minimum_rate, allows recovery)
+    self.current_stag_rate = max(self.minimum_rate, self.current_stag_rate)
+    self.current_hare_rate = max(self.minimum_rate, self.current_hare_rate)
 ```
 
 ### Step 5: Add Method to Update Rates at Epoch End
@@ -317,9 +324,9 @@ def update_resource_density_at_epoch_end(self, stags_taken: int, hares_taken: in
     self.current_stag_rate -= (stags_taken * self.stag_decrease_rate)
     self.current_hare_rate -= (hares_taken * self.hare_decrease_rate)
     
-    # Apply bounds: ensure rates stay within [0.0, 1.0]
-    self.current_stag_rate = max(0.0, min(1.0, self.current_stag_rate))
-    self.current_hare_rate = max(0.0, min(1.0, self.current_hare_rate))
+    # Apply bounds: ensure rates stay within [minimum_rate, 1.0]
+    self.current_stag_rate = max(self.minimum_rate, min(1.0, self.current_stag_rate))
+    self.current_hare_rate = max(self.minimum_rate, min(1.0, self.current_hare_rate))
 ```
 
 ### Step 6: Integrate Density Updates into Epoch Lifecycle
@@ -571,7 +578,8 @@ if hasattr(self, 'metrics_collector') and self.metrics_collector is not None:
 - Test rate increase at epoch start
 - Test rate decrease at epoch end (separate for stag and hare)
 - Test maximum cap enforcement (1.0)
-- Test minimum (0.0) enforcement
+- Test minimum rate enforcement (prevents rates from going below minimum_rate)
+- Test rate recovery from minimum_rate using multiplier
 - Test disabled mode (rates = 1.0, no filtering)
 - Test Step 3 filter logic (spawn success/failure based on rates)
 
@@ -585,11 +593,12 @@ if hasattr(self, 'metrics_collector') and self.metrics_collector is not None:
 
 ### Edge Cases
 - Zero resources taken (no decrease, rates stay same or increase)
-- Very high resource counts (rates go to 0.0, no spawns)
+- Very high resource counts (rates go to minimum_rate, still allows some spawns)
 - Rates reach maximum (1.0 cap enforced)
+- Rates reach minimum (minimum_rate floor enforced, can recover via multiplier)
 - Multiple epochs (rates accumulate changes)
 - One resource type heavily consumed, other not (independent adjustment)
-- Rates at 0.0 (no spawns for that resource type)
+- Recovery from minimum_rate (multiplier can increase rates from minimum)
 
 ## Backward Compatibility
 
@@ -610,6 +619,7 @@ if hasattr(self, 'metrics_collector') and self.metrics_collector is not None:
         "rate_increase_multiplier": 1.1,  # 10% increase per epoch
         "stag_decrease_rate": 0.02,  # Decrease stag_rate by 0.02 per stag consumed
         "hare_decrease_rate": 0.02,  # Decrease hare_rate by 0.02 per hare consumed
+        "minimum_rate": 0.1,  # Minimum rate (prevents rates from reaching 0.0, allows recovery)
         "initial_stag_rate": 1.0,  # Start at 100% spawn success (optional, defaults to 1.0)
         "initial_hare_rate": 1.0,  # Start at 100% spawn success (optional, defaults to 1.0)
     },
@@ -628,6 +638,8 @@ if hasattr(self, 'metrics_collector') and self.metrics_collector is not None:
 - **Independent Control**: Stag and hare rates adjust independently, allowing different depletion/regeneration patterns
 - **Backward Compatibility**: When disabled (rates = 1.0), Step 3 never filters, so behavior matches current 2-step process exactly
 - **Decrease Formula**: Rates decrease by subtraction (`rate -= count * decrease_rate`), not multiplication
+- **Minimum Rate**: Rates are bounded by `minimum_rate` (default 0.1) to prevent reaching 0.0, allowing recovery via multiplier
+- **Recovery Mechanism**: Even after heavy consumption, rates can recover from `minimum_rate` because `minimum_rate * multiplier > minimum_rate` (e.g., 0.1 * 1.1 = 0.11)
 - **Metrics Reset**: Metrics reset automatically per epoch via `reset_epoch_metrics()` in `log_epoch_metrics()`, so no manual reset is needed
 
 

@@ -50,6 +50,12 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
             self.first_probe_test_exported = False
         
         for epoch in range(self.config.experiment.epochs + 1):
+            # Update dynamic resource spawn success rates at epoch start (BEFORE reset)
+            # This must happen before reset() because reset() calls populate_environment()
+            # which uses current_stag_rate and current_hare_rate in Step 3 of _populate_randomly()
+            if hasattr(self.world, 'dynamic_resource_density_enabled') and self.world.dynamic_resource_density_enabled:
+                self.world.update_resource_density_at_epoch_start()
+            
             # Reset the environment at the start of each epoch
             self.reset()
 
@@ -81,6 +87,26 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
                 self.take_turn()
 
             self.world.is_done = True
+
+            # Update dynamic resource spawn success rates at epoch end (BEFORE metrics are reset)
+            # IMPORTANT: Get resource counts BEFORE log_epoch_metrics() is called,
+            # because log_epoch_metrics() calls reset_epoch_metrics() which clears all metrics
+            if hasattr(self.world, 'dynamic_resource_density_enabled') and self.world.dynamic_resource_density_enabled:
+                # Get resource counts from metrics collector BEFORE they're reset
+                if hasattr(self, 'metrics_collector') and self.metrics_collector is not None:
+                    # Calculate total stags and hares defeated this epoch
+                    total_stags = 0
+                    total_hares = 0
+                    for agent in self.agents:
+                        if agent.agent_id in self.spawned_agent_ids:
+                            agent_id = agent.agent_id
+                            if agent_id in self.metrics_collector.agent_metrics:
+                                agent_data = self.metrics_collector.agent_metrics[agent_id]
+                                total_stags += agent_data.get('stags_defeated', 0)
+                                total_hares += agent_data.get('hares_defeated', 0)
+                    
+                    # Update spawn success rates based on resources consumed
+                    self.world.update_resource_density_at_epoch_end(total_stags, total_hares)
 
             # Generate the gif if animation was done (reuse existing logic)
             if animate_this_turn and renderer is not None:

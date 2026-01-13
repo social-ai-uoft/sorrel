@@ -157,6 +157,43 @@ class StagHuntWorld(Gridworld):
         self.skip_spawn_validation: bool = bool(get_world_param("skip_spawn_validation", False))
         self.current_turn: int = 0  # Track current turn for regeneration
 
+        # Dynamic resource density parameters (3-step process with resource-specific rates)
+        # Note: get_world_param doesn't support nested paths, so access nested config directly
+        dynamic_cfg = world_cfg.get("dynamic_resource_density", {})
+        self.dynamic_resource_density_enabled: bool = bool(
+            dynamic_cfg.get("enabled", False)
+        )
+        if self.dynamic_resource_density_enabled:
+            self.rate_increase_multiplier: float = float(
+                dynamic_cfg.get("rate_increase_multiplier", 1.1)
+            )
+            self.stag_decrease_rate: float = float(
+                dynamic_cfg.get("stag_decrease_rate", 0.02)
+            )
+            self.hare_decrease_rate: float = float(
+                dynamic_cfg.get("hare_decrease_rate", 0.02)
+            )
+            # Minimum rate to prevent rates from reaching 0.0 (allows recovery)
+            self.minimum_rate: float = float(
+                dynamic_cfg.get("minimum_rate", 0.1)
+            )
+            # Initialize rates (start at 1.0 for 100% spawn success, or use initial values)
+            initial_stag_rate = dynamic_cfg.get("initial_stag_rate", None)
+            if initial_stag_rate is not None:
+                self.current_stag_rate: float = float(initial_stag_rate)
+            else:
+                self.current_stag_rate: float = 1.0
+            
+            initial_hare_rate = dynamic_cfg.get("initial_hare_rate", None)
+            if initial_hare_rate is not None:
+                self.current_hare_rate: float = float(initial_hare_rate)
+            else:
+                self.current_hare_rate: float = 1.0
+        else:
+            # When disabled, rates are always 1.0 (no filtering, backward compatible)
+            self.current_stag_rate: float = 1.0
+            self.current_hare_rate: float = 1.0
+
         # Agent configuration system
         use_agent_config = bool(get_world_param("use_agent_config", False))  # Default to False for backward compatibility
         agent_config = get_world_param("agent_config", None)
@@ -193,3 +230,45 @@ class StagHuntWorld(Gridworld):
         """
         self.agent_spawn_points = [(2, 2, 1), (3, 3, 1), (4, 4, 1), (5, 5, 1)]
         self.resource_spawn_points = []
+
+    def update_resource_density_at_epoch_start(self) -> None:
+        """Update resource spawn success rates at the start of each epoch.
+        
+        Increases rates by the configured multiplier and applies maximum cap (1.0).
+        Only applies if dynamic_resource_density is enabled.
+        """
+        if not self.dynamic_resource_density_enabled:
+            return
+        
+        # Increase by multiplier
+        self.current_stag_rate *= self.rate_increase_multiplier
+        self.current_hare_rate *= self.rate_increase_multiplier
+        
+        # Apply maximum cap (never exceed 1.0 = 100% spawn success)
+        self.current_stag_rate = min(1.0, self.current_stag_rate)
+        self.current_hare_rate = min(1.0, self.current_hare_rate)
+        
+        # Apply minimum floor (never go below minimum_rate, allows recovery)
+        self.current_stag_rate = max(self.minimum_rate, self.current_stag_rate)
+        self.current_hare_rate = max(self.minimum_rate, self.current_hare_rate)
+
+    def update_resource_density_at_epoch_end(self, stags_taken: int, hares_taken: int) -> None:
+        """Update resource spawn success rates at the end of each epoch.
+        
+        Decreases rates based on the number of resources consumed.
+        Only applies if dynamic_resource_density is enabled.
+        
+        Args:
+            stags_taken: Number of stags defeated during the epoch
+            hares_taken: Number of hares defeated during the epoch
+        """
+        if not self.dynamic_resource_density_enabled:
+            return
+        
+        # Decrease rates based on consumption (subtract decrease_rate per resource)
+        self.current_stag_rate -= (stags_taken * self.stag_decrease_rate)
+        self.current_hare_rate -= (hares_taken * self.hare_decrease_rate)
+        
+        # Apply bounds: ensure rates stay within [minimum_rate, 1.0]
+        self.current_stag_rate = max(self.minimum_rate, min(1.0, self.current_stag_rate))
+        self.current_hare_rate = max(self.minimum_rate, min(1.0, self.current_hare_rate))

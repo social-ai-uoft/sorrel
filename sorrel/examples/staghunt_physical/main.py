@@ -62,7 +62,7 @@ def run_stag_hunt() -> None:
             # recording period for animation (unused here)
             "record_period": 1000,
             # Base run name (max_turns and epsilon will be automatically appended)
-            "run_name_base": "debug", #'
+            "run_name_base": "test_dynamic_resource_density_rate_increase_multiplier_3", #'
             #"test_full_identity_system_individual_recognition_v0", 
             # # Base name without max_turns/epsilon
             # Model saving configuration
@@ -175,6 +175,16 @@ def run_stag_hunt() -> None:
             # regeneration cooldown parameters
             "stag_regeneration_cooldown": 1,  # Turns to wait before stag regenerates
             "hare_regeneration_cooldown": 1,  # Turns to wait before hare regenerates
+            # Dynamic resource density configuration (3-step process with resource-specific rates)
+            "dynamic_resource_density": {
+                "enabled": True,  # Set to True to enable dynamic density
+                "rate_increase_multiplier": 3,  # Increase rates by 10% each epoch
+                "stag_decrease_rate": 0.1,  # Decrease stag_rate by 0.1 per stag consumed
+                "hare_decrease_rate": 0.1,  # Decrease hare_rate by 0.1 per hare consumed
+                "minimum_rate": 0.1,  # Minimum rate (prevents rates from reaching 0.0, allows recovery)
+                "initial_stag_rate": None,  # Optional: starting stag rate (defaults to 1.0)
+                "initial_hare_rate": None,  # Optional: starting hare rate (defaults to 1.0)
+            },
             # legacy parameter for backward compatibility
             # "taste_reward": 10,
             # zap hits required to destroy a resource (legacy parameter)

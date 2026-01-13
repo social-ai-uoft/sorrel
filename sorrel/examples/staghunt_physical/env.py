@@ -335,14 +335,38 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             # choose resource type based on stag_probability parameter
             if np.random.random() < world.stag_probability:
                 resource_type = "stag"
-                world.add(
-                    dynamic, StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown)
-                )
+                # Step 3: Apply stag spawn success rate filter
+                if getattr(world, 'dynamic_resource_density_enabled', False):
+                    if np.random.random() < world.current_stag_rate:
+                        # Spawn success - actually place the stag
+                        world.add(
+                            dynamic, StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown)
+                        )
+                    else:
+                        # Filtered out - place Empty instead
+                        world.add(dynamic, Empty())
+                else:
+                    # Feature disabled - always spawn (backward compatible)
+                    world.add(
+                        dynamic, StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown)
+                    )
             else:
                 resource_type = "hare"
-                world.add(
-                    dynamic, HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown)
-                )
+                # Step 3: Apply hare spawn success rate filter
+                if getattr(world, 'dynamic_resource_density_enabled', False):
+                    if np.random.random() < world.current_hare_rate:
+                        # Spawn success - actually place the hare
+                        world.add(
+                            dynamic, HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown)
+                        )
+                    else:
+                        # Filtered out - place Empty instead
+                        world.add(dynamic, Empty())
+                else:
+                    # Feature disabled - always spawn (backward compatible)
+                    world.add(
+                        dynamic, HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown)
+                    )
 
             # Update the Sand entity below to remember this resource type
             terrain_loc = (y, x, world.terrain_layer)
@@ -352,7 +376,11 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     hasattr(terrain_entity, "can_convert_to_resource")
                     and terrain_entity.can_convert_to_resource
                 ):
-                    terrain_entity.resource_type = resource_type
+                    # Only update resource_type if resource actually spawned
+                    # Check if dynamic layer has a resource (not Empty)
+                    dynamic_entity = world.observe(dynamic)
+                    if hasattr(dynamic_entity, 'name') and dynamic_entity.name in ['stag', 'hare']:
+                        terrain_entity.resource_type = resource_type
 
         # Determine how many agents to spawn
         # Get num_agents_to_spawn from config (defaults to num_agents for backward compatibility)
