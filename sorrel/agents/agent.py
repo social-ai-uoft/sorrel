@@ -152,6 +152,7 @@ class MovingAgent[W: Gridworld](Agent):
         Path(__file__).parent / "./assets/hero-left.png",  # Left
         Path(__file__).parent / "./assets/hero-right.png",  # Right
     ]
+    direction = 2  # Default: facing down
 
     def movement(self, action: int) -> tuple[int, int, int]:
         """Attempt to move with the specified action to a new location.
@@ -167,12 +168,16 @@ class MovingAgent[W: Gridworld](Agent):
         self.sprite = self.sprite_directions[action]
         new_location = self.location
         if action_name == "up":
+            self.direction = 0
             new_location = (self.location[0] - 1, self.location[1], self.location[2])
         if action_name == "down":
+            self.direction = 2
             new_location = (self.location[0] + 1, self.location[1], self.location[2])
         if action_name == "left":
+            self.direction = 3
             new_location = (self.location[0], self.location[1] - 1, self.location[2])
         if action_name == "right":
+            self.direction = 1
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
 
         return new_location

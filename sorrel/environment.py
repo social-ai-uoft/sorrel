@@ -191,10 +191,12 @@ class Environment[W: Gridworld]:
                 if hasattr(self.config.model, "epsilon_decay"):
                     agent.model.epsilon_decay(self.config.model.epsilon_decay)
                 if epoch % self.config.experiment.record_period == 0:
-                    agent.model.save(
-                        output_dir
-                        / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
-                    )
+                    if hasattr(self.config.model, "save_weights"):
+                        if self.config.model.save_weights:
+                            agent.model.save(
+                                output_dir
+                                / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
+                            )
 
     def generate_memories(
         self,
