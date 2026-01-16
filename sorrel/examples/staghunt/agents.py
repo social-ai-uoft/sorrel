@@ -116,9 +116,10 @@ class StaghuntAgent(MovingAgent[StaghuntWorld]):
     def act(self, world: StaghuntWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
         # Add the rewards from eating
-        for gem in self.last_attacked:
+        for i, gem in enumerate(self.last_attacked):
             if gem.num_attacks >= gem.hp:
                 self.last_turn_reward += gem.value
+                self.last_attacked.pop(i)
 
         reward = self.last_turn_reward
         self.last_turn_reward = 0

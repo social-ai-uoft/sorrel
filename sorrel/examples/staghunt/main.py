@@ -30,7 +30,7 @@ if __name__ == "__main__":
             "food_value": 5,
             "bone_value": -10,
             "spawn_prob": 0.002,
-            "spawn_props": [1.0, 0.0, 0.0],
+            "spawn_props": [1.0, 0.0, 0.0],  # gem, food, bone
             "beam_radius": 2,
         },
     }
