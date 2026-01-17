@@ -97,7 +97,7 @@ def parse_arguments():
         "--map_size", type=int, default=10, help="Size of the world map"
     )
     parser.add_argument(
-        "--num_resources", type=int, default=8, help="Number of resources"
+        "--num_resources", type=int, default=5, help="Number of resources (default: 5, must match predefined schedule)"
     )
 
     # Mode flags
@@ -265,9 +265,9 @@ def parse_arguments():
     parser.add_argument(
         "--model_type",
         type=str,
-        choices=["iqn", "ppo"],
+        choices=["iqn", "ppo", "ppo_lstm", "ppo_lstm_cpc"],
         default="iqn",
-        help="Model type to use: 'iqn' or 'ppo' (default: iqn)"
+        help="Model type to use: 'iqn', 'ppo' (GRU-based), 'ppo_lstm' (LSTM-based), or 'ppo_lstm_cpc' (LSTM with CPC) (default: iqn)"
     )
     parser.add_argument(
         "--ppo_use_dual_head",
@@ -310,6 +310,130 @@ def parse_arguments():
         type=float,
         default=-0.5,
         help="Scale factor for intrinsic penalty once threshold is exceeded (default: -0.5)"
+    )
+
+    # PPO-specific hyperparameters
+    parser.add_argument(
+        "--ppo_clip_param",
+        type=float,
+        default=0.2,
+        help="PPO clipping parameter (epsilon) (default: 0.2)"
+    )
+    parser.add_argument(
+        "--ppo_k_epochs",
+        type=int,
+        default=4,
+        help="Number of passes over the rollout per update (default: 4)"
+    )
+    parser.add_argument(
+        "--ppo_rollout_length",
+        type=int,
+        default=50,
+        help="Minimum rollout length before training (default: 50)"
+    )
+    parser.add_argument(
+        "--ppo_entropy_start",
+        type=float,
+        default=0.01,
+        help="Initial entropy coefficient (default: 0.01)"
+    )
+    parser.add_argument(
+        "--ppo_entropy_end",
+        type=float,
+        default=0.01,
+        help="Final entropy coefficient after annealing (default: 0.01)"
+    )
+    parser.add_argument(
+        "--ppo_entropy_decay_steps",
+        type=int,
+        default=0,
+        help="Number of training steps for entropy annealing (0 = fixed schedule, default: 0)"
+    )
+    parser.add_argument(
+        "--ppo_max_grad_norm",
+        type=float,
+        default=0.5,
+        help="Max gradient norm for clipping (default: 0.5)"
+    )
+    parser.add_argument(
+        "--ppo_gae_lambda",
+        type=float,
+        default=0.95,
+        help="GAE lambda parameter (default: 0.95)"
+    )
+
+    # CPC-specific hyperparameters
+    parser.add_argument(
+        "--use_cpc",
+        action="store_true",
+        help="Enable Contrastive Predictive Coding (CPC) for representation learning (only for ppo_lstm_cpc model)"
+    )
+    parser.add_argument(
+        "--cpc_horizon",
+        type=int,
+        default=30,
+        help="CPC prediction horizon: number of future steps to predict (default: 30)"
+    )
+    parser.add_argument(
+        "--cpc_weight",
+        type=float,
+        default=1.0,
+        help="Weight for CPC loss: L_total = L_RL + λ * L_CPC (default: 1.0)"
+    )
+    parser.add_argument(
+        "--cpc_projection_dim",
+        type=int,
+        default=None,
+        help="CPC projection dimension (default: None, uses hidden_size)"
+    )
+    parser.add_argument(
+        "--cpc_temperature",
+        type=float,
+        default=0.07,
+        help="Temperature for InfoNCE loss in CPC (default: 0.07)"
+    )
+
+    # Phased voting parameters
+    parser.add_argument(
+        "--enable_phased_voting",
+        action="store_true",
+        help="Enable phased voting mode (agents can only vote during designated phased voting periods)"
+    )
+    parser.add_argument(
+        "--phased_voting_interval",
+        type=int,
+        default=10,
+        help="Steps between phased voting periods (X steps, default: 10)"
+    )
+    parser.add_argument(
+        "--no_phased_voting_reset_per_epoch",
+        action="store_true",
+        help="Disable resetting phased voting counter at epoch start (counter persists across epochs, default: reset each epoch)"
+    )
+    
+    # Separate model parameters
+    parser.add_argument(
+        "--use_separate_models",
+        action="store_true",
+        help="Enable separate move and vote controllers (requires model_type=iqn)"
+    )
+    parser.add_argument(
+        "--vote_window_size",
+        type=int,
+        default=10,
+        help="Steps between vote epochs for separate models (default: 10, should match phased_voting_interval if phased voting enabled)"
+    )
+    parser.add_argument(
+        "--use_window_stats",
+        action="store_true",
+        help="Include window statistics (mean reward, violation rate, punishment rate) in vote observation"
+    )
+    
+    # Punishment reset control
+    parser.add_argument(
+        "--no_reset_punishment_level_per_epoch",
+        action="store_true",
+        help="Disable resetting punishment level at epoch start (punishment persists across epochs, default: reset each epoch)"
     )
 
     return parser.parse_args()
@@ -424,6 +548,24 @@ def run_experiment(args):
         else:
             use_dual_head = args.ppo_use_dual_head
 
+    # Determine phased voting reset flag
+    phased_voting_reset = True  # Default
+    if args.no_phased_voting_reset_per_epoch:
+        phased_voting_reset = False
+    
+    # Validate separate models configuration
+    if args.use_separate_models and args.model_type != "iqn":
+        raise ValueError(
+            f"--use_separate_models is only supported with --model_type=iqn, "
+            f"but got --model_type={args.model_type}. "
+            f"Please set --model_type=iqn or remove --use_separate_models flag."
+        )
+    
+    # Determine punishment reset flag
+    punishment_reset = True  # Default
+    if args.no_reset_punishment_level_per_epoch:
+        punishment_reset = False
+
     # Create configuration
     config = create_config(
         num_agents=args.num_agents,
@@ -476,6 +618,31 @@ def run_experiment(args):
         norm_enforcer_internalization_threshold=args.norm_enforcer_internalization_threshold,  # NEW: pass threshold
         norm_enforcer_max_norm_strength=args.norm_enforcer_max_norm_strength,  # NEW: pass max strength
         norm_enforcer_intrinsic_scale=args.norm_enforcer_intrinsic_scale,  # NEW: pass intrinsic scale
+        # PPO-specific hyperparameters
+        ppo_clip_param=args.ppo_clip_param,
+        ppo_k_epochs=args.ppo_k_epochs,
+        ppo_rollout_length=args.ppo_rollout_length,
+        ppo_entropy_start=args.ppo_entropy_start,
+        ppo_entropy_end=args.ppo_entropy_end,
+        ppo_entropy_decay_steps=args.ppo_entropy_decay_steps,
+        ppo_max_grad_norm=args.ppo_max_grad_norm,
+        ppo_gae_lambda=args.ppo_gae_lambda,
+        # CPC-specific hyperparameters
+        use_cpc=args.use_cpc if args.model_type == "ppo_lstm_cpc" else False,
+        cpc_horizon=args.cpc_horizon,
+        cpc_weight=args.cpc_weight,
+        cpc_projection_dim=args.cpc_projection_dim,
+        cpc_temperature=args.cpc_temperature,
+        # Phased voting parameters
+        enable_phased_voting=args.enable_phased_voting,
+        phased_voting_interval=args.phased_voting_interval,
+        phased_voting_reset_per_epoch=phased_voting_reset,
+        # Separate model parameters
+        use_separate_models=args.use_separate_models,
+        vote_window_size=args.vote_window_size,
+        use_window_stats=args.use_window_stats,
+        # Punishment reset control
+        reset_punishment_level_per_epoch=punishment_reset,
     )
 
     # Print expected rewards (use config value, not CLI arg, so it reflects the actual config)
@@ -484,11 +651,13 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f"with_norm_enforcer_simple_params_epsilon{args.epsilon}_{base_run_name}_{timestamp}"
+    run_folder = f'phased_voting_s100_orginal_params_{base_run_name}_{timestamp}'
+    
+    #f"validate_reward_structure_complex_para_3agents_epsilon{args.epsilon}_{base_run_name}_{timestamp}"
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_debug2" / run_folder
+    log_dir = Path(__file__).parent / "runs_debug4" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder
@@ -551,6 +720,11 @@ def run_experiment(args):
     print(f"Random policy: {args.random_policy}")
     print(f"Random seed: {args.seed if args.seed is not None else 'Not set (not reproducible)'}")
     print(f"Probe test: {'disabled' if args.disable_probe_test else 'enabled'}")
+    print(f"Phased voting: {'enabled' if args.enable_phased_voting else 'disabled'}")
+    if args.enable_phased_voting:
+        print(f"  - Phased voting interval: {args.phased_voting_interval} steps")
+        print(f"  - Counter reset per epoch: {'yes' if phased_voting_reset else 'no'}")
+    print(f"Punishment reset per epoch: {'yes' if punishment_reset else 'no'}")
     print(f"Agent replacement: {'enabled' if args.enable_agent_replacement else 'disabled'}")
     if args.enable_agent_replacement:
         print(f"  - Agents to replace per epoch: {args.agents_to_replace_per_epoch}")

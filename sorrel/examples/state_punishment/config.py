@@ -17,8 +17,8 @@ def create_config(
     use_predefined_punishment_schedule: bool = False,
     social_harm_accessible: bool = False,
     map_size: int = 10,
-    num_resources: int = 8,
-    learning_rate: float = 0.00025,
+    num_resources: int = 8,  # Initial number of resources to spawn in the world (can be any number)
+    learning_rate: float = 0.00025, # 0.00025
     batch_size: int = 64, #64
     memory_size: int = 1024, #1024
     target_update_frequency: int = 200,
@@ -51,13 +51,38 @@ def create_config(
     replacement_minimum_tenure_epochs: int = 10,  # NEW: Minimum epochs before replacement
     device: str = "cpu",
     randomize_agent_order: bool = True,
-    model_type: str = "iqn",  # NEW: Model type selection ("iqn" or "ppo")
+    model_type: str = "iqn",  # NEW: Model type selection ("iqn", "ppo", "ppo_lstm", or "ppo_lstm_cpc")
     ppo_use_dual_head: bool = True,  # NEW: PPO mode selection (dual-head vs single-head)
     use_norm_enforcer: bool = False,  # NEW: Enable norm enforcer for intrinsic penalties
+    # CPC-specific parameters
+    use_cpc: bool = False,  # NEW: Enable CPC (only for ppo_lstm_cpc model)
+    cpc_horizon: int = 30,  # NEW: CPC prediction horizon
+    cpc_weight: float = 1.0,  # NEW: Weight for CPC loss
+    cpc_projection_dim: Optional[int] = None,  # NEW: CPC projection dimension (None = use hidden_size)
+    cpc_temperature: float = 0.07,  # NEW: Temperature for InfoNCE loss
     norm_enforcer_decay_rate: float = 0.995,  # NEW: Norm strength decay rate
     norm_enforcer_internalization_threshold: float = 5.0,  # NEW: Threshold for guilt penalties
     norm_enforcer_max_norm_strength: float = 10.0,  # NEW: Maximum norm strength
     norm_enforcer_intrinsic_scale: float = -0.5,  # NEW: Scale factor for intrinsic penalty
+    # PPO-specific hyperparameters
+    ppo_clip_param: float = 0.2,  # PPO clipping parameter (epsilon)
+    ppo_k_epochs: int = 4,  # Number of passes over the rollout per update
+    ppo_rollout_length: int = 50,  # Minimum rollout length before training
+    ppo_entropy_start: float = 0.01,  # Initial entropy coefficient
+    ppo_entropy_end: float = 0.01,  # Final entropy coefficient after annealing
+    ppo_entropy_decay_steps: int = 0,  # Number of training steps for entropy annealing (0 = fixed schedule)
+    ppo_max_grad_norm: float = 0.5,  # Max gradient norm for clipping
+    ppo_gae_lambda: float = 0.95,  # GAE lambda parameter
+    # Phased voting parameters
+    enable_phased_voting: bool = False,  # Enable phased voting mode
+    phased_voting_interval: int = 10,    # Steps between phased voting periods (X)
+    phased_voting_reset_per_epoch: bool = True,  # Reset counter each epoch
+    # Separate model parameters
+    use_separate_models: bool = False,  # Enable separate move and vote models
+    vote_window_size: int = 10,  # Steps between vote epochs (should match phased_voting_interval if phased voting enabled)
+    use_window_stats: bool = False,  # Include window statistics in vote observation
+    # Punishment reset control
+    reset_punishment_level_per_epoch: bool = True,  # Reset punishment level at epoch start
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -73,19 +98,19 @@ def create_config(
             }
         else:
             social_harm_config = {
-                "A": 0, # 2.16666667
-                "B": 0, # 2.86
-                "C": 1.2, # 4.99546667
-                "D": 3.5, # 11.572704
-                "E": 7.5, # 31.83059499
+                "A": 7.5, # 0
+                "B": 0, # 0
+                "C": 0, # 1.2
+                "D": 0, # 3.5
+                "E": 0, # 7.5
             }
     else:
         social_harm_config = {
-            "A": 3, 
+            "A": 3, # 3
             "B": 0, 
             "C": 0, 
-            "D": 0, 
-            "E": 0, 
+            "D": 0.0, 
+            "E": 0.0, 
         }
 
     # flexible parameters
@@ -182,20 +207,29 @@ def create_config(
         norm_enforcer_tag = "none"
     
     # Model type tags
-    model_type_tag = model_type  # "iqn" or "ppo"
+    model_type_tag = model_type  # "iqn", "ppo", "ppo_lstm", or "ppo_lstm_cpc"
     if model_type == "ppo":
         # Add PPO-specific mode tag
         if ppo_use_dual_head:
             model_type_tag = "ppo_dual"
         else:
             model_type_tag = "ppo_single"
+    elif model_type == "ppo_lstm":
+        model_type_tag = "ppo_lstm"
+    elif model_type == "ppo_lstm_cpc":
+        model_type_tag = "ppo_lstm_cpc"
+        # Ensure CPC is enabled for this model type
+        use_cpc = True
+    
+    # Punishment reset tag
+    punishment_reset_tag = "preset" if reset_punishment_level_per_epoch else "pnoreset"
     
     if simple_foraging:
         run_name = (
-            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_{punishment_reset_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
         )
     else:
-        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_{punishment_reset_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
 
     return {
         "experiment": {
@@ -238,6 +272,12 @@ def create_config(
             "replacement_initial_agents_count": replacement_initial_agents_count,  # NEW
             "replacement_minimum_tenure_epochs": replacement_minimum_tenure_epochs,  # NEW
             "randomize_agent_order": randomize_agent_order,
+            "enable_phased_voting": enable_phased_voting,
+            "phased_voting_interval": phased_voting_interval,
+            "phased_voting_reset_per_epoch": phased_voting_reset_per_epoch,
+            "use_separate_models": use_separate_models,
+            "vote_window_size": vote_window_size,
+            "use_window_stats": use_window_stats,
         },
         "world": {
             "height": map_size,
@@ -245,16 +285,17 @@ def create_config(
             "num_resources": num_resources,
             "spawn_prob": respawn_prob,
             "a_value": 25,  # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
-            "b_value": 10, # 25, 10, 10, 10, 10
+            "b_value": 10, # 25, 17, 11, 8, 8
             "c_value": 10,
             "d_value": 10,
             "e_value": 10,
             "social_harm": social_harm_config,
             "init_punishment_prob": 0.0,
-            "punishment_magnitude": 20.0, # 20.0 48
+            "punishment_magnitude": 25.0, # 20.0 48 30
             "change_per_vote": 0.1,
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
+            "reset_punishment_level_per_epoch": reset_punishment_level_per_epoch,
         },
         "model": {
             "agent_vision_radius": vision_radius,
@@ -275,8 +316,23 @@ def create_config(
             "n_quantiles": 12, # 12
             "device": device,
             "target_update_frequency": target_update_frequency,
-            "type": model_type,  # NEW: Model type ("iqn" or "ppo")
-            "use_dual_head": ppo_use_dual_head if model_type == "ppo" else None,  # NEW: PPO mode
+            "type": model_type,  # NEW: Model type ("iqn", "ppo", "ppo_lstm", or "ppo_lstm_cpc")
+            "use_dual_head": ppo_use_dual_head if model_type == "ppo" else None,  # NEW: PPO mode (only for GRU-based PPO)
+            # PPO-specific hyperparameters
+            "ppo_clip_param": ppo_clip_param,
+            "ppo_k_epochs": ppo_k_epochs,
+            "ppo_rollout_length": ppo_rollout_length,
+            "ppo_entropy_start": ppo_entropy_start,
+            "ppo_entropy_end": ppo_entropy_end,
+            "ppo_entropy_decay_steps": ppo_entropy_decay_steps,
+            "ppo_max_grad_norm": ppo_max_grad_norm,
+            "ppo_gae_lambda": ppo_gae_lambda,
+            # CPC-specific hyperparameters
+            "use_cpc": use_cpc if model_type == "ppo_lstm_cpc" else False,
+            "cpc_horizon": cpc_horizon if model_type == "ppo_lstm_cpc" else None,
+            "cpc_weight": cpc_weight if model_type == "ppo_lstm_cpc" else None,
+            "cpc_projection_dim": cpc_projection_dim if model_type == "ppo_lstm_cpc" else None,
+            "cpc_temperature": cpc_temperature if model_type == "ppo_lstm_cpc" else None,
         },
         "norm_enforcer": {
             "enabled": use_norm_enforcer,

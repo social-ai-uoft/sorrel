@@ -84,22 +84,65 @@ class StatePunishmentLogger:
                     total_action_frequencies[action_name] += frequency
                     mean_action_frequencies[action_name] += frequency
                 
-                # Access sigma_weight from PyTorchIQN model
-                if hasattr(agent.model, 'qnetwork_local') and hasattr(agent.model.qnetwork_local, 'ff_1'):
-                    # Get sigma_weight from the first NoisyLinear layer (ff_1)
-                    sigma_weight_ff1 = agent.model.qnetwork_local.ff_1.sigma_weight.mean().item()
-                    encounter_data[f"Agent_{i}/sigma_weight_ff1"] = sigma_weight_ff1
-                    sigma_weights_ff1.append(sigma_weight_ff1)
+                # Access sigma_weight and epsilon from PyTorchIQN model
+                # Check if agent uses separate models
+                from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
+                if isinstance(agent, SeparateModelStatePunishmentAgent):
+                    # Separate model agent: log sigma weights and epsilon from both move and vote models
+                    # Move model sigma weights
+                    if hasattr(agent.move_model, 'qnetwork_local') and hasattr(agent.move_model.qnetwork_local, 'ff_1'):
+                        # Get sigma_weight from the first NoisyLinear layer (ff_1)
+                        sigma_weight_ff1 = agent.move_model.qnetwork_local.ff_1.sigma_weight.mean().item()
+                        encounter_data[f"Agent_{i}/move_sigma_weight_ff1"] = sigma_weight_ff1
+                        sigma_weights_ff1.append(sigma_weight_ff1)
+                        
+                        # Get sigma_weight from advantage layer
+                        sigma_weight_adv = agent.move_model.qnetwork_local.advantage.sigma_weight.mean().item()
+                        encounter_data[f"Agent_{i}/move_sigma_weight_advantage"] = sigma_weight_adv
+                        sigma_weights_advantage.append(sigma_weight_adv)
+                        
+                        # Get sigma_weight from value layer
+                        sigma_weight_val = agent.move_model.qnetwork_local.value.sigma_weight.mean().item()
+                        encounter_data[f"Agent_{i}/move_sigma_weight_value"] = sigma_weight_val
+                        sigma_weights_value.append(sigma_weight_val)
                     
-                    # Get sigma_weight from advantage layer
-                    sigma_weight_adv = agent.model.qnetwork_local.advantage.sigma_weight.mean().item()
-                    encounter_data[f"Agent_{i}/sigma_weight_advantage"] = sigma_weight_adv
-                    sigma_weights_advantage.append(sigma_weight_adv)
+                    # Vote model sigma weights
+                    if hasattr(agent.vote_model, 'qnetwork_local') and hasattr(agent.vote_model.qnetwork_local, 'ff_1'):
+                        # Get sigma_weight from the first NoisyLinear layer (ff_1)
+                        vote_sigma_weight_ff1 = agent.vote_model.qnetwork_local.ff_1.sigma_weight.mean().item()
+                        encounter_data[f"Agent_{i}/vote_sigma_weight_ff1"] = vote_sigma_weight_ff1
+                        
+                        # Get sigma_weight from advantage layer
+                        vote_sigma_weight_adv = agent.vote_model.qnetwork_local.advantage.sigma_weight.mean().item()
+                        encounter_data[f"Agent_{i}/vote_sigma_weight_advantage"] = vote_sigma_weight_adv
+                        
+                        # Get sigma_weight from value layer
+                        vote_sigma_weight_val = agent.vote_model.qnetwork_local.value.sigma_weight.mean().item()
+                        encounter_data[f"Agent_{i}/vote_sigma_weight_value"] = vote_sigma_weight_val
                     
-                    # Get sigma_weight from value layer
-                    sigma_weight_val = agent.model.qnetwork_local.value.sigma_weight.mean().item()
-                    encounter_data[f"Agent_{i}/sigma_weight_value"] = sigma_weight_val
-                    sigma_weights_value.append(sigma_weight_val)
+                    # Log epsilon for both models
+                    encounter_data[f"Agent_{i}/move_epsilon"] = agent.move_model.epsilon
+                    encounter_data[f"Agent_{i}/vote_epsilon"] = agent.vote_model.epsilon
+                else:
+                    # Standard agent: log sigma weights and epsilon from single model
+                    if hasattr(agent.model, 'qnetwork_local') and hasattr(agent.model.qnetwork_local, 'ff_1'):
+                        # Get sigma_weight from the first NoisyLinear layer (ff_1)
+                        sigma_weight_ff1 = agent.model.qnetwork_local.ff_1.sigma_weight.mean().item()
+                        encounter_data[f"Agent_{i}/sigma_weight_ff1"] = sigma_weight_ff1
+                        sigma_weights_ff1.append(sigma_weight_ff1)
+                        
+                        # Get sigma_weight from advantage layer
+                        sigma_weight_adv = agent.model.qnetwork_local.advantage.sigma_weight.mean().item()
+                        encounter_data[f"Agent_{i}/sigma_weight_advantage"] = sigma_weight_adv
+                        sigma_weights_advantage.append(sigma_weight_adv)
+                        
+                        # Get sigma_weight from value layer
+                        sigma_weight_val = agent.model.qnetwork_local.value.sigma_weight.mean().item()
+                        encounter_data[f"Agent_{i}/sigma_weight_value"] = sigma_weight_val
+                        sigma_weights_value.append(sigma_weight_val)
+                    
+                    # Log epsilon for standard agent
+                    encounter_data[f"Agent_{i}/epsilon"] = agent.model.epsilon
             
             # Add totals and means to encounter_data
             for entity_type in total_encounters:
@@ -115,9 +158,16 @@ class StatePunishmentLogger:
             encounter_data["Mean/mean_social_harm_received"] = total_social_harm_received / len(self.multi_agent_env.individual_envs)
             
             # Add total and mean action frequencies
+            # Note: For standard agents, each agent takes one action per turn, so the sum of mean
+            # action frequencies should equal max_turns (typically 100) if the epoch completes.
+            # For separate model agents, the total includes both movement actions (one per turn)
+            # and vote actions (one per vote epoch), so the sum will be higher than max_turns.
+            # For example: if max_turns=100 and vote_window_size=10, expect ~110 actions per agent
+            # (100 movement + 10 vote actions). Epochs can end early if world.is_done is True.
             for action_name in total_action_frequencies:
                 encounter_data[f"Total/total_action_freq_{action_name}"] = total_action_frequencies[action_name]
                 encounter_data[f"Mean/mean_action_freq_{action_name}"] = mean_action_frequencies[action_name] / len(self.multi_agent_env.individual_envs)
+            
             
             # Add mean sigma weights across all agents
             if sigma_weights_ff1:
@@ -142,9 +192,31 @@ class StatePunishmentLogger:
             encounter_data["Global/current_punishment_level"] = (
                 self.multi_agent_env.shared_state_system.prob
             )
+            
+            # Vote tracking metrics (shared across all agents)
+            if hasattr(self.multi_agent_env.shared_state_system, "epoch_vote_up"):
+                encounter_data["Global/vote_increase"] = (
+                    self.multi_agent_env.shared_state_system.epoch_vote_up
+                )
+            if hasattr(self.multi_agent_env.shared_state_system, "epoch_vote_down"):
+                encounter_data["Global/vote_decrease"] = (
+                    self.multi_agent_env.shared_state_system.epoch_vote_down
+                )
+            if hasattr(self.multi_agent_env.shared_state_system, "get_epoch_vote_stats"):
+                vote_stats = self.multi_agent_env.shared_state_system.get_epoch_vote_stats()
+                if vote_stats is not None:
+                    encounter_data["Global/total_votes"] = vote_stats.get("total_votes", 0)
+            
+            # Log vote epsilon if provided (for separate model agents)
+            if "vote_epsilon" in kwargs and kwargs["vote_epsilon"] is not None:
+                encounter_data["Global/vote_epsilon"] = kwargs.pop("vote_epsilon")
 
         # Merge encounter data with existing kwargs
         kwargs.update(encounter_data)
+        
+        # Filter out None values before logging to TensorBoard
+        # TensorBoard cannot handle None values, so we skip them
+        filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
 
         # Log to console (without additional data to avoid the assertion error)
         try:
@@ -155,5 +227,5 @@ class StatePunishmentLogger:
                 f"Epoch: {epoch}, Loss: {loss:.4f}, Reward: {reward:.2f}, Epsilon: {epsilon:.3f}"
             )
 
-        # Log to tensorboard (with all additional data)
-        self.tensorboard_logger.record_turn(epoch, loss, reward, epsilon, **kwargs)
+        # Log to tensorboard (with all additional data, excluding None values)
+        self.tensorboard_logger.record_turn(epoch, loss, reward, epsilon, **filtered_kwargs)

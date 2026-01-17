@@ -20,6 +20,47 @@ predefined_punishment_probs = np.array([
     [0.95, 0.20, 0.15, 0.15, 0.10],  # s = 9
 ])
 
+# increase the punishment prob for A
+# predefined_punishment_probs = np.array([
+#     [0.40, 0.00, 0.00, 0.00, 0.00],  # s = 0
+#     [0.45, 0.05, 0.00, 0.00, 0.00],  # s = 1
+#     [0.55, 0.10, 0.00, 0.00, 0.00],  # s = 2
+#     [0.70, 0.10, 0.05, 0.00, 0.00],  # s = 3
+#     [0.80, 0.10, 0.10, 0.00, 0.00],  # s = 4
+#     [0.90, 0.10, 0.10, 0.05, 0.00],  # s = 5
+#     [0.95, 0.10, 0.10, 0.10, 0.00],  # s = 6
+#     [1.0, 0.15, 0.10, 0.10, 0.05],  # s = 7
+#     [1.0, 0.15, 0.15, 0.10, 0.10],  # s = 8
+#     [1.0, 0.20, 0.15, 0.15, 0.10],  # s = 9
+# ])
+
+# predefined_punishment_probs = np.array([
+#     [0.50, 0.00, 0.00, 0.00, 0.00],  # s = 0
+#     [0.55, 0.05, 0.00, 0.00, 0.00],  # s = 1
+#     [0.60, 0.10, 0.00, 0.00, 0.00],  # s = 2 here (25) 
+#     [0.65, 0.15, 0.05, 0.00, 0.00],  # s = 3
+#     [0.70, 0.20, 0.10, 0.00, 0.00],  # s = 4
+#     [0.75, 0.25, 0.10, 0.05, 0.00],  # s = 5
+#     [0.80, 0.30, 0.10, 0.10, 0.00],  # s = 6
+#     [0.85, 0.35, 0.10, 0.10, 0.05],  # s = 7 here (16)
+#     [0.90, 0.40, 0.15, 0.10, 0.10],  # s = 8
+#     [0.95, 0.45, 0.15, 0.15, 0.10],  # s = 9
+# ])
+
+# in total there are three bad resources: value (22, 17, 11, 8, 8); harm (12, 9, 6, 0, 0); punishment value 25
+# predefined_punishment_probs = np.array([
+#     [0.50, 0.30, 0.10, 0.00, 0.00],  # s = 0
+#     [0.60, 0.35, 0.10, 0.00, 0.00],  # s = 1 (b1 less than good)
+#     [0.70, 0.40, 0.10, 0.00, 0.00],  # s = 2 (b2 less than good)
+#     [0.80, 0.45, 0.15, 0.00, 0.00],  # s = 3 (b3 less than good) (all bad less value than good) 
+#     [0.90, 0.50, 0.20, 0.00, 0.00],  # s = 4 (b1 less than 0)
+#     [1.00, 0.60, 0.25, 0.05, 0.00],  # s = 5 
+#     [1.00, 0.70, 0.35, 0.10, 0.00],  # s = 6 (b2 less than 0)
+#     [1.00, 0.80, 0.45, 0.10, 0.05],  # s = 7 (b3 less than 0)
+#     [1.00, 0.90, 0.55, 0.10, 0.10],  # s = 8 
+#     [1.00, 1.00, 0.65, 0.15, 0.10],  # s = 9 
+# ])
+
 def generate_exponential_function(intercept: float, base: float):
     """
     Returns an exponential function of the form:
@@ -90,6 +131,7 @@ class StateSystem:
         only_punish_taboo: bool = True,
         use_probabilistic_punishment: bool = True,
         use_predefined_punishment_schedule: bool = False,
+        reset_punishment_level_per_epoch: bool = True,  # NEW: Control punishment reset at epoch start
     ):
         """Initialize the state system.
 
@@ -114,11 +156,22 @@ class StateSystem:
         """
         self.prob = init_prob
         self.init_prob = init_prob
+        self.reset_punishment_level_per_epoch = reset_punishment_level_per_epoch  # NEW
         self.magnitude = magnitude
         self.change_per_vote = change_per_vote
         self.taboo_resources = taboo_resources or ["A", "B", "C", "D", "E"]
         self.vote_history = []
         self.punishment_history = []
+        
+        # Phased voting tracking
+        self.phased_voting_enabled = False
+        self.phased_voting_interval = 10
+        self.phased_voting_reset_per_epoch = True
+        self.phased_voting_counter = 0  # Steps since last phased voting period (0 = phased voting period)
+        self.is_phased_voting = False  # Current phased voting period status
+
+        # Note: Counter starts at 0, so if phased voting is enabled and reset_per_epoch=True,
+        # the first turn of each epoch will be a phased voting period (counter == 0).
 
         # Advanced punishment system parameters
         self.num_resources = num_resources
@@ -139,12 +192,14 @@ class StateSystem:
             if predefined_punishment_probs.shape[0] != num_steps:
                 raise ValueError(
                     f"Predefined schedule has {predefined_punishment_probs.shape[0]} steps, "
-                    f"but num_steps={num_steps}. Expected {num_steps} steps."
+                    f"but num_steps={num_steps}. Expected {num_steps} steps. "
+                    f"Either set num_steps={predefined_punishment_probs.shape[0]} or disable --use_predefined_punishment_schedule."
                 )
             if predefined_punishment_probs.shape[1] != num_resources:
                 raise ValueError(
                     f"Predefined schedule has {predefined_punishment_probs.shape[1]} resources, "
-                    f"but num_resources={num_resources}. Expected {num_resources} resources."
+                    f"but num_resources={num_resources}. Expected {num_resources} resources. "
+                    f"Either set --num_resources={predefined_punishment_probs.shape[1]} or disable --use_predefined_punishment_schedule."
                 )
             
             # Transpose to match expected format: (num_resources, num_steps)
@@ -285,8 +340,73 @@ class StateSystem:
             return entity.social_harm
         return 0.0
 
+    def set_phased_voting_config(
+        self, 
+        enabled: bool, 
+        interval: int, 
+        reset_per_epoch: bool
+    ) -> None:
+        """Configure phased voting parameters.
+        
+        Args:
+            enabled: Whether phased voting mode is enabled
+            interval: Steps between phased voting periods (must be > 0)
+            reset_per_epoch: Whether to reset counter at epoch start
+            
+        Raises:
+            ValueError: If interval <= 0
+        """
+        if interval <= 0:
+            raise ValueError(f"phased_voting_interval must be > 0, got {interval}")
+        
+        self.phased_voting_enabled = enabled
+        self.phased_voting_interval = interval
+        self.phased_voting_reset_per_epoch = reset_per_epoch
+        if not enabled:
+            self.is_phased_voting = False
+            self.phased_voting_counter = 0
+
+    def update_phased_voting(self) -> None:
+        """Update phased voting status based on step counter.
+        
+        Called at the start of each turn. If counter == 0, it's phased voting period.
+        After checking, increment counter. When counter reaches interval, reset to 0.
+        """
+        if not self.phased_voting_enabled:
+            self.is_phased_voting = False
+            return
+        
+        # Check if it's phased voting period (counter == 0 means voting time)
+        self.is_phased_voting = (self.phased_voting_counter == 0)
+        
+        # Increment counter for next turn
+        self.phased_voting_counter += 1
+        
+        # Reset counter if interval reached (next turn will be phased voting period)
+        if self.phased_voting_counter >= self.phased_voting_interval:
+            self.phased_voting_counter = 0
+
+    def reset_phased_voting_counter(self) -> None:
+        """Reset phased voting counter (called at epoch start if reset_per_epoch=True).
+        
+        This ensures that if reset_per_epoch=True, each epoch starts with a phased voting period
+        (counter = 0, is_phased_voting = True).
+        """
+        if self.phased_voting_reset_per_epoch:
+            self.phased_voting_counter = 0
+            self.is_phased_voting = True  # Start new epoch with phased voting period
+
     def reset_epoch(self) -> None:
-        """Reset epoch-specific tracking."""
+        """Reset epoch-specific tracking.
+        
+        This is called on shared_state_system at the start of each epoch in run_experiment().
+        Individual world state_systems are reset via world.reset() -> state_system.reset().
+        """
+        # Reset punishment level if configured to do so (for shared_state_system)
+        # This handles the case where shared_state_system.reset() is not called
+        if self.reset_punishment_level_per_epoch:
+            self.prob = self.init_prob
+        
         self.epoch_vote_up = 0
         self.epoch_vote_down = 0
         self.epoch_vote_history.append(
@@ -298,6 +418,10 @@ class StateSystem:
         )
         # Reset punishment level history for new epoch
         self.punishment_level_history = []
+        
+        # Reset phased voting counter if configured
+        if self.phased_voting_reset_per_epoch:
+            self.reset_phased_voting_counter()
 
     def get_epoch_vote_stats(self) -> Dict:
         """Get vote statistics for the current epoch."""
@@ -323,8 +447,17 @@ class StateSystem:
         return stats
 
     def reset(self) -> None:
-        """Reset the state system to initial values."""
-        self.prob = self.init_prob
+        """Reset the state system to initial values.
+        
+        NOTE: For the shared_state_system used by agents, this method is rarely called.
+        Individual world state_systems call this, but agents use shared_state_system.
+        The shared_state_system is reset via reset_epoch() in run_experiment().
+        """
+        # Only reset punishment level if configured to do so
+        if self.reset_punishment_level_per_epoch:
+            self.prob = self.init_prob
+        
+        # Always reset these tracking variables
         self.vote_history = []
         self.punishment_history = []
         self.transgression_record = {resource: [] for resource in self.taboo_resources}

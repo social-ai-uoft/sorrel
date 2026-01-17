@@ -39,13 +39,20 @@ class StatePunishmentWorld(Gridworld):
         self.entity_classes = {"A": A, "B": B, "C": C, "D": D, "E": E}
 
         # Initialize state system
+        reset_punishment_per_epoch = config.world.get("reset_punishment_level_per_epoch", True)
+        # NOTE: num_resources in config.world is for initial resource spawning in the world.
+        # StateSystem always uses 5 resources (A, B, C, D, E) for punishment schedules,
+        # regardless of how many resources are spawned in the world.
+        state_system_num_resources = 5  # StateSystem must use exactly 5 resources for punishment schedules
         self.state_system = StateSystem(
             init_prob=config.world.init_punishment_prob,
             magnitude=config.world.punishment_magnitude,
             change_per_vote=config.world.change_per_vote,
             taboo_resources=config.world.taboo_resources,
+            num_resources=state_system_num_resources,  # Always 5 for StateSystem (A, B, C, D, E)
             use_probabilistic_punishment=config.experiment.get("use_probabilistic_punishment", True),
             use_predefined_punishment_schedule=config.experiment.get("use_predefined_punishment_schedule", False),
+            reset_punishment_level_per_epoch=reset_punishment_per_epoch,  # NEW
         )
 
         # Social harm tracking (shared across all agents)
