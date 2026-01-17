@@ -356,10 +356,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
     @override
     def take_turn(self) -> None:
         """Coordinate turns across all individual environments."""
-        # Update voting season status BEFORE incrementing turn counter
-        # This ensures voting season status is set before agent actions
-        if hasattr(self.shared_state_system, 'update_voting_season'):
-            self.shared_state_system.update_voting_season()
+        # Update phased voting status BEFORE incrementing turn counter
+        # This ensures phased voting status is set before agent actions
+        if hasattr(self.shared_state_system, 'update_phased_voting'):
+            self.shared_state_system.update_phased_voting()
         
         # Increment the turn counter for the multi-agent environment
         self.turn += 1
@@ -417,20 +417,31 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
 
         # Process each agent
         for i, (agent, env) in enumerate(zip(all_agents, all_envs)):
-            if use_composite and env.use_composite_views:
-                # Use composite observation and add agent-specific scalars
-                state = agent._add_scalars_to_composite_state(
-                    composite_observations[i],
-                    self.shared_state_system,
-                    self.shared_social_harm,
-                    punishment_tracker=self.punishment_tracker
+            # Check if agent uses separate models (needs time-to-vote feature)
+            from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent, construct_move_observation
+            if isinstance(agent, SeparateModelStatePunishmentAgent):
+                # For separate models, use construct_move_observation (adds time-to-vote feature)
+                # construct_move_observation internally calls generate_single_view, so we don't need to get base_state
+                state = construct_move_observation(
+                    agent, env.world, self.shared_state_system, self.shared_social_harm,
+                    self.turn, agent.vote_window_size
                 )
             else:
-                # Use single agent view
-                state = agent.generate_single_view(
-                    env.world, self.shared_state_system, self.shared_social_harm,
-                    punishment_tracker=self.punishment_tracker
-                )
+                # Standard agent: use existing observation generation
+                if use_composite and env.use_composite_views:
+                    # Use composite observation and add agent-specific scalars
+                    state = agent._add_scalars_to_composite_state(
+                        composite_observations[i],
+                        self.shared_state_system,
+                        self.shared_social_harm,
+                        punishment_tracker=self.punishment_tracker
+                    )
+                else:
+                    # Use single agent view
+                    state = agent.generate_single_view(
+                        env.world, self.shared_state_system, self.shared_social_harm,
+                        punishment_tracker=self.punishment_tracker
+                    )
 
             # Execute agent transition
             self._execute_agent_transition(agent, env, state)
@@ -473,20 +484,43 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         action = agent.get_action(state)
 
         # Execute action with shared state system and social harm
-        if self.punishment_tracker is not None:
-            # Use new interface with info return
-            reward, info = agent.act(
-                env.world, action, self.shared_state_system, self.shared_social_harm, return_info=True
-            )
-            
-            # Track punishment if it occurred
-            if info.get('is_punished', False):
-                self.punishment_tracker.record_punishment(agent.agent_id)
+        # Pass step_count for separate models (for vote epoch detection)
+        from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
+        info = None
+        if isinstance(agent, SeparateModelStatePunishmentAgent):
+            # For separate models, pass step_count
+            if self.punishment_tracker is not None:
+                # Use new interface with info return
+                reward, info = agent.act(
+                    env.world, action, self.shared_state_system, self.shared_social_harm, 
+                    return_info=True, step_count=self.turn
+                )
+                
+                # Track punishment if it occurred
+                if info.get('is_punished', False):
+                    self.punishment_tracker.record_punishment(agent.agent_id)
+            else:
+                # Use original interface (backward compatible)
+                reward = agent.act(
+                    env.world, action, self.shared_state_system, self.shared_social_harm,
+                    step_count=self.turn
+                )
         else:
-            # Use original interface (backward compatible)
-            reward = agent.act(
-                env.world, action, self.shared_state_system, self.shared_social_harm
-            )
+            # Standard agent (no step_count needed)
+            if self.punishment_tracker is not None:
+                # Use new interface with info return
+                reward, info = agent.act(
+                    env.world, action, self.shared_state_system, self.shared_social_harm, return_info=True
+                )
+                
+                # Track punishment if it occurred
+                if info.get('is_punished', False):
+                    self.punishment_tracker.record_punishment(agent.agent_id)
+            else:
+                # Use original interface (backward compatible)
+                reward = agent.act(
+                    env.world, action, self.shared_state_system, self.shared_social_harm
+                )
 
         # Update individual score
         agent.individual_score += reward
@@ -494,9 +528,12 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         # Check if done
         done = agent.is_done(env.world)
 
-        # Add to memory
+        # Add to memory (skip if action was blocked)
         env.world.total_reward += reward
-        agent.add_memory(state.flatten(), action, reward, done)
+        # Check if action was blocked - don't store blocked transitions in memory
+        action_blocked = info is not None and info.get('action_blocked') is not None
+        if not action_blocked:
+            agent.add_memory(state.flatten(), action, reward, done)
 
     @override
     def reset(self) -> None:
@@ -558,12 +595,12 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         disable_punishment_info = old_agent.disable_punishment_info
         
         # Calculate model input size (same as old agent)
-        # NOTE: Scalar features are now 4: punishment_level, social_harm, third_feature, is_voting_season
+        # NOTE: Scalar features are now 4: punishment_level, social_harm, third_feature, is_phased_voting
         base_flattened_size = (
             observation_spec.input_size[0]
             * observation_spec.input_size[1]
             * observation_spec.input_size[2]
-            + 4  # punishment_level, social_harm, third_feature, is_voting_season
+            + 4  # punishment_level, social_harm, third_feature, is_phased_voting
         )
         
         # Add punishment observation features if enabled
@@ -1074,7 +1111,13 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             # Start epoch action for all agents
             for env in self.individual_envs:
                 for agent in env.agents:
-                    agent.model.start_epoch_action(epoch=epoch)
+                    from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
+                    if isinstance(agent, SeparateModelStatePunishmentAgent):
+                        # Separate models: call start_epoch_action on both models
+                        agent.start_epoch_action(epoch=epoch)
+                    else:
+                        # Standard agent: call on model
+                        agent.model.start_epoch_action(epoch=epoch)
 
             # Determine whether to animate this epoch
             animate_this_epoch = animate and (
@@ -1111,14 +1154,45 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             # End epoch action for all agents
             for env in self.individual_envs:
                 for agent in env.agents:
-                    agent.model.end_epoch_action(epoch=epoch)
+                    from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
+                    if isinstance(agent, SeparateModelStatePunishmentAgent):
+                        # Separate models: call end_epoch_action on both models
+                        agent.move_model.end_epoch_action(epoch=epoch)
+                        agent.vote_model.end_epoch_action(epoch=epoch)
+                    else:
+                        # Standard agent: call on model
+                        agent.model.end_epoch_action(epoch=epoch)
 
             # Train all agents at the end of each epoch
             total_loss = 0.0
             loss_count = 0
             for env in self.individual_envs:
                 for agent in env.agents:
-                    if hasattr(agent.model, "train_step"):
+                    # Check if agent uses separate models
+                    from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
+                    if isinstance(agent, SeparateModelStatePunishmentAgent):
+                        # === Train Move Model ===
+                        # Note: start_epoch_action() is already called at epoch start (line 1107-1116)
+                        # Check sampleable size (reduced by n_frames + 1 due to frame stacking)
+                        sampleable_size = max(1, len(agent.move_model.memory) - agent.move_model.n_frames - 1)
+                        if sampleable_size >= agent.move_model.batch_size:
+                            loss = agent.move_model.train_step()  # Uses self.GAMMA (standard discount)
+                            if loss is not None and loss != 0.0:
+                                total_loss += float(loss)
+                                loss_count += 1
+                        
+                        # === Train Vote Model ===
+                        # Train when window completes and we have enough samples
+                        sampleable_size = max(1, len(agent.vote_model.memory) - agent.vote_model.n_frames - 1)
+                        if agent.should_train_vote_model(self.turn) and sampleable_size >= agent.vote_model.batch_size:
+                            # Use macro discount: custom_gamma = γ^X
+                            # train_step() internally computes: discount = custom_gamma**n_step
+                            loss = agent.vote_model.train_step(custom_gamma=agent.vote_gamma)
+                            if loss is not None and loss != 0.0:
+                                total_loss += float(loss)
+                                loss_count += 1
+                    elif hasattr(agent.model, "train_step"):
+                        # Existing training code for single-model agents
                         # Check if it's a PPO model (uses rollout_memory) or IQN model (uses memory)
                         from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
                         from sorrel.models.pytorch.recurrent_ppo_lstm_generic import RecurrentPPOLSTM
@@ -1148,6 +1222,8 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 avg_loss = total_loss / loss_count if loss_count > 0 else 0.0
 
                 # Get current epsilon from the first agent's model
+                # For separate model agents, we log move_model epsilon as primary (for backward compatibility)
+                # and vote_model epsilon as a separate metric
                 current_epsilon = (
                     np.mean(
                         [
@@ -1158,15 +1234,31 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     if self.individual_envs
                     else 0.0
                 )
+                
+                # Also collect vote epsilon for separate model agents
+                vote_epsilons = []
+                for env in self.individual_envs:
+                    agent = env.agents[0]
+                    from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
+                    if isinstance(agent, SeparateModelStatePunishmentAgent):
+                        vote_epsilons.append(agent.vote_model.epsilon)
 
                 logger.record_turn(
-                    epoch, avg_loss, total_reward, epsilon=current_epsilon
+                    epoch, avg_loss, total_reward, epsilon=current_epsilon,
+                    vote_epsilon=np.mean(vote_epsilons) if vote_epsilons else None
                 )
 
             # Update epsilon for all agents
             for env in self.individual_envs:
                 for agent in env.agents:
-                    agent.model.epsilon_decay(self.config.model.epsilon_decay)
+                    from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
+                    if isinstance(agent, SeparateModelStatePunishmentAgent):
+                        # Decay epsilon for both move and vote models
+                        agent.move_model.epsilon_decay(self.config.model.epsilon_decay)
+                        agent.vote_model.epsilon_decay(self.config.model.epsilon_decay)
+                    else:
+                        # Standard agent: decay epsilon for single model
+                        agent.model.epsilon_decay(self.config.model.epsilon_decay)
 
             # Run probe test at specified intervals
             if (probe_test_logger is not None and 
@@ -1293,7 +1385,11 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         agents = []
 
         for i in range(agent_num):
+            # Check if separate models are enabled (needed for entity_list)
+            use_separate_models = self.config.experiment.get("use_separate_models", False)
+            
             # Create the observation spec with separate entity types for each agent
+            # Include the appropriate agent class name in entity list
             entity_list = [
                 "EmptyEntity",
                 "Wall",
@@ -1305,6 +1401,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 "E",
                 "StatePunishmentAgent",
             ]
+            # Add separate model agent class if using separate models
+            if use_separate_models:
+                entity_list.append("SeparateModelStatePunishmentAgent")
             observation_spec = OneHotObservationSpec(
                 entity_list,
                 full_view=self.config.model.full_view,
@@ -1354,14 +1453,14 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
             action_spec = ActionSpec(action_names)
 
-            # Create the model with extra features (punishment_level, social_harm, third_feature, is_voting_season)
+            # Create the model with extra features (punishment_level, social_harm, third_feature, is_phased_voting)
             # The input_size should be a tuple representing the flattened dimensions
-            # We always add 4 extra features: punishment_level (accessible value or 0), social_harm, third_feature, is_voting_season
+            # We always add 4 extra features: punishment_level (accessible value or 0), social_harm, third_feature, is_phased_voting
             base_flattened_size = (
                 observation_spec.input_size[0]
                 * observation_spec.input_size[1]
                 * observation_spec.input_size[2]
-                + 4  # punishment_level, social_harm, third_feature, is_voting_season
+                + 4  # punishment_level, social_harm, third_feature, is_phased_voting
             )
             
             # Add punishment observation features if enabled
@@ -1524,26 +1623,119 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     "device": self.config.norm_enforcer.get("device", self.config.model.device),
                 }
             
-            agents.append(
-                StatePunishmentAgent(
-                    observation_spec=observation_spec,
-                    action_spec=action_spec,
-                    model=model,
-                    agent_id=i,
-                    use_composite_views=self.use_composite_views,
-                    use_composite_actions=self.use_composite_actions,
-                    simple_foraging=self.simple_foraging,
-                    use_random_policy=self.use_random_policy,
-                    punishment_level_accessible=self.config.experiment.get("punishment_level_accessible", False),
-                    social_harm_accessible=self.config.experiment.get("social_harm_accessible", False),
-                    delayed_punishment=self.config.experiment.get("delayed_punishment", False),
-                    important_rule=self.config.experiment.get("important_rule", False),
-                    punishment_observable=self.config.experiment.get("punishment_observable", False),
-                    disable_punishment_info=self.config.experiment.get("disable_punishment_info", False),
-                    use_norm_enforcer=self.config.get("norm_enforcer", {}).get("enabled", False),
-                    norm_enforcer_config=norm_enforcer_config,
+            # Check if separate models are enabled
+            use_separate_models = self.config.experiment.get("use_separate_models", False)
+            
+            # Validate that separate models are only used with IQN
+            if use_separate_models and model_type != "iqn":
+                raise ValueError(
+                    f"use_separate_models=True is only supported with model_type='iqn', "
+                    f"but got model_type='{model_type}'. "
+                    f"Please set model_type='iqn' or set use_separate_models=False."
                 )
-            )
+            
+            if use_separate_models and model_type == "iqn":
+                # Create separate move and vote models
+                from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
+                
+                # Move model uses full observation (with time-to-vote feature added)
+                # Add 1 for time-to-vote feature
+                move_flattened_size = flattened_size + 1
+                move_model = PyTorchIQN(
+                    input_size=(move_flattened_size,),  # Single observation size (IQN handles frame stacking internally)
+                    action_space=4,  # Only movement actions: up, down, left, right
+                    layer_size=self.config.model.layer_size,
+                    epsilon=self.config.model.epsilon,
+                    epsilon_min=self.config.model.epsilon_min,
+                    device=self.config.model.device,
+                    seed=torch.random.seed(),
+                    n_frames=self.config.model.n_frames,
+                    n_step=self.config.model.n_step,
+                    sync_freq=self.config.model.sync_freq,
+                    model_update_freq=self.config.model.model_update_freq,
+                    batch_size=self.config.model.batch_size,
+                    memory_size=self.config.model.memory_size,
+                    LR=self.config.model.LR,
+                    TAU=self.config.model.TAU,
+                    GAMMA=self.config.model.GAMMA,
+                    n_quantiles=self.config.model.n_quantiles,
+                )
+                
+                # Vote model uses low-dimensional summary
+                vote_window_size = self.config.experiment.get("vote_window_size", 10)
+                use_window_stats = self.config.experiment.get("use_window_stats", False)
+                # Base features: [punishment_level, normalized_return, normalized_social_harm] = 3
+                # Must match construct_vote_observation() return shape
+                vote_obs_dim = 3  # Base: punishment_level + aggregated_return + total_social_harm
+                if use_window_stats:
+                    # Additional features: [mean_reward_norm, violation_rate, punishment_rate] = 3
+                    vote_obs_dim += 3  # Additional: mean_reward, violation_rate, punishment_rate
+                
+                vote_model = PyTorchIQN(
+                    input_size=(vote_obs_dim,),
+                    action_space=3,  # no_vote, vote_increase, vote_decrease
+                    layer_size=self.config.model.layer_size,
+                    epsilon=self.config.model.epsilon,
+                    epsilon_min=self.config.model.epsilon_min,
+                    device=self.config.model.device,
+                    seed=torch.random.seed(),
+                    n_frames=1,  # No frame stacking for vote model
+                    n_step=1,  # Use n_step=1 for vote model (recommended in plan)
+                    sync_freq=self.config.model.sync_freq,
+                    model_update_freq=self.config.model.model_update_freq,
+                    batch_size=self.config.model.batch_size,
+                    memory_size=self.config.model.memory_size,  # Same buffer size as move model
+                    LR=self.config.model.LR,
+                    TAU=self.config.model.TAU,
+                    GAMMA=self.config.model.GAMMA,
+                    n_quantiles=self.config.model.n_quantiles,
+                )
+                
+                agents.append(
+                    SeparateModelStatePunishmentAgent(
+                        observation_spec=observation_spec,
+                        action_spec=action_spec,
+                        move_model=move_model,
+                        vote_model=vote_model,
+                        agent_id=i,
+                        vote_window_size=vote_window_size,
+                        use_window_stats=use_window_stats,
+                        use_composite_views=self.use_composite_views,
+                        use_composite_actions=self.use_composite_actions,
+                        simple_foraging=self.simple_foraging,
+                        use_random_policy=self.use_random_policy,
+                        punishment_level_accessible=self.config.experiment.get("punishment_level_accessible", False),
+                        social_harm_accessible=self.config.experiment.get("social_harm_accessible", False),
+                        delayed_punishment=self.config.experiment.get("delayed_punishment", False),
+                        important_rule=self.config.experiment.get("important_rule", False),
+                        punishment_observable=self.config.experiment.get("punishment_observable", False),
+                        disable_punishment_info=self.config.experiment.get("disable_punishment_info", False),
+                        use_norm_enforcer=self.config.get("norm_enforcer", {}).get("enabled", False),
+                        norm_enforcer_config=norm_enforcer_config,
+                    )
+                )
+            else:
+                # Standard single-model agent
+                agents.append(
+                    StatePunishmentAgent(
+                        observation_spec=observation_spec,
+                        action_spec=action_spec,
+                        model=model,
+                        agent_id=i,
+                        use_composite_views=self.use_composite_views,
+                        use_composite_actions=self.use_composite_actions,
+                        simple_foraging=self.simple_foraging,
+                        use_random_policy=self.use_random_policy,
+                        punishment_level_accessible=self.config.experiment.get("punishment_level_accessible", False),
+                        social_harm_accessible=self.config.experiment.get("social_harm_accessible", False),
+                        delayed_punishment=self.config.experiment.get("delayed_punishment", False),
+                        important_rule=self.config.experiment.get("important_rule", False),
+                        punishment_observable=self.config.experiment.get("punishment_observable", False),
+                        disable_punishment_info=self.config.experiment.get("disable_punishment_info", False),
+                        use_norm_enforcer=self.config.get("norm_enforcer", {}).get("enabled", False),
+                        norm_enforcer_config=norm_enforcer_config,
+                    )
+                )
 
         self.agents = agents
 

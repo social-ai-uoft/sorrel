@@ -73,10 +73,14 @@ def create_config(
     ppo_entropy_decay_steps: int = 0,  # Number of training steps for entropy annealing (0 = fixed schedule)
     ppo_max_grad_norm: float = 0.5,  # Max gradient norm for clipping
     ppo_gae_lambda: float = 0.95,  # GAE lambda parameter
-    # Voting season parameters
-    enable_voting_season: bool = False,  # Enable voting season mode
-    voting_season_interval: int = 10,    # Steps between voting seasons (X)
-    voting_season_reset_per_epoch: bool = True,  # Reset counter each epoch
+    # Phased voting parameters
+    enable_phased_voting: bool = False,  # Enable phased voting mode
+    phased_voting_interval: int = 10,    # Steps between phased voting periods (X)
+    phased_voting_reset_per_epoch: bool = True,  # Reset counter each epoch
+    # Separate model parameters
+    use_separate_models: bool = False,  # Enable separate move and vote models
+    vote_window_size: int = 10,  # Steps between vote epochs (should match phased_voting_interval if phased voting enabled)
+    use_window_stats: bool = False,  # Include window statistics in vote observation
     # Punishment reset control
     reset_punishment_level_per_epoch: bool = True,  # Reset punishment level at epoch start
 ) -> Dict[str, Any]:
@@ -217,12 +221,15 @@ def create_config(
         # Ensure CPC is enabled for this model type
         use_cpc = True
     
+    # Punishment reset tag
+    punishment_reset_tag = "preset" if reset_punishment_level_per_epoch else "pnoreset"
+    
     if simple_foraging:
         run_name = (
-            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+            f"v2_{probabilistic_tag}_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_{punishment_reset_tag}_sf_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_p{fixed_punishment_level:.1f}_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
         )
     else:
-        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
+        run_name = f"v2_{probabilistic_tag}_ext_{collective_harm_tag}_{delayed_punishment_tag}_{rule_type_tag}_{punishment_obs_tag}_{other_punishment_obs_tag}_{appearance_tag}_{replacement_tag}_{norm_enforcer_tag}_{model_type_tag}_{punishment_reset_tag}_sp_r{respawn_prob:.3f}_v{vision_radius}_m{map_size}_cv{use_composite_views}_me{use_multi_env_composite}_{num_agents}a_{punishment_accessibility_tag}_{social_harm_accessibility_tag}"
 
     return {
         "experiment": {
@@ -265,9 +272,12 @@ def create_config(
             "replacement_initial_agents_count": replacement_initial_agents_count,  # NEW
             "replacement_minimum_tenure_epochs": replacement_minimum_tenure_epochs,  # NEW
             "randomize_agent_order": randomize_agent_order,
-            "enable_voting_season": enable_voting_season,
-            "voting_season_interval": voting_season_interval,
-            "voting_season_reset_per_epoch": voting_season_reset_per_epoch,
+            "enable_phased_voting": enable_phased_voting,
+            "phased_voting_interval": phased_voting_interval,
+            "phased_voting_reset_per_epoch": phased_voting_reset_per_epoch,
+            "use_separate_models": use_separate_models,
+            "vote_window_size": vote_window_size,
+            "use_window_stats": use_window_stats,
         },
         "world": {
             "height": map_size,

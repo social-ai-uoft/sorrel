@@ -163,15 +163,15 @@ class StateSystem:
         self.vote_history = []
         self.punishment_history = []
         
-        # Voting season tracking
-        self.voting_season_enabled = False
-        self.voting_season_interval = 10
-        self.voting_season_reset_per_epoch = True
-        self.voting_season_counter = 0  # Steps since last voting season (0 = voting season)
-        self.is_voting_season = False  # Current voting season status
-        
-        # Note: Counter starts at 0, so if voting season is enabled and reset_per_epoch=True,
-        # the first turn of each epoch will be a voting season (counter == 0).
+        # Phased voting tracking
+        self.phased_voting_enabled = False
+        self.phased_voting_interval = 10
+        self.phased_voting_reset_per_epoch = True
+        self.phased_voting_counter = 0  # Steps since last phased voting period (0 = phased voting period)
+        self.is_phased_voting = False  # Current phased voting period status
+
+        # Note: Counter starts at 0, so if phased voting is enabled and reset_per_epoch=True,
+        # the first turn of each epoch will be a phased voting period (counter == 0).
 
         # Advanced punishment system parameters
         self.num_resources = num_resources
@@ -340,61 +340,61 @@ class StateSystem:
             return entity.social_harm
         return 0.0
 
-    def set_voting_season_config(
+    def set_phased_voting_config(
         self, 
         enabled: bool, 
         interval: int, 
         reset_per_epoch: bool
     ) -> None:
-        """Configure voting season parameters.
+        """Configure phased voting parameters.
         
         Args:
-            enabled: Whether voting season mode is enabled
-            interval: Steps between voting seasons (must be > 0)
+            enabled: Whether phased voting mode is enabled
+            interval: Steps between phased voting periods (must be > 0)
             reset_per_epoch: Whether to reset counter at epoch start
             
         Raises:
             ValueError: If interval <= 0
         """
         if interval <= 0:
-            raise ValueError(f"voting_season_interval must be > 0, got {interval}")
+            raise ValueError(f"phased_voting_interval must be > 0, got {interval}")
         
-        self.voting_season_enabled = enabled
-        self.voting_season_interval = interval
-        self.voting_season_reset_per_epoch = reset_per_epoch
+        self.phased_voting_enabled = enabled
+        self.phased_voting_interval = interval
+        self.phased_voting_reset_per_epoch = reset_per_epoch
         if not enabled:
-            self.is_voting_season = False
-            self.voting_season_counter = 0
+            self.is_phased_voting = False
+            self.phased_voting_counter = 0
 
-    def update_voting_season(self) -> None:
-        """Update voting season status based on step counter.
+    def update_phased_voting(self) -> None:
+        """Update phased voting status based on step counter.
         
-        Called at the start of each turn. If counter == 0, it's voting season.
+        Called at the start of each turn. If counter == 0, it's phased voting period.
         After checking, increment counter. When counter reaches interval, reset to 0.
         """
-        if not self.voting_season_enabled:
-            self.is_voting_season = False
+        if not self.phased_voting_enabled:
+            self.is_phased_voting = False
             return
         
-        # Check if it's voting season (counter == 0 means voting time)
-        self.is_voting_season = (self.voting_season_counter == 0)
+        # Check if it's phased voting period (counter == 0 means voting time)
+        self.is_phased_voting = (self.phased_voting_counter == 0)
         
         # Increment counter for next turn
-        self.voting_season_counter += 1
+        self.phased_voting_counter += 1
         
-        # Reset counter if interval reached (next turn will be voting season)
-        if self.voting_season_counter >= self.voting_season_interval:
-            self.voting_season_counter = 0
+        # Reset counter if interval reached (next turn will be phased voting period)
+        if self.phased_voting_counter >= self.phased_voting_interval:
+            self.phased_voting_counter = 0
 
-    def reset_voting_season_counter(self) -> None:
-        """Reset voting season counter (called at epoch start if reset_per_epoch=True).
+    def reset_phased_voting_counter(self) -> None:
+        """Reset phased voting counter (called at epoch start if reset_per_epoch=True).
         
-        This ensures that if reset_per_epoch=True, each epoch starts with a voting season
-        (counter = 0, is_voting_season = True).
+        This ensures that if reset_per_epoch=True, each epoch starts with a phased voting period
+        (counter = 0, is_phased_voting = True).
         """
-        if self.voting_season_reset_per_epoch:
-            self.voting_season_counter = 0
-            self.is_voting_season = True  # Start new epoch with voting season
+        if self.phased_voting_reset_per_epoch:
+            self.phased_voting_counter = 0
+            self.is_phased_voting = True  # Start new epoch with phased voting period
 
     def reset_epoch(self) -> None:
         """Reset epoch-specific tracking.
@@ -419,9 +419,9 @@ class StateSystem:
         # Reset punishment level history for new epoch
         self.punishment_level_history = []
         
-        # Reset voting season counter if configured
-        if self.voting_season_reset_per_epoch:
-            self.reset_voting_season_counter()
+        # Reset phased voting counter if configured
+        if self.phased_voting_reset_per_epoch:
+            self.reset_phased_voting_counter()
 
     def get_epoch_vote_stats(self) -> Dict:
         """Get vote statistics for the current epoch."""

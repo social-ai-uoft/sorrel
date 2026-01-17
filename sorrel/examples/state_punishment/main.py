@@ -393,22 +393,40 @@ def parse_arguments():
         help="Temperature for InfoNCE loss in CPC (default: 0.07)"
     )
 
-    # Voting season parameters
+    # Phased voting parameters
     parser.add_argument(
-        "--enable_voting_season",
+        "--enable_phased_voting",
         action="store_true",
-        help="Enable voting season mode (agents can only vote during designated voting seasons)"
+        help="Enable phased voting mode (agents can only vote during designated phased voting periods)"
     )
     parser.add_argument(
-        "--voting_season_interval",
+        "--phased_voting_interval",
         type=int,
         default=10,
-        help="Steps between voting seasons (X steps, default: 10)"
+        help="Steps between phased voting periods (X steps, default: 10)"
     )
     parser.add_argument(
-        "--no_voting_season_reset_per_epoch",
+        "--no_phased_voting_reset_per_epoch",
         action="store_true",
-        help="Disable resetting voting season counter at epoch start (counter persists across epochs, default: reset each epoch)"
+        help="Disable resetting phased voting counter at epoch start (counter persists across epochs, default: reset each epoch)"
+    )
+    
+    # Separate model parameters
+    parser.add_argument(
+        "--use_separate_models",
+        action="store_true",
+        help="Enable separate move and vote controllers (requires model_type=iqn)"
+    )
+    parser.add_argument(
+        "--vote_window_size",
+        type=int,
+        default=10,
+        help="Steps between vote epochs for separate models (default: 10, should match phased_voting_interval if phased voting enabled)"
+    )
+    parser.add_argument(
+        "--use_window_stats",
+        action="store_true",
+        help="Include window statistics (mean reward, violation rate, punishment rate) in vote observation"
     )
     
     # Punishment reset control
@@ -530,10 +548,18 @@ def run_experiment(args):
         else:
             use_dual_head = args.ppo_use_dual_head
 
-    # Determine voting season reset flag
-    voting_season_reset = True  # Default
-    if args.no_voting_season_reset_per_epoch:
-        voting_season_reset = False
+    # Determine phased voting reset flag
+    phased_voting_reset = True  # Default
+    if args.no_phased_voting_reset_per_epoch:
+        phased_voting_reset = False
+    
+    # Validate separate models configuration
+    if args.use_separate_models and args.model_type != "iqn":
+        raise ValueError(
+            f"--use_separate_models is only supported with --model_type=iqn, "
+            f"but got --model_type={args.model_type}. "
+            f"Please set --model_type=iqn or remove --use_separate_models flag."
+        )
     
     # Determine punishment reset flag
     punishment_reset = True  # Default
@@ -607,10 +633,14 @@ def run_experiment(args):
         cpc_weight=args.cpc_weight,
         cpc_projection_dim=args.cpc_projection_dim,
         cpc_temperature=args.cpc_temperature,
-        # Voting season parameters
-        enable_voting_season=args.enable_voting_season,
-        voting_season_interval=args.voting_season_interval,
-        voting_season_reset_per_epoch=voting_season_reset,
+        # Phased voting parameters
+        enable_phased_voting=args.enable_phased_voting,
+        phased_voting_interval=args.phased_voting_interval,
+        phased_voting_reset_per_epoch=phased_voting_reset,
+        # Separate model parameters
+        use_separate_models=args.use_separate_models,
+        vote_window_size=args.vote_window_size,
+        use_window_stats=args.use_window_stats,
         # Punishment reset control
         reset_punishment_level_per_epoch=punishment_reset,
     )
@@ -621,13 +651,13 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f'voting_season_10steps_mode_iqn_orginal_params_{base_run_name}_{timestamp}'
+    run_folder = f'phased_voting_s100_orginal_params_{base_run_name}_{timestamp}'
     
     #f"validate_reward_structure_complex_para_3agents_epsilon{args.epsilon}_{base_run_name}_{timestamp}"
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_debug3" / run_folder
+    log_dir = Path(__file__).parent / "runs_debug4" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder
@@ -690,10 +720,10 @@ def run_experiment(args):
     print(f"Random policy: {args.random_policy}")
     print(f"Random seed: {args.seed if args.seed is not None else 'Not set (not reproducible)'}")
     print(f"Probe test: {'disabled' if args.disable_probe_test else 'enabled'}")
-    print(f"Voting season: {'enabled' if args.enable_voting_season else 'disabled'}")
-    if args.enable_voting_season:
-        print(f"  - Voting season interval: {args.voting_season_interval} steps")
-        print(f"  - Counter reset per epoch: {'yes' if voting_season_reset else 'no'}")
+    print(f"Phased voting: {'enabled' if args.enable_phased_voting else 'disabled'}")
+    if args.enable_phased_voting:
+        print(f"  - Phased voting interval: {args.phased_voting_interval} steps")
+        print(f"  - Counter reset per epoch: {'yes' if phased_voting_reset else 'no'}")
     print(f"Punishment reset per epoch: {'yes' if punishment_reset else 'no'}")
     print(f"Agent replacement: {'enabled' if args.enable_agent_replacement else 'disabled'}")
     if args.enable_agent_replacement:

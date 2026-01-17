@@ -317,16 +317,24 @@ class iRainbowModel(DoublePyTorchModel):
         
         return action_values.cpu().data.numpy()[0]  # Return as 1D array
 
-    def train_step(self) -> np.ndarray:
+    def train_step(self, custom_gamma: float = None) -> np.ndarray:
         """Update value parameters using given batch of experience tuples.
 
         .. note:: The training loop CANNOT be named `train()` or `training()` as this conflicts with `nn.Module` superclass functions.
+
+        Args:
+            custom_gamma: Optional custom discount factor. If None, uses self.GAMMA.
+                For vote model, pass γ^X (macro discount). For move model, pass None.
 
         Returns:
             float: The loss output.
         """
         loss = torch.tensor(0.0)
         self.optimizer.zero_grad()
+
+        # Use custom_gamma if provided, otherwise use self.GAMMA
+        # Note: IQN uses n-step returns, so discount is (gamma)**n_step
+        discount_factor = custom_gamma if custom_gamma is not None else self.GAMMA
 
         # Check if we have enough experiences to sample a batch
         # The sampleable population is reduced by n_frames + 1 due to frame stacking requirements
@@ -365,8 +373,12 @@ class iRainbowModel(DoublePyTorchModel):
             ).transpose(1, 2)
 
             # Compute Q targets for current states
+            # For vote model: custom_gamma = γ^X (macro discount)
+            #   Effective discount = (γ^X)^n_step = γ^(X*n_step)
+            # For move model: custom_gamma = None (uses self.GAMMA = γ)
+            #   Effective discount = γ^n_step
             Q_targets = rewards.unsqueeze(-1) + (
-                self.GAMMA**self.n_step
+                discount_factor**self.n_step
                 * Q_targets_next
                 * (1.0 - dones.unsqueeze(-1))
             )

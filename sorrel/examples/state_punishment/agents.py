@@ -199,7 +199,7 @@ class StatePunishmentAgent(Agent):
         
         Returns:
             Observation array with shape (1, visual_field_size + 4 + num_other_agents).
-            Scalar features (4 total): [punishment_level, social_harm, third_feature, is_voting_season]
+            Scalar features (4 total): [punishment_level, social_harm, third_feature, is_phased_voting]
             Note: If punishment_tracker is provided, other_punishments are concatenated after these 4 features.
         """
         image = self.observation_spec.observe(world, self.location)
@@ -221,20 +221,20 @@ class StatePunishmentAgent(Agent):
         else:
             third_feature = np.random.random()
         
-        # Add voting season flag (4th scalar feature)
-        # Only include flag if voting season is enabled
+        # Add phased voting flag (4th scalar feature)
+        # Only include flag if phased voting is enabled
         if (state_system is not None and 
-            hasattr(state_system, 'voting_season_enabled') and 
-            state_system.voting_season_enabled and
-            hasattr(state_system, 'is_voting_season')):
-            is_voting_season = 1.0 if state_system.is_voting_season else 0.0
+            hasattr(state_system, 'phased_voting_enabled') and 
+            state_system.phased_voting_enabled and
+            hasattr(state_system, 'is_phased_voting')):
+            is_phased_voting = 1.0 if state_system.is_phased_voting else 0.0
         else:
-            is_voting_season = 0.0
+            is_phased_voting = 0.0
 
-        # Add voting season flag to extra_features (as 4th feature)
+        # Add phased voting flag to extra_features (as 4th feature)
         # NOTE: Observation shape changed from 3 to 4 scalar features
         extra_features = np.array(
-            [punishment_level, social_harm, third_feature, is_voting_season], dtype=visual_field.dtype
+            [punishment_level, social_harm, third_feature, is_phased_voting], dtype=visual_field.dtype
         ).reshape(1, -1)
         
         # Add other agents' punishment status if enabled
@@ -255,7 +255,7 @@ class StatePunishmentAgent(Agent):
         
         Returns:
             Composite state with scalar features concatenated.
-            Scalar features (4 total): [punishment_level, social_harm, third_feature, is_voting_season]
+            Scalar features (4 total): [punishment_level, social_harm, third_feature, is_phased_voting]
             Note: If punishment_tracker is provided, other_punishments are concatenated after these 4 features.
         """
         # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and third feature
@@ -273,19 +273,19 @@ class StatePunishmentAgent(Agent):
         else:
             third_feature = np.random.random()
         
-        # Add voting season flag (4th scalar feature)
-        # Only include flag if voting season is enabled
+        # Add phased voting flag (4th scalar feature)
+        # Only include flag if phased voting is enabled
         if (state_system is not None and 
-            hasattr(state_system, 'voting_season_enabled') and 
-            state_system.voting_season_enabled and
-            hasattr(state_system, 'is_voting_season')):
-            is_voting_season = 1.0 if state_system.is_voting_season else 0.0
+            hasattr(state_system, 'phased_voting_enabled') and 
+            state_system.phased_voting_enabled and
+            hasattr(state_system, 'is_phased_voting')):
+            is_phased_voting = 1.0 if state_system.is_phased_voting else 0.0
         else:
-            is_voting_season = 0.0
+            is_phased_voting = 0.0
 
         # NOTE: Observation shape changed from 3 to 4 scalar features
         extra_features = np.array(
-            [punishment_level, social_harm, third_feature, is_voting_season], dtype=composite_state.dtype
+            [punishment_level, social_harm, third_feature, is_phased_voting], dtype=composite_state.dtype
         ).reshape(1, -1)
         
         # Add other agents' punishment status if enabled
@@ -397,28 +397,31 @@ class StatePunishmentAgent(Agent):
                 else:
                     voting_action = 0  # no vote
 
-        # Enforce voting season constraints AFTER action conversion
-        # Check voting season status (only apply constraints if voting season is enabled)
-        is_voting_season = False
+        # Enforce phased voting constraints AFTER action conversion
+        # Only apply constraints if phased voting is enabled
+        is_phased_voting = False
+        phased_voting_enabled = False
         if (state_system is not None and 
-            hasattr(state_system, 'voting_season_enabled') and 
-            state_system.voting_season_enabled and
-            hasattr(state_system, 'is_voting_season')):
-            is_voting_season = state_system.is_voting_season
+            hasattr(state_system, 'phased_voting_enabled')):
+            phased_voting_enabled = state_system.phased_voting_enabled
+            if phased_voting_enabled and hasattr(state_system, 'is_phased_voting'):
+                is_phased_voting = state_system.is_phased_voting
         
-        # Apply voting season constraints
-        if is_voting_season:
-            # During voting season: only allow voting, block movement
-            if movement_action >= 0:
-                # Movement attempted during voting season - block it
-                movement_action = -1  # No movement allowed
-                # Note: Agent can still vote if voting_action > 0
-        else:
-            # Outside voting season: only allow movement, block voting
-            if voting_action > 0:
-                # Voting attempted outside voting season - block it
-                voting_action = 0  # No vote allowed
-                # Note: Agent can still move if movement_action >= 0
+        # Apply phased voting constraints (only when phased voting is enabled)
+        if phased_voting_enabled:
+            if is_phased_voting:
+                # During phased voting period: only allow voting, block movement
+                if movement_action >= 0:
+                    # Movement attempted during phased voting period - block it
+                    movement_action = -1  # No movement allowed
+                    # Note: Agent can still vote if voting_action > 0
+            else:
+                # Outside phased voting period: only allow movement, block voting
+                if voting_action > 0:
+                    # Voting attempted outside phased voting period - block it
+                    voting_action = 0  # No vote allowed
+                    # Note: Agent can still move if movement_action >= 0
+        # If phased voting is disabled, both movement and voting are allowed (no constraints)
 
         # Execute movement (if valid and not simple foraging with non-movement action)
         if movement_action >= 0 and not (self.simple_foraging and action >= 4):
@@ -435,6 +438,7 @@ class StatePunishmentAgent(Agent):
                 reward += movement_reward
 
         # Execute voting (if valid and not simple foraging)
+        # Note: _execute_voting returns 0.0 (no immediate cost or reward for voting)
         if voting_action > 0 and not self.simple_foraging:
             reward += self._execute_voting(voting_action, world, state_system)
 
@@ -570,9 +574,9 @@ class StatePunishmentAgent(Agent):
             elif voting_action == 2:
                 state_system.vote_decrease()
 
-        # Record vote and apply small cost
+        # Record vote (no cost for voting)
         self.vote_history.append(1 if voting_action == 1 else -1)
-        return -0.1  # Small cost for voting
+        return 0.0  # No cost for voting
 
     def apply_delayed_punishments(self) -> float:
         """Apply any pending punishments from previous turn.
@@ -637,3 +641,604 @@ class StatePunishmentAgent(Agent):
     def is_done(self, world) -> bool:
         """Returns whether this Agent is done."""
         return world.is_done
+
+
+class WindowStats:
+    """Helper class to track statistics over vote window."""
+    
+    def __init__(self):
+        self.reset()
+    
+    def reset(self):
+        """Reset all statistics."""
+        self.total_reward = 0.0
+        self.num_violations = 0
+        self.num_punishments = 0
+        self.num_steps = 0
+        self.total_social_harm = 0.0  # Track social harm in window
+    
+    def update(self, world, action, reward, info, social_harm_value=0.0):
+        """Update statistics with new transition.
+        
+        Args:
+            world: World state
+            action: Action taken
+            reward: Reward received
+            info: Info dict from action execution
+            social_harm_value: Social harm received in this step
+        """
+        self.total_reward += reward
+        self.num_steps += 1
+        self.total_social_harm += social_harm_value  # Accumulate social harm
+        
+        if info.get('is_punished', False):
+            self.num_punishments += 1
+        
+        # Track violations (taboo resource collections) - Check all taboo resources
+        if info.get('resource_collected') in ['A', 'B', 'C', 'D', 'E']:
+            self.num_violations += 1
+
+
+def construct_move_observation(
+    agent: StatePunishmentAgent,
+    world,
+    state_system,
+    social_harm_dict,
+    step_count: int,
+    vote_window_size: int,
+) -> np.ndarray:
+    """Construct move observation with time-to-vote feature.
+    
+    Args:
+        agent: Agent instance
+        world: World state
+        state_system: State system
+        social_harm_dict: Social harm dictionary
+        step_count: Current step count
+        vote_window_size: Size of vote window
+    
+    Returns:
+        Move observation array
+    """
+    # Get base observation
+    base_obs = agent.generate_single_view(world, state_system, social_harm_dict)
+    
+    # Extract components
+    visual_size = (
+        agent.observation_spec.input_size[0] *
+        agent.observation_spec.input_size[1] *
+        agent.observation_spec.input_size[2]
+    )
+    visual_field = base_obs[:, :visual_size]
+    scalars = base_obs[:, visual_size:]
+    
+    # Add time-to-vote feature (normalized to [0, 1])
+    time_to_vote = (vote_window_size - (step_count % vote_window_size)) / vote_window_size
+    time_feature = np.array([[time_to_vote]], dtype=base_obs.dtype)
+    
+    # Concatenate
+    move_obs = np.concatenate([visual_field, scalars, time_feature], axis=1)
+    return move_obs
+
+
+def construct_vote_observation(
+    state_system,
+    prev_aggregated_return: float,
+    vote_window_size: int,
+    max_reward_per_step: float = 3.0,
+    window_stats: Optional[WindowStats] = None,
+    prev_total_social_harm: float = 0.0,
+) -> np.ndarray:
+    """Construct vote observation from summary statistics.
+    
+    Args:
+        state_system: State system (for punishment level)
+        prev_aggregated_return: Previous window's aggregated return
+        vote_window_size: Size of vote window
+        max_reward_per_step: Maximum expected reward per step (for normalization)
+        window_stats: Optional window statistics
+        prev_total_social_harm: Previous window's total social harm
+    
+    Returns:
+        Vote observation array (shape: (1, vote_obs_dim))
+    """
+    # Base features
+    punishment_level = state_system.prob  # Already in [0, 1]
+    
+    # Normalize aggregated return
+    max_expected_return = vote_window_size * max_reward_per_step
+    normalized_return = prev_aggregated_return / max_expected_return
+    # Clip to reasonable range
+    normalized_return = np.clip(normalized_return, -2.0, 2.0)
+    
+    # Normalize social harm
+    # Estimate max social harm per window
+    # Resource D has highest social harm (1.5), so max per window = 1.5 * vote_window_size
+    max_social_harm_per_window = 1.5 * vote_window_size
+    normalized_social_harm = prev_total_social_harm / max_social_harm_per_window if max_social_harm_per_window > 0 else 0.0
+    normalized_social_harm = np.clip(normalized_social_harm, 0.0, 2.0)  # Social harm is non-negative
+    
+    # Start with base features: [punishment_level, normalized_return, normalized_social_harm]
+    vote_obs = np.array([[punishment_level, normalized_return, normalized_social_harm]], dtype=np.float32)
+    
+    # (Optional) Add window statistics
+    if window_stats is not None:
+        # Mean reward per step
+        mean_reward = window_stats.total_reward / max(window_stats.num_steps, 1)
+        # Normalize
+        mean_reward_norm = mean_reward / max_reward_per_step
+        mean_reward_norm = np.clip(mean_reward_norm, -2.0, 2.0)
+        
+        # Violation rate
+        violation_rate = window_stats.num_violations / max(window_stats.num_steps, 1)
+        
+        # Punishment rate
+        punishment_rate = window_stats.num_punishments / max(window_stats.num_steps, 1)
+        
+        # Concatenate statistics
+        stats_features = np.array([
+            [mean_reward_norm, violation_rate, punishment_rate]
+        ], dtype=np.float32)
+        vote_obs = np.concatenate([vote_obs, stats_features], axis=1)
+    
+    return vote_obs
+
+
+class SeparateModelStatePunishmentAgent(StatePunishmentAgent):
+    """Agent with separate move and vote IQN models."""
+    
+    def __init__(
+        self,
+        observation_spec: OneHotObservationSpec,
+        action_spec: ActionSpec,
+        move_model: PyTorchIQN,  # IQN model for movement
+        vote_model: PyTorchIQN,  # IQN model for voting
+        agent_id: int = 0,
+        agent_name: int = None,
+        vote_window_size: int = 10,
+        use_window_stats: bool = False,
+        # ... all other StatePunishmentAgent parameters ...
+        use_composite_views: bool = False,
+        use_composite_actions: bool = False,
+        simple_foraging: bool = False,
+        use_random_policy: bool = False,
+        punishment_level_accessible: bool = False,
+        social_harm_accessible: bool = False,
+        delayed_punishment: bool = False,
+        important_rule: bool = False,
+        punishment_observable: bool = False,
+        disable_punishment_info: bool = False,
+        use_norm_enforcer: bool = False,
+        norm_enforcer_config: Optional[Dict] = None,
+    ):
+        # Initialize parent with move_model (for compatibility)
+        super().__init__(
+            observation_spec=observation_spec,
+            action_spec=action_spec,
+            model=move_model,  # Set move_model as primary model
+            agent_id=agent_id,
+            agent_name=agent_name,
+            use_composite_views=use_composite_views,
+            use_composite_actions=use_composite_actions,
+            simple_foraging=simple_foraging,
+            use_random_policy=use_random_policy,
+            punishment_level_accessible=punishment_level_accessible,
+            social_harm_accessible=social_harm_accessible,
+            delayed_punishment=delayed_punishment,
+            important_rule=important_rule,
+            punishment_observable=punishment_observable,
+            disable_punishment_info=disable_punishment_info,
+            use_norm_enforcer=use_norm_enforcer,
+            norm_enforcer_config=norm_enforcer_config,
+        )
+        
+        # Store separate models
+        self.move_model = move_model
+        self.vote_model = vote_model
+        self.vote_window_size = vote_window_size
+        self.use_window_stats = use_window_stats
+        
+        # Compute macro discount for vote model
+        self.vote_gamma = self.move_model.GAMMA ** vote_window_size
+        
+        # Vote window tracking
+        self.vote_window_rewards = []
+        self.vote_window_stats = WindowStats()  # Helper class to track statistics
+        self.steps_in_window = 0
+        self.prev_aggregated_return = 0.0
+        self.prev_total_social_harm = 0.0  # Track previous window's social harm
+        
+        # Store pending vote transition (state/action stored at vote epoch, 
+        # reward computed when window completes)
+        self.pending_vote_state = None
+        self.pending_vote_action = None
+        self.pending_vote_done = False
+        
+        # Training tracking
+        self.last_vote_epoch = -1
+        self._internal_step_count = 0  # Internal step counter for per-agent tracking
+    
+    @override
+    def get_action(self, state: np.ndarray) -> int:
+        """Get action from move model (vote handled separately at vote epochs).
+        
+        For IQN models, this handles frame stacking via memory.current_state().
+        
+        Args:
+            state: Current observation (move observation, shape: (1, obs_dim))
+        
+        Returns:
+            Move action (0-3: up, down, left, right)
+        """
+        # IQN models use frame stacking for temporal context
+        # Get previous frames from buffer
+        prev_states = self.move_model.memory.current_state()
+        
+        # Handle shape mismatches (e.g., when observation shape changes)
+        if prev_states.shape[1] != state.shape[1]:
+            if prev_states.shape[1] < state.shape[1]:
+                # Pad with zeros (new features were 0 before)
+                pad_width = state.shape[1] - prev_states.shape[1]
+                prev_states = np.pad(
+                    prev_states, 
+                    ((0, 0), (0, pad_width)), 
+                    mode='constant', 
+                    constant_values=0
+                )
+            else:
+                # Truncate (shouldn't happen, but handle gracefully)
+                prev_states = prev_states[:, :state.shape[1]]
+        
+        # Stack frames: [prev_frame1, prev_frame2, ..., current_state]
+        stacked_states = np.vstack((prev_states, state))
+        
+        # Flatten for model input
+        model_input = stacked_states.reshape(1, -1)
+        
+        # Get action from move model
+        action = self.move_model.take_action(model_input)
+        return action
+    
+    def get_vote_action(self, vote_obs: np.ndarray) -> int:
+        """Get vote action from vote model.
+        
+        Args:
+            vote_obs: Vote observation (low-dimensional summary)
+        
+        Returns:
+            Vote action (0: no_vote, 1: vote_increase, 2: vote_decrease)
+        """
+        return self.vote_model.take_action(vote_obs)
+    
+    @override
+    def act(
+        self, 
+        world, 
+        action: int, 
+        state_system=None, 
+        social_harm_dict=None, 
+        return_info=False,
+        step_count: Optional[int] = None,  # NEW: Track step count for vote epochs
+    ) -> Union[float, Tuple[float, dict]]:
+        """Execute action and handle vote epochs.
+        
+        Args:
+            world: World state
+            action: Move action (0-3)
+            state_system: State system for punishment
+            social_harm_dict: Social harm tracking
+            return_info: Whether to return info dict
+            step_count: Current step count (for vote epoch detection). If None, track internally.
+        
+        Returns:
+            Reward (and info if return_info=True)
+        """
+        # Clear punishment flag from previous step (for immediate punishment mode)
+        # This happens after observation generation but before action execution
+        if not self.delayed_punishment:
+            self.was_punished_last_step = False
+        
+        # Apply delayed punishments from previous turn at the start of this action
+        # (same as base class)
+        delayed_punishment = 0.0
+        if self.delayed_punishment:
+            delayed_punishment = self.apply_delayed_punishments()
+        
+        # Track step count internally if not provided
+        if step_count is None:
+            step_count = self._internal_step_count
+            self._internal_step_count += 1
+        else:
+            # Update internal counter to match provided step_count
+            self._internal_step_count = step_count + 1
+        
+        # === Phased Voting Integration ===
+        # Check if phased voting is enabled and get current status
+        phased_voting_enabled = False
+        is_phased_voting = False
+        if (state_system is not None and 
+            hasattr(state_system, 'phased_voting_enabled')):
+            phased_voting_enabled = state_system.phased_voting_enabled
+            if phased_voting_enabled and hasattr(state_system, 'is_phased_voting'):
+                is_phased_voting = state_system.is_phased_voting
+        
+        # Check if this is a vote epoch
+        # When phased voting is enabled, vote epochs occur when is_phased_voting == True
+        # When phased voting is disabled, vote epochs occur at fixed intervals
+        if phased_voting_enabled:
+            # Vote epochs align with phased voting periods
+            is_vote_epoch = is_phased_voting
+        else:
+            # Vote epochs occur at fixed intervals
+            is_vote_epoch = (step_count % self.vote_window_size == 0)
+        
+        # Apply phased voting constraints
+        # When phased voting is ENABLED:
+        #   - Voting phase (is_phased_voting == True): ONLY voting allowed, movement BLOCKED
+        #   - Moving phase (is_phased_voting == False): ONLY movement allowed, voting BLOCKED
+        # When phased voting is DISABLED:
+        #   - Votes happen at vote epochs, movement happens at all steps (no blocking)
+        movement_blocked = False
+        vote_blocked = False
+        
+        if phased_voting_enabled:
+            # Phased voting is enabled: apply strict phase constraints
+            if is_phased_voting:
+                # === VOTING PHASE ===
+                # During phased voting period: ONLY voting is allowed, movement is BLOCKED
+                movement_blocked = True  # Block all movement during voting phase
+                if not is_vote_epoch:
+                    # Not a vote epoch but in phased voting period - this shouldn't happen if aligned correctly
+                    # But handle gracefully: block movement, no vote action
+                    if return_info:
+                        return 0.0, {'done': False, 'action_blocked': 'movement_blocked_during_phased_voting'}
+                    return 0.0
+                # is_vote_epoch == True and is_phased_voting == True: proceed with vote only
+                # vote_blocked remains False, so votes can execute
+            else:
+                # === MOVING PHASE ===
+                # Outside phased voting period: ONLY movement is allowed, voting is BLOCKED
+                # Movement is NOT blocked (movement_blocked remains False)
+                if is_vote_epoch:
+                    # Vote epoch but outside phased voting period - this shouldn't happen if aligned correctly
+                    # But handle gracefully: allow movement, BLOCK vote
+                    is_vote_epoch = False  # Skip vote action
+                    vote_blocked = True  # Block voting during moving phase
+                # is_vote_epoch == False and is_phased_voting == False: proceed with movement only
+        else:
+            # Phased voting is disabled: votes happen at vote epochs, movement happens at all steps
+            # No blocking - both can happen (vote at vote epochs, movement at all steps)
+            # Note: In practice, vote epochs are separate from movement steps, so they don't conflict
+            # movement_blocked and vote_blocked remain False
+            pass
+        
+        # Track action frequency (only track if action will actually execute)
+        # Don't track blocked movement actions - they don't count as executed actions
+        if not movement_blocked and 0 <= action < len(self.action_names):
+            action_name = self.action_names[action]
+            self.action_frequencies[action_name] = self.action_frequencies.get(action_name, 0) + 1
+        
+        vote_reward = 0.0
+        
+        # === Vote Epoch ===
+        if is_vote_epoch and not vote_blocked:
+            
+            # If we reach here, vote should execute (blocking logic already handled above)
+            # Check simple_foraging mode (same as base class: if voting_action > 0 and not self.simple_foraging)
+            if not self.simple_foraging:
+                # Construct vote observation for current vote epoch
+                vote_obs = construct_vote_observation(
+                    state_system, 
+                    self.prev_aggregated_return,
+                    self.vote_window_size,
+                    window_stats=self.vote_window_stats if self.use_window_stats else None,
+                    prev_total_social_harm=self.prev_total_social_harm,  # Pass previous window's social harm
+                )
+                
+                # Get vote action
+                # vote_obs is already shape (1, vote_obs_dim), which is correct for take_action
+                # (take_action expects batch dimension)
+                vote_action = self.get_vote_action(vote_obs)
+                
+                # Track vote action frequency (track all vote actions, including vote_no)
+                if vote_action == 0:
+                    self.action_frequencies["vote_no"] = self.action_frequencies.get("vote_no", 0) + 1
+                elif vote_action == 1:
+                    self.action_frequencies["vote_increase"] = self.action_frequencies.get("vote_increase", 0) + 1
+                elif vote_action == 2:
+                    self.action_frequencies["vote_decrease"] = self.action_frequencies.get("vote_decrease", 0) + 1
+                
+                # Execute vote (this records to vote_history and updates state_system)
+                # Only execute if vote_action > 0 (same as base class)
+                if vote_action > 0:
+                    vote_reward = self._execute_voting(vote_action, world, state_system)
+                else:
+                    vote_reward = 0.0
+                    vote_action = 0  # Ensure vote_action is 0 for no vote
+                
+                # Store vote state/action for later (reward computed when window completes)
+                # Only store if we actually have a vote observation
+                self.pending_vote_state = vote_obs.flatten()
+                self.pending_vote_action = vote_action
+                self.pending_vote_done = False  # Will be updated when window completes
+                
+                # Reset window tracking
+                self.vote_window_rewards = []
+                self.vote_window_stats.reset()
+                self.steps_in_window = 0
+                self.last_vote_epoch = step_count
+            else:
+                # Simple foraging mode: skip voting (same as base class)
+                vote_reward = 0.0
+                vote_action = 0
+                # Track vote_no in simple foraging mode (for consistency)
+                self.action_frequencies["vote_no"] = self.action_frequencies.get("vote_no", 0) + 1
+                # Don't store vote state/action in simple foraging mode
+                # Don't reset window tracking (movement continues normally)
+        
+        # === Move Execution ===
+        # Execute movement action (only if not blocked)
+        if movement_blocked:
+            # Movement is blocked during slow voting period
+            reward = 0.0
+            info = {'done': False, 'action_blocked': 'movement_blocked_during_slow_voting'}
+            # Don't accumulate blocked movement in vote window
+            # (vote window only tracks actual movement rewards)
+        else:
+            # Execute movement action
+            reward, info = self._execute_movement(
+                action, world, state_system, social_harm_dict, return_info=True
+            )
+            
+            # Apply social harm to reward (same as base class _execute_action)
+            # Social harm is updated in _execute_movement, but needs to be applied here
+            # IMPORTANT: Apply social harm BEFORE accumulating in vote window
+            social_harm_value = 0.0  # Initialize
+            if social_harm_dict is not None:
+                social_harm_value = social_harm_dict.get(self.agent_id, 0.0)
+                reward -= social_harm_value
+                # Track social harm received in this epoch
+                self.social_harm_received_epoch += social_harm_value
+                # Reset social harm to 0 after applying it
+                social_harm_dict[self.agent_id] = 0.0
+            
+            # Accumulate for vote window (only if movement was executed)
+            # Reward now includes social harm penalty
+            self.vote_window_rewards.append(reward)
+            self.vote_window_stats.update(world, action, reward, info, social_harm_value)  # Pass social_harm
+            self.steps_in_window += 1
+        
+        # === Complete Vote Window ===
+        # Check if window just completed
+        window_completed = (
+            (step_count + 1) % self.vote_window_size == 0 or 
+            info.get('done', False)
+        )
+        
+        if window_completed and self.pending_vote_state is not None:
+            # Compute aggregated return over window
+            # Formula: R_k = Σ_{i=0}^{X-1} r_{k*X + i}
+            # This is the undiscounted sum of rewards over the X-step window
+            # All rewards in the window are consequences of the same vote decision, so they are equally weighted
+            aggregated_return = sum(self.vote_window_rewards)
+            
+            # Store vote transition in vote buffer
+            # Buffer.add() signature: add(obs, action, reward, done)
+            # Note: next_state is NOT stored explicitly - it's computed during sampling
+            # Buffer.sample() automatically gets next_state from states[indices + 1]
+            # Since vote transitions are stored sequentially, the next vote transition's
+            # state will be the correct next_state for this transition
+            self.vote_model.memory.add(
+                self.pending_vote_state,
+                self.pending_vote_action,
+                aggregated_return,  # This is the reward for the vote transition
+                info.get('done', False)
+            )
+            
+            # Update for next vote
+            self.prev_aggregated_return = aggregated_return
+            self.prev_total_social_harm = self.vote_window_stats.total_social_harm  # Store for next vote epoch
+            self.pending_vote_state = None
+            self.pending_vote_action = None
+        
+        # Move transition is stored via add_memory() called by environment
+        # after getting next observation
+        
+        # Note: If movement was blocked during slow voting period, reward is 0.0
+        # If vote was skipped outside slow voting period, vote_reward is 0.0
+        # Note: vote_reward is always 0.0 (voting has no immediate cost or reward)
+        
+        # Apply delayed punishment (subtract from total reward, same as base class)
+        total_reward = reward + vote_reward - delayed_punishment
+        
+        if return_info:
+            return total_reward, info
+        else:
+            return total_reward
+    
+    @override
+    def add_memory(
+        self, 
+        state: np.ndarray, 
+        action: int, 
+        reward: float, 
+        done: bool,
+    ) -> None:
+        """Add transition to move buffer.
+        
+        Note: Buffer.add() signature is (obs, action, reward, done).
+        Next state is handled internally by buffer during sampling.
+        
+        Args:
+            state: Current state (move observation)
+            action: Action taken (move action, 0-3)
+            reward: Reward received
+            done: Episode done flag
+        """
+        # Add to move buffer
+        # Note: next_state is not passed - buffer handles it internally
+        if state.ndim == 2 and state.shape[0] == 1:
+            state = state.flatten()
+        self.move_model.memory.add(
+            state,
+            action,
+            reward,
+            done
+        )
+        
+        # Vote transitions are handled separately in act() method
+        # when vote window completes
+    
+    def should_train_vote_model(self, step_count: int) -> bool:
+        """Check if vote model should be trained.
+        
+        Args:
+            step_count: Current step count
+        
+        Returns:
+            True if vote model should be trained
+        """
+        # Train when vote window completes (after transition is stored)
+        # Window completes when (step_count + 1) % vote_window_size == 0
+        window_completed = (
+            (step_count + 1) % self.vote_window_size == 0
+        )
+        
+        # Check if we have enough data (considering sampleable size)
+        sampleable_size = max(1, len(self.vote_model.memory) - self.vote_model.n_frames - 1)
+        has_enough_data = sampleable_size >= self.vote_model.batch_size
+        
+        return window_completed and has_enough_data
+    
+    @override
+    def reset(self) -> None:
+        """Reset agent state and window tracking."""
+        # Call parent reset
+        super().reset()
+        
+        # Reset window tracking
+        self.vote_window_rewards = []
+        self.vote_window_stats.reset()
+        self.steps_in_window = 0
+        self.prev_aggregated_return = 0.0
+        self.prev_total_social_harm = 0.0  # Reset previous window's social harm
+        self.pending_vote_state = None
+        self.pending_vote_action = None
+        self.pending_vote_done = False
+        self.last_vote_epoch = -1
+        self._internal_step_count = 0  # Reset internal step counter
+        
+        # Reset models (if they have reset methods)
+        if hasattr(self.move_model, 'reset'):
+            self.move_model.reset()
+        if hasattr(self.vote_model, 'reset'):
+            self.vote_model.reset()
+    
+    def start_epoch_action(self, **kwargs) -> None:
+        """Model actions before agent takes an action."""
+        # Move model
+        self.move_model.start_epoch_action(**kwargs)
+        
+        # Vote model (only at vote epochs)
+        if kwargs.get("epoch", 0) % self.vote_window_size == 0:
+            self.vote_model.start_epoch_action(**kwargs)

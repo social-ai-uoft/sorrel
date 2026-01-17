@@ -142,6 +142,8 @@ dmypy.json
 output/
 outputs/
 logs/
+**/docs/
+**/plans/
 data/
 sorrel/examples/*/data/
 sorrel/examples/*/checkpoints/
