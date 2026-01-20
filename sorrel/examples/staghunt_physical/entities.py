@@ -354,11 +354,12 @@ class HareResource(Resource):
 class Beam(Entity["StagHuntWorld"]):
     """Generic beam class for agent interaction beams."""
 
-    def __init__(self):
+    def __init__(self, creator_agent_id: int | None = None):
         super().__init__()
         self.sprite = Path(__file__).parent / "./assets/beam.png"
         self.turn_counter = 0
         self.has_transitions = True
+        self.creator_agent_id = creator_agent_id  # Track which agent created this beam
 
     def transition(self, world: StagHuntWorld):
         # Beams persist for one full turn, then disappear.
@@ -378,14 +379,14 @@ class InteractionBeam(Beam):
 class AttackBeam(Beam):
     """Beam used for attacking resources in stag hunt."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, creator_agent_id: int | None = None):
+        super().__init__(creator_agent_id)
         self.sprite = Path(__file__).parent / "./assets/beam.png"  # Could use different sprite
 
 
 class PunishBeam(Beam):
     """Beam used for punishing agents in stag hunt."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, creator_agent_id: int | None = None):
+        super().__init__(creator_agent_id)
         self.sprite = Path(__file__).parent / "./assets/zap.png"  # Using zap sprite for punish

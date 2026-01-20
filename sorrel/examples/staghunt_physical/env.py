@@ -139,6 +139,20 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         # If "agent_identity" key is missing, defaults to {} which results in enabled=False
         identity_config = world_cfg.get("agent_identity", {})
         
+        # Get standard observation mode from config
+        standard_obs = world_cfg.get("standard_obs", False)
+        agent_id_vector_dim = world_cfg.get("agent_id_vector_dim", 8)
+        agent_id_encoding_mode = world_cfg.get("agent_id_encoding_mode", "random_vector")
+        
+        # Validate mutual exclusivity: only one observation mode can be enabled
+        identity_enabled = identity_config.get("enabled", False)
+        if identity_enabled and standard_obs:
+            raise ValueError(
+                "agent_identity.enabled and standard_obs cannot both be True. "
+                "These are mutually exclusive observation modes. "
+                "Please set one to False."
+            )
+        
         # Get agent entity mode from config (applies regardless of enabled status)
         # This controls entity list generation even when identity is disabled
         agent_entity_mode = identity_config.get("agent_entity_mode", "detailed")
@@ -166,6 +180,9 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 identity_config=identity_config,  # NEW: from config["world"]["agent_identity"] in main.py
                 num_agents=n_agents,  # NEW: needed for one-hot size
                 agent_kinds=agent_kinds,  # NEW: needed for group encoding
+                standard_obs=standard_obs,  # NEW: from config["world"]["standard_obs"]
+                agent_id_vector_dim=agent_id_vector_dim,  # NEW: from config["world"]["agent_id_vector_dim"]
+                agent_id_encoding_mode=agent_id_encoding_mode,  # NEW: from config["world"]["agent_id_encoding_mode"]
             )
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size
@@ -870,16 +887,27 @@ def export_agent_identity_codes(
     
     # Get identity system configuration from first agent (if available)
     identity_enabled = False
+    standard_obs = False
+    agent_id_vector_dim = 8
     identity_mode = "N/A"
     if agents and len(agents) > 0 and hasattr(agents[0], 'observation_spec'):
         try:
             identity_enabled = getattr(agents[0].observation_spec, 'identity_enabled', False)
+            standard_obs = getattr(agents[0].observation_spec, 'standard_obs', False)
+            agent_id_vector_dim = getattr(agents[0].observation_spec, 'agent_id_vector_dim', 8)
             if identity_enabled and hasattr(agents[0].observation_spec, 'identity_encoder'):
                 identity_mode = getattr(agents[0].observation_spec.identity_encoder, 'mode', 'N/A')
+            elif standard_obs:
+                identity_mode = f"standard_obs (vector_dim={agent_id_vector_dim})"
         except (AttributeError, TypeError):
             # Safe fallback if observation_spec structure is unexpected
             identity_enabled = False
+            standard_obs = False
+            agent_id_vector_dim = 8
             identity_mode = "N/A"
+    
+    # Determine if identity-aware mode (either identity_enabled or standard_obs)
+    identity_aware = identity_enabled or standard_obs
     
     # Write to file
     with open(filepath, 'w') as f:
@@ -892,8 +920,21 @@ def export_agent_identity_codes(
         else:
             f.write("Epoch: Initialization\n")
         f.write(f"Identity System Enabled: {identity_enabled}\n")
+        f.write(f"Standard Observation Mode: {standard_obs}\n")
+        if standard_obs:
+            # Get encoding mode and dimension from observation spec if available
+            if agents and len(agents) > 0:
+                agent_id_encoding_mode = getattr(agents[0].observation_spec, 'agent_id_encoding_mode', 'random_vector')
+                agent_id_dim = getattr(agents[0].observation_spec, 'agent_id_dim', agent_id_vector_dim)
+                f.write(f"Agent ID Encoding Mode: {agent_id_encoding_mode}\n")
+                f.write(f"Agent ID Dimension: {agent_id_dim}\n")
+            else:
+                f.write(f"Agent ID Encoding Mode: random_vector (default)\n")
+                f.write(f"Agent ID Vector Dimension: {agent_id_vector_dim}\n")
         if identity_enabled:
             f.write(f"Identity Encoding Mode: {identity_mode}\n")
+        elif standard_obs:
+            f.write(f"Identity Encoding Mode: standard_obs\n")
         f.write("\n")
         
         # Agent information
@@ -919,25 +960,111 @@ def export_agent_identity_codes(
                 f.write(f"  Orientation: {orientation}\n")
             
             # Entity Code (one-hot encoding in entity channels)
-            entity_code = None
-            entity_code_index = None
-            if hasattr(agent, 'observation_spec') and hasattr(agent.observation_spec, 'entity_list'):
-                entity_list = agent.observation_spec.entity_list
-                if entity_kind and entity_kind in entity_list:
-                    entity_code_index = entity_list.index(entity_kind)
-                    entity_code = np.zeros(len(entity_list), dtype=np.float32)
-                    entity_code[entity_code_index] = 1.0
-                    entity_code_list = entity_code.tolist()
-                    f.write(f"  Entity Type: {entity_kind}\n")
-                    f.write(f"  Entity Code Index: {entity_code_index}\n")
-                    f.write(f"  Entity Code: {entity_code_list}\n")
-                    f.write(f"  Entity Code Size: {len(entity_code)}\n")
+            # NOTE: In standard_obs mode, agents are NOT encoded using entity channels.
+            # Instead, they use: me=1 (for observer) or other=1 + ID vector (for other agents)
+            # Check this agent's observation_spec for standard_obs (in case agents have different configs)
+            agent_standard_obs = standard_obs  # Default to global setting
+            if hasattr(agent, 'observation_spec'):
+                agent_standard_obs = getattr(agent.observation_spec, 'standard_obs', standard_obs)
+            
+            if agent_standard_obs:
+                f.write(f"  Entity Type: {entity_kind}\n")
+                f.write(f"  Entity Code: N/A (standard_obs mode does not use entity channels for agents)\n")
+                
+                # Generate actual observation vector for this agent
+                try:
+                    # Try to get world from various sources
+                    agent_world = None
+                    if world is not None:
+                        agent_world = world
+                    elif hasattr(agent, 'world') and agent.world is not None:
+                        agent_world = agent.world
+                    elif hasattr(agent, 'environment') and hasattr(agent.environment, 'world'):
+                        agent_world = agent.environment.world
+                    
+                    if agent_world is not None and hasattr(agent, 'location') and hasattr(agent, 'observation_spec'):
+                        # Generate observation using the agent's observation_spec.observe method
+                        obs_spec = agent.observation_spec
+                        observation = obs_spec.observe(agent_world, agent.location)
+                        obs_list = observation.tolist()
+                        
+                        # Format observation vector (show first N and last M values if too long)
+                        max_display = 100  # Show first 50 and last 50 if vector is longer
+                        if len(obs_list) > max_display:
+                            first_part = obs_list[:max_display//2]
+                            last_part = obs_list[-max_display//2:]
+                            obs_str = ", ".join([f"{v:.6f}" for v in first_part])
+                            obs_str += f", ... ({len(obs_list) - max_display} values) ..., "
+                            obs_str += ", ".join([f"{v:.6f}" for v in last_part])
+                        else:
+                            obs_str = ", ".join([f"{v:.6f}" for v in obs_list])
+                        
+                        f.write(f"  Observation Vector (size {len(obs_list)}): [{obs_str}]\n")
+                        
+                        # Also show breakdown of observation components
+                        vision_radius = getattr(obs_spec, 'vision_radius', 3)
+                        features_per_cell = getattr(obs_spec, 'features_per_cell', 31)
+                        embedding_size = getattr(obs_spec, 'embedding_size', 3)
+                        
+                        visual_field_size = features_per_cell * (2 * vision_radius + 1) * (2 * vision_radius + 1)
+                        extra_features_size = 4  # inv_stag, inv_hare, ready_flag, interaction_reward_flag
+                        pos_code_size = embedding_size * embedding_size
+                        
+                        f.write(f"  Observation Breakdown:\n")
+                        f.write(f"    - Visual field: features 0-{visual_field_size-1} ({visual_field_size} values)\n")
+                        f.write(f"      * Features per cell: {features_per_cell} (8 entity types + 4 beams + 4 self orientation + 4 other orientation + 3 groups + 8 ID vector)\n")
+                        f.write(f"      * Grid size: {(2*vision_radius+1)}x{(2*vision_radius+1)} = {(2*vision_radius+1)**2} cells\n")
+                        f.write(f"      * Flattening order: Channel-first (feature-first)\n")
+                        f.write(f"        Structure: [all_cells_feature0, all_cells_feature1, ..., all_cells_feature{features_per_cell-1}]\n")
+                        f.write(f"        Features for the same cell are NOT consecutive - they're spread across the vector\n")
+                        f.write(f"        Consecutive values indicate: multiple cells have the same feature active\n")
+                        f.write(f"    - Extra features: features {visual_field_size}-{visual_field_size+extra_features_size-1} ({extra_features_size} values: inv_stag, inv_hare, ready_flag, interaction_reward_flag)\n")
+                        f.write(f"    - Positional embedding: features {visual_field_size+extra_features_size}-{visual_field_size+extra_features_size+pos_code_size-1} ({pos_code_size} values)\n")
+                        
+                        # Add feature index mapping for clarity
+                        f.write(f"\n  Feature Index Mapping (within each cell's 31 features):\n")
+                        f.write(f"    [0] Empty, [1] Me, [2] Wall, [3] Spawn, [4] Sand, [5] Stag, [6] Hare, [7] Other\n")
+                        f.write(f"    [8] Me Attack Beam, [9] Me Punish Beam, [10] Other Attack Beam, [11] Other Punish Beam\n")
+                        f.write(f"    [12] Me North, [13] Me East, [14] Me South, [15] Me West\n")
+                        f.write(f"    [16] Other North, [17] Other East, [18] Other South, [19] Other West\n")
+                        f.write(f"    [20] Group A, [21] Group B, [22] Group C\n")
+                        f.write(f"    [23-30] Agent ID Vector (8 values)\n")
+                    else:
+                        missing = []
+                        if agent_world is None:
+                            missing.append("world")
+                        if not hasattr(agent, 'location'):
+                            missing.append("location")
+                        if not hasattr(agent, 'observation_spec'):
+                            missing.append("observation_spec")
+                        f.write(f"  Observation Vector: Unable to generate (missing: {', '.join(missing)})\n")
+                except Exception as e:
+                    import traceback
+                    error_msg = str(e)
+                    f.write(f"  Observation Vector: Error generating observation - {error_msg}\n")
+                    # Uncomment for debugging:
+                    # f.write(f"  Error traceback: {traceback.format_exc()}\n")
+            else:
+                # Original entity channel encoding (for non-standard_obs modes)
+                entity_code = None
+                entity_code_index = None
+                if hasattr(agent, 'observation_spec') and hasattr(agent.observation_spec, 'entity_list'):
+                    entity_list = agent.observation_spec.entity_list
+                    if entity_kind and entity_kind in entity_list:
+                        entity_code_index = entity_list.index(entity_kind)
+                        entity_code = np.zeros(len(entity_list), dtype=np.float32)
+                        entity_code[entity_code_index] = 1.0
+                        entity_code_list = entity_code.tolist()
+                        f.write(f"  Entity Type: {entity_kind}\n")
+                        f.write(f"  Entity Code Index: {entity_code_index}\n")
+                        f.write(f"  Entity Code: {entity_code_list}\n")
+                        f.write(f"  Entity Code Size: {len(entity_code)}\n")
+                    else:
+                        f.write(f"  Entity Type: {entity_kind}\n")
+                        f.write(f"  Entity Code: Not found in entity_list\n")
                 else:
                     f.write(f"  Entity Type: {entity_kind}\n")
-                    f.write(f"  Entity Code: Not found in entity_list\n")
-            else:
-                f.write(f"  Entity Type: {entity_kind}\n")
-                f.write(f"  Entity Code: Unable to generate (observation_spec or entity_list not available)\n")
+                    f.write(f"  Entity Code: Unable to generate (observation_spec or entity_list not available)\n")
             
             # Identity Code
             if identity_code is not None:
@@ -951,11 +1078,36 @@ def export_agent_identity_codes(
             else:
                 f.write(f"  Identity Code: None (identity system disabled or not initialized)\n")
         
+        # If standard_obs, also export agent ID vectors
+        if standard_obs and agents and len(agents) > 0:
+            f.write("\n")
+            f.write("=" * 50 + "\n")
+            encoding_mode = getattr(agents[0].observation_spec, 'agent_id_encoding_mode', 'random_vector')
+            if encoding_mode == "onehot":
+                f.write("Agent Identity Vectors (One-Hot Encoding)\n")
+            else:
+                f.write("Agent Identity Vectors (Fixed Random Vectors)\n")
+            f.write("=" * 50 + "\n")
+            obs_spec = agents[0].observation_spec
+            if hasattr(obs_spec, 'agent_id_vectors'):
+                id_vectors = obs_spec.agent_id_vectors
+                for agent_id in range(len(id_vectors)):
+                    vector = id_vectors[agent_id]
+                    vector_str = ", ".join([f"{v:.6f}" for v in vector])
+                    f.write(f"Agent {agent_id}: [{vector_str}]\n")
+            f.write("\n")
+        
         # Export all entities' entity codes at initialization (if world is provided)
         if context == "initialization" and world is not None:
             f.write("\n")
             f.write("=" * 50 + "\n")
-            f.write("All Entities' Entity Codes (Initialization)\n")
+            if standard_obs:
+                f.write("All Entities' Entity Codes (Initialization)\n")
+                f.write("NOTE: In standard_obs mode, agents are NOT encoded using entity channels.\n")
+                f.write("      Agents use: me=1 (observer) or other=1 + ID vector (other agents).\n")
+                f.write("      Entity codes shown here are for non-agent entities only.\n")
+            else:
+                f.write("All Entities' Entity Codes (Initialization)\n")
             f.write("=" * 50 + "\n")
             f.write("\n")
             
@@ -1002,18 +1154,26 @@ def export_agent_identity_codes(
                     f.write(f"\nEntity Type: {entity_kind}\n")
                     f.write(f"  Count: {count}\n")
                     
-                    # Generate entity code for this type
-                    if entity_kind in entity_list:
-                        entity_code_index = entity_list.index(entity_kind)
-                        entity_code = np.zeros(len(entity_list), dtype=np.float32)
-                        entity_code[entity_code_index] = 1.0
-                        entity_code_list = entity_code.tolist()
-                        f.write(f"  Entity Code Index: {entity_code_index}\n")
-                        f.write(f"  Entity Code: {entity_code_list}\n")
-                        f.write(f"  Entity Code Size: {len(entity_code)}\n")
+                    # In standard_obs mode, agents are not encoded using entity channels
+                    if standard_obs and entity_kind == "Agent":
+                        f.write(f"  Entity Code: N/A (standard_obs mode does not use entity channels for agents)\n")
+                        f.write(f"  Observation Encoding: \n")
+                        f.write(f"    - Observer's position: me=1 (feature index 1)\n")
+                        f.write(f"    - Other agents: other=1 (feature index 7) + ID vector (features 23-30)\n")
+                        f.write(f"    - See 'Agent Identity Vectors' section above for ID vectors\n")
                     else:
-                        f.write(f"  Entity Code: Not found in entity_list\n")
-                        f.write(f"  Note: This entity type is not in the observation entity_list\n")
+                        # Generate entity code for this type (non-agent entities or non-standard_obs mode)
+                        if entity_kind in entity_list:
+                            entity_code_index = entity_list.index(entity_kind)
+                            entity_code = np.zeros(len(entity_list), dtype=np.float32)
+                            entity_code[entity_code_index] = 1.0
+                            entity_code_list = entity_code.tolist()
+                            f.write(f"  Entity Code Index: {entity_code_index}\n")
+                            f.write(f"  Entity Code: {entity_code_list}\n")
+                            f.write(f"  Entity Code Size: {len(entity_code)}\n")
+                        else:
+                            f.write(f"  Entity Code: Not found in entity_list\n")
+                            f.write(f"  Note: This entity type is not in the observation entity_list\n")
                     
                     # Show sample locations (first 5)
                     f.write(f"  Sample Locations (first 5):\n")
@@ -1025,10 +1185,19 @@ def export_agent_identity_codes(
         
         f.write("\n")
         f.write("Notes:\n")
-        f.write("- Entity codes are one-hot vectors indicating which entity channel an entity occupies\n")
-        f.write("- Entity codes are based on the entity's 'kind' attribute (or class name if kind is not available)\n")
-        f.write("- Entity code index shows the position in the entity_list where this entity type appears\n")
-        f.write("- Identity codes are numpy arrays encoding agent ID, kind, and orientation (agents only)\n")
+        if standard_obs:
+            f.write("- STANDARD_OBS MODE:\n")
+            f.write("  - Agents are NOT encoded using entity channels\n")
+            f.write("  - Observer's position: me=1 (feature index 1) + orientation flags (features 12-15)\n")
+            f.write("  - Other agents: other=1 (feature index 7) + orientation flags (features 16-19) + group flags (features 20-22) + ID vector (features 23-30)\n")
+            f.write("  - Agent ID vectors are fixed random vectors (Rademacher ±1, L2-normalized)\n")
+            f.write("  - Entity codes shown above are for non-agent entities only (Empty, Wall, Spawn, Sand, StagResource, HareResource)\n")
+            f.write("  - Beams are encoded separately: Me_attack_beam, Me_punish_beam, Other_attack_beam, Other_punish_beam (features 8-11)\n")
+        else:
+            f.write("- Entity codes are one-hot vectors indicating which entity channel an entity occupies\n")
+            f.write("- Entity codes are based on the entity's 'kind' attribute (or class name if kind is not available)\n")
+            f.write("- Entity code index shows the position in the entity_list where this entity type appears\n")
+            f.write("- Identity codes are numpy arrays encoding agent ID, kind, and orientation (agents only)\n")
         f.write("- Format: [value1, value2, ...]\n")
         f.write("- Orientation: 0=North, 1=East, 2=South, 3=West\n")
         if context == "initialization" and world is not None:

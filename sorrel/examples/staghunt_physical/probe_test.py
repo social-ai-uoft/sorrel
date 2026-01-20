@@ -256,9 +256,17 @@ class TestIntentionProbeTest:
                 self.identity_enabled = first_agent.observation_spec.identity_enabled
             else:
                 self.identity_enabled = False
+            
+            # Get standard_obs flag from observation spec
+            if hasattr(first_agent.observation_spec, 'standard_obs'):
+                self.standard_obs = first_agent.observation_spec.standard_obs
+            else:
+                self.standard_obs = False
         else:
             self.identity_map = {}
             self.identity_enabled = False
+            self.standard_obs = False
+            self.standard_obs = False
         
         if hasattr(original_env, 'agent_info'):
             self.agent_info = original_env.agent_info
@@ -274,8 +282,8 @@ class TestIntentionProbeTest:
         else:
             self.agent_kind_to_ids = {}
         
-        # CSV headers (include identity columns when enabled)
-        if self.identity_enabled:
+        # CSV headers (include identity columns when identity-aware)
+        if self._is_identity_aware():
             self.csv_headers = [
                 "epoch", "agent_id", "map_name", "partner_kind", "version",
                 "partner_agent_id", "partner_agent_kind",  # NEW: ID and kind from training
@@ -290,6 +298,18 @@ class TestIntentionProbeTest:
                 "q_val_forward", "q_val_backward", "q_val_step_left", "q_val_step_right", "q_val_attack",
                 "weight_facing_stag", "weight_facing_hare"
             ]
+    
+    def _is_identity_aware(self) -> bool:
+        """Check if probe test should use identity-aware behavior.
+        
+        Returns True if any of:
+        - identity_enabled is True (original identity system)
+        - standard_obs is True (selective tuning mode)
+        - standard_obs is True (standard observation mode)
+        
+        All these modes track agent identities and should use the same probe test procedure.
+        """
+        return self.identity_enabled or self.standard_obs or self.standard_obs
     
     def _parse_orientation_reference(self, file_path: str) -> dict:
         """Parse orientation reference file and extract mappings.
@@ -924,8 +944,8 @@ class TestIntentionProbeTest:
                             # Orientation NOT passed - will be set by probe test logic (orientation reference file)
                         )
                         
-                        # Generate filename - use partner_id when identity enabled, partner_kind otherwise
-                        if self.identity_enabled and partner_id is not None:
+                        # Generate filename - use partner_id when identity-aware, partner_kind otherwise
+                        if self._is_identity_aware() and partner_id is not None:
                             # Identity enabled: Use partner_id only (exclude partner_kind)
                             csv_filename = (
                                 f"test_intention_epoch_{epoch}_agent_{agent_id}_"
@@ -943,8 +963,8 @@ class TestIntentionProbeTest:
                         with open(csv_path, 'w', newline='') as f:
                             writer = csv.writer(f)
                             writer.writerow(self.csv_headers)
-                            # When writing CSV, include identity columns if identity enabled
-                            if self.identity_enabled:
+                            # When writing CSV, include identity columns if identity-aware
+                            if self._is_identity_aware():
                                 writer.writerow([
                                     epoch,
                                     agent_id,
@@ -1018,9 +1038,27 @@ class MultiStepProbeTest:
                 self.identity_enabled = first_agent.observation_spec.identity_enabled
             else:
                 self.identity_enabled = False
+            
+            # Get standard_obs flag from observation spec
+            if hasattr(first_agent, 'observation_spec'):
+                self.standard_obs = getattr(
+                    first_agent.observation_spec, 
+                    'standard_obs', 
+                    False
+                )
+            else:
+                self.standard_obs = False
+            
+            # Get standard_obs flag from observation spec
+            if hasattr(first_agent.observation_spec, 'standard_obs'):
+                self.standard_obs = first_agent.observation_spec.standard_obs
+            else:
+                self.standard_obs = False
         else:
             self.identity_map = {}
             self.identity_enabled = False
+            self.standard_obs = False
+            self.standard_obs = False
         
         if hasattr(original_env, 'agent_info'):
             self.agent_info = original_env.agent_info
@@ -1036,8 +1074,8 @@ class MultiStepProbeTest:
         else:
             self.agent_kind_to_ids = {}
         
-        # CSV headers (include identity columns when enabled)
-        if self.identity_enabled:
+        # CSV headers (include identity columns when identity-aware)
+        if self._is_identity_aware():
             self.csv_headers = [
                 "epoch", "agent_id", "partner_kind", "partner_agent_id", "partner_agent_kind",  # NEW: ID and kind from training
                 # Note: orientation NOT included - it's determined by probe test setup
@@ -1050,6 +1088,18 @@ class MultiStepProbeTest:
                 "epoch", "agent_id", "partner_kind", "first_attack_target", 
                 "result", "turn_of_first_attack"
             ]
+    
+    def _is_identity_aware(self) -> bool:
+        """Check if probe test should use identity-aware behavior.
+        
+        Returns True if any of:
+        - identity_enabled is True (original identity system)
+        - standard_obs is True (selective tuning mode)
+        - standard_obs is True (standard observation mode)
+        
+        All these modes track agent identities and should use the same probe test procedure.
+        """
+        return self.identity_enabled or self.standard_obs or self.standard_obs
     
     def _setup_test_env(self, map_file_name: str):
         """Set up the test environment with specified ASCII map layout.
@@ -1111,11 +1161,11 @@ class MultiStepProbeTest:
             partner_kind = getattr(original_agent, 'agent_kind', None)
         
         # Determine partner ID (orientation is set by probe test logic, not here)
-        if self.identity_enabled and partner_id is not None:
-            # Identity enabled: Use provided partner_id from training
+        if self._is_identity_aware() and partner_id is not None:
+            # Identity-aware: Use provided partner_id from training
             partner_agent_id = partner_id
         else:
-            # Identity disabled: Use backward compatible behavior
+            # Not identity-aware: Use backward compatible behavior
             partner_agent_id = agent_id  # Use provided agent_id parameter
         
         # Get partner attributes
@@ -1266,9 +1316,9 @@ class MultiStepProbeTest:
             map_name_clean = map_name.replace('.txt', '')
             partner_kind_name = partner_kind if partner_kind != "no_partner" else "no_partner"
             
-            # NEW: Include partner_id in filename when identity is enabled to avoid overwrites
-            if self.identity_enabled and partner_id is not None:
-                # Identity enabled: Include partner_id to make filename unique
+            # Include partner_id in filename when identity-aware to avoid overwrites
+            if self._is_identity_aware() and partner_id is not None:
+                # Identity-aware: Include partner_id to make filename unique
                 viz_filename = (
                     f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
                     f"map_{map_name_clean}_partner_{partner_kind_name}_id_{partner_id}_initial_state.png"
@@ -1398,9 +1448,9 @@ class MultiStepProbeTest:
                 
                 focal_agent_id = agent_id
                 
-                # NEW: Determine partner agent identities based on identity system status
-                if self.identity_enabled and self.agent_info:
-                    # Identity enabled: Loop through all other agent IDs from training
+                # Determine partner agent identities based on identity-aware mode
+                if self._is_identity_aware() and self.agent_info:
+                    # Identity-aware mode: Loop through all other agent IDs from training
                     all_agent_ids = list(self.agent_info.keys())
                     other_agent_ids = [aid for aid in all_agent_ids if aid != focal_agent_id]
                     
@@ -1453,8 +1503,8 @@ class MultiStepProbeTest:
                         # Orientation NOT passed - will be set by probe test logic
                     )
                     
-                    # Generate filename - use partner_id when identity enabled, partner_kind otherwise
-                    if self.identity_enabled and partner_id is not None:
+                    # Generate filename - use partner_id when identity-aware, partner_kind otherwise
+                    if self._is_identity_aware() and partner_id is not None:
                         # Identity enabled: Use partner_id only (exclude partner_kind)
                         csv_filename = (
                             f"multi_step_probe_test_epoch_{epoch}_agent_{agent_id}_"
@@ -1472,8 +1522,8 @@ class MultiStepProbeTest:
                     with open(csv_path, 'w', newline='') as f:
                         writer = csv.writer(f)
                         writer.writerow(self.csv_headers)
-                        # When writing CSV, include identity columns if identity enabled
-                        if self.identity_enabled:
+                        # When writing CSV, include identity columns if identity-aware
+                        if self._is_identity_aware():
                             writer.writerow([
                                 epoch,
                                 agent_id,

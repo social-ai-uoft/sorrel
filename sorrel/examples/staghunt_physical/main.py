@@ -56,13 +56,13 @@ def run_stag_hunt() -> None:
             # number of episodes/epochs to run
             "epochs": 3000000,
             # maximum number of turns per episode
-            "max_turns": 50,
+            "max_turns": 100,
             # If True, randomly sample number of turns per epoch from [1, max_turns] instead of using fixed max_turns
             "random_max_turns": True,
             # recording period for animation (unused here)
             "record_period": 1000,
             # Base run name (max_turns and epsilon will be automatically appended)
-            "run_name_base": "test_dynamic_resource_density_rate_increase_multiplier_3", #'
+            "run_name_base":  "test_onehot_new_observation_format", #'
             #"test_full_identity_system_individual_recognition_v0", 
             # # Base name without max_turns/epsilon
             # Model saving configuration
@@ -120,7 +120,7 @@ def run_stag_hunt() -> None:
         },
         "model": {
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
-            "agent_vision_radius": 4,
+            "agent_vision_radius": 3,
             # epsilon decay hyperparameter for the IQN model
             "epsilon_decay": 0.001, # 0.0001
             "epsilon_min": 0.05,
@@ -249,13 +249,21 @@ def run_stag_hunt() -> None:
             },
             # Agent identity system configuration
             "agent_identity": {
-                "enabled": True,  # Set to True to enable identity channels
+                "enabled": False,  # Set to True to enable identity channels
                 "mode": "unique_and_group",  # Options: "unique_onehot", "unique_and_group", "custom"
                 "agent_entity_mode": "generic",  # Options: "detailed" (separate entities per kind+orientation) or "generic" (single "Agent" entity)
                 # For custom mode, also provide:
                 # "custom_encoder": your_custom_encoder_function,
                 # "custom_encoder_size": 10,  # Size of custom encoder output
             },
+            # Standard observation mode configuration
+            "standard_obs": True,  # Set to True to enable standard observation mode
+            "agent_id_vector_dim": 8,  # Dimensionality of agent identity vectors (only used when agent_id_encoding_mode="random_vector")
+            "agent_id_encoding_mode": "onehot",  # Options: "random_vector" (default) or "onehot"
+            # When standard_obs=True: uses flat feature list with agent IDs encoded as either:
+            #   - "random_vector": Fixed random vectors of dimension agent_id_vector_dim (default: 8)
+            #   - "onehot": One-hot vectors of dimension num_agents
+            # NOTE: Cannot be True when agent_identity.enabled is True (mutually exclusive)
         },
     }
 

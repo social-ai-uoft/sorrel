@@ -156,7 +156,8 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
                                 agents=self.agents,
                                 output_dir=output_dir,
                                 epoch=epoch,
-                                context="probe_test"
+                                context="probe_test",
+                                world=self.world
                             )
                         except ImportError:
                             # Function not available (shouldn't happen, but handle gracefully)
