@@ -1815,8 +1815,39 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
             # Don't override input size - let the observation spec handle it naturally
 
+            # Check if factored actions are enabled (for IQN or PPO)
+            model_type = self.config.model.get("type", "iqn")
+            use_factored_actions = False
+            action_dims = None
+            if model_type == "iqn":
+                use_factored_actions = self.config.model.get("iqn_use_factored_actions", False)
+                if use_factored_actions:
+                    action_dims_str = self.config.model.get("iqn_action_dims", None)
+                    if action_dims_str:
+                        action_dims = [int(d.strip()) for d in action_dims_str.split(",")]
+                    else:
+                        raise ValueError(
+                            "iqn_action_dims must be provided in config when iqn_use_factored_actions=True"
+                        )
+            elif model_type in ["ppo", "ppo_lstm", "ppo_lstm_cpc"]:
+                use_factored_actions = self.config.model.get("ppo_use_factored_actions", False)
+                if use_factored_actions:
+                    action_dims_str = self.config.model.get("ppo_action_dims", None)
+                    if action_dims_str:
+                        action_dims = [int(d.strip()) for d in action_dims_str.split(",")]
+                    else:
+                        raise ValueError(
+                            "ppo_action_dims must be provided in config when ppo_use_factored_actions=True"
+                        )
+
             # Create the action spec
-            if self.use_composite_actions:
+            if use_factored_actions and action_dims:
+                # Factored actions: create action space matching prod(action_dims)
+                import numpy as np
+                total_actions = int(np.prod(action_dims))
+                # Create generic action names for factored action space
+                action_names = [f"action_{i}" for i in range(total_actions)]
+            elif self.use_composite_actions:
                 # Composite actions: 4 movements × 3 voting options + noop = 13 actions
                 action_names = [
                     "up_no_vote",
@@ -1872,12 +1903,10 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
             else:
                 flattened_size = base_flattened_size
             
-            # Get model type from config
-            model_type = self.config.model.get("type", "iqn")
-            
             if model_type == "ppo":
                 # PPO model (GRU-based)
                 use_dual_head = self.config.model.get("use_dual_head", True)
+                # use_factored_actions and action_dims already parsed above for action_spec
                 # Derive obs_dim from observation spec
                 obs_dim = (
                     observation_spec.input_size[0],  # C
@@ -1892,6 +1921,8 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     epsilon_min=self.config.model.epsilon_min,
                     device=self.config.model.device,
                     seed=torch.random.seed(),
+                    use_factored_actions=use_factored_actions if action_dims else True,  # Default True for DualHeadRecurrentPPO
+                    action_dims=action_dims,
                     use_dual_head=use_dual_head,
                     obs_dim=obs_dim,
                     n_move_actions=4,
@@ -1911,6 +1942,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 )
             elif model_type == "ppo_lstm":
                 # PPO LSTM model (LSTM-based, single-head)
+                # use_factored_actions and action_dims already parsed above for action_spec
                 # Derive obs_dim from observation spec
                 obs_dim = (
                     observation_spec.input_size[0],  # C
@@ -1942,9 +1974,13 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     rollout_length=self.config.model.ppo_rollout_length,
                     # LSTM-specific parameters
                     hidden_size=256,  # LSTM hidden size (can match layer_size if desired)
+                    # Factored action space parameters
+                    use_factored_actions=use_factored_actions,
+                    action_dims=action_dims,
                 )
             elif model_type == "ppo_lstm_cpc":
                 # PPO LSTM with CPC model (LSTM-based with Contrastive Predictive Coding)
+                # use_factored_actions and action_dims already parsed above for action_spec
                 # Derive obs_dim from observation spec
                 obs_dim = (
                     observation_spec.input_size[0],  # C
@@ -1976,6 +2012,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     rollout_length=self.config.model.ppo_rollout_length,
                     # LSTM-specific parameters
                     hidden_size=256,  # LSTM hidden size (can match layer_size if desired)
+                    # Factored action space parameters
+                    use_factored_actions=use_factored_actions,
+                    action_dims=action_dims,
                     # CPC-specific parameters
                     use_cpc=self.config.model.get("use_cpc", True),
                     cpc_horizon=self.config.model.get("cpc_horizon", 30),
@@ -1985,6 +2024,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 )
             else:
                 # IQN model (default)
+                # use_factored_actions and action_dims already parsed above
+                factored_target_variant = self.config.model.get("iqn_factored_target_variant", "A")
+                
                 model = PyTorchIQN(
                     input_size=(flattened_size,),
                     action_space=action_spec.n_actions,
@@ -2003,6 +2045,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     TAU=self.config.model.TAU,
                     GAMMA=self.config.model.GAMMA,
                     n_quantiles=self.config.model.n_quantiles,
+                    use_factored_actions=use_factored_actions,
+                    action_dims=action_dims,
+                    factored_target_variant=factored_target_variant,
                 )
 
             # Extract norm enforcer config

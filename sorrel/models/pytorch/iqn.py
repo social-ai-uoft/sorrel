@@ -60,6 +60,9 @@ class IQN(nn.Module):
         n_quantiles: int,
         n_frames: int = 5,
         device: str | torch.device = "cpu",
+        use_factored_actions: bool = False,
+        action_dims: Sequence[int] | None = None,
+        factored_target_variant: str = "A",
     ) -> None:
 
         super().__init__()
@@ -77,6 +80,26 @@ class IQN(nn.Module):
         )
         self.device = device
 
+        # Factored action space parameters
+        self.use_factored_actions = use_factored_actions
+        if use_factored_actions:
+            if action_dims is None:
+                raise ValueError("action_dims must be provided when use_factored_actions=True")
+            self.action_dims = tuple(action_dims)
+            self.n_action_dims = len(action_dims)
+            # Validate that prod(action_dims) == action_space
+            if np.prod(action_dims) != action_space:
+                raise ValueError(
+                    f"prod(action_dims)={np.prod(action_dims)} must equal action_space={action_space}"
+                )
+            self.factored_target_variant = factored_target_variant
+            if factored_target_variant not in ["A", "B"]:
+                raise ValueError(f"factored_target_variant must be 'A' or 'B', got '{factored_target_variant}'")
+        else:
+            self.action_dims = None
+            self.n_action_dims = 0
+            self.factored_target_variant = "A"
+
         # Network architecture
         self.head1 = nn.Linear(n_frames * self.input_shape.prod(), layer_size)
 
@@ -84,8 +107,17 @@ class IQN(nn.Module):
         self.ff_1 = NoisyLinear(layer_size, layer_size)
         self.cos_layer_out = layer_size
 
+        # Original architecture (always created for backward compatibility)
         self.advantage = NoisyLinear(layer_size, action_space)
         self.value = NoisyLinear(layer_size, 1)
+        
+        # Factored architecture (only created when use_factored_actions=True)
+        if use_factored_actions:
+            self.quantile_heads = nn.ModuleList([
+                NoisyLinear(layer_size, n_d) for n_d in action_dims
+            ])
+        else:
+            self.quantile_heads = None
 
     def calc_cos(
         self, batch_size: int, n_tau: int = 8
@@ -154,21 +186,40 @@ class IQN(nn.Module):
         x = self.ff_1(x)
         x = torch.relu(x)
 
-        # Calculate output based on value and advantage
-        advantage = self.advantage(x)
-        value = self.value(x)
-        out = value + advantage - advantage.mean(dim=1, keepdim=True)
+        if self.use_factored_actions:
+            # Branching architecture: each head outputs quantiles for its action dimension
+            quantiles_list = []
+            for d, head in enumerate(self.quantile_heads):
+                quantiles_d = head(x)  # (batch*n_tau, n_d)
+                quantiles_d = quantiles_d.view(batch_size, n_tau, self.action_dims[d])
+                quantiles_list.append(quantiles_d)
+            return quantiles_list, taus
+        else:
+            # Original architecture
+            # Calculate output based on value and advantage
+            advantage = self.advantage(x)
+            value = self.value(x)
+            out = value + advantage - advantage.mean(dim=1, keepdim=True)
 
-        return out.view(batch_size, n_tau, self.action_space), taus
+            return out.view(batch_size, n_tau, self.action_space), taus
 
     def get_qvalues(self, inputs, is_eval=False):
         if is_eval:
             n_tau = 256
         else:
             n_tau = self.n_quantiles
-        quantiles, _ = self.forward(inputs, n_tau)
-        actions = quantiles.mean(dim=1)
-        return actions
+        
+        forward_output = self.forward(inputs, n_tau)
+        quantiles, _ = forward_output
+        
+        if self.use_factored_actions:
+            # Return list of Q-value tensors, one for each branch
+            qvalues_list = [q.mean(dim=1) for q in quantiles]  # Mean over quantiles
+            return qvalues_list
+        else:
+            # Original behavior: single Q-value tensor
+            actions = quantiles.mean(dim=1)
+            return actions
 
 
 # ------------------------ #
@@ -205,6 +256,10 @@ class iRainbowModel(DoublePyTorchModel):
         TAU: float,
         GAMMA: float,
         n_quantiles: int,
+        # Factored action space parameters
+        use_factored_actions: bool = False,
+        action_dims: Sequence[int] | None = None,
+        factored_target_variant: str = "A",
     ):
         """Initialize an iRainbow model.
 
@@ -239,6 +294,8 @@ class iRainbowModel(DoublePyTorchModel):
         self.sync_freq = sync_freq
         self.model_update_freq = model_update_freq
 
+        # Factored action space parameters (already in function signature)
+
         # IQN-Network
         self.qnetwork_local = IQN(
             input_size,
@@ -248,6 +305,9 @@ class iRainbowModel(DoublePyTorchModel):
             n_quantiles,
             n_frames,
             device=device,
+            use_factored_actions=use_factored_actions,
+            action_dims=action_dims,
+            factored_target_variant=factored_target_variant,
         ).to(device)
         self.qnetwork_target = IQN(
             input_size,
@@ -257,6 +317,9 @@ class iRainbowModel(DoublePyTorchModel):
             n_quantiles,
             n_frames,
             device=device,
+            use_factored_actions=use_factored_actions,
+            action_dims=action_dims,
+            factored_target_variant=factored_target_variant,
         ).to(device)
 
         # Aliases for saving to disk
@@ -286,17 +349,49 @@ class iRainbowModel(DoublePyTorchModel):
         if random.random() > self.epsilon:
             torch_state = torch.from_numpy(state)
             torch_state = torch_state.float().to(self.device)
+            # Add batch dimension if needed
+            if torch_state.dim() == 1:
+                torch_state = torch_state.unsqueeze(0)
 
             self.qnetwork_local.eval()
             with torch.no_grad():
-                action_values = self.qnetwork_local.get_qvalues(torch_state, is_eval=True)  # .mean(0)
+                if self.qnetwork_local.use_factored_actions:
+                    qvalues_list = self.qnetwork_local.get_qvalues(torch_state, is_eval=True)
+                    actions = tuple(torch.argmax(q, dim=-1).cpu().numpy()[0] for q in qvalues_list)
+                    # Convert to single index for backward compatibility
+                    # Encoding: action = move_action * n_vote + vote_action
+                    # For action_dims = [5, 3]: move_action ∈ {0,1,2,3,4} (4=noop), vote_action ∈ {0,1,2}
+                    if len(actions) == 2:
+                        move_idx, vote_idx = actions
+                        single_action = move_idx * self.qnetwork_local.action_dims[1] + vote_idx
+                        return int(single_action)
+                    # General case for D > 2
+                    single_action = actions[0]
+                    for d in range(1, len(actions)):
+                        single_action = single_action * self.qnetwork_local.action_dims[d] + actions[d]
+                    return int(single_action)
+                else:
+                    action_values = self.qnetwork_local.get_qvalues(torch_state, is_eval=True)
+                    action = np.argmax(action_values.cpu().data.numpy(), axis=1)
+                    return action[0]
             self.qnetwork_local.train()
-            action = np.argmax(action_values.cpu().data.numpy(), axis=1)
-            return action[0]
         else:
-
-            action = random.choices(np.arange(self.action_space), k=1)
-            return action[0]
+            if self.qnetwork_local.use_factored_actions:
+                # Random action for each branch
+                actions = tuple(random.choice(range(n_d)) for n_d in self.qnetwork_local.action_dims)
+                # Convert to single index
+                if len(actions) == 2:
+                    move_idx, vote_idx = actions
+                    single_action = move_idx * self.qnetwork_local.action_dims[1] + vote_idx
+                    return int(single_action)
+                # General case for D > 2
+                single_action = actions[0]
+                for d in range(1, len(actions)):
+                    single_action = single_action * self.qnetwork_local.action_dims[d] + actions[d]
+                return int(single_action)
+            else:
+                action = random.choices(np.arange(self.action_space), k=1)
+                return action[0]
     
     def get_all_qvalues(self, state: np.ndarray) -> np.ndarray:
         """Get Q-values for all actions in the given state.
@@ -309,13 +404,32 @@ class iRainbowModel(DoublePyTorchModel):
         """
         torch_state = torch.from_numpy(state)
         torch_state = torch_state.float().to(self.device)
+        # Add batch dimension if needed
+        if torch_state.dim() == 1:
+            torch_state = torch_state.unsqueeze(0)
         
         self.qnetwork_local.eval()
         with torch.no_grad():
             action_values = self.qnetwork_local.get_qvalues(torch_state, is_eval=True)
         self.qnetwork_local.train()
         
-        return action_values.cpu().data.numpy()[0]  # Return as 1D array
+        if self.qnetwork_local.use_factored_actions:
+            # For factored actions, compute Q-values for all combinations
+            # action_values is a list of Q-value tensors, one per branch
+            # We need to compute Q(s, a) = Q_move(s, a_move) + Q_vote(s, a_vote) for all combinations
+            qvalues_move = action_values[0].cpu().data.numpy()[0]  # (5,)
+            qvalues_vote = action_values[1].cpu().data.numpy()[0]  # (3,)
+            
+            # Compute Q-values for all 15 combinations
+            all_qvalues = np.zeros(15)
+            for move_idx in range(5):
+                for vote_idx in range(3):
+                    action_idx = move_idx * 3 + vote_idx
+                    all_qvalues[action_idx] = qvalues_move[move_idx] + qvalues_vote[vote_idx]
+            
+            return all_qvalues
+        else:
+            return action_values.cpu().data.numpy()[0]  # Return as 1D array
 
     def train_step(self, custom_gamma: float = None) -> np.ndarray:
         """Update value parameters using given batch of experience tuples.
@@ -353,63 +467,123 @@ class iRainbowModel(DoublePyTorchModel):
             dones = torch.from_numpy(dones).float().to(self.device)
             valid = torch.from_numpy(valid).float().to(self.device)
 
-            # REPLACED: as suggested by Gemini, use local network to select action and target network to evaluate it
-            # Get max predicted Q values (for next states) from target model
-            # Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
-            # Q_targets_next: torch.Tensor = Q_targets_next.detach().cpu()
-            # action_indx = torch.argmax(Q_targets_next.mean(dim=1), dim=1, keepdim=True)
-            # Q_targets_next = Q_targets_next.gather(
-            #     2,
-            #     action_indx.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1),
-            # ).transpose(1, 2)
-            q_values_next_local, _ = self.qnetwork_local(next_states, self.n_quantiles)
-            action_indx = torch.argmax(
-                q_values_next_local.mean(dim=1), dim=1, keepdim=True
-            )
-            Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
-            Q_targets_next = Q_targets_next.gather(
-                2,
-                action_indx.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1),
-            ).transpose(1, 2)
+            if self.qnetwork_local.use_factored_actions:
+                # Factored action space training
+                D = self.qnetwork_local.n_action_dims
+                action_dims = self.qnetwork_local.action_dims
+                
+                # Sample quantiles
+                taus_cur = torch.rand(self.batch_size, self.n_quantiles, 1).to(self.device)
+                
+                # Get greedy next actions for each branch
+                # Note: forward() returns quantiles, not qvalues. We compute qvalues by taking mean over quantiles.
+                quantiles_next_list, _ = self.qnetwork_local.forward(next_states, self.n_quantiles)
+                qvalues_next_list = [q.mean(dim=1) for q in quantiles_next_list]  # Mean over quantiles to get Q-values
+                a_star_list = [torch.argmax(q, dim=-1) for q in qvalues_next_list]
+                
+                # Compute target quantiles
+                target_quantiles_list, _ = self.qnetwork_target.forward(next_states, self.n_quantiles)
+                
+                if self.qnetwork_local.factored_target_variant == "A":
+                    # Variant A: Shared target
+                    target_sum = torch.zeros(self.batch_size, self.n_quantiles, 1).to(self.device)
+                    for d in range(D):
+                        # Gather quantiles for greedy action
+                        a_star_d = a_star_list[d].unsqueeze(-1).unsqueeze(-1)  # (batch, 1, 1)
+                        target_q_d = target_quantiles_list[d].gather(
+                            2, a_star_d.expand(self.batch_size, self.n_quantiles, 1)
+                        )  # (batch, n_quantiles, 1)
+                        target_sum += target_q_d
+                    y = rewards.unsqueeze(-1) + (
+                        discount_factor**self.n_step * (target_sum / D) * (1.0 - dones.unsqueeze(-1))
+                    )
+                    
+                    # Loss for each branch toward shared target
+                    loss = 0.0
+                    for d in range(D):
+                        # Get current action indices for branch d
+                        actions_d = self._extract_action_component(actions, d)
+                        # Ensure actions_d is 1D [batch_size]
+                        if actions_d.dim() > 1:
+                            actions_d = actions_d.squeeze()
+                        # Get expected quantiles
+                        quantiles_expected_list, _ = self.qnetwork_local.forward(states, self.n_quantiles)
+                        # Reshape actions_d to [batch_size, 1, 1] then expand to [batch_size, n_quantiles, 1]
+                        actions_d_indices = actions_d.unsqueeze(-1).unsqueeze(1).expand(self.batch_size, self.n_quantiles, 1)
+                        quantiles_expected_d = quantiles_expected_list[d].gather(2, actions_d_indices)
+                        # Quantile regression loss
+                        td_error = y - quantiles_expected_d
+                        huber_l = calculate_huber_loss(td_error, 1.0) * valid.unsqueeze(-1)
+                        quantil_l = abs(taus_cur - (td_error.detach() < 0).float()) * huber_l / 1.0
+                        loss += quantil_l.mean()
+                    loss = loss / D
+                else:
+                    # Variant B: Separate targets
+                    loss = 0.0
+                    for d in range(D):
+                        a_star_d = a_star_list[d].unsqueeze(-1).unsqueeze(-1)  # (batch, 1, 1)
+                        target_q_d = target_quantiles_list[d].gather(
+                            2, a_star_d.expand(self.batch_size, self.n_quantiles, 1)
+                        )  # (batch, n_quantiles, 1)
+                        y_d = rewards.unsqueeze(-1) + (
+                            discount_factor**self.n_step * target_q_d * (1.0 - dones.unsqueeze(-1))
+                        )
+                        # Get current action and compute loss
+                        actions_d = self._extract_action_component(actions, d)
+                        # Ensure actions_d is 1D [batch_size]
+                        if actions_d.dim() > 1:
+                            actions_d = actions_d.squeeze()
+                        quantiles_expected_list, _ = self.qnetwork_local.forward(states, self.n_quantiles)
+                        # Reshape actions_d to [batch_size, 1, 1] then expand to [batch_size, n_quantiles, 1]
+                        actions_d_indices = actions_d.unsqueeze(-1).unsqueeze(1).expand(self.batch_size, self.n_quantiles, 1)
+                        quantiles_expected_d = quantiles_expected_list[d].gather(2, actions_d_indices)
+                        td_error = y_d - quantiles_expected_d
+                        huber_l = calculate_huber_loss(td_error, 1.0) * valid.unsqueeze(-1)
+                        quantil_l = abs(taus_cur - (td_error.detach() < 0).float()) * huber_l / 1.0
+                        loss += quantil_l.mean()
+                    loss = loss / D
+            else:
+                # Original single-action-space training
+                # REPLACED: as suggested by Gemini, use local network to select action and target network to evaluate it
+                q_values_next_local, _ = self.qnetwork_local(next_states, self.n_quantiles)
+                action_indx = torch.argmax(
+                    q_values_next_local.mean(dim=1), dim=1, keepdim=True
+                )
+                Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
+                Q_targets_next = Q_targets_next.gather(
+                    2,
+                    action_indx.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1),
+                ).transpose(1, 2)
 
-            # Compute Q targets for current states
-            # For vote model: custom_gamma = γ^X (macro discount)
-            #   Effective discount = (γ^X)^n_step = γ^(X*n_step)
-            # For move model: custom_gamma = None (uses self.GAMMA = γ)
-            #   Effective discount = γ^n_step
-            Q_targets = rewards.unsqueeze(-1) + (
-                discount_factor**self.n_step
-                * Q_targets_next
-                * (1.0 - dones.unsqueeze(-1))
-            )
+                # Compute Q targets for current states
+                Q_targets = rewards.unsqueeze(-1) + (
+                    discount_factor**self.n_step
+                    * Q_targets_next
+                    * (1.0 - dones.unsqueeze(-1))
+                )
 
-            # Get expected Q values from local model
-            Q_expected, taus = self.qnetwork_local(states, self.n_quantiles)
-            Q_expected: torch.Tensor = Q_expected.gather(
-                2, actions.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1)
-            )
+                # Get expected Q values from local model
+                Q_expected, taus = self.qnetwork_local(states, self.n_quantiles)
+                Q_expected: torch.Tensor = Q_expected.gather(
+                    2, actions.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1)
+                )
 
-            # Quantile Huber loss
-            td_error: torch.Tensor = Q_targets - Q_expected
-            assert td_error.shape == (
-                self.batch_size,
-                self.n_quantiles,
-                self.n_quantiles,
-            ), "wrong td error shape"
-            huber_l = calculate_huber_loss(td_error, 1.0)
-            # Zero out loss on invalid actions (when you clip past the end of an episode)
-            huber_l = huber_l * valid.unsqueeze(-1)
+                # Quantile Huber loss
+                td_error: torch.Tensor = Q_targets - Q_expected
+                assert td_error.shape == (
+                    self.batch_size,
+                    self.n_quantiles,
+                    self.n_quantiles,
+                ), "wrong td error shape"
+                huber_l = calculate_huber_loss(td_error, 1.0)
+                # Zero out loss on invalid actions (when you clip past the end of an episode)
+                huber_l = huber_l * valid.unsqueeze(-1)
 
-            quantil_l: torch.Tensor = (
-                abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
-            )
+                quantil_l: torch.Tensor = (
+                    abs(taus - (td_error.detach() < 0).float()) * huber_l / 1.0
+                )
 
-            # REPLACED: as suggested by Gemini & GPT, simply average across all quantile & batch dimensions
-            # loss: torch.Tensor = quantil_l.sum(dim=1).mean(
-            #     dim=1
-            # )  # , keepdim=True if per weights get multipl
-            # loss = loss.mean()
-            loss = quantil_l.mean()
+                loss = quantil_l.mean()
             
             
             # Minimize the loss
@@ -458,6 +632,31 @@ class iRainbowModel(DoublePyTorchModel):
         #         kwargs["game_vars"].losses.append(kwargs["loss"])
         #     else:
         #         kwargs["losses"] += kwargs["loss"]
+    
+    def _extract_action_component(self, actions: torch.Tensor, component_idx: int) -> torch.Tensor:
+        """Extract action component from single action index.
+        
+        Decoding: Given action index a and action_dims = [n_0, n_1, n_2, ...]
+        For component d:
+            if d == 0: a_0 = a // (n_1 * n_2 * ...)
+            elif d == D-1: a_D-1 = a % n_D-1
+            else: a_d = (a // (n_d+1 * n_d+2 * ...)) % n_d
+        """
+        action_dims = self.qnetwork_local.action_dims
+        D = len(action_dims)
+        
+        if component_idx == 0:
+            # First component
+            divisor = np.prod(action_dims[1:])
+            return actions // divisor
+        elif component_idx == D - 1:
+            # Last component
+            return actions % action_dims[-1]
+        else:
+            # Middle components
+            divisor_after = np.prod(action_dims[component_idx+1:])
+            component = (actions // divisor_after) % action_dims[component_idx]
+            return component
 
 
 # ------------------------ #

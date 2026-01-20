@@ -199,7 +199,11 @@ def parse_arguments():
 
     # Logging
     parser.add_argument(
-        "--experiment_name", type=str, default=None, help="Experiment name"
+        "--experiment_name", type=str, default=None, help="Experiment name (overrides entire name)"
+    )
+    parser.add_argument(
+        "--run_folder_prefix", type=str, default="replacement_slow_orig_iqn_params",
+        help="Prefix for run folder name (default: 'replacement_slow_orig_iqn_params')"
     )
     parser.add_argument(
         "--disable_probe_test", action="store_true", help="Disable probe test functionality"
@@ -279,6 +283,39 @@ def parse_arguments():
         "--ppo_single_head",
         action="store_true",
         help="Use single-head mode for PPO (combined action head, like IQN). Overrides --ppo_use_dual_head."
+    )
+    
+    # IQN factored action space parameters
+    parser.add_argument(
+        "--iqn_use_factored_actions",
+        action="store_true",
+        help="Enable factored (combinatorial) action space for IQN"
+    )
+    parser.add_argument(
+        "--iqn_action_dims",
+        type=str,
+        default=None,
+        help="Action dimensions for factored actions (comma-separated, e.g., '5,3' for 5 moves × 3 votes = 15 actions). Required if --iqn_use_factored_actions is set."
+    )
+    parser.add_argument(
+        "--iqn_factored_target_variant",
+        type=str,
+        choices=["A", "B"],
+        default="A",
+        help="IQN factored target variant: 'A' (shared target) or 'B' (separate targets) (default: A)"
+    )
+
+    # PPO factored action space parameters
+    parser.add_argument(
+        "--ppo_use_factored_actions",
+        action="store_true",
+        help="Enable factored (combinatorial) action space for PPO models (ppo, ppo_lstm, ppo_lstm_cpc)"
+    )
+    parser.add_argument(
+        "--ppo_action_dims",
+        type=str,
+        default=None,
+        help="Action dimensions for factored actions (comma-separated, e.g., '5,3' for 5 moves × 3 votes = 15 actions). Required if --ppo_use_factored_actions is set."
     )
 
     # Norm enforcer parameters
@@ -578,6 +615,64 @@ def run_experiment(args):
     punishment_reset = True  # Default
     if args.no_reset_punishment_level_per_epoch:
         punishment_reset = False
+    
+    # Parse IQN action_dims if provided
+    iqn_action_dims_parsed = None
+    if args.iqn_action_dims:
+        try:
+            iqn_action_dims_parsed = [int(d.strip()) for d in args.iqn_action_dims.split(",")]
+        except ValueError:
+            raise ValueError(
+                f"Invalid --iqn_action_dims format: {args.iqn_action_dims}. "
+                f"Expected comma-separated integers (e.g., '5,3')"
+            )
+    
+    # Validate IQN factored actions configuration
+    if args.iqn_use_factored_actions:
+        if args.model_type != "iqn":
+            raise ValueError(
+                f"--iqn_use_factored_actions is only supported with --model_type=iqn, "
+                f"but got --model_type={args.model_type}"
+            )
+        if iqn_action_dims_parsed is None:
+            raise ValueError(
+                "--iqn_action_dims must be provided when --iqn_use_factored_actions is set. "
+                "Example: --iqn_action_dims 5,3"
+            )
+    
+    # Convert parsed action_dims back to string for config (or keep original if not parsed)
+    iqn_action_dims_str = args.iqn_action_dims if args.iqn_action_dims else None
+    if iqn_action_dims_parsed is not None:
+        iqn_action_dims_str = ",".join(map(str, iqn_action_dims_parsed))
+    
+    # Parse PPO action_dims if provided
+    ppo_action_dims_parsed = None
+    if args.ppo_action_dims:
+        try:
+            ppo_action_dims_parsed = [int(d.strip()) for d in args.ppo_action_dims.split(",")]
+        except ValueError:
+            raise ValueError(
+                f"Invalid --ppo_action_dims format: {args.ppo_action_dims}. "
+                f"Expected comma-separated integers (e.g., '5,3')"
+            )
+    
+    # Validate PPO factored actions configuration
+    if args.ppo_use_factored_actions:
+        if args.model_type not in ["ppo", "ppo_lstm", "ppo_lstm_cpc"]:
+            raise ValueError(
+                f"--ppo_use_factored_actions is only supported with --model_type in ['ppo', 'ppo_lstm', 'ppo_lstm_cpc'], "
+                f"but got --model_type={args.model_type}"
+            )
+        if ppo_action_dims_parsed is None:
+            raise ValueError(
+                "--ppo_action_dims must be provided when --ppo_use_factored_actions is set. "
+                "Example: --ppo_action_dims 5,3"
+            )
+    
+    # Convert parsed PPO action_dims back to string for config (or keep original if not parsed)
+    ppo_action_dims_str = args.ppo_action_dims if args.ppo_action_dims else None
+    if ppo_action_dims_parsed is not None:
+        ppo_action_dims_str = ",".join(map(str, ppo_action_dims_parsed))
 
     # Create configuration
     config = create_config(
@@ -659,6 +754,13 @@ def run_experiment(args):
         # Slot-based observation encoding
         use_slot_based_encoding=not args.use_onehot_encoding,  # Default: True (slot-based)
         punishment_persistence_steps=args.punishment_persistence_steps,
+        # IQN factored action space parameters
+        iqn_use_factored_actions=args.iqn_use_factored_actions,
+        iqn_action_dims=iqn_action_dims_str,
+        iqn_factored_target_variant=args.iqn_factored_target_variant,
+        # PPO factored action space parameters
+        ppo_use_factored_actions=args.ppo_use_factored_actions,
+        ppo_action_dims=ppo_action_dims_str,
     )
 
     # Print expected rewards (use config value, not CLI arg, so it reflects the actual config)
@@ -667,7 +769,7 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f'replacement_slow_orig_iqn_params_{base_run_name}_{timestamp}'
+    run_folder = f'{args.run_folder_prefix}_{base_run_name}_{timestamp}'
     
     #f"validate_reward_structure_complex_para_3agents_epsilon{args.epsilon}_{base_run_name}_{timestamp}"
 

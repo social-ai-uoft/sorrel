@@ -95,6 +95,13 @@ def create_config(
     # Slot-based observation encoding
     use_slot_based_encoding: bool = True,  # Use slot-based encoding (default: True)
     punishment_persistence_steps: int = 2,  # Number of steps to persist punishment flag
+    # IQN factored action space parameters
+    iqn_use_factored_actions: bool = False,  # Enable factored actions for IQN
+    iqn_action_dims: Optional[str] = None,  # Comma-separated action dimensions (e.g., "5,3")
+    iqn_factored_target_variant: str = "A",  # Target variant: "A" (shared) or "B" (separate)
+    # PPO factored action space parameters
+    ppo_use_factored_actions: bool = False,  # Enable factored actions for PPO
+    ppo_action_dims: Optional[str] = None,  # Comma-separated action dimensions (e.g., "5,3")
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -350,6 +357,13 @@ def create_config(
             "cpc_weight": cpc_weight if model_type == "ppo_lstm_cpc" else None,
             "cpc_projection_dim": cpc_projection_dim if model_type == "ppo_lstm_cpc" else None,
             "cpc_temperature": cpc_temperature if model_type == "ppo_lstm_cpc" else None,
+            # IQN factored action space parameters
+            "iqn_use_factored_actions": iqn_use_factored_actions if model_type == "iqn" else False,
+            "iqn_action_dims": iqn_action_dims if model_type == "iqn" else None,
+            "iqn_factored_target_variant": iqn_factored_target_variant if model_type == "iqn" else "A",
+            # PPO factored action space parameters
+            "ppo_use_factored_actions": ppo_use_factored_actions if model_type in ["ppo", "ppo_lstm", "ppo_lstm_cpc"] else False,
+            "ppo_action_dims": ppo_action_dims if model_type in ["ppo", "ppo_lstm", "ppo_lstm_cpc"] else None,
         },
         "norm_enforcer": {
             "enabled": use_norm_enforcer,

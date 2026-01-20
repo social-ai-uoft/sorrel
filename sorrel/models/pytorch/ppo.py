@@ -73,6 +73,8 @@ class ActorCritic(nn.Module):
         action_space: int,
         layer_size: int = 64,
         dropout: bool = False,
+        use_factored_actions: bool = False,
+        action_dims: Sequence[int] | None = None,
     ):
         """Initialize the actor-critic module.
 
@@ -81,13 +83,31 @@ class ActorCritic(nn.Module):
           action_space: The number of actions that can be taken.
           layer_size: The multiplier for the hidden layer size.
           dropout: Whether to include dropout. Defaults to False.
+          use_factored_actions: Whether to use factored action space. Defaults to False.
+          action_dims: List of action dimensions for each branch. Required if use_factored_actions=True.
         """
         super().__init__()
+
+        # Factored action space parameters
+        self.use_factored_actions = use_factored_actions
+        if use_factored_actions:
+            if action_dims is None:
+                raise ValueError("action_dims must be provided when use_factored_actions=True")
+            self.action_dims = tuple(action_dims)
+            self.n_action_dims = len(action_dims)
+            # Validate that prod(action_dims) == action_space
+            if np.prod(action_dims) != action_space:
+                raise ValueError(
+                    f"prod(action_dims)={np.prod(action_dims)} must equal action_space={action_space}"
+                )
+        else:
+            self.action_dims = None
+            self.n_action_dims = 0
 
         # Dropout probability
         p = 0.2 if dropout else 0.0
 
-        # Actor network
+        # Actor network (always created for backward compatibility)
         self.actor = nn.Sequential(
             nn.Linear(input_size, layer_size),
             nn.Tanh(),
@@ -99,6 +119,14 @@ class ActorCritic(nn.Module):
             nn.Linear(layer_size, action_space),
             nn.Softmax(dim=-1),
         )
+
+        # Factored actor heads (only created when use_factored_actions=True)
+        if use_factored_actions:
+            self.actor_heads = nn.ModuleList([
+                nn.Linear(layer_size, n_d) for n_d in action_dims
+            ])
+        else:
+            self.actor_heads = None
 
         # Critic network
         self.critic = nn.Sequential(
@@ -126,14 +154,46 @@ class ActorCritic(nn.Module):
         Returns:
           tuple[Tensor, Tensor]: The action and action log probability.
         """
-        state_ = torch.tensor(state)
-        action_probs = self.actor(state_)
-        dist = Categorical(action_probs)
+        state_ = torch.tensor(state, dtype=torch.float64)  # Match model dtype (double)
+        
+        if self.use_factored_actions:
+            # Extract shared layers (all except the final linear layer and softmax)
+            x = state_
+            for i, layer in enumerate(self.actor):
+                if i < len(self.actor) - 2:  # All except last Linear and Softmax
+                    x = layer(x)
+            
+            # Factored action sampling
+            actions_list = []
+            log_probs_list = []
+            for d, head in enumerate(self.actor_heads):
+                logits_d = head(x)
+                dist_d = Categorical(logits=logits_d)
+                action_d = dist_d.sample()
+                log_prob_d = dist_d.log_prob(action_d)
+                actions_list.append(action_d)
+                log_probs_list.append(log_prob_d)
+            
+            # Joint log-probability
+            joint_log_prob = sum(log_probs_list)
+            
+            # Convert to single action index for backward compatibility
+            # Encoding: a = a_0 * n_1 * n_2 * ... + a_1 * n_2 * ... + a_2 * n_3 * ... + ...
+            single_action = actions_list[0]
+            for d in range(1, len(actions_list)):
+                multiplier = int(np.prod(self.action_dims[d:]))
+                single_action = single_action * multiplier + actions_list[d]
+            
+            return single_action.detach(), joint_log_prob.detach()
+        else:
+            # Original single-action-space behavior
+            action_probs = self.actor(state_)
+            dist = Categorical(action_probs)
 
-        action = dist.sample()
-        action_logprob: torch.Tensor = dist.log_prob(action)
+            action = dist.sample()
+            action_logprob: torch.Tensor = dist.log_prob(action)
 
-        return action.detach(), action_logprob.detach()
+            return action.detach(), action_logprob.detach()
 
     def evaluate(
         self, state: torch.Tensor, action: Tensor
@@ -148,13 +208,70 @@ class ActorCritic(nn.Module):
           tuple[Tensor, Tensor, Tensor]: The action log probability, estimated state value,
           and distribution entropy.
         """
-        action_probs = self.actor(state)
-        dist = Categorical(action_probs)
-        action_logprobs = dist.log_prob(action)
-        dist_entropy = dist.entropy()
-        state_values = self.critic(state)
+        # Ensure state matches model dtype (double/float64)
+        if state.dtype != torch.float64:
+            state = state.double()
+        
+        if self.use_factored_actions:
+            # Extract shared layers (all except the final linear layer and softmax)
+            x = state
+            for i, layer in enumerate(self.actor):
+                if i < len(self.actor) - 2:  # All except last Linear and Softmax
+                    x = layer(x)
+            
+            # Extract action components from single action index
+            action_components = self._extract_action_components(action)
+            
+            # Compute log-probs and entropies for each branch
+            log_probs_list = []
+            entropies_list = []
+            for d, head in enumerate(self.actor_heads):
+                logits_d = head(x)
+                dist_d = Categorical(logits=logits_d)
+                log_prob_d = dist_d.log_prob(action_components[d])
+                entropy_d = dist_d.entropy()
+                log_probs_list.append(log_prob_d)
+                entropies_list.append(entropy_d)
+            
+            # Joint log-probability and entropy
+            joint_log_prob = sum(log_probs_list)
+            joint_entropy = sum(entropies_list)
+            
+            # State value (unchanged)
+            state_values = self.critic(state)
+            
+            return joint_log_prob, state_values, joint_entropy
+        else:
+            # Original single-action-space behavior
+            action_probs = self.actor(state)
+            dist = Categorical(action_probs)
+            action_logprobs = dist.log_prob(action)
+            dist_entropy = dist.entropy()
+            state_values = self.critic(state)
 
-        return action_logprobs, state_values, dist_entropy
+            return action_logprobs, state_values, dist_entropy
+    
+    def _extract_action_components(self, action: Tensor) -> list[Tensor]:
+        """Extract action components from single action index.
+        
+        Decoding: Given action index a and action_dims = [n_0, n_1, n_2, ...]
+        a_0 = a // (n_1 * n_2 * ...)
+        a_1 = (a // (n_2 * n_3 * ...)) % n_1
+        a_2 = (a // (n_3 * n_4 * ...)) % n_2
+        ...
+        a_D-1 = a % n_D-1
+        """
+        components = []
+        remaining = action
+        for d in range(len(self.action_dims)):
+            if d < len(self.action_dims) - 1:
+                divisor = int(np.prod(self.action_dims[d+1:]))
+                component = remaining // divisor
+                remaining = remaining % divisor
+            else:
+                component = remaining  # Last component
+            components.append(component)
+        return components
 
 
 class PyTorchPPO(PyTorchModel):
@@ -175,12 +292,20 @@ class PyTorchPPO(PyTorchModel):
         lr_critic: float,
         max_turns: int,
         seed: int | None = None,
+        use_factored_actions: bool = False,
+        action_dims: Sequence[int] | None = None,
     ):
 
         super().__init__(input_size, action_space, layer_size, epsilon, device, seed)
         ac_input_size = int(np.prod(input_size))
         # Actor-critic network
-        self.policy = ActorCritic(ac_input_size, action_space, layer_size)
+        self.policy = ActorCritic(
+            ac_input_size, 
+            action_space, 
+            layer_size,
+            use_factored_actions=use_factored_actions,
+            action_dims=action_dims,
+        )
         # Set up optimizers for actor and critic
         self.optimizer = torch.optim.Adam(
             [
