@@ -435,6 +435,19 @@ def parse_arguments():
         action="store_true",
         help="Disable resetting punishment level at epoch start (punishment persists across epochs, default: reset each epoch)"
     )
+    
+    # Slot-based observation encoding
+    parser.add_argument(
+        "--use_onehot_encoding",
+        action="store_true",
+        help="Use legacy one-hot encoding (disables slot-based encoding, default: slot-based)"
+    )
+    parser.add_argument(
+        "--punishment_persistence_steps",
+        type=int,
+        default=2,
+        help="Number of steps to persist punishment flag (default: 2)"
+    )
 
     return parser.parse_args()
 
@@ -643,6 +656,9 @@ def run_experiment(args):
         use_window_stats=args.use_window_stats,
         # Punishment reset control
         reset_punishment_level_per_epoch=punishment_reset,
+        # Slot-based observation encoding
+        use_slot_based_encoding=not args.use_onehot_encoding,  # Default: True (slot-based)
+        punishment_persistence_steps=args.punishment_persistence_steps,
     )
 
     # Print expected rewards (use config value, not CLI arg, so it reflects the actual config)
@@ -651,7 +667,7 @@ def run_experiment(args):
     # Set up logging and animation directories
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base_run_name = config["experiment"]["run_name"]
-    run_folder = f'phased_voting_s100_orginal_params_{base_run_name}_{timestamp}'
+    run_folder = f'replacement_slow_orig_iqn_params_{base_run_name}_{timestamp}'
     
     #f"validate_reward_structure_complex_para_3agents_epsilon{args.epsilon}_{base_run_name}_{timestamp}"
 

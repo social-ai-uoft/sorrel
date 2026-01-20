@@ -33,6 +33,7 @@ class StatePunishmentAgent(Agent):
         model: PyTorchIQN,
         agent_id: int = 0,
         agent_name: int = None,
+        ancestor_name: int = None,
         use_composite_views: bool = False,
         use_composite_actions: bool = False,
         simple_foraging: bool = False,
@@ -54,6 +55,7 @@ class StatePunishmentAgent(Agent):
             model: The neural network model
             agent_id: Unique identifier for this agent
             agent_name: Unique name for this agent (separate from agent_id)
+            ancestor_name: Name of the original agent that started this lineage (inherited on replacement)
             use_composite_views: Whether to use composite state observations
             use_composite_actions: Whether to use composite actions (movement + voting)
             simple_foraging: Whether to use simple foraging mode
@@ -69,6 +71,7 @@ class StatePunishmentAgent(Agent):
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
         self.agent_name = agent_name
+        self.ancestor_name = ancestor_name if ancestor_name is not None else agent_name  # Default to agent_name if not specified
         self.use_composite_views = use_composite_views
         self.use_composite_actions = use_composite_actions
         self.simple_foraging = simple_foraging
@@ -124,8 +127,50 @@ class StatePunishmentAgent(Agent):
         # Turn counter for debugging
         self.turn = 0
 
+    def _validate_me_vector(self, state: np.ndarray):
+        """Validate that "me" vector exists in observation (for slot-based encoding).
+        
+        This assertion ensures that the agent can identify itself in the observation.
+        Only checks if using slot-based encoding.
+        """
+        from sorrel.observation.slot_based_observation_spec import SlotBasedObservationSpec
+        
+        if isinstance(self.observation_spec, SlotBasedObservationSpec):
+            # For slot-based encoding, check if "me" indicator (index 1) is present
+            # State is flattened: (1, features_per_cell * height * width + scalars)
+            # We need to check the visual field part (before scalars)
+            
+            # Get visual field size from observation spec
+            if self.observation_spec.full_view:
+                height = self.observation_spec.env_dims[0]
+                width = self.observation_spec.env_dims[1]
+            else:
+                vision = self.observation_spec.vision_radius
+                height = width = 2 * vision + 1
+            
+            features_per_cell = 27  # 10 entity + 16 id + 1 punished
+            visual_field_size = features_per_cell * height * width
+            
+            # Extract visual field (before scalars)
+            visual_field = state[0, :visual_field_size]
+            
+            # Reshape to (features_per_cell, height, width)
+            visual_field_reshaped = visual_field.reshape(features_per_cell, height, width)
+            
+            # Check if "me" indicator (index 1) is active anywhere
+            me_indicator = visual_field_reshaped[1, :, :]  # Index 1 = "me"
+            has_me = np.any(me_indicator > 0.5)  # Check if any cell has "me" = 1
+            
+            assert has_me, (
+                f"Agent {self.agent_id}: 'me' vector not found in observation! "
+                f"This should not happen - agent must be able to identify itself."
+            )
+
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the provided state."""
+        # Validate "me" vector exists in observation (for slot-based encoding)
+        self._validate_me_vector(state)
+        
         # If using random policy, return a random action
         if self.use_random_policy:
             return np.random.randint(0, self.action_spec.n_actions)
@@ -194,34 +239,55 @@ class StatePunishmentAgent(Agent):
 
     # Note: pov method removed - use generate_single_view directly
 
-    def generate_single_view(self, world, state_system, social_harm_dict, punishment_tracker=None) -> np.ndarray:
+    def generate_single_view(
+        self, 
+        world, 
+        state_system, 
+        social_harm_dict, 
+        punishment_tracker=None,
+        current_step: int = 0,
+        use_me_encoding: bool = True,
+    ) -> np.ndarray:
         """Generate observation from single agent perspective.
         
+        Args:
+            world: The gridworld
+            state_system: State system for punishment level
+            social_harm_dict: Social harm dictionary
+            punishment_tracker: Punishment tracker (legacy, for other_punishments)
+            current_step: Current step number (for slot-based encoding)
+            use_me_encoding: If True, encode self as "me", else as "other" (for composite views)
+        
         Returns:
-            Observation array with shape (1, visual_field_size + 4 + num_other_agents).
-            Scalar features (4 total): [punishment_level, social_harm, third_feature, is_phased_voting]
-            Note: If punishment_tracker is provided, other_punishments are concatenated after these 4 features.
+            Observation array with shape (1, visual_field_size + 3 + num_other_agents).
+            Scalar features (3 total): [punishment_level, social_harm, is_phased_voting]
+            Note: If punishment_tracker is provided, other_punishments are concatenated after these 3 features.
         """
-        image = self.observation_spec.observe(world, self.location)
-        # flatten the image to get the state
-        visual_field = image.reshape(1, -1)
+        # Check if using slot-based encoding
+        from sorrel.observation.slot_based_observation_spec import SlotBasedObservationSpec
+        
+        if isinstance(self.observation_spec, SlotBasedObservationSpec):
+            # Use slot-based encoding
+            image = self.observation_spec.observe(
+                world=world,
+                location=self.location,
+                observing_agent_id=self.agent_name if use_me_encoding else None,  # Use agent_name for identity encoding
+                current_step=current_step,
+                use_me_encoding=use_me_encoding,
+            )
+            # Flatten: (27, H, W) -> (1, 27*H*W)
+            visual_field = image.reshape(1, -1)
+        else:
+            # Legacy one-hot encoding
+            image = self.observation_spec.observe(world, self.location)
+            visual_field = image.reshape(1, -1)
 
-        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and third feature
+        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0)
+        # NOTE: third_feature removed for slot-based encoding
         punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
         social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
         
-        # Third feature: punishment observable or random noise
-        if self.punishment_observable:
-            if self.delayed_punishment:
-                # Delayed mode: show pending punishment (future)
-                third_feature = 1.0 if self.pending_punishment > 0 else 0.0
-            else:
-                # Immediate mode: show if punished in last step (past)
-                third_feature = 1.0 if self.was_punished_last_step else 0.0
-        else:
-            third_feature = np.random.random()
-        
-        # Add phased voting flag (4th scalar feature)
+        # Add phased voting flag (3rd scalar feature)
         # Only include flag if phased voting is enabled
         if (state_system is not None and 
             hasattr(state_system, 'phased_voting_enabled') and 
@@ -231,10 +297,9 @@ class StatePunishmentAgent(Agent):
         else:
             is_phased_voting = 0.0
 
-        # Add phased voting flag to extra_features (as 4th feature)
-        # NOTE: Observation shape changed from 3 to 4 scalar features
+        # Scalar features: [punishment_level, social_harm, is_phased_voting] (3 features, third_feature removed)
         extra_features = np.array(
-            [punishment_level, social_harm, third_feature, is_phased_voting], dtype=visual_field.dtype
+            [punishment_level, social_harm, is_phased_voting], dtype=visual_field.dtype
         ).reshape(1, -1)
         
         # Add other agents' punishment status if enabled
@@ -255,25 +320,16 @@ class StatePunishmentAgent(Agent):
         
         Returns:
             Composite state with scalar features concatenated.
-            Scalar features (4 total): [punishment_level, social_harm, third_feature, is_phased_voting]
-            Note: If punishment_tracker is provided, other_punishments are concatenated after these 4 features.
+            Scalar features (3 total): [punishment_level, social_harm, is_phased_voting]
+            Note: third_feature removed for slot-based encoding
+            Note: If punishment_tracker is provided, other_punishments are concatenated after these 3 features.
         """
-        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0), and third feature
+        # Add extra features: punishment level (accessible value or 0), social harm (accessible value or 0)
+        # NOTE: third_feature removed for slot-based encoding
         punishment_level = state_system.prob if self.punishment_level_accessible else 0.0
         social_harm = social_harm_dict.get(self.agent_id, 0.0) if self.social_harm_accessible else 0.0
         
-        # Third feature: punishment observable or random noise
-        if self.punishment_observable:
-            if self.delayed_punishment:
-                # Delayed mode: show pending punishment (future)
-                third_feature = 1.0 if self.pending_punishment > 0 else 0.0
-            else:
-                # Immediate mode: show if punished in last step (past)
-                third_feature = 1.0 if self.was_punished_last_step else 0.0
-        else:
-            third_feature = np.random.random()
-        
-        # Add phased voting flag (4th scalar feature)
+        # Add phased voting flag (3rd scalar feature)
         # Only include flag if phased voting is enabled
         if (state_system is not None and 
             hasattr(state_system, 'phased_voting_enabled') and 
@@ -283,9 +339,9 @@ class StatePunishmentAgent(Agent):
         else:
             is_phased_voting = 0.0
 
-        # NOTE: Observation shape changed from 3 to 4 scalar features
+        # Scalar features: [punishment_level, social_harm, is_phased_voting] (3 features, third_feature removed)
         extra_features = np.array(
-            [punishment_level, social_harm, third_feature, is_phased_voting], dtype=composite_state.dtype
+            [punishment_level, social_harm, is_phased_voting], dtype=composite_state.dtype
         ).reshape(1, -1)
         
         # Add other agents' punishment status if enabled
@@ -700,8 +756,14 @@ def construct_move_observation(
     Returns:
         Move observation array
     """
-    # Get base observation
-    base_obs = agent.generate_single_view(world, state_system, social_harm_dict)
+    # Get base observation (with current_step for slot-based encoding)
+    base_obs = agent.generate_single_view(
+        world, 
+        state_system, 
+        social_harm_dict,
+        current_step=step_count,
+        use_me_encoding=True,
+    )
     
     # Extract components
     visual_size = (
@@ -795,6 +857,7 @@ class SeparateModelStatePunishmentAgent(StatePunishmentAgent):
         vote_model: PyTorchIQN,  # IQN model for voting
         agent_id: int = 0,
         agent_name: int = None,
+        ancestor_name: int = None,
         vote_window_size: int = 10,
         use_window_stats: bool = False,
         # ... all other StatePunishmentAgent parameters ...
@@ -818,6 +881,7 @@ class SeparateModelStatePunishmentAgent(StatePunishmentAgent):
             model=move_model,  # Set move_model as primary model
             agent_id=agent_id,
             agent_name=agent_name,
+            ancestor_name=ancestor_name,
             use_composite_views=use_composite_views,
             use_composite_actions=use_composite_actions,
             simple_foraging=simple_foraging,
@@ -870,6 +934,9 @@ class SeparateModelStatePunishmentAgent(StatePunishmentAgent):
         Returns:
             Move action (0-3: up, down, left, right)
         """
+        # Validate "me" vector exists in observation (for slot-based encoding)
+        self._validate_me_vector(state)
+        
         # IQN models use frame stacking for temporal context
         # Get previous frames from buffer
         prev_states = self.move_model.memory.current_state()

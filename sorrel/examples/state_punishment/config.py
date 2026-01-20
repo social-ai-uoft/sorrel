@@ -3,6 +3,15 @@
 from typing import Any, Dict, List, Optional
 
 
+def _get_punishment_schedule_table(use_schedule: bool):
+    """Get predefined punishment schedule table as list, or None."""
+    if not use_schedule:
+        return None
+    # Lazy import to avoid circular imports
+    from .state_system import predefined_punishment_probs
+    return predefined_punishment_probs.tolist()
+
+
 def create_config(
     num_agents: int = 1,
     epochs: int = 10000,
@@ -83,6 +92,9 @@ def create_config(
     use_window_stats: bool = False,  # Include window statistics in vote observation
     # Punishment reset control
     reset_punishment_level_per_epoch: bool = True,  # Reset punishment level at epoch start
+    # Slot-based observation encoding
+    use_slot_based_encoding: bool = True,  # Use slot-based encoding (default: True)
+    punishment_persistence_steps: int = 2,  # Number of steps to persist punishment flag
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -279,6 +291,10 @@ def create_config(
             "vote_window_size": vote_window_size,
             "use_window_stats": use_window_stats,
         },
+        "observation": {
+            "use_slot_based_encoding": use_slot_based_encoding,
+            "punishment_persistence_steps": punishment_persistence_steps,
+        },
         "world": {
             "height": map_size,
             "width": map_size,
@@ -296,6 +312,7 @@ def create_config(
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
             "reset_punishment_level_per_epoch": reset_punishment_level_per_epoch,
+            "predefined_punishment_schedule": _get_punishment_schedule_table(use_predefined_punishment_schedule),
         },
         "model": {
             "agent_vision_radius": vision_radius,

@@ -25,6 +25,139 @@ from .entity_map_shuffler import EntityMapShuffler
 from .world import StatePunishmentWorld
 
 
+class AgentIdentityManager:
+    """Manages fixed random identity vectors for agents."""
+    
+    def __init__(self, num_agents: int, d: int = 16, seed: int = 0, max_agents: int = None):
+        """Initialize agent identity manager.
+        
+        Args:
+            num_agents: Number of agents (minimum to generate vectors for)
+            d: Dimensionality of identity vectors (default: 16)
+            seed: Random seed for reproducibility (default: 0)
+            max_agents: Maximum number of agent IDs to pre-generate vectors for.
+                       If None, uses num_agents. Useful for preparing vectors for agent replacement.
+        """
+        self.num_agents = num_agents
+        self.max_agents = max_agents if max_agents is not None else num_agents
+        self.d = d
+        # Generate vectors for max_agents to prepare for replacements/new agents
+        self.identity_vectors = self.make_random_id_codes(
+            num_agents=self.max_agents,
+            d=d,
+            seed=seed,
+            rademacher=True,
+            normalize=True,
+        )
+    
+    def get_identity_vector(self, agent_id: int) -> np.ndarray:
+        """Get identity vector for an agent.
+        
+        Args:
+            agent_id: ID of the agent
+            
+        Returns:
+            Identity vector of shape (d,). Returns zeros if agent_id is invalid or out of pre-generated range.
+        """
+        if 0 <= agent_id < self.max_agents:
+            return self.identity_vectors[agent_id].copy()
+        else:
+            return np.zeros(self.d, dtype=np.float32)
+    
+    @staticmethod
+    def make_random_id_codes(
+        num_agents: int,
+        d: int = 16,
+        seed: int = 0,
+        rademacher: bool = True,
+        normalize: bool = True,
+    ) -> np.ndarray:
+        """Generate fixed random identity codes for agents.
+        
+        Implementation from observation_encoding.md.
+        
+        Args:
+            num_agents: Number of agents
+            d: Dimensionality of identity vectors
+            seed: Random seed
+            rademacher: If True, use Rademacher distribution (±1), else Gaussian
+            normalize: If True, L2-normalize vectors
+            
+        Returns:
+            Array of shape (num_agents, d) with identity vectors
+        """
+        rng = np.random.default_rng(seed)
+        
+        if rademacher:
+            codes = rng.choice(
+                np.array([-1.0, 1.0], dtype=np.float32),
+                size=(num_agents, d),
+                replace=True,
+            )
+        else:
+            codes = rng.standard_normal(size=(num_agents, d)).astype(np.float32)
+        
+        if normalize:
+            norms = np.linalg.norm(codes, axis=1, keepdims=True)
+            codes = codes / (norms + 1e-12)
+        
+        return codes
+
+
+class PunishmentHistoryTracker:
+    """Tracks punishment history for X-step persistence."""
+    
+    def __init__(self, num_agents: int, persistence_steps: int = 2):
+        """Initialize punishment history tracker.
+        
+        Args:
+            num_agents: Number of agents
+            persistence_steps: Number of steps to persist punishment flag (X)
+        """
+        self.num_agents = num_agents
+        self.persistence_steps = persistence_steps
+        # Store punishment steps for each agent
+        self.punishment_history = {i: [] for i in range(num_agents)}
+    
+    def record_punishment(self, agent_id: int, step: int):
+        """Record that an agent was punished at a specific step.
+        
+        Args:
+            agent_id: ID of the agent
+            step: Step number when punishment occurred
+        """
+        if 0 <= agent_id < self.num_agents:
+            self.punishment_history[agent_id].append(step)
+            # Keep only recent history (last persistence_steps entries)
+            if len(self.punishment_history[agent_id]) > self.persistence_steps:
+                self.punishment_history[agent_id] = self.punishment_history[agent_id][-self.persistence_steps:]
+    
+    def was_punished_recently(self, agent_id: int, current_step: int) -> bool:
+        """Check if agent was punished in last X steps.
+        
+        Args:
+            agent_id: ID of the agent
+            current_step: Current step number
+            
+        Returns:
+            True if agent was punished in window [current_step - persistence_steps + 1, current_step]
+        """
+        if agent_id not in self.punishment_history:
+            return False
+        
+        # Check if any punishment occurred in the window
+        window_start = current_step - self.persistence_steps + 1
+        for step in self.punishment_history[agent_id]:
+            if window_start <= step <= current_step:
+                return True
+        return False
+    
+    def step(self):
+        """Optional: cleanup old entries if needed."""
+        # History is automatically trimmed in record_punishment()
+        pass
+
+
 class PunishmentTracker:
     """Minimal punishment tracker that hooks into existing flow."""
     
@@ -229,13 +362,49 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         if any(env.config.experiment.get("observe_other_punishments", False) for env in individual_envs):
             self.punishment_tracker = PunishmentTracker(len(individual_envs))
         
+        # Initialize shared identity manager and punishment history tracker (if slot-based encoding enabled)
+        # Check config from first individual env
+        use_slot_based = individual_envs[0].config.observation.get("use_slot_based_encoding", True)
+        
+        # NEW: Initialize agent name management BEFORE passing to individual envs
+        self._max_agent_name = -1  # Will be initialized based on initial agents
+        self._agent_name_map = {}  # Maps agent_id -> agent_name
+        
+        if use_slot_based:
+            num_agents = len(individual_envs)
+            # Optionally pre-generate extra identity vectors for agent replacement
+            # Check if replacement is enabled and calculate max agents needed
+            max_agents = num_agents
+            if any(env.config.experiment.get("enable_agent_replacement", False) for env in individual_envs):
+                # Pre-generate extra vectors (e.g., 2x the number of agents) for replacements
+                # This ensures identity vectors are ready even if agent IDs exceed initial count
+                max_agents = max(num_agents * 2, num_agents + 100)  # Generate extra for safety
+            
+            self.agent_identity_manager = AgentIdentityManager(
+                num_agents=num_agents,
+                d=16,
+                seed=0,
+                max_agents=max_agents
+            )
+            self.punishment_history_tracker = PunishmentHistoryTracker(
+                num_agents=num_agents,
+                persistence_steps=individual_envs[0].config.observation.get("punishment_persistence_steps", 2)
+            )
+            
+            # Pass to individual environments (they'll use it when creating observation specs)
+            for env in individual_envs:
+                env.agent_identity_manager = self.agent_identity_manager
+                env.punishment_history_tracker = self.punishment_history_tracker
+                env.agent_name_map = self._agent_name_map  # Pass agent_name_map for identity encoding
+        else:
+            self.agent_identity_manager = None
+            self.punishment_history_tracker = None
+        
         # Track last replacement epoch for minimum epochs between replacements
         self.last_replacement_epoch = -1
         
-        # NEW: Agent name management
-        self._max_agent_name = -1  # Will be initialized based on initial agents
-        self._agent_name_map = {}  # Maps agent_id -> agent_name
-        self._initialize_agent_names()  # Initialize names for existing agents
+        # Initialize agent names (this populates _agent_name_map)
+        self._initialize_agent_names()
         
         # NEW: Track agent creation/replacement epochs for tenure-based replacement
         # Maps agent_id -> epoch when agent was created/replaced
@@ -258,6 +427,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             for i, env in enumerate(self.individual_envs):
                 agent = env.agents[0]
                 agent.agent_name = i
+                agent.ancestor_name = i  # Initial agents: ancestor_name = agent_name
                 self._agent_name_map[agent.agent_id] = i
                 self._max_agent_name = max(self._max_agent_name, i)
         else:
@@ -268,11 +438,15 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     # Assign new name
                     self._max_agent_name += 1
                     agent.agent_name = self._max_agent_name
+                    agent.ancestor_name = self._max_agent_name  # Initial agents: ancestor_name = agent_name
                     self._agent_name_map[agent.agent_id] = self._max_agent_name
                 else:
                     # Preserve existing name
                     self._agent_name_map[agent.agent_id] = agent.agent_name
                     self._max_agent_name = max(self._max_agent_name, agent.agent_name)
+                    # If ancestor_name is not set, set it to agent_name (for initial agents)
+                    if not hasattr(agent, 'ancestor_name') or agent.ancestor_name is None:
+                        agent.ancestor_name = agent.agent_name
 
     def _setup_agent_name_recording(self, output_dir: Path = None) -> Path:
         """Set up directory for agent name recording.
@@ -309,6 +483,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             agent = env.agents[0]
             agent_data.append({
                 'Name': agent.agent_name,
+                'Ancestor_Name': getattr(agent, 'ancestor_name', agent.agent_name),  # Include ancestor_name
                 'Epoch': epoch
             })
         
@@ -438,44 +613,180 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     )
                 else:
                     # Use single agent view
-                    state = agent.generate_single_view(
-                        env.world, self.shared_state_system, self.shared_social_harm,
-                        punishment_tracker=self.punishment_tracker
-                    )
+                    from sorrel.observation.slot_based_observation_spec import SlotBasedObservationSpec
+                    if isinstance(agent.observation_spec, SlotBasedObservationSpec):
+                        # Slot-based encoding: pass current_step and use_me_encoding
+                        state = agent.generate_single_view(
+                            env.world, 
+                            self.shared_state_system, 
+                            self.shared_social_harm,
+                            punishment_tracker=self.punishment_tracker,
+                            current_step=self.turn,
+                            use_me_encoding=True,
+                        )
+                    else:
+                        # Legacy one-hot encoding
+                        state = agent.generate_single_view(
+                            env.world, 
+                            self.shared_state_system, 
+                            self.shared_social_harm,
+                            punishment_tracker=self.punishment_tracker
+                        )
 
             # Execute agent transition
             self._execute_agent_transition(agent, env, state)
 
     def _generate_composite_observations(self, all_agents, all_envs):
         """Generate composite observations for all agents."""
+        from sorrel.observation.slot_based_observation_spec import SlotBasedObservationSpec
+        
+        # Check if any agent uses slot-based encoding
+        use_slot_based = any(
+            isinstance(a.observation_spec, SlotBasedObservationSpec) 
+            for a in all_agents
+        )
+        
         composite_observations = []
 
         for i, (agent, env) in enumerate(zip(all_agents, all_envs)):
             if not env.use_composite_views:
                 # Single view for this agent
-                composite_observations.append(
-                    agent.generate_single_view(
-                        env.world, self.shared_state_system, self.shared_social_harm,
-                        punishment_tracker=self.punishment_tracker
+                if isinstance(agent.observation_spec, SlotBasedObservationSpec):
+                    # Use slot-based encoding with current_step
+                    composite_observations.append(
+                        agent.generate_single_view(
+                            env.world, 
+                            self.shared_state_system, 
+                            self.shared_social_harm,
+                            punishment_tracker=self.punishment_tracker,
+                            current_step=self.turn,
+                            use_me_encoding=True,
+                        )
                     )
-                )
+                else:
+                    # Legacy one-hot encoding
+                    composite_observations.append(
+                        agent.generate_single_view(
+                            env.world, 
+                            self.shared_state_system, 
+                            self.shared_social_harm,
+                            punishment_tracker=self.punishment_tracker
+                        )
+                    )
                 continue
 
-            # Generate composite view by collecting observations from all agents
-            all_views = [
-                self._get_agent_observation_without_scalars(a, e.world)
-                for a, e in zip(all_agents, all_envs)
-            ]
-            composite_observations.append(np.concatenate(all_views, axis=1))
+            # Generate composite view
+            if use_slot_based:
+                # Slot-based encoding: two-version generation
+                # Step 1: Generate all views with use_me_encoding=False (treat self as "other")
+                all_views_other = []
+                for a, e in zip(all_agents, all_envs):
+                    if isinstance(a.observation_spec, SlotBasedObservationSpec):
+                        # Generate observation with self as "other"
+                        obs = a.observation_spec.observe(
+                            world=e.world,
+                            location=a.location,
+                            observing_agent_id=None,  # No "me" encoding
+                            current_step=self.turn,
+                            use_me_encoding=False,
+                        )
+                        visual_field = obs.reshape(1, -1)
+                    else:
+                        # Legacy one-hot encoding
+                        visual_field = self._get_agent_observation_without_scalars(a, e.world)
+                    all_views_other.append(visual_field)
+                
+                # Step 2: Stack all views
+                stacked_visual = np.concatenate(all_views_other, axis=1)
+                
+                # Step 3: For each agent, replace its own "other" encoding with "me" encoding
+                agent_self_views = {}
+                for a, e in zip(all_agents, all_envs):
+                    if isinstance(a.observation_spec, SlotBasedObservationSpec):
+                        # Generate "me" version for this agent
+                        obs_me = a.observation_spec.observe(
+                            world=e.world,
+                            location=a.location,
+                            observing_agent_id=a.agent_name,  # Use agent_name for identity encoding
+                            current_step=self.turn,
+                            use_me_encoding=True,
+                        )
+                        agent_self_views[a.agent_id] = obs_me.reshape(1, -1)
+                
+                # Step 4: Replace each agent's portion in the composite
+                final_composite_observations = []
+                for agent, env in zip(all_agents, all_envs):
+                    if not env.use_composite_views:
+                        continue
+                    
+                    # Copy stacked visual
+                    agent_composite = stacked_visual.copy()
+                    
+                    # Find this agent's position in the stack
+                    agent_idx = agent.agent_id
+                    visual_size = agent.observation_spec.input_size[0] * agent.observation_spec.input_size[1] * agent.observation_spec.input_size[2]
+                    
+                    # Replace agent's portion with "me" version
+                    start_idx = agent_idx * visual_size
+                    end_idx = (agent_idx + 1) * visual_size
+                    
+                    if isinstance(agent.observation_spec, SlotBasedObservationSpec):
+                        agent_me_visual = agent_self_views[agent.agent_id][:, :visual_size]
+                        agent_composite[:, start_idx:end_idx] = agent_me_visual
+                    
+                    # Add scalar features
+                    final_obs = agent._add_scalars_to_composite_state(
+                        agent_composite,
+                        self.shared_state_system,
+                        self.shared_social_harm,
+                        punishment_tracker=self.punishment_tracker
+                    )
+                    final_composite_observations.append(final_obs)
+                
+                composite_observations.extend(final_composite_observations)
+            else:
+                # Legacy one-hot encoding: use existing logic
+                all_views = [
+                    self._get_agent_observation_without_scalars(a, e.world)
+                    for a, e in zip(all_agents, all_envs)
+                ]
+                stacked_visual = np.concatenate(all_views, axis=1)
+                
+                # All agents with composite views get same visual, but different scalars
+                for agent, env in zip(all_agents, all_envs):
+                    if not env.use_composite_views:
+                        continue
+                    
+                    # Add agent-specific scalars
+                    final_obs = agent._add_scalars_to_composite_state(
+                        stacked_visual,
+                        self.shared_state_system,
+                        self.shared_social_harm,
+                        punishment_tracker=self.punishment_tracker
+                    )
+                    composite_observations.append(final_obs)
 
         return composite_observations
 
     def _get_agent_observation_without_scalars(self, agent, world):
         """Get agent observation excluding all scalar values."""
+        from sorrel.observation.slot_based_observation_spec import SlotBasedObservationSpec
+        
         # Get only the visual field observation (no scalar features)
-        image = agent.observation_spec.observe(world, agent.location)
+        if isinstance(agent.observation_spec, SlotBasedObservationSpec):
+            # For slot-based encoding, use observe() with appropriate parameters
+            image = agent.observation_spec.observe(
+                world=world,
+                location=agent.location,
+                observing_agent_id=agent.agent_name,  # Use agent_name for identity encoding
+                current_step=self.turn,
+                use_me_encoding=True,
+            )
+        else:
+            # Legacy one-hot encoding
+            image = agent.observation_spec.observe(world, agent.location)
+        
         visual_field = image.reshape(1, -1)
-
         return visual_field
 
     def _execute_agent_transition(self, agent, env, state):
@@ -499,6 +810,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 # Track punishment if it occurred
                 if info.get('is_punished', False):
                     self.punishment_tracker.record_punishment(agent.agent_id)
+                    # Also record in punishment history tracker (for slot-based encoding)
+                    if self.punishment_history_tracker is not None:
+                        self.punishment_history_tracker.record_punishment(agent.agent_id, self.turn)
             else:
                 # Use original interface (backward compatible)
                 reward = agent.act(
@@ -516,6 +830,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 # Track punishment if it occurred
                 if info.get('is_punished', False):
                     self.punishment_tracker.record_punishment(agent.agent_id)
+                    # Also record in punishment history tracker (for slot-based encoding)
+                    if self.punishment_history_tracker is not None:
+                        self.punishment_history_tracker.record_punishment(agent.agent_id, self.turn)
             else:
                 # Use original interface (backward compatible)
                 reward = agent.act(
@@ -582,6 +899,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         self._max_agent_name += 1
         new_agent_name = self._max_agent_name
         
+        # NEW: Inherit ancestor_name from old agent (lineage tracking)
+        ancestor_name = getattr(old_agent, 'ancestor_name', old_agent.agent_name)
+        
         # Store all configuration flags
         use_composite_views = old_agent.use_composite_views
         use_composite_actions = old_agent.use_composite_actions
@@ -595,12 +915,12 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         disable_punishment_info = old_agent.disable_punishment_info
         
         # Calculate model input size (same as old agent)
-        # NOTE: Scalar features are now 4: punishment_level, social_harm, third_feature, is_phased_voting
+        # NOTE: Scalar features are now 3: punishment_level, social_harm, is_phased_voting (third_feature removed for slot-based encoding)
         base_flattened_size = (
             observation_spec.input_size[0]
             * observation_spec.input_size[1]
             * observation_spec.input_size[2]
-            + 4  # punishment_level, social_harm, third_feature, is_phased_voting
+            + 3  # punishment_level, social_harm, is_phased_voting (third_feature removed)
         )
         
         # Add punishment observation features if enabled
@@ -744,6 +1064,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             model=new_model,
             agent_id=agent_id_value,
             agent_name=new_agent_name,  # NEW: Assign new name for replaced agent
+            ancestor_name=ancestor_name,  # NEW: Inherit ancestor_name from old agent
             use_composite_views=use_composite_views,
             use_composite_actions=use_composite_actions,
             simple_foraging=simple_foraging,
@@ -784,6 +1105,15 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         
         # NEW: Update agent name map with new name
         self._agent_name_map[agent_id] = new_agent_name
+        
+        # Update agent_name_map in all environments and observation specs (for slot-based encoding)
+        for env in self.individual_envs:
+            if hasattr(env, 'agent_name_map'):
+                env.agent_name_map = self._agent_name_map
+            # Update observation spec's agent_name_map if it exists (for slot-based encoding)
+            for agent in env.agents:
+                if hasattr(agent.observation_spec, 'agent_name_map'):
+                    agent.observation_spec.agent_name_map = self._agent_name_map
         
         # NEW: Record replacement epoch for tenure tracking
         if replacement_epoch is not None:
@@ -1376,6 +1706,50 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 mapping_file_path=mapping_file_path
             )
 
+        # Initialize agent identity manager and punishment history tracker BEFORE super().__init__()
+        # (because super().__init__() calls setup_agents() which needs these)
+        # In multi-agent setup, these will be overwritten by MultiAgentStatePunishmentEnv
+        # Safely access observation config (might be dict or OmegaConf)
+        try:
+            if hasattr(config, "observation"):
+                observation_config = config.observation
+                if isinstance(observation_config, dict):
+                    use_slot_based = observation_config.get("use_slot_based_encoding", True)
+                    persistence_steps = observation_config.get("punishment_persistence_steps", 2)
+                else:
+                    # OmegaConf object
+                    use_slot_based = getattr(observation_config, "use_slot_based_encoding", True)
+                    persistence_steps = getattr(observation_config, "punishment_persistence_steps", 2)
+            else:
+                # Fallback: assume slot-based encoding is enabled
+                use_slot_based = True
+                persistence_steps = 2
+        except (AttributeError, KeyError):
+            # Fallback: assume slot-based encoding is enabled
+            use_slot_based = True
+            persistence_steps = 2
+        if use_slot_based:
+            num_agents = config.experiment.num_agents
+            # Optionally pre-generate extra identity vectors for agent replacement
+            max_agents = num_agents
+            if config.experiment.get("enable_agent_replacement", False):
+                # Pre-generate extra vectors for replacements
+                max_agents = max(num_agents * 2, num_agents + 100)
+            
+            self.agent_identity_manager = AgentIdentityManager(
+                num_agents=num_agents,
+                d=16,
+                seed=0,
+                max_agents=max_agents
+            )
+            self.punishment_history_tracker = PunishmentHistoryTracker(
+                num_agents=config.experiment.num_agents,
+                persistence_steps=persistence_steps
+            )
+        else:
+            self.agent_identity_manager = None
+            self.punishment_history_tracker = None
+
         # Simplified - no complex coordination needed
         super().__init__(world, config)
 
@@ -1404,16 +1778,36 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
             # Add separate model agent class if using separate models
             if use_separate_models:
                 entity_list.append("SeparateModelStatePunishmentAgent")
-            observation_spec = OneHotObservationSpec(
-                entity_list,
-                full_view=self.config.model.full_view,
-                vision_radius=self.config.model.agent_vision_radius,
-                env_dims=(
-                    (self.config.world.height, self.config.world.width)
-                    if self.config.model.full_view
-                    else None
-                ),
-            )
+            
+            # Create observation spec based on config
+            use_slot_based = self.config.observation.get("use_slot_based_encoding", True)
+            
+            if use_slot_based:
+                from sorrel.observation.slot_based_observation_spec import SlotBasedObservationSpec
+                observation_spec = SlotBasedObservationSpec(
+                    entity_list=entity_list,
+                    full_view=self.config.model.full_view,
+                    vision_radius=self.config.model.agent_vision_radius,
+                    env_dims=(
+                        (self.config.world.height, self.config.world.width)
+                        if self.config.model.full_view
+                        else None
+                    ),
+                    agent_identity_manager=self.agent_identity_manager,
+                    punishment_history_tracker=self.punishment_history_tracker,
+                    agent_name_map=getattr(self, 'agent_name_map', {}),  # Use agent_name_map if available
+                )
+            else:
+                observation_spec = OneHotObservationSpec(
+                    entity_list,
+                    full_view=self.config.model.full_view,
+                    vision_radius=self.config.model.agent_vision_radius,
+                    env_dims=(
+                        (self.config.world.height, self.config.world.width)
+                        if self.config.model.full_view
+                        else None
+                    ),
+                )
 
             # Apply shuffled entity map if shuffling is enabled
             if self.entity_map_shuffler is not None:
@@ -1453,14 +1847,15 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
 
             action_spec = ActionSpec(action_names)
 
-            # Create the model with extra features (punishment_level, social_harm, third_feature, is_phased_voting)
+            # Create the model with extra features (punishment_level, social_harm, is_phased_voting)
             # The input_size should be a tuple representing the flattened dimensions
-            # We always add 4 extra features: punishment_level (accessible value or 0), social_harm, third_feature, is_phased_voting
+            # We always add 3 extra features: punishment_level (accessible value or 0), social_harm, is_phased_voting
+            # NOTE: third_feature removed for slot-based encoding
             base_flattened_size = (
                 observation_spec.input_size[0]
                 * observation_spec.input_size[1]
                 * observation_spec.input_size[2]
-                + 4  # punishment_level, social_harm, third_feature, is_phased_voting
+                + 3  # punishment_level, social_harm, is_phased_voting (third_feature removed)
             )
             
             # Add punishment observation features if enabled

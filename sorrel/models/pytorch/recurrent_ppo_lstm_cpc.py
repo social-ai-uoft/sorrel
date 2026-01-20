@@ -5,6 +5,8 @@ This module extends RecurrentPPOLSTM with CPC for learning predictive representa
 """
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections import deque, defaultdict
+import random
 
 try:
     from typing import override
@@ -74,6 +76,10 @@ class RecurrentPPOLSTMCPC(RecurrentPPOLSTM):
         cpc_weight: float = 1.0,
         cpc_projection_dim: Optional[int] = None,
         cpc_temperature: float = 0.07,
+        # Memory bank for accumulating sequences (enables B > 1 with single agent)
+        cpc_memory_bank_size: int = 1000,  # Number of past sequences to keep
+        cpc_sample_size: int = 64,  # Number of sequences to sample from memory bank for CPC training
+        cpc_start_epoch: int = 1,  # Epoch to start CPC training (0 = start immediately, 1 = wait for memory bank)
     ) -> None:
         """
         Initialize RecurrentPPOLSTM with CPC.
@@ -85,6 +91,10 @@ class RecurrentPPOLSTMCPC(RecurrentPPOLSTM):
             cpc_weight: Weight for CPC loss: L_total = L_RL + λ * L_CPC (default: 1.0)
             cpc_projection_dim: Dimension of CPC projection (default: hidden_size)
             cpc_temperature: Temperature for InfoNCE loss (default: 0.07)
+            cpc_memory_bank_size: Number of past sequences to keep in memory bank (default: 1000)
+            cpc_sample_size: Number of sequences to sample from memory bank for CPC training (default: 64)
+            cpc_start_epoch: Epoch to start CPC training. 0 = start immediately (B=1, loss=0),
+                           1 = wait for memory bank to accumulate (default: 1)
         """
         # Initialize base class
         super().__init__(
@@ -114,7 +124,18 @@ class RecurrentPPOLSTMCPC(RecurrentPPOLSTM):
         
         # Initialize CPC module
         self.use_cpc = use_cpc
-        self.cpc_weight = cpc_weight if use_cpc else 0.0
+        # Set cpc_weight to 0.0 when use_cpc is False
+        self.cpc_weight = 0.0 if not use_cpc else cpc_weight
+        self.cpc_memory_bank_size = cpc_memory_bank_size
+        self.cpc_sample_size = cpc_sample_size
+        self.cpc_start_epoch = cpc_start_epoch
+        
+        # Memory bank to accumulate sequences for batch negatives (original CPC paper approach)
+        # This allows B > 1 even with a single agent by batching multiple rollouts
+        self.cpc_memory_bank: deque = deque(maxlen=cpc_memory_bank_size) if use_cpc else 0.0
+        
+        # Track current epoch for CPC start control
+        self.current_epoch = 0
         
         if use_cpc:
             self.cpc_module = CPCModule(
@@ -205,7 +226,7 @@ class RecurrentPPOLSTMCPC(RecurrentPPOLSTM):
         return z_seq, c_seq, dones
     
     @override
-    def learn(self) -> float:
+    def learn(self, other_agent_sequences: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]] = None) -> float:
         """
         Perform a PPO update with optional CPC loss.
         
@@ -213,8 +234,14 @@ class RecurrentPPOLSTMCPC(RecurrentPPOLSTM):
             1. Extract CPC sequences (before shuffling, preserve temporal order)
             2. Prepare PPO batch (shuffles for minibatching)
             3. Compute GAE advantages
-            4. Compute CPC loss (once, on full sequence)
+            4. Compute CPC loss (once, on full sequence) - batched with other agents if provided
             5. Optimize PPO + CPC loss over K_epochs and minibatches
+        
+        Args:
+            other_agent_sequences: Optional list of (z_seq, c_seq, dones) tuples from other agents.
+                                  Used to create batch negatives for CPC (original paper approach).
+                                  Each agent maintains separate memory buffers, but sequences are
+                                  batched together for CPC loss computation.
         
         Returns:
             Average loss value
@@ -293,17 +320,105 @@ class RecurrentPPOLSTMCPC(RecurrentPPOLSTM):
                 # Compute and add CPC loss only to first minibatch of FIRST epoch
                 # This reduces overhead while still updating CPC (once per learn() call)
                 # We extract sequences fresh here to ensure a fresh computation graph
-                if self.cpc_module is not None and minibatch_idx == 0 and epoch_idx == 0:
+                # Check if CPC should start training based on cpc_start_epoch parameter
+                should_train_cpc = (
+                    self.cpc_module is not None 
+                    and minibatch_idx == 0 
+                    and epoch_idx == 0
+                    and self.current_epoch >= self.cpc_start_epoch
+                )
+                if should_train_cpc:
                     # Extract CPC sequences fresh for this epoch (preserve temporal order)
                     z_seq_epoch, c_seq_epoch, dones_cpc = self._prepare_cpc_sequences()
-                    # Reshape for CPC: treat entire rollout as one sequence
-                    z_seq_epoch = z_seq_epoch.unsqueeze(0)  # (1, N, hidden_size)
-                    c_seq_epoch = c_seq_epoch.unsqueeze(0)  # (1, N, hidden_size)
-                    # Create mask from dones (handle episode boundaries)
-                    mask_epoch = self.cpc_module.create_mask_from_dones(dones_cpc, len(dones_cpc))
-                    # Compute CPC loss with fresh computation graph
-                    cpc_loss_epoch = self.cpc_module.compute_loss(z_seq_epoch, c_seq_epoch, mask_epoch)
-                    total_loss = total_loss + self.cpc_weight * cpc_loss_epoch
+                    
+                    # Following toy_cpc_rl_one_lstm.md: accumulate multiple rollouts from single agent
+                    # This creates B > 1 by batching multiple episodes/rollouts (not multiple agents)
+                    # Original CPC paper: batch negatives come from other sequences in the batch
+                    
+                    # Collect sequences: current (with gradients) + sampled past rollouts from memory bank (detached)
+                    z_sequences = [z_seq_epoch]  # Current rollout (with gradients)
+                    c_sequences = [c_seq_epoch]  # Current rollout (with gradients)
+                    dones_sequences = [dones_cpc]
+                    
+                    # Sample sequences from memory bank (detached, serve as negatives)
+                    # For large memory banks, use RECENT-FIRST sampling to avoid staleness
+                    # Staleness occurs when old sequences (from outdated policy) are used as negatives
+                    # Recent-first ensures all negatives are from recent policy stages
+                    memory_bank_list = list(self.cpc_memory_bank)
+                    if len(memory_bank_list) > 0:
+                        # Sample from the most recent sequences (avoid staleness)
+                        # Deque is FIFO: newest at end, oldest at beginning
+                        # Take most recent min(sample_size, available) sequences
+                        num_to_sample = min(self.cpc_sample_size, len(memory_bank_list))
+                        recent_sequences = memory_bank_list[-num_to_sample:]  # Most recent sequences
+                        for z_past, c_past, dones_past in recent_sequences:
+                            z_sequences.append(z_past)
+                            c_sequences.append(c_past)
+                            dones_sequences.append(dones_past)
+                    
+                    # Add current rollout to memory bank AFTER using it (for next training step)
+                    # This ensures we don't use the same sequence twice in the current batch
+                    self.cpc_memory_bank.append((
+                        z_seq_epoch.detach().clone(),
+                        c_seq_epoch.detach().clone(),
+                        dones_cpc.detach().clone() if isinstance(dones_cpc, torch.Tensor) else dones_cpc.clone()
+                    ))
+                    
+                    # Also support other agents' sequences if provided (for multi-agent scenarios)
+                    if other_agent_sequences is not None:
+                        for z_other, c_other, dones_other in other_agent_sequences:
+                            z_sequences.append(z_other.detach() if z_other.requires_grad else z_other)
+                            c_sequences.append(c_other.detach() if c_other.requires_grad else c_other)
+                            dones_sequences.append(dones_other)
+                    
+                    # Batch sequences together (following toy_cpc_rl_one_lstm.md and original CPC paper)
+                    # Group sequences by length to avoid padding (no padding - proper handling)
+                    if len(z_sequences) > 1:
+                        # Group sequences by length
+                        length_groups = defaultdict(list)
+                        for i, (z_seq, c_seq, dones) in enumerate(zip(z_sequences, c_sequences, dones_sequences)):
+                            seq_len = len(dones)
+                            length_groups[seq_len].append((i, z_seq, c_seq, dones))
+                        
+                        # Process each length group separately
+                        cpc_losses = []
+                        for seq_len, group in length_groups.items():
+                            if len(group) == 1:
+                                # Only one sequence of this length - skip (B=1, loss=0.0)
+                                continue
+                            
+                            # Batch sequences of the same length
+                            z_batch_list = []
+                            c_batch_list = []
+                            mask_batch_list = []
+                            
+                            for idx, z_seq, c_seq, dones in group:
+                                z_batch_list.append(z_seq)
+                                c_batch_list.append(c_seq)
+                                mask = self.cpc_module.create_mask_from_dones(dones, len(dones))
+                                # Mask is (1, T), squeeze to (T,) before stacking
+                                mask_batch_list.append(mask.squeeze(0))
+                            
+                            # Stack to create batch dimension (all sequences same length, no padding needed)
+                            z_seq_batch = torch.stack(z_batch_list, dim=0)  # (B, T, hidden_size)
+                            c_seq_batch = torch.stack(c_batch_list, dim=0)  # (B, T, hidden_size)
+                            mask_batch = torch.stack(mask_batch_list, dim=0)  # (B, T)
+                            
+                            # Compute CPC loss for this length group
+                            # First sequence (current agent, idx=0) has gradients; others are detached negatives
+                            group_loss = self.cpc_module.compute_loss(z_seq_batch, c_seq_batch, mask_batch)
+                            cpc_losses.append(group_loss)
+                        
+                        # Average losses across length groups
+                        if cpc_losses:
+                            cpc_loss_epoch = sum(cpc_losses) / len(cpc_losses)
+                            total_loss = total_loss + self.cpc_weight * cpc_loss_epoch
+                    else:
+                        # Only one sequence (B=1): skip CPC computation to save compute
+                        # CPC loss would be 0.0 anyway (no negatives available)
+                        # PPO loss still trains normally, CPC will start contributing from next epoch
+                        # when memory bank has accumulated sequences
+                        pass
                 
                 minibatch_idx += 1
                 
@@ -334,4 +449,32 @@ class RecurrentPPOLSTMCPC(RecurrentPPOLSTM):
         # Return average loss
         avg_loss = np.mean(total_losses) if total_losses else 0.0
         return float(avg_loss)
+    
+    @override
+    def start_epoch_action(self, epoch: int = 0, **kwargs) -> None:
+        """Reset hidden state at start of epoch and track epoch number for CPC start control."""
+        super().start_epoch_action(**kwargs)
+        self.current_epoch = epoch
+    
+    @override
+    def train_step(self, other_agent_sequences: Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]] = None) -> np.ndarray:
+        """
+        IQN-compatible training step with support for CPC batch negatives.
+        
+        Args:
+            other_agent_sequences: Optional list of (z_seq, c_seq, dones) tuples from other agents.
+                                  Used to create batch negatives for CPC (original paper approach).
+        
+        Returns:
+            Loss value as numpy array
+        """
+        # Train on whatever data we have collected (even if less than rollout_length)
+        # This allows training at the end of each epoch
+        if len(self.rollout_memory["states"]) > 0:
+            # Perform PPO update with optional CPC batch negatives
+            loss = self.learn(other_agent_sequences=other_agent_sequences)
+            return np.array(loss)
+        else:
+            # No data collected yet, return zero loss
+            return np.array(0.0)
 
