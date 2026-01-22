@@ -154,11 +154,18 @@ class MovingAgent[W: Gridworld](Agent):
     ]
     direction = 2  # Default: facing down
 
-    def movement(self, action: int) -> tuple[int, int, int]:
+    def movement(
+        self,
+        action: int,
+        bound_vertical: int | None = None,
+        bound_horizontal: int | None = None,
+    ) -> tuple[int, int, int]:
         """Attempt to move with the specified action to a new location.
 
         Args:
             action (int): The action coded as an integer.
+            bound_vertical (int | None): The vertical boundary of the gridworld. If None, no vertical boundary is applied.
+            bound_horizontal (int | None): The horizontal boundary of the gridworld. If None, no horizontal boundary is applied.
 
         Returns:
             tuple[int, int, int]: The new location.
@@ -179,6 +186,12 @@ class MovingAgent[W: Gridworld](Agent):
         if action_name == "right":
             self.direction = 1
             new_location = (self.location[0], self.location[1] + 1, self.location[2])
+
+        if any(coord < 0 for coord in new_location):
+            new_location = self.location
+        if bound_horizontal != None and bound_vertical != None:
+            if new_location[0] >= bound_vertical or new_location[1] >= bound_horizontal:
+                new_location = self.location
 
         return new_location
 
