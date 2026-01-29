@@ -50,12 +50,20 @@ class CleanupEnv(Environment[CleanupWorld]):
             )
             action_spec = ActionSpec(["up", "down", "left", "right", "clean", "zap"])
 
+            # Extract model parameters, excluding device (we use self.device instead)
+            model_params = {
+                k: v
+                for k, v in self.config.model.iqn.parameters.items()
+                if k != "device"
+            }
+
             model = PyTorchIQN(
                 input_size=observation_spec.input_size,
                 action_space=action_spec.n_actions,
                 seed=torch.random.seed(),
                 n_frames=self.config.agent.agent.obs.n_frames,
-                **self.config.model.iqn.parameters,
+                device=self.device,
+                **model_params,
             )
 
             # if "load_weights" in kwargs:
