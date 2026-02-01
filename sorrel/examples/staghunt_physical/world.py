@@ -143,7 +143,7 @@ class StagHuntWorld(Gridworld):
         self.stag_regeneration_cooldown: int = int(get_world_param("stag_regeneration_cooldown", 1))
         self.hare_regeneration_cooldown: int = int(get_world_param("hare_regeneration_cooldown", 1))
         self.reward_sharing_radius: int = int(get_world_param("reward_sharing_radius", 3))
-        self.accurate_reward_allocation: bool = bool(get_world_param("accurate_reward_allocation", False))
+        self.accurate_reward_allocation: bool = bool(get_world_param("accurate_reward_allocation", True))
         
         # Wounded stag mechanism flag
         self.use_wounded_stag: bool = bool(get_world_param("use_wounded_stag", False))

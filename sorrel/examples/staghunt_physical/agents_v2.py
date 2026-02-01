@@ -289,33 +289,47 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         standard_obs: bool = False,
         agent_id_vector_dim: int = 8,
         agent_id_encoding_mode: str = "random_vector",
+        use_agent_id_in_standard_obs: bool = True,
     ):
         super().__init__(entity_list, full_view, vision_radius, env_dims)
         self.embedding_size = embedding_size
         self.standard_obs = standard_obs
         self.agent_id_vector_dim = agent_id_vector_dim
         self.agent_id_encoding_mode = agent_id_encoding_mode
+        self.use_agent_id_in_standard_obs = use_agent_id_in_standard_obs
 
         # Standard observation mode setup
         if standard_obs:
             if num_agents is None:
                 raise ValueError("num_agents must be provided when standard_obs=True")
             
-            # Generate agent ID vectors based on encoding mode
-            if agent_id_encoding_mode == "onehot":
-                self.agent_id_vectors = make_onehot_id_codes(num_agents)
-            elif agent_id_encoding_mode == "random_vector":
-                self.agent_id_vectors = make_random_id_codes(
-                    num_agents=num_agents,
-                    d=agent_id_vector_dim,
-                    seed=0,
-                    rademacher=True,
-                    normalize=True,
-                )
+            # Generate agent ID vectors based on encoding mode and enable flag
+            if use_agent_id_in_standard_obs:
+                # Normal mode: generate unique vectors
+                if agent_id_encoding_mode == "onehot":
+                    self.agent_id_vectors = make_onehot_id_codes(num_agents)
+                elif agent_id_encoding_mode == "random_vector":
+                    self.agent_id_vectors = make_random_id_codes(
+                        num_agents=num_agents,
+                        d=agent_id_vector_dim,
+                        seed=0,
+                        rademacher=True,
+                        normalize=True,
+                    )
+                else:
+                    raise ValueError(f"Invalid agent_id_encoding_mode: {agent_id_encoding_mode}. Must be 'onehot' or 'random_vector'")
             else:
-                raise ValueError(f"Invalid agent_id_encoding_mode: {agent_id_encoding_mode}. Must be 'onehot' or 'random_vector'")
+                # Disabled mode: all agents get zero vectors
+                if agent_id_encoding_mode == "onehot":
+                    # Zero vectors of dimension num_agents
+                    self.agent_id_vectors = np.zeros((num_agents, num_agents), dtype=np.float32)
+                elif agent_id_encoding_mode == "random_vector":
+                    # Zero vectors of dimension agent_id_vector_dim
+                    self.agent_id_vectors = np.zeros((num_agents, agent_id_vector_dim), dtype=np.float32)
+                else:
+                    raise ValueError(f"Invalid agent_id_encoding_mode: {agent_id_encoding_mode}. Must be 'onehot' or 'random_vector'")
             
-            # Calculate agent ID encoding dimension based on mode
+            # Calculate agent ID encoding dimension based on mode (needed regardless of enable flag)
             if agent_id_encoding_mode == "onehot":
                 self.agent_id_dim = num_agents
             elif agent_id_encoding_mode == "random_vector":
@@ -834,11 +848,14 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                                 feature_tensor[feat_idx, y, x] = 1.0
                             
                             # Group indicators (only when other=1)
-                            # Note: entity.kind may include orientation (e.g., "AgentKindANorth")
-                            # We need to extract the base kind (e.g., "AgentKindA") for mapping
+                            # Use agent_kind attribute directly if available (stores base kind like "AgentKindA")
+                            # Otherwise, try to extract from entity.kind (which may include orientation like "AgentKindANorth")
                             base_kind = None
-                            if entity_kind:
-                                # Strip orientation suffixes: North, East, South, West
+                            if hasattr(entity, 'agent_kind') and entity.agent_kind:
+                                # Direct access to base kind (preferred)
+                                base_kind = entity.agent_kind
+                            elif entity_kind:
+                                # Fallback: extract base kind from entity.kind by stripping orientation suffixes
                                 for suffix in ["North", "East", "South", "West"]:
                                     if entity_kind.endswith(suffix):
                                         base_kind = entity_kind[:-len(suffix)]

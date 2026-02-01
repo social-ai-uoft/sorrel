@@ -24,6 +24,10 @@ from sorrel.examples.staghunt_physical.entities import Empty
 from sorrel.examples.staghunt_physical.env_with_probe_test import StagHuntEnvWithProbeTest
 from sorrel.examples.staghunt_physical.world import StagHuntWorld
 from sorrel.examples.staghunt_physical.metrics_collector import StagHuntMetricsCollector
+from sorrel.examples.staghunt_physical.config_loader import (
+    load_agent_config_from_csv,
+    merge_agent_configs,
+)
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 
 
@@ -48,8 +52,12 @@ class CombinedLogger(Logger):
             self.experiment_env.log_epoch_metrics(epoch, self.tensorboard_logger.writer)
 
 
-def run_stag_hunt() -> None:
-    """Run a single stag hunt experiment with default hyperparameters."""
+def run_stag_hunt(run_name_base: str | None = None) -> None:
+    """Run a single stag hunt experiment with default hyperparameters.
+    
+    Args:
+        run_name_base: Optional base name for the run. If not provided, uses default from config.
+    """
     # configuration dictionary specifying hyperparameters
     config = {
         "experiment": {
@@ -62,11 +70,11 @@ def run_stag_hunt() -> None:
             # recording period for animation (unused here)
             "record_period": 1000,
             # Base run name (max_turns and epsilon will be automatically appended)
-            "run_name_base":  "test_onehot_new_observation_format", #'
-            #"test_full_identity_system_individual_recognition_v0", 
+            # Can be overridden via CLI argument
+            "run_name_base": run_name_base if run_name_base is not None else "test_onehot_new_observation_format", 
             # # Base name without max_turns/epsilon
             # Model saving configuration
-            "save_models": True,  # Enable model saving
+            "save_models": False,  # Enable model saving
             "save_interval": 2000,  # Save models every X epochs
         },
         "probe_test": {
@@ -145,13 +153,13 @@ def run_stag_hunt() -> None:
             "generation_mode": "random",  # "random" or "ascii_map"
             "ascii_map_file": "test_intention_onlystag.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 13, # 13
-            "width": 13,
+            "height": 27, # 13
+            "width": 27,
             # number of players in the game
-            "num_agents": 4,
+            "num_agents": 20,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
             # Only the spawned agents will act and learn in each epoch
-            "num_agents_to_spawn": 4,  # Spawn 2 out of 3 agents each epoch
+            "num_agents_to_spawn": 20,  # Spawn 2 out of 3 agents each epoch
             # probability an empty cell spawns a resource each step
             "resource_density": 0.15,
             # If True in random mode, agents spawn randomly in valid locations instead of fixed spawn points
@@ -177,7 +185,7 @@ def run_stag_hunt() -> None:
             "hare_regeneration_cooldown": 1,  # Turns to wait before hare regenerates
             # Dynamic resource density configuration (3-step process with resource-specific rates)
             "dynamic_resource_density": {
-                "enabled": True,  # Set to True to enable dynamic density
+                "enabled": False,  # Set to True to enable dynamic density
                 "rate_increase_multiplier": 3,  # Increase rates by 10% each epoch
                 "stag_decrease_rate": 0.1,  # Decrease stag_rate by 0.1 per stag consumed
                 "hare_decrease_rate": 0.1,  # Decrease hare_rate by 0.1 per hare consumed
@@ -218,8 +226,13 @@ def run_stag_hunt() -> None:
             "use_wounded_stag": False,  # If True, stags change kind to 'WoundedStagResource' when health < max_health
             # Agent configuration system
             "use_agent_config": True,  # If True, use agent_config to assign kinds and attributes
+            # Optional: Path to CSV file for agent configuration (alternative to agent_config dict)
+            # If provided, CSV will be loaded and merged with agent_config (CSV takes precedence)
+            # Path is resolved relative to main.py's directory if not absolute
+            "agent_config_csv": "configs/agents_example.csv",  # Uncomment to use CSV-based agent config
             # Agent configuration - mapping from agent_id to kind and attributes
             # Only used if use_agent_config is True
+            # Can be supplemented/overridden by agent_config_csv if provided
             "agent_config": {
                     0: {
                         "kind": "AgentKindA",
@@ -234,17 +247,17 @@ def run_stag_hunt() -> None:
                         "exclusive_reward": False,
                     },
                     2: {
-                        "kind": "AgentKindA",
-                        "can_hunt": False,
-                        "can_receive_shared_reward": True,
-                        "exclusive_reward": False,
-                    },
-                    3: {
                         "kind": "AgentKindB",
                         "can_hunt": False,
                         "can_receive_shared_reward": True,
                         "exclusive_reward": False,
                     },
+                    # 3: {
+                    #     "kind": "AgentKindB",
+                    #     "can_hunt": False,
+                    #     "can_receive_shared_reward": True,
+                    #     "exclusive_reward": False,
+                    # },
                 # ... etc
             },
             # Agent identity system configuration
@@ -259,14 +272,67 @@ def run_stag_hunt() -> None:
             # Standard observation mode configuration
             "standard_obs": True,  # Set to True to enable standard observation mode
             "agent_id_vector_dim": 8,  # Dimensionality of agent identity vectors (only used when agent_id_encoding_mode="random_vector")
-            "agent_id_encoding_mode": "onehot",  # Options: "random_vector" (default) or "onehot"
+            "agent_id_encoding_mode": "random_vector",  # Options: "random_vector" (default) or "onehot"
+            "use_agent_id_in_standard_obs": True,  # Enable/disable agent ID encoding in standard obs mode
+            # When False: all agents get zero ID vectors (indistinguishable by unique ID)
+            # When True: agents have unique ID vectors based on agent_id_encoding_mode (default)
+            # Only applies when standard_obs=True
             # When standard_obs=True: uses flat feature list with agent IDs encoded as either:
             #   - "random_vector": Fixed random vectors of dimension agent_id_vector_dim (default: 8)
             #   - "onehot": One-hot vectors of dimension num_agents
+            #   - When use_agent_id_in_standard_obs=False: all agents get zero ID vectors
             # NOTE: Cannot be True when agent_identity.enabled is True (mutually exclusive)
         },
     }
 
+    # Load and merge CSV agent config if provided
+    world_cfg = config.get("world", {})
+    agent_config_csv = world_cfg.get("agent_config_csv", None)
+    
+    # Only process CSV if a non-empty string path is provided (None or empty string skip CSV loading)
+    if agent_config_csv and isinstance(agent_config_csv, str) and agent_config_csv.strip():
+        # Resolve CSV path relative to main.py's directory if not absolute
+        csv_path = Path(agent_config_csv)
+        if not csv_path.is_absolute():
+            csv_path = Path(__file__).parent / csv_path
+        
+        # Load CSV config
+        try:
+            csv_config = load_agent_config_from_csv(csv_path)
+            print(f"Loaded agent config from CSV: {csv_path}")
+            print(f"  Found {len(csv_config)} agents in CSV")
+        except Exception as e:
+            raise ValueError(
+                f"Failed to load agent config from CSV file '{agent_config_csv}': {e}"
+            ) from e
+        
+        # Get existing dict config (if any)
+        dict_config = world_cfg.get("agent_config", None)
+        
+        # Merge configs (CSV takes precedence)
+        merged_config = merge_agent_configs(dict_config, csv_config)
+        
+        # Validate agent count matches num_agents
+        num_agents = world_cfg.get("num_agents", None)
+        if num_agents is not None:
+            num_agents_in_config = len(merged_config)
+            if num_agents_in_config != num_agents:
+                raise ValueError(
+                    f"Number of agents in merged config ({num_agents_in_config}) does not match "
+                    f"num_agents ({num_agents}). Please ensure agent_config_csv and/or agent_config "
+                    f"define exactly {num_agents} agents (with agent IDs 0 through {num_agents - 1})."
+                )
+        
+        # Update config with merged agent_config
+        config["world"]["agent_config"] = merged_config
+        
+        # Remove agent_config_csv from config before saving (saved YAMLs should be self-contained)
+        # Store it temporarily for the message, then remove
+        config["world"].pop("agent_config_csv", None)
+        
+        if dict_config:
+            print(f"  Merged with {len(dict_config)} agents from dict config (CSV took precedence for overlaps)")
+    
     # Automatically construct run_name from base name and key parameters
     run_name_base = config["experiment"].get("run_name_base", "staghunt_experiment")
     max_turns = config["experiment"]["max_turns"]
@@ -353,4 +419,13 @@ def run_stag_hunt() -> None:
 
 
 if __name__ == "__main__":
-    run_stag_hunt()
+    parser = argparse.ArgumentParser(description="Run stag hunt experiment")
+    parser.add_argument(
+        "--run-name-base",
+        type=str,
+        default=None,
+        help="Base name for the run (max_turns and epsilon will be automatically appended). "
+             "If not provided, uses default from config."
+    )
+    args = parser.parse_args()
+    run_stag_hunt(run_name_base=args.run_name_base)

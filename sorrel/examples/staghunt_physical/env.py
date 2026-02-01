@@ -135,6 +135,18 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         agent_kind_mapping = getattr(self.world, 'agent_kind_mapping', {})
         agent_attributes = getattr(self.world, 'agent_attributes', {})
         
+        # Validate that agent_config matches num_agents if use_agent_config is enabled
+        use_agent_config = world_cfg.get("use_agent_config", False)
+        agent_config = world_cfg.get("agent_config", None)
+        if use_agent_config and agent_config is not None:
+            num_agents_in_config = len(agent_config)
+            if num_agents_in_config != n_agents:
+                raise ValueError(
+                    f"Number of agents in agent_config ({num_agents_in_config}) does not match "
+                    f"num_agents ({n_agents}). Please ensure agent_config defines exactly "
+                    f"{n_agents} agents (with agent IDs 0 through {n_agents - 1})."
+                )
+        
         # Get identity configuration from world config (set in main.py)
         # If "agent_identity" key is missing, defaults to {} which results in enabled=False
         identity_config = world_cfg.get("agent_identity", {})
@@ -143,6 +155,19 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         standard_obs = world_cfg.get("standard_obs", False)
         agent_id_vector_dim = world_cfg.get("agent_id_vector_dim", 8)
         agent_id_encoding_mode = world_cfg.get("agent_id_encoding_mode", "random_vector")
+        use_agent_id_in_standard_obs = world_cfg.get("use_agent_id_in_standard_obs", True)
+        
+        # Validate: use_agent_id_in_standard_obs only meaningful when standard_obs is enabled
+        if not standard_obs and not use_agent_id_in_standard_obs:
+            import warnings
+            warnings.warn(
+                "use_agent_id_in_standard_obs=False is ignored when standard_obs=False. "
+                "This parameter only applies in standard observation mode."
+            )
+        
+        # Log when agent IDs are disabled
+        if standard_obs and not use_agent_id_in_standard_obs:
+            print("Warning: Agent ID encoding is disabled. All agents will have zero identity vectors.")
         
         # Validate mutual exclusivity: only one observation mode can be enabled
         identity_enabled = identity_config.get("enabled", False)
@@ -183,6 +208,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 standard_obs=standard_obs,  # NEW: from config["world"]["standard_obs"]
                 agent_id_vector_dim=agent_id_vector_dim,  # NEW: from config["world"]["agent_id_vector_dim"]
                 agent_id_encoding_mode=agent_id_encoding_mode,  # NEW: from config["world"]["agent_id_encoding_mode"]
+                use_agent_id_in_standard_obs=use_agent_id_in_standard_obs,  # NEW: from config["world"]["use_agent_id_in_standard_obs"]
             )
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size
@@ -763,12 +789,12 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         Args:
             agents: A list of new agents
         """
-        # Assign unique IDs to overridden agents
+        # Preserve existing agent IDs if they're already set (important for probe tests
+        # where agents need to maintain their training identities)
+        # Only assign sequential IDs if an agent doesn't have an agent_id attribute
         for agent_id, agent in enumerate(agents):
-            if hasattr(agent, 'agent_id'):
-                agent.agent_id = agent_id
-            else:
-                # If agent doesn't have agent_id attribute, add it
+            if not hasattr(agent, 'agent_id') or agent.agent_id is None:
+                # Only assign if agent_id is missing or None
                 agent.agent_id = agent_id
         
         self.agents = agents
@@ -1082,13 +1108,19 @@ def export_agent_identity_codes(
         if standard_obs and agents and len(agents) > 0:
             f.write("\n")
             f.write("=" * 50 + "\n")
-            encoding_mode = getattr(agents[0].observation_spec, 'agent_id_encoding_mode', 'random_vector')
-            if encoding_mode == "onehot":
-                f.write("Agent Identity Vectors (One-Hot Encoding)\n")
-            else:
-                f.write("Agent Identity Vectors (Fixed Random Vectors)\n")
-            f.write("=" * 50 + "\n")
             obs_spec = agents[0].observation_spec
+            use_agent_id = getattr(obs_spec, 'use_agent_id_in_standard_obs', True)
+            
+            if not use_agent_id:
+                f.write("Agent Identity Vectors (DISABLED - All Zeros)\n")
+            else:
+                encoding_mode = getattr(obs_spec, 'agent_id_encoding_mode', 'random_vector')
+                if encoding_mode == "onehot":
+                    f.write("Agent Identity Vectors (One-Hot Encoding)\n")
+                else:
+                    f.write("Agent Identity Vectors (Fixed Random Vectors)\n")
+            f.write("=" * 50 + "\n")
+            
             if hasattr(obs_spec, 'agent_id_vectors'):
                 id_vectors = obs_spec.agent_id_vectors
                 for agent_id in range(len(id_vectors)):
