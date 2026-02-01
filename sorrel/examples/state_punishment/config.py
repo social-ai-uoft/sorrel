@@ -3,6 +3,15 @@
 from typing import Any, Dict, List, Optional
 
 
+def _get_punishment_schedule_table(use_schedule: bool):
+    """Get predefined punishment schedule table as list, or None."""
+    if not use_schedule:
+        return None
+    # Lazy import to avoid circular imports
+    from .state_system import predefined_punishment_probs
+    return predefined_punishment_probs.tolist()
+
+
 def create_config(
     num_agents: int = 1,
     epochs: int = 10000,
@@ -60,6 +69,9 @@ def create_config(
     cpc_weight: float = 1.0,  # NEW: Weight for CPC loss
     cpc_projection_dim: Optional[int] = None,  # NEW: CPC projection dimension (None = use hidden_size)
     cpc_temperature: float = 0.07,  # NEW: Temperature for InfoNCE loss
+    cpc_memory_bank_size: int = 1000,  # NEW: Number of past sequences to keep in memory bank
+    cpc_sample_size: int = 64,  # NEW: Number of sequences to sample from memory bank for CPC training
+    cpc_start_epoch: int = 1,  # NEW: Epoch to start CPC training (0 = start immediately, 1 = wait for memory bank)
     norm_enforcer_decay_rate: float = 0.995,  # NEW: Norm strength decay rate
     norm_enforcer_internalization_threshold: float = 5.0,  # NEW: Threshold for guilt penalties
     norm_enforcer_max_norm_strength: float = 10.0,  # NEW: Maximum norm strength
@@ -83,6 +95,31 @@ def create_config(
     use_window_stats: bool = False,  # Include window statistics in vote observation
     # Punishment reset control
     reset_punishment_level_per_epoch: bool = True,  # Reset punishment level at epoch start
+    # Slot-based observation encoding
+    use_slot_based_encoding: bool = True,  # Use slot-based encoding (default: True)
+    punishment_persistence_steps: int = 2,  # Number of steps to persist punishment flag
+    # IQN factored action space parameters
+    iqn_use_factored_actions: bool = False,  # Enable factored actions for IQN
+    iqn_action_dims: Optional[str] = None,  # Comma-separated action dimensions (e.g., "5,3")
+    iqn_factored_target_variant: str = "A",  # Target variant: "A" (shared) or "B" (separate)
+    # IQN CPC parameters
+    iqn_use_cpc: bool = False,  # Enable CPC for IQN models
+    iqn_cpc_horizon: int = 30,  # CPC prediction horizon
+    iqn_cpc_weight: float = 1.0,  # Weight for CPC loss
+    iqn_cpc_projection_dim: Optional[int] = None,  # CPC projection dimension (None = use hidden_size)
+    iqn_cpc_temperature: float = 0.07,  # Temperature for InfoNCE loss
+    iqn_cpc_memory_bank_size: int = 1000,  # Number of past sequences to keep in memory bank
+    iqn_cpc_sample_size: int = 64,  # Number of sequences to sample from memory bank
+    iqn_cpc_start_epoch: int = 1,  # Epoch to start CPC training
+    iqn_hidden_size: int = 256,  # Hidden size for encoder and LSTM
+    # PPO factored action space parameters
+    ppo_use_factored_actions: bool = False,  # Enable factored actions for PPO
+    ppo_action_dims: Optional[str] = None,  # Comma-separated action dimensions (e.g., "5,3")
+    # History observation parameters
+    enable_history_observation: bool = False,  # Enable epoch history tracking and observation
+    history_window_size: int = 10,  # Number of epochs to aggregate over for history observation
+    respawn_prob: float = 0.0,  # Probability of resource respawning
+    max_resources: Optional[int] = None,  # Maximum number of resources allowed in the world (None = unlimited)
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -116,7 +153,7 @@ def create_config(
     # flexible parameters
     map_size = map_size
     vision_radius = 4
-    respawn_prob = 0.005  # 0.005
+    # respawn_prob is now a parameter, use it directly
     collective_harm_tag = "nocharm" if no_collective_harm else "charm"
 
     # Generate dynamic run name based on experiment parameters
@@ -278,12 +315,19 @@ def create_config(
             "use_separate_models": use_separate_models,
             "vote_window_size": vote_window_size,
             "use_window_stats": use_window_stats,
+            "enable_history_observation": enable_history_observation,
+            "history_window_size": history_window_size,
+        },
+        "observation": {
+            "use_slot_based_encoding": use_slot_based_encoding,
+            "punishment_persistence_steps": punishment_persistence_steps,
         },
         "world": {
             "height": map_size,
             "width": map_size,
             "num_resources": num_resources,
             "spawn_prob": respawn_prob,
+            "max_resources": max_resources,
             "a_value": 25,  # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
             "b_value": 10, # 25, 17, 11, 8, 8
             "c_value": 10,
@@ -296,6 +340,7 @@ def create_config(
             "taboo_resources": ["A", "B", "C", "D", "E"],
             "entity_spawn_probs": {"A": 0.2, "B": 0.2, "C": 0.2, "D": 0.2, "E": 0.2},
             "reset_punishment_level_per_epoch": reset_punishment_level_per_epoch,
+            "predefined_punishment_schedule": _get_punishment_schedule_table(use_predefined_punishment_schedule),
         },
         "model": {
             "agent_vision_radius": vision_radius,
@@ -333,6 +378,26 @@ def create_config(
             "cpc_weight": cpc_weight if model_type == "ppo_lstm_cpc" else None,
             "cpc_projection_dim": cpc_projection_dim if model_type == "ppo_lstm_cpc" else None,
             "cpc_temperature": cpc_temperature if model_type == "ppo_lstm_cpc" else None,
+            "cpc_memory_bank_size": cpc_memory_bank_size if model_type == "ppo_lstm_cpc" else None,
+            "cpc_sample_size": cpc_sample_size if model_type == "ppo_lstm_cpc" else None,
+            "cpc_start_epoch": cpc_start_epoch if model_type == "ppo_lstm_cpc" else None,
+            # IQN factored action space parameters
+            "iqn_use_factored_actions": iqn_use_factored_actions if model_type == "iqn" else False,
+            "iqn_action_dims": iqn_action_dims if model_type == "iqn" else None,
+            "iqn_factored_target_variant": iqn_factored_target_variant if model_type == "iqn" else "A",
+            # IQN CPC parameters
+            "iqn_use_cpc": iqn_use_cpc if model_type == "iqn" else False,
+            "iqn_cpc_horizon": iqn_cpc_horizon if model_type == "iqn" else None,
+            "iqn_cpc_weight": iqn_cpc_weight if model_type == "iqn" else None,
+            "iqn_cpc_projection_dim": iqn_cpc_projection_dim if model_type == "iqn" else None,
+            "iqn_cpc_temperature": iqn_cpc_temperature if model_type == "iqn" else None,
+            "iqn_cpc_memory_bank_size": iqn_cpc_memory_bank_size if model_type == "iqn" else None,
+            "iqn_cpc_sample_size": iqn_cpc_sample_size if model_type == "iqn" else None,
+            "iqn_cpc_start_epoch": iqn_cpc_start_epoch if model_type == "iqn" else None,
+            "iqn_hidden_size": iqn_hidden_size if model_type == "iqn" else None,
+            # PPO factored action space parameters
+            "ppo_use_factored_actions": ppo_use_factored_actions if model_type in ["ppo", "ppo_lstm", "ppo_lstm_cpc"] else False,
+            "ppo_action_dims": ppo_action_dims if model_type in ["ppo", "ppo_lstm", "ppo_lstm_cpc"] else None,
         },
         "norm_enforcer": {
             "enabled": use_norm_enforcer,

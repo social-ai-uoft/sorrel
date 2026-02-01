@@ -91,6 +91,9 @@ class RecurrentPPOLSTM(PyTorchModel):
         # Architecture parameters
         hidden_size: int = 256,  # LSTM hidden size
         use_cnn: Optional[bool] = None,  # Override auto-detection
+        # Factored action space parameters
+        use_factored_actions: bool = False,
+        action_dims: Optional[Sequence[int]] = None,
     ) -> None:
         """
         Initialize the RecurrentPPOLSTM agent.
@@ -212,8 +215,32 @@ class RecurrentPPOLSTM(PyTorchModel):
         # LSTM for temporal memory (R2D2-style)
         self.lstm = nn.LSTM(hidden_size, hidden_size, batch_first=True)
 
-        # Actor head: outputs logits over actions
+        # Factored action space parameters
+        self.use_factored_actions = use_factored_actions
+        if use_factored_actions:
+            if action_dims is None:
+                raise ValueError("action_dims must be provided when use_factored_actions=True")
+            self.action_dims = tuple(action_dims)
+            self.n_action_dims = len(action_dims)
+            # Validate that prod(action_dims) == action_space
+            if np.prod(action_dims) != action_space:
+                raise ValueError(
+                    f"prod(action_dims)={np.prod(action_dims)} must equal action_space={action_space}"
+                )
+        else:
+            self.action_dims = None
+            self.n_action_dims = 0
+
+        # Actor head: outputs logits over actions (always created for backward compatibility)
         self.actor = nn.Linear(hidden_size, action_space)
+        
+        # Factored actor heads (only created when use_factored_actions=True)
+        if use_factored_actions:
+            self.actor_heads = nn.ModuleList([
+                nn.Linear(hidden_size, n_d) for n_d in action_dims
+            ])
+        else:
+            self.actor_heads = None
 
         # Critic head: outputs scalar value
         self.critic = nn.Linear(hidden_size, 1)
@@ -391,15 +418,43 @@ class RecurrentPPOLSTM(PyTorchModel):
             self._pending_value = float(val.item())
 
         # Sample action from policy
-        dist = Categorical(logits=self.actor(features))
-        action = dist.sample()
-        log_prob = dist.log_prob(action).item()
+        if self.use_factored_actions:
+            # Factored action sampling
+            actions_list = []
+            log_probs_list = []
+            for d, head in enumerate(self.actor_heads):
+                logits_d = head(features)
+                dist_d = Categorical(logits=logits_d)
+                action_d = dist_d.sample()
+                log_prob_d = dist_d.log_prob(action_d)
+                actions_list.append(action_d)
+                log_probs_list.append(log_prob_d)
+            
+            # Joint log-probability
+            joint_log_prob = sum(log_probs_list).item()
+            
+            # Convert to single action index for backward compatibility
+            single_action = actions_list[0].item()
+            for d in range(1, len(actions_list)):
+                multiplier = int(np.prod(self.action_dims[d:]))
+                single_action = single_action * multiplier + actions_list[d].item()
+            
+            # Store pending action and prob for later
+            self._pending_action = int(single_action)
+            self._pending_log_prob = joint_log_prob
+            
+            return int(single_action)
+        else:
+            # Original single-action-space behavior
+            dist = Categorical(logits=self.actor(features))
+            action = dist.sample()
+            log_prob = dist.log_prob(action).item()
 
-        # Store pending action and prob for later
-        self._pending_action = int(action.item())
-        self._pending_log_prob = log_prob
+            # Store pending action and prob for later
+            self._pending_action = int(action.item())
+            self._pending_log_prob = log_prob
 
-        return int(action.item())
+            return int(action.item())
 
     def add_memory_ppo(self, reward: float, done: bool) -> None:
         """
@@ -543,19 +598,51 @@ class RecurrentPPOLSTM(PyTorchModel):
         features, new_hidden = self._forward_base(state, hidden_state)
 
         # Sample action
-        dist = Categorical(logits=self.actor(features))
-        action = dist.sample()
-        log_prob = dist.log_prob(action)
+        if self.use_factored_actions:
+            # Factored action sampling
+            actions_list = []
+            log_probs_list = []
+            for d, head in enumerate(self.actor_heads):
+                logits_d = head(features)
+                dist_d = Categorical(logits=logits_d)
+                action_d = dist_d.sample()
+                log_prob_d = dist_d.log_prob(action_d)
+                actions_list.append(action_d)
+                log_probs_list.append(log_prob_d)
+            
+            # Joint log-probability
+            joint_log_prob = sum(log_probs_list)
+            
+            # Convert to single action index
+            single_action = actions_list[0]
+            for d in range(1, len(actions_list)):
+                multiplier = int(np.prod(self.action_dims[d:]))
+                single_action = single_action * multiplier + actions_list[d]
+            
+            # Critic
+            val = self.critic(features)
+            
+            return (
+                int(single_action.item()),
+                float(joint_log_prob.item()),
+                float(val.item()),
+                new_hidden,
+            )
+        else:
+            # Original single-action-space behavior
+            dist = Categorical(logits=self.actor(features))
+            action = dist.sample()
+            log_prob = dist.log_prob(action)
 
-        # Critic
-        val = self.critic(features)
+            # Critic
+            val = self.critic(features)
 
-        return (
-            int(action.item()),
-            float(log_prob.item()),
-            float(val.item()),
-            new_hidden,
-        )
+            return (
+                int(action.item()),
+                float(log_prob.item()),
+                float(val.item()),
+                new_hidden,
+            )
 
     # ------------------------ #
     # endregion                #
@@ -765,8 +852,30 @@ class RecurrentPPOLSTM(PyTorchModel):
                 features, _ = self._forward_base(mb_states, (mb_h, mb_c))
 
                 # Actor loss (PPO clipped surrogate)
-                dist = Categorical(logits=self.actor(features))
-                new_log_probs = dist.log_prob(mb_actions)
+                if self.use_factored_actions:
+                    # Factored action evaluation
+                    action_components = self._extract_action_components(mb_actions)
+                    
+                    # Compute log-probs and entropies for each branch
+                    log_probs_list = []
+                    entropies_list = []
+                    for d, head in enumerate(self.actor_heads):
+                        logits_d = head(features)
+                        dist_d = Categorical(logits=logits_d)
+                        log_prob_d = dist_d.log_prob(action_components[d])
+                        entropy_d = dist_d.entropy()
+                        log_probs_list.append(log_prob_d)
+                        entropies_list.append(entropy_d)
+                    
+                    # Joint log-probability and entropy
+                    new_log_probs = sum(log_probs_list)
+                    entropy = sum(entropies_list).mean()
+                else:
+                    # Original single-action-space behavior
+                    dist = Categorical(logits=self.actor(features))
+                    new_log_probs = dist.log_prob(mb_actions)
+                    entropy = dist.entropy().mean()
+                
                 ratio = torch.exp(new_log_probs - mb_old_probs)
                 surr1 = ratio * mb_advantages
                 surr2 = torch.clamp(
@@ -775,9 +884,6 @@ class RecurrentPPOLSTM(PyTorchModel):
                     1.0 + self.clip_param,
                 ) * mb_advantages
                 loss_actor = -torch.min(surr1, surr2).mean()
-
-                # Entropy
-                entropy = dist.entropy().mean()
 
                 # Critic loss
                 new_vals = self.critic(features).squeeze(-1)
@@ -814,6 +920,28 @@ class RecurrentPPOLSTM(PyTorchModel):
         # Return average loss
         avg_loss = np.mean(total_losses) if total_losses else 0.0
         return float(avg_loss)
+    
+    def _extract_action_components(self, actions: torch.Tensor) -> list[torch.Tensor]:
+        """Extract action components from single action index.
+        
+        Decoding: Given action index a and action_dims = [n_0, n_1, n_2, ...]
+        a_0 = a // (n_1 * n_2 * ...)
+        a_1 = (a // (n_2 * n_3 * ...)) % n_1
+        a_2 = (a // (n_3 * n_4 * ...)) % n_2
+        ...
+        a_D-1 = a % n_D-1
+        """
+        components = []
+        remaining = actions
+        for d in range(len(self.action_dims)):
+            if d < len(self.action_dims) - 1:
+                divisor = int(np.prod(self.action_dims[d+1:]))
+                component = remaining // divisor
+                remaining = remaining % divisor
+            else:
+                component = remaining  # Last component
+            components.append(component)
+        return components
 
 
 # ------------------------ #

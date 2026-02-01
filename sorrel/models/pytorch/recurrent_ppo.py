@@ -80,12 +80,11 @@ class DualHeadRecurrentPPO(PyTorchModel):
         epsilon_min: float,
         device: str | torch.device,
         seed: int | None = None,
-        # Mode selection
-        use_dual_head: bool = True,
+        # Factored action space parameters (combinatorial action design)
+        use_factored_actions: bool = True,
+        action_dims: Optional[Sequence[int]] = None,
         # PPO-specific parameters
         obs_dim: Optional[Sequence[int]] = None,
-        n_move_actions: int = 4,
-        n_vote_actions: int = 3,
         gamma: float = 0.99,
         lr: float = 3e-4,
         clip_param: float = 0.2,
@@ -110,10 +109,10 @@ class DualHeadRecurrentPPO(PyTorchModel):
             epsilon_min: Minimum epsilon for PyTorchModel compatibility.
             device: Device on which to run the model.
             seed: Random seed.
-            use_dual_head: If True, use dual-head mode (separate move/vote heads). If False, use single-head mode.
+            use_factored_actions: Whether to use factored (combinatorial) action space. Default True.
+            action_dims: List of action dimensions for each branch. Required if use_factored_actions=True.
+                        For example, [5, 3] means 5 move actions (including noop) × 3 vote actions = 15 total actions.
             obs_dim: Observation shape (C, H, W). If None, derived from input_size.
-            n_move_actions: Number of discrete move actions.
-            n_vote_actions: Number of discrete vote actions.
             gamma: Discount factor.
             lr: Learning rate for Adam optimizer.
             clip_param: PPO clipping parameter (epsilon).
@@ -124,7 +123,6 @@ class DualHeadRecurrentPPO(PyTorchModel):
             entropy_decay_steps: Number of training steps for entropy annealing.
             max_grad_norm: Max gradient norm for clipping.
             gae_lambda: GAE lambda parameter.
-            use_composite_actions: Whether using composite actions (affects action mapping).
             rollout_length: Minimum rollout length before training.
         """
         # Initialize PyTorchModel base class
@@ -138,9 +136,20 @@ class DualHeadRecurrentPPO(PyTorchModel):
             seed=seed,
         )
 
-        # Store mode and action configuration
-        self.use_dual_head = use_dual_head
-        self.use_composite_actions = use_composite_actions
+        # Factored action space parameters (combinatorial action design)
+        self.use_factored_actions = use_factored_actions
+        if use_factored_actions:
+            if action_dims is None:
+                raise ValueError("action_dims must be provided when use_factored_actions=True")
+            self.action_dims = tuple(action_dims)
+            self.n_action_dims = len(action_dims)
+            # Validate that prod(action_dims) == action_space
+            if np.prod(action_dims) != action_space:
+                raise ValueError(
+                    f"prod(action_dims)={np.prod(action_dims)} must equal action_space={action_space}"
+                )
+        else:
+            raise ValueError("use_factored_actions=False is not supported. This model uses combinatorial action design.")
         
         # Derive obs_dim from input_size if not provided
         if obs_dim is None:
@@ -165,8 +174,10 @@ class DualHeadRecurrentPPO(PyTorchModel):
         
         # Hyperparameters
         self.obs_dim = tuple(obs_dim)
-        self.n_move_actions = n_move_actions
-        self.n_vote_actions = n_vote_actions
+        # Derive action dimensions from action_dims
+        if use_factored_actions:
+            self.n_move_actions = action_dims[0]
+            self.n_vote_actions = action_dims[1] if len(action_dims) > 1 else 1
         self.gamma = gamma
         self.clip_param = clip_param
         self.K_epochs = K_epochs
@@ -197,17 +208,14 @@ class DualHeadRecurrentPPO(PyTorchModel):
         self.fc_shared = nn.Linear(64 * h * w, 256)
         self.gru = nn.GRU(256, 256, batch_first=True)
 
-        # Actor heads - depends on mode
-        if use_dual_head:
-            # Dual-head mode: separate move and vote heads
-            self.actor_move = nn.Linear(256, n_move_actions)
-            self.actor_vote = nn.Linear(256, n_vote_actions)
-            self.actor_combined = None
-        else:
-            # Single-head mode: combined action head
-            self.actor_move = None
-            self.actor_vote = None
-            self.actor_combined = nn.Linear(256, action_space)
+        # Actor heads - factored action design (combinatorial actions)
+        # Create separate heads for each action dimension
+        self.actor_heads = nn.ModuleList([
+            nn.Linear(256, n_d) for n_d in action_dims
+        ])
+        # For backward compatibility, also create actor_move and actor_vote
+        self.actor_move = self.actor_heads[0]
+        self.actor_vote = self.actor_heads[1] if len(action_dims) > 1 else None
 
         # Critic head
         self.critic = nn.Linear(256, 1)
@@ -232,15 +240,14 @@ class DualHeadRecurrentPPO(PyTorchModel):
         )
         
         # PPO's actual memory for rollouts (separate from compatibility buffer)
+        # Factored action design: store actions and probs per dimension
         self.rollout_memory: Dict[str, List[Any]] = {
             "states": [],
             "h_states": [],
             "actions_move": [],
             "actions_vote": [],
-            "actions_combined": [],  # For single-head mode
             "probs_move": [],
             "probs_vote": [],
-            "probs_combined": [],  # For single-head mode
             "vals": [],
             "rewards": [],
             "dones": [],
@@ -314,44 +321,27 @@ class DualHeadRecurrentPPO(PyTorchModel):
         image_tensor = torch.from_numpy(image).float().unsqueeze(0).to(self.device)
         return image_tensor
 
-    def _dual_action_to_single(self, move_action: int, vote_action: int) -> int:
-        """Convert dual actions to single action index (composite mode)."""
-        if move_action == -1:  # No movement
-            return 12  # noop
-        # Mapping: move_action (0-3) * 3 + vote_action (0-2) = 0-11
-        return move_action * 3 + vote_action
-
-    def _single_action_to_dual(self, action: int) -> Tuple[int, int]:
-        """Convert single action index to dual actions (composite mode)."""
-        if action == 12:  # noop
-            return (-1, 0)  # No movement, no vote
-        move_action = action // 3
-        vote_action = action % 3
-        return (move_action, vote_action)
-
-    def _dual_action_to_single_simple(self, move_action: int, vote_action: int) -> int:
-        """Convert dual actions to single action index (simple mode)."""
-        # Mapping: move actions 0-3, vote actions 4-5, noop 6
-        # Priority: vote actions override movement actions
-        if vote_action == 1:  # Vote increase
-            return 4
-        elif vote_action == 2:  # Vote decrease
-            return 5
-        elif move_action == -1:  # No movement and no vote
-            return 6  # noop
-        else:  # vote_action == 0, movement only
-            return move_action  # 0-3
-
-    def _single_action_to_dual_simple(self, action: int) -> Tuple[int, int]:
-        """Convert single action index to dual actions (simple mode)."""
-        if action == 6:  # noop
-            return (-1, 0)  # No movement, no vote
-        elif action < 4:  # Movement only
-            return (action, 0)  # move_action, no vote
-        elif action == 4:  # Vote increase
-            return (-1, 1)  # No movement, vote increase
-        else:  # action == 5, Vote decrease
-            return (-1, 2)  # No movement, vote decrease
+    def _extract_action_components(self, actions: torch.Tensor) -> list[torch.Tensor]:
+        """Extract action components from single action index.
+        
+        Decoding: Given action index a and action_dims = [n_0, n_1, n_2, ...]
+        a_0 = a // (n_1 * n_2 * ...)
+        a_1 = (a // (n_2 * n_3 * ...)) % n_1
+        a_2 = (a // (n_3 * n_4 * ...)) % n_2
+        ...
+        a_D-1 = a % n_D-1
+        """
+        components = []
+        remaining = actions
+        for d in range(len(self.action_dims)):
+            if d < len(self.action_dims) - 1:
+                divisor = int(np.prod(self.action_dims[d+1:]))
+                component = remaining // divisor
+                remaining = remaining % divisor
+            else:
+                component = remaining  # Last component
+            components.append(component)
+        return components
 
     def _get_hidden_state(self) -> torch.Tensor:
         """Get or initialize hidden state."""
@@ -411,36 +401,33 @@ class DualHeadRecurrentPPO(PyTorchModel):
             val = self.critic(features)
             self._pending_value = float(val.item())
         
-        if self.use_dual_head:
-            # Dual-head mode: sample from both heads and combine
-            dist_move = Categorical(logits=self.actor_move(features))
-            dist_vote = Categorical(logits=self.actor_vote(features))
-            action_move = dist_move.sample()
-            action_vote = dist_vote.sample()
-            log_prob_move = dist_move.log_prob(action_move).item()
-            log_prob_vote = dist_vote.log_prob(action_vote).item()
-            # Store pending action and probs for later
-            self._pending_action = (int(action_move.item()), int(action_vote.item()))
-            self._pending_probs = (log_prob_move, log_prob_vote)
-            # Convert to single action index
-            if self.use_composite_actions:
-                return self._dual_action_to_single(action_move.item(), action_vote.item())
-            else:
-                return self._dual_action_to_single_simple(action_move.item(), action_vote.item())
-        else:
-            # Single-head mode: sample from combined head
-            dist_combined = Categorical(logits=self.actor_combined(features))
-            action = dist_combined.sample()
-            log_prob_combined = dist_combined.log_prob(action).item()
-            # Store pending action and probs for later
-            # Convert single action to dual for storage
-            if self.use_composite_actions:
-                action_move, action_vote = self._single_action_to_dual(action.item())
-            else:
-                action_move, action_vote = self._single_action_to_dual_simple(action.item())
-            self._pending_action = (action_move, action_vote)
-            self._pending_probs = (log_prob_combined, 0.0)  # Dummy vote prob
-            return action.item()
+        # Factored action design: sample from each head and combine
+        actions_list = []
+        log_probs_list = []
+        for d, head in enumerate(self.actor_heads):
+            logits_d = head(features)
+            dist_d = Categorical(logits=logits_d)
+            action_d = dist_d.sample()
+            log_prob_d = dist_d.log_prob(action_d)
+            actions_list.append(action_d)
+            log_probs_list.append(log_prob_d)
+        
+        # Joint log-probability
+        joint_log_prob = sum(log_probs_list).item()
+        
+        # Store pending action and probs for later
+        # For backward compatibility, store as (move, vote) tuple
+        self._pending_action = (int(actions_list[0].item()), int(actions_list[1].item()) if len(actions_list) > 1 else 0)
+        self._pending_probs = (log_probs_list[0].item(), log_probs_list[1].item() if len(log_probs_list) > 1 else 0.0)
+        
+        # Convert to single action index using standard factored action encoding
+        # Encoding: action = a_0 * n_1 * n_2 * ... + a_1 * n_2 * ... + a_2 * n_3 * ... + ...
+        single_action = actions_list[0].item()
+        for d in range(1, len(actions_list)):
+            multiplier = int(np.prod(self.action_dims[d:]))
+            single_action = single_action * multiplier + actions_list[d].item()
+        
+        return int(single_action)
     
     def get_dual_action(self) -> Optional[Tuple[int, int]]:
         """
@@ -582,25 +569,22 @@ class DualHeadRecurrentPPO(PyTorchModel):
 
         features, new_hidden = self._forward_base(state, hidden_state)
 
-        if self.use_dual_head:
-            # Dual-head mode
-            dist_move = Categorical(logits=self.actor_move(features))
-            action_move = dist_move.sample()
-            dist_vote = Categorical(logits=self.actor_vote(features))
-            action_vote = dist_vote.sample()
-            log_prob_move = dist_move.log_prob(action_move)
-            log_prob_vote = dist_vote.log_prob(action_vote)
-        else:
-            # Single-head mode - not used in get_action, but kept for compatibility
-            dist_combined = Categorical(logits=self.actor_combined(features))
-            action_combined = dist_combined.sample()
-            # Convert to dual actions for compatibility
-            if self.use_composite_actions:
-                action_move, action_vote = self._single_action_to_dual(action_combined.item())
-            else:
-                action_move, action_vote = self._single_action_to_dual_simple(action_combined.item())
-            log_prob_move = dist_combined.log_prob(action_combined)
-            log_prob_vote = torch.tensor(0.0, device=self.device)  # Dummy for single-head
+        # Factored action design: sample from each head
+        actions_list = []
+        log_probs_list = []
+        for d, head in enumerate(self.actor_heads):
+            logits_d = head(features)
+            dist_d = Categorical(logits=logits_d)
+            action_d = dist_d.sample()
+            log_prob_d = dist_d.log_prob(action_d)
+            actions_list.append(action_d)
+            log_probs_list.append(log_prob_d)
+        
+        # For backward compatibility, return as (move, vote) tuple
+        action_move = actions_list[0]
+        action_vote = actions_list[1] if len(actions_list) > 1 else torch.tensor(0, device=self.device)
+        log_prob_move = log_probs_list[0]
+        log_prob_vote = log_probs_list[1] if len(log_probs_list) > 1 else torch.tensor(0.0, device=self.device)
 
         # Critic
         val = self.critic(features)
@@ -650,19 +634,11 @@ class DualHeadRecurrentPPO(PyTorchModel):
 
         self.rollout_memory["states"].append(state_tensor)
         self.rollout_memory["h_states"].append(hidden.detach().cpu())
-        if self.use_dual_head:
-            self.rollout_memory["actions_move"].append(int(action[0]))
-            self.rollout_memory["actions_vote"].append(int(action[1]))
-            self.rollout_memory["probs_move"].append(float(probs[0]))
-            self.rollout_memory["probs_vote"].append(float(probs[1]))
-        else:
-            # Single-head mode: convert dual action to single
-            if self.use_composite_actions:
-                action_single = self._dual_action_to_single(int(action[0]), int(action[1]))
-            else:
-                action_single = self._dual_action_to_single_simple(int(action[0]), int(action[1]))
-            self.rollout_memory["actions_combined"].append(action_single)
-            self.rollout_memory["probs_combined"].append(float(probs[0]))  # Use move prob
+        # Factored action design: store actions and probs per dimension
+        self.rollout_memory["actions_move"].append(int(action[0]))
+        self.rollout_memory["actions_vote"].append(int(action[1]))
+        self.rollout_memory["probs_move"].append(float(probs[0]))
+        self.rollout_memory["probs_vote"].append(float(probs[1]))
         self.rollout_memory["vals"].append(float(val))
         self.rollout_memory["rewards"].append(float(reward))
         self.rollout_memory["dones"].append(float(done))
@@ -695,17 +671,14 @@ class DualHeadRecurrentPPO(PyTorchModel):
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        Optional[torch.Tensor],
-        Optional[torch.Tensor],
+        torch.Tensor,
     ]:
         """
         Convert memory buffers into batched tensors on the correct device.
 
         Returns:
-            states, h_states, actions_move (or None), actions_vote (or None),
-            old_log_probs_move (or None), old_log_probs_vote (or None),
-            actions_combined (or None), old_log_probs_combined (or None),
-            values, dones
+            states, h_states, actions_move, actions_vote,
+            old_log_probs_move, old_log_probs_vote, vals, rewards, dones
         """
         states = torch.stack(
             [s.to(self.device) for s in self.rollout_memory["states"]], dim=0
@@ -714,32 +687,19 @@ class DualHeadRecurrentPPO(PyTorchModel):
         # h_states stored as (1, 1, 256); cat along time dimension -> (1, N, 256)
         h_states = torch.cat(self.rollout_memory["h_states"], dim=1).to(self.device)
 
-        if self.use_dual_head:
-            actions_move = torch.tensor(
-                self.rollout_memory["actions_move"], dtype=torch.long, device=self.device
-            )
-            actions_vote = torch.tensor(
-                self.rollout_memory["actions_vote"], dtype=torch.long, device=self.device
-            )
-            old_log_probs_move = torch.tensor(
-                self.rollout_memory["probs_move"], dtype=torch.float32, device=self.device
-            )
-            old_log_probs_vote = torch.tensor(
-                self.rollout_memory["probs_vote"], dtype=torch.float32, device=self.device
-            )
-            actions_combined = None
-            old_log_probs_combined = None
-        else:
-            actions_combined = torch.tensor(
-                self.rollout_memory["actions_combined"], dtype=torch.long, device=self.device
-            )
-            old_log_probs_combined = torch.tensor(
-                self.rollout_memory["probs_combined"], dtype=torch.float32, device=self.device
-            )
-            actions_move = None
-            actions_vote = None
-            old_log_probs_move = None
-            old_log_probs_vote = None
+        # Factored action design: always use factored actions
+        actions_move = torch.tensor(
+            self.rollout_memory["actions_move"], dtype=torch.long, device=self.device
+        )
+        actions_vote = torch.tensor(
+            self.rollout_memory["actions_vote"], dtype=torch.long, device=self.device
+        )
+        old_log_probs_move = torch.tensor(
+            self.rollout_memory["probs_move"], dtype=torch.float32, device=self.device
+        )
+        old_log_probs_vote = torch.tensor(
+            self.rollout_memory["probs_vote"], dtype=torch.float32, device=self.device
+        )
 
         vals = torch.tensor(
             self.rollout_memory["vals"], dtype=torch.float32, device=self.device
@@ -758,8 +718,6 @@ class DualHeadRecurrentPPO(PyTorchModel):
             actions_vote,
             old_log_probs_move,
             old_log_probs_vote,
-            actions_combined,
-            old_log_probs_combined,
             vals,
             rewards,
             dones,
@@ -830,8 +788,6 @@ class DualHeadRecurrentPPO(PyTorchModel):
             actions_vote,
             old_log_probs_move,
             old_log_probs_vote,
-            actions_combined,
-            old_log_probs_combined,
             vals,
             rewards,
             dones,
@@ -868,61 +824,34 @@ class DualHeadRecurrentPPO(PyTorchModel):
                 # Forward through backbone
                 features, _ = self._forward_base(mb_states, mb_h_states)
 
-                if self.use_dual_head:
-                    # Dual-head mode
-                    mb_actions_move = actions_move[idx]
-                    mb_actions_vote = actions_vote[idx]
-                    mb_old_probs_move = old_log_probs_move[idx]
-                    mb_old_probs_vote = old_log_probs_vote[idx]
-                    
-                    # Move head
-                    dist_move = Categorical(logits=self.actor_move(features))
-                    new_log_probs_move = dist_move.log_prob(mb_actions_move)
-                    ratio_move = torch.exp(new_log_probs_move - mb_old_probs_move)
-                    surr1_move = ratio_move * mb_advantages
-                    surr2_move = torch.clamp(
-                        ratio_move,
-                        1.0 - self.clip_param,
-                        1.0 + self.clip_param,
-                    ) * mb_advantages
-                    loss_move = -torch.min(surr1_move, surr2_move).mean()
+                # Factored action design: compute log-probs and entropies for each branch
+                mb_actions_move = actions_move[idx]
+                mb_actions_vote = actions_vote[idx]
+                mb_old_probs_move = old_log_probs_move[idx]
+                mb_old_probs_vote = old_log_probs_vote[idx]
+                
+                # Move head
+                dist_move = Categorical(logits=self.actor_heads[0](features))
+                new_log_probs_move = dist_move.log_prob(mb_actions_move)
+                
+                # Vote head
+                dist_vote = Categorical(logits=self.actor_heads[1](features))
+                new_log_probs_vote = dist_vote.log_prob(mb_actions_vote)
+                
+                # Joint log-probability for PPO ratio computation
+                joint_new_log_probs = new_log_probs_move + new_log_probs_vote
+                joint_old_log_probs = mb_old_probs_move + mb_old_probs_vote
+                joint_ratio = torch.exp(joint_new_log_probs - joint_old_log_probs)
+                joint_surr1 = joint_ratio * mb_advantages
+                joint_surr2 = torch.clamp(
+                    joint_ratio,
+                    1.0 - self.clip_param,
+                    1.0 + self.clip_param,
+                ) * mb_advantages
+                loss_actor = -torch.min(joint_surr1, joint_surr2).mean()
 
-                    # Vote head
-                    dist_vote = Categorical(logits=self.actor_vote(features))
-                    new_log_probs_vote = dist_vote.log_prob(mb_actions_vote)
-                    ratio_vote = torch.exp(new_log_probs_vote - mb_old_probs_vote)
-                    surr1_vote = ratio_vote * mb_advantages
-                    surr2_vote = torch.clamp(
-                        ratio_vote,
-                        1.0 - self.clip_param,
-                        1.0 + self.clip_param,
-                    ) * mb_advantages
-                    loss_vote = -torch.min(surr1_vote, surr2_vote).mean()
-
-                    # Entropy
-                    entropy = dist_move.entropy().mean() + dist_vote.entropy().mean()
-                    
-                    # Total loss
-                    loss_actor = loss_move + loss_vote
-                else:
-                    # Single-head mode
-                    mb_actions_combined = actions_combined[idx]
-                    mb_old_probs_combined = old_log_probs_combined[idx]
-                    
-                    # Combined head
-                    dist_combined = Categorical(logits=self.actor_combined(features))
-                    new_log_probs_combined = dist_combined.log_prob(mb_actions_combined)
-                    ratio_combined = torch.exp(new_log_probs_combined - mb_old_probs_combined)
-                    surr1_combined = ratio_combined * mb_advantages
-                    surr2_combined = torch.clamp(
-                        ratio_combined,
-                        1.0 - self.clip_param,
-                        1.0 + self.clip_param,
-                    ) * mb_advantages
-                    loss_actor = -torch.min(surr1_combined, surr2_combined).mean()
-                    
-                    # Entropy
-                    entropy = dist_combined.entropy().mean()
+                # Entropy: sum of entropies from all branches
+                entropy = dist_move.entropy().mean() + dist_vote.entropy().mean()
 
                 # Critic loss
                 new_vals = self.critic(features).squeeze(-1)
