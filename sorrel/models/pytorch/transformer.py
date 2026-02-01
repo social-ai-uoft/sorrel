@@ -758,7 +758,37 @@ class ViTOneHot(VisionTransformer):
         state_predictions = state_predictions.permute(0, 2, 1, 5, 3, 4)
 
         return loss(state_predictions, state_targets)
+    
+    # Overload state_loss for mask
 
+    def state_loss(self, state_predictions: torch.Tensor, state_targets: torch.Tensor, mask):
+    
+        # Moving class dimension to back
+        state_predictions = state_predictions.permute(0, 1, 5, 3, 4, 2)  
+
+        # Flattening to 1D
+        predictions_flat = state_predictions.reshape(-1, 2)
+        targets_flat = state_targets.reshape(-1)
+
+        # Adding dimensions for mask (from (H,W) -> (1,1,1,H,W))
+        mask_expanded = mask.unsqueeze(0).unsqueeze(0).unsqueeze(0)
+
+        # (B,T,C,H,W)
+        B, T, C, H, W = state_targets.shape
+        mask_expanded = mask_expanded.expand(B, T, C, H, W) 
+
+        # Flattening mask to match
+        mask_flat = mask_expanded.reshape(-1)
+
+        loss = nn.CrossEntropyLoss()
+
+        # Extracting only the visibles (1 = visible, 0 = masked)
+        predictions_masked = predictions_flat[mask_flat == 1]
+        targets_masked = targets_flat[mask_flat == 1]
+
+        return loss(predictions_masked, targets_masked)
+
+    
     def plot_trajectory(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Using the current forward model, create a T x C x H x W video of one game and
         its reconstruction.
