@@ -11,7 +11,7 @@ from numpy import ndenumerate
 from sorrel.action.action_spec import ActionSpec
 from sorrel.agents import Agent
 from sorrel.environment import Environment
-from sorrel.models.pytorch import PyTorchIQN
+from sorrel.models.pytorch import PyTorchIQN, PyTorchIQNCPC
 from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
 from sorrel.models.pytorch.recurrent_ppo_lstm_generic import RecurrentPPOLSTM
 from sorrel.models.pytorch.recurrent_ppo_lstm_cpc import RecurrentPPOLSTMCPC
@@ -929,6 +929,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             num_other_agents = total_num_agents - 1
             base_flattened_size += num_other_agents
         
+        # Add history observation features if enabled (4 features: punishments, returns, vote_increases, vote_decreases)
+        if env.config.experiment.get("enable_history_observation", False):
+            base_flattened_size += 4
+        
         # Adjust for composite views
         if use_composite_views:
             flattened_size = base_flattened_size * env.config.experiment.get("total_num_agents", len(self.individual_envs))
@@ -1004,25 +1008,65 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 hidden_size=256,
             )
         else:
-            new_model = PyTorchIQN(
-                input_size=(flattened_size,),
-                action_space=action_spec.n_actions,
-                layer_size=env.config.model.layer_size,
-                epsilon=env.config.model.epsilon,
-                epsilon_min=env.config.model.epsilon_min,
-                device=env.config.model.device,
-                seed=torch.random.seed(),  # Fresh random seed
-                n_frames=env.config.model.n_frames,
-                n_step=env.config.model.n_step,
-                sync_freq=env.config.model.sync_freq,
-                model_update_freq=env.config.model.model_update_freq,
-                batch_size=env.config.model.batch_size,
-                memory_size=env.config.model.memory_size,
-                LR=env.config.model.LR,
-                TAU=env.config.model.TAU,
-                GAMMA=env.config.model.GAMMA,
-                n_quantiles=env.config.model.n_quantiles,
-            )
+            # Check if CPC is enabled for IQN replacement models
+            iqn_use_cpc = env.config.model.get("iqn_use_cpc", False)
+            
+            if iqn_use_cpc:
+                # Use IQN with CPC wrapper for replacement
+                new_model = PyTorchIQNCPC(
+                    input_size=(flattened_size,),
+                    action_space=action_spec.n_actions,
+                    layer_size=env.config.model.layer_size,
+                    epsilon=env.config.model.epsilon,
+                    epsilon_min=env.config.model.epsilon_min,
+                    device=env.config.model.device,
+                    seed=torch.random.seed(),  # Fresh random seed
+                    n_frames=env.config.model.n_frames,
+                    n_step=env.config.model.n_step,
+                    sync_freq=env.config.model.sync_freq,
+                    model_update_freq=env.config.model.model_update_freq,
+                    batch_size=env.config.model.batch_size,
+                    memory_size=env.config.model.memory_size,
+                    LR=env.config.model.LR,
+                    TAU=env.config.model.TAU,
+                    GAMMA=env.config.model.GAMMA,
+                    n_quantiles=env.config.model.n_quantiles,
+                    use_factored_actions=False,  # Replacement models use default (can be updated if needed)
+                    action_dims=None,
+                    factored_target_variant="A",
+                    # CPC-specific parameters
+                    use_cpc=True,
+                    cpc_horizon=env.config.model.get("iqn_cpc_horizon", 30),
+                    cpc_weight=env.config.model.get("iqn_cpc_weight", 1.0),
+                    cpc_projection_dim=env.config.model.get("iqn_cpc_projection_dim", None),
+                    cpc_temperature=env.config.model.get("iqn_cpc_temperature", 0.07),
+                    cpc_memory_bank_size=env.config.model.get("iqn_cpc_memory_bank_size", 1000),
+                    cpc_sample_size=env.config.model.get("iqn_cpc_sample_size", 64),
+                    cpc_start_epoch=env.config.model.get("iqn_cpc_start_epoch", 1),
+                    hidden_size=env.config.model.get("iqn_hidden_size", 256),
+                    max_sequence_length=env.config.model.get("iqn_cpc_max_sequence_length", 1000),
+                )
+            else:
+                # Use standard IQN (no CPC) for replacement
+                new_model = PyTorchIQN(
+                    input_size=(flattened_size,),
+                    action_space=action_spec.n_actions,
+                    layer_size=env.config.model.layer_size,
+                    epsilon=env.config.model.epsilon,
+                    epsilon_min=env.config.model.epsilon_min,
+                    device=env.config.model.device,
+                    seed=torch.random.seed(),  # Fresh random seed
+                    n_frames=env.config.model.n_frames,
+                    n_step=env.config.model.n_step,
+                    sync_freq=env.config.model.sync_freq,
+                    model_update_freq=env.config.model.model_update_freq,
+                    batch_size=env.config.model.batch_size,
+                    memory_size=env.config.model.memory_size,
+                    LR=env.config.model.LR,
+                    TAU=env.config.model.TAU,
+                    GAMMA=env.config.model.GAMMA,
+                    n_quantiles=env.config.model.n_quantiles,
+                )
         
         # Load pretrained model if path is specified
         if model_path is not None and model_path != "":
@@ -1448,6 +1492,8 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     else:
                         # Standard agent: call on model
                         agent.model.start_epoch_action(epoch=epoch)
+                    # Call agent epoch tracking (safe to call even if track_history=False)
+                    agent.start_epoch(epoch)
 
             # Determine whether to animate this epoch
             animate_this_epoch = animate and (
@@ -1484,6 +1530,8 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             # End epoch action for all agents
             for env in self.individual_envs:
                 for agent in env.agents:
+                    # Call agent epoch tracking first (safe to call even if track_history=False)
+                    agent.end_epoch(epoch)
                     from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
                     if isinstance(agent, SeparateModelStatePunishmentAgent):
                         # Separate models: call end_epoch_action on both models
@@ -1896,6 +1944,10 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 num_other_agents = total_num_agents - 1
                 base_flattened_size += num_other_agents
 
+            # Add history observation features if enabled (4 features: punishments, returns, vote_increases, vote_decreases)
+            if self.config.experiment.get("enable_history_observation", False):
+                base_flattened_size += 4
+
             # Adjust for composite views (multiply by number of views)
             if self.use_composite_views:
                 # Composite views use all agent perspectives
@@ -2021,34 +2073,77 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     cpc_weight=self.config.model.get("cpc_weight", 1.0),
                     cpc_projection_dim=self.config.model.get("cpc_projection_dim", None),
                     cpc_temperature=self.config.model.get("cpc_temperature", 0.07),
+                    cpc_memory_bank_size=self.config.model.get("cpc_memory_bank_size", 1000),
+                    cpc_sample_size=self.config.model.get("cpc_sample_size", 64),
+                    cpc_start_epoch=self.config.model.get("cpc_start_epoch", 1),
                 )
             else:
                 # IQN model (default)
                 # use_factored_actions and action_dims already parsed above
                 factored_target_variant = self.config.model.get("iqn_factored_target_variant", "A")
                 
-                model = PyTorchIQN(
-                    input_size=(flattened_size,),
-                    action_space=action_spec.n_actions,
-                    layer_size=self.config.model.layer_size,
-                    epsilon=self.config.model.epsilon,
-                    epsilon_min=self.config.model.epsilon_min,
-                    device=self.config.model.device,
-                    seed=torch.random.seed(),
-                    n_frames=self.config.model.n_frames,
-                    n_step=self.config.model.n_step,
-                    sync_freq=self.config.model.sync_freq,
-                    model_update_freq=self.config.model.model_update_freq,
-                    batch_size=self.config.model.batch_size,
-                    memory_size=self.config.model.memory_size,
-                    LR=self.config.model.LR,
-                    TAU=self.config.model.TAU,
-                    GAMMA=self.config.model.GAMMA,
-                    n_quantiles=self.config.model.n_quantiles,
-                    use_factored_actions=use_factored_actions,
-                    action_dims=action_dims,
-                    factored_target_variant=factored_target_variant,
-                )
+                # Check if CPC is enabled for IQN
+                iqn_use_cpc = self.config.model.get("iqn_use_cpc", False)
+                
+                if iqn_use_cpc:
+                    # Use IQN with CPC wrapper
+                    model = PyTorchIQNCPC(
+                        input_size=(flattened_size,),
+                        action_space=action_spec.n_actions,
+                        layer_size=self.config.model.layer_size,
+                        epsilon=self.config.model.epsilon,
+                        epsilon_min=self.config.model.epsilon_min,
+                        device=self.config.model.device,
+                        seed=torch.random.seed(),
+                        n_frames=self.config.model.n_frames,
+                        n_step=self.config.model.n_step,
+                        sync_freq=self.config.model.sync_freq,
+                        model_update_freq=self.config.model.model_update_freq,
+                        batch_size=self.config.model.batch_size,
+                        memory_size=self.config.model.memory_size,
+                        LR=self.config.model.LR,
+                        TAU=self.config.model.TAU,
+                        GAMMA=self.config.model.GAMMA,
+                        n_quantiles=self.config.model.n_quantiles,
+                        use_factored_actions=use_factored_actions,
+                        action_dims=action_dims,
+                        factored_target_variant=factored_target_variant,
+                        # CPC-specific parameters
+                        use_cpc=True,
+                        cpc_horizon=self.config.model.get("iqn_cpc_horizon", 30),
+                        cpc_weight=self.config.model.get("iqn_cpc_weight", 1.0),
+                        cpc_projection_dim=self.config.model.get("iqn_cpc_projection_dim", None),
+                        cpc_temperature=self.config.model.get("iqn_cpc_temperature", 0.07),
+                        cpc_memory_bank_size=self.config.model.get("iqn_cpc_memory_bank_size", 1000),
+                        cpc_sample_size=self.config.model.get("iqn_cpc_sample_size", 64),
+                        cpc_start_epoch=self.config.model.get("iqn_cpc_start_epoch", 1),
+                        hidden_size=self.config.model.get("iqn_hidden_size", 256),
+                        max_sequence_length=self.config.model.get("iqn_cpc_max_sequence_length", 1000),
+                    )
+                else:
+                    # Use standard IQN (no CPC)
+                    model = PyTorchIQN(
+                        input_size=(flattened_size,),
+                        action_space=action_spec.n_actions,
+                        layer_size=self.config.model.layer_size,
+                        epsilon=self.config.model.epsilon,
+                        epsilon_min=self.config.model.epsilon_min,
+                        device=self.config.model.device,
+                        seed=torch.random.seed(),
+                        n_frames=self.config.model.n_frames,
+                        n_step=self.config.model.n_step,
+                        sync_freq=self.config.model.sync_freq,
+                        model_update_freq=self.config.model.model_update_freq,
+                        batch_size=self.config.model.batch_size,
+                        memory_size=self.config.model.memory_size,
+                        LR=self.config.model.LR,
+                        TAU=self.config.model.TAU,
+                        GAMMA=self.config.model.GAMMA,
+                        n_quantiles=self.config.model.n_quantiles,
+                        use_factored_actions=use_factored_actions,
+                        action_dims=action_dims,
+                        factored_target_variant=factored_target_variant,
+                    )
 
             # Extract norm enforcer config
             norm_enforcer_config = None
@@ -2152,6 +2247,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                         disable_punishment_info=self.config.experiment.get("disable_punishment_info", False),
                         use_norm_enforcer=self.config.get("norm_enforcer", {}).get("enabled", False),
                         norm_enforcer_config=norm_enforcer_config,
+                        track_history=self.config.experiment.get("enable_history_observation", False),
+                        history_window_size=self.config.experiment.get("history_window_size", 10),
+                        max_turns_per_epoch=self.config.experiment.get("max_turns", 100),
                     )
                 )
             else:
@@ -2174,6 +2272,9 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                         disable_punishment_info=self.config.experiment.get("disable_punishment_info", False),
                         use_norm_enforcer=self.config.get("norm_enforcer", {}).get("enabled", False),
                         norm_enforcer_config=norm_enforcer_config,
+                        track_history=self.config.experiment.get("enable_history_observation", False),
+                        history_window_size=self.config.experiment.get("history_window_size", 10),
+                        max_turns_per_epoch=self.config.experiment.get("max_turns", 100),
                     )
                 )
 
@@ -2213,7 +2314,15 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
         ]
 
         # Place initial resources
-        initial_resources = self.config.experiment.get("initial_resources", 10)
+        initial_resources = self.config.experiment.get("initial_resources", 8)
+        max_resources = self.config.world.get("max_resources")
+        
+        # Adjust initial_resources if cap is set
+        if max_resources is not None:
+            current_count = self.world.count_resources()
+            available_slots = max_resources - current_count
+            initial_resources = min(initial_resources, available_slots, len(remaining_spawn_locations))
+        
         resource_locations_indices = np.random.choice(
             len(remaining_spawn_locations),
             size=min(initial_resources, len(remaining_spawn_locations)),

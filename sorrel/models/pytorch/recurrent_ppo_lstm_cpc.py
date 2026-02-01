@@ -70,6 +70,9 @@ class RecurrentPPOLSTMCPC(RecurrentPPOLSTM):
         # Architecture parameters
         hidden_size: int = 256,
         use_cnn: Optional[bool] = None,
+        # Factored action space parameters
+        use_factored_actions: bool = False,
+        action_dims: Optional[Sequence[int]] = None,
         # CPC-specific parameters
         use_cpc: bool = True,
         cpc_horizon: int = 30,
@@ -120,6 +123,8 @@ class RecurrentPPOLSTMCPC(RecurrentPPOLSTM):
             rollout_length=rollout_length,
             hidden_size=hidden_size,
             use_cnn=use_cnn,
+            use_factored_actions=use_factored_actions,
+            action_dims=action_dims,
         )
         
         # Initialize CPC module

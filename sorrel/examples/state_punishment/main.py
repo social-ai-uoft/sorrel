@@ -97,7 +97,7 @@ def parse_arguments():
         "--map_size", type=int, default=10, help="Size of the world map"
     )
     parser.add_argument(
-        "--num_resources", type=int, default=5, help="Number of resources (default: 5, must match predefined schedule)"
+        "--num_resources", type=int, default=8, help="Number of resources (default: 8, must match predefined schedule)"
     )
 
     # Mode flags
@@ -305,6 +305,61 @@ def parse_arguments():
         help="IQN factored target variant: 'A' (shared target) or 'B' (separate targets) (default: A)"
     )
 
+    # IQN CPC-specific hyperparameters
+    parser.add_argument(
+        "--iqn_use_cpc",
+        action="store_true",
+        help="Enable Contrastive Predictive Coding (CPC) for IQN models (only for iqn model type)"
+    )
+    parser.add_argument(
+        "--iqn_cpc_horizon",
+        type=int,
+        default=30,
+        help="IQN CPC prediction horizon: number of future steps to predict (default: 30)"
+    )
+    parser.add_argument(
+        "--iqn_cpc_weight",
+        type=float,
+        default=1.0,
+        help="IQN CPC loss weight: L_total = L_IQN + λ * L_CPC (default: 1.0)"
+    )
+    parser.add_argument(
+        "--iqn_cpc_projection_dim",
+        type=int,
+        default=None,
+        help="IQN CPC projection dimension (default: None, uses hidden_size)"
+    )
+    parser.add_argument(
+        "--iqn_cpc_temperature",
+        type=float,
+        default=0.07,
+        help="IQN CPC temperature for InfoNCE loss (default: 0.07)"
+    )
+    parser.add_argument(
+        "--iqn_cpc_memory_bank_size",
+        type=int,
+        default=1000,
+        help="IQN CPC memory bank size: number of past sequences to keep (default: 1000)"
+    )
+    parser.add_argument(
+        "--iqn_cpc_sample_size",
+        type=int,
+        default=64,
+        help="IQN CPC sample size: number of sequences to sample from memory bank (default: 64)"
+    )
+    parser.add_argument(
+        "--iqn_cpc_start_epoch",
+        type=int,
+        default=1,
+        help="Epoch to start IQN CPC training (default: 1)"
+    )
+    parser.add_argument(
+        "--iqn_hidden_size",
+        type=int,
+        default=256,
+        help="IQN hidden size for encoder and LSTM (default: 256)"
+    )
+
     # PPO factored action space parameters
     parser.add_argument(
         "--ppo_use_factored_actions",
@@ -429,6 +484,24 @@ def parse_arguments():
         default=0.07,
         help="Temperature for InfoNCE loss in CPC (default: 0.07)"
     )
+    parser.add_argument(
+        "--cpc_memory_bank_size",
+        type=int,
+        default=1000,
+        help="CPC memory bank size: number of past sequences to keep (default: 1000)"
+    )
+    parser.add_argument(
+        "--cpc_sample_size",
+        type=int,
+        default=64,
+        help="CPC sample size: number of sequences to sample from memory bank for training (default: 64)"
+    )
+    parser.add_argument(
+        "--cpc_start_epoch",
+        type=int,
+        default=1,
+        help="Epoch to start CPC training. 0 = start immediately (B=1, loss=0), 1+ = wait for memory bank (default: 1)"
+    )
 
     # Phased voting parameters
     parser.add_argument(
@@ -484,6 +557,40 @@ def parse_arguments():
         type=int,
         default=2,
         help="Number of steps to persist punishment flag (default: 2)"
+    )
+    
+    # History observation parameters
+    parser.add_argument(
+        "--enable_history_observation",
+        action="store_true",
+        help="Enable epoch history tracking and observation (default: False)"
+    )
+    parser.add_argument(
+        "--history_window_size",
+        type=int,
+        default=10,
+        help="Number of epochs to aggregate over for history observation (default: 10)"
+    )
+    
+    # World parameters
+    parser.add_argument(
+        "--respawn_prob",
+        type=float,
+        default=0.0,
+        help="Probability of resource respawning (default: 0.0)"
+    )
+    parser.add_argument(
+        "--max_resources",
+        type=int,
+        default=None,
+        help="Maximum number of resources allowed in the world at any step (None = unlimited, default: None)"
+    )
+    
+    # Animation parameters
+    parser.add_argument(
+        "--animate",
+        action="store_true",
+        help="Enable animations (default: False)"
     )
 
     return parser.parse_args()
@@ -673,6 +780,14 @@ def run_experiment(args):
     ppo_action_dims_str = args.ppo_action_dims if args.ppo_action_dims else None
     if ppo_action_dims_parsed is not None:
         ppo_action_dims_str = ",".join(map(str, ppo_action_dims_parsed))
+    
+    # Validate IQN CPC configuration
+    if args.iqn_use_cpc:
+        if args.model_type != "iqn":
+            raise ValueError(
+                f"--iqn_use_cpc is only supported with --model_type=iqn, "
+                f"but got --model_type={args.model_type}"
+            )
 
     # Create configuration
     config = create_config(
@@ -741,6 +856,9 @@ def run_experiment(args):
         cpc_weight=args.cpc_weight,
         cpc_projection_dim=args.cpc_projection_dim,
         cpc_temperature=args.cpc_temperature,
+        cpc_memory_bank_size=args.cpc_memory_bank_size,
+        cpc_sample_size=args.cpc_sample_size,
+        cpc_start_epoch=args.cpc_start_epoch,
         # Phased voting parameters
         enable_phased_voting=args.enable_phased_voting,
         phased_voting_interval=args.phased_voting_interval,
@@ -758,9 +876,23 @@ def run_experiment(args):
         iqn_use_factored_actions=args.iqn_use_factored_actions,
         iqn_action_dims=iqn_action_dims_str,
         iqn_factored_target_variant=args.iqn_factored_target_variant,
+        # IQN CPC parameters
+        iqn_use_cpc=args.iqn_use_cpc if args.model_type == "iqn" else False,
+        iqn_cpc_horizon=args.iqn_cpc_horizon,
+        iqn_cpc_weight=args.iqn_cpc_weight,
+        iqn_cpc_projection_dim=args.iqn_cpc_projection_dim,
+        iqn_cpc_temperature=args.iqn_cpc_temperature,
+        iqn_cpc_memory_bank_size=args.iqn_cpc_memory_bank_size,
+        iqn_cpc_sample_size=args.iqn_cpc_sample_size,
+        iqn_cpc_start_epoch=args.iqn_cpc_start_epoch,
+        iqn_hidden_size=args.iqn_hidden_size,
         # PPO factored action space parameters
         ppo_use_factored_actions=args.ppo_use_factored_actions,
         ppo_action_dims=ppo_action_dims_str,
+        enable_history_observation=args.enable_history_observation,
+        history_window_size=args.history_window_size,
+        respawn_prob=args.respawn_prob,
+        max_resources=args.max_resources,
     )
 
     # Print expected rewards (use config value, not CLI arg, so it reflects the actual config)
@@ -775,7 +907,7 @@ def run_experiment(args):
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_debug4" / run_folder
+    log_dir = Path(__file__).parent / "runs_debug5" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder
@@ -860,7 +992,7 @@ def run_experiment(args):
     print("-" * 50)
 
     multi_agent_env.run_experiment(
-        animate=False,  # Enable animations
+        animate=args.animate,  # Enable animations via CLI
         logging=True,
         logger=logger,
         output_dir=anim_dir,

@@ -1,5 +1,6 @@
 """World for the state punishment game."""
 
+import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from sorrel.worlds import Gridworld
@@ -92,10 +93,29 @@ class StatePunishmentWorld(Gridworld):
             return self.state_system.prob
         return sum(self.punishment_level_history) / len(self.punishment_level_history)
 
+    def count_resources(self) -> int:
+        """Count the number of resource entities (A, B, C, D, E) in the world.
+        
+        Returns:
+            int: Number of resource entities currently in the world.
+        """
+        count = 0
+        resource_kinds = {"A", "B", "C", "D", "E"}
+        for index in np.ndindex(self.map.shape):
+            entity = self.map[index]
+            if hasattr(entity, 'kind') and entity.kind in resource_kinds:
+                count += 1
+        return count
+
     def spawn_entity(self, location) -> None:
         """Spawn an entity at the given location using complex probability
         distribution."""
-        import numpy as np
+        # Check resource cap before creating entity (optimization)
+        max_resources = self.config.world.get("max_resources")
+        if max_resources is not None:
+            current_count = self.count_resources()
+            if current_count >= max_resources:
+                return  # Skip spawning if cap reached
 
         # Get entity types and their probabilities
         entity_types = list(self.entity_spawn_probs.keys())

@@ -28,7 +28,10 @@ def create_shared_state_system(
     shared_state_system = temp_world.state_system
 
     if simple_foraging:
+        # Set both current prob and init_prob to fixed_punishment_level
+        # This ensures that reset_epoch() and reset() will restore the fixed level
         shared_state_system.prob = fixed_punishment_level
+        shared_state_system.init_prob = fixed_punishment_level
         shared_state_system.simple_foraging = True
     
     # Configure phased voting if enabled

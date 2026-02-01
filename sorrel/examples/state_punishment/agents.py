@@ -46,6 +46,9 @@ class StatePunishmentAgent(Agent):
         disable_punishment_info: bool = False,
         use_norm_enforcer: bool = False,
         norm_enforcer_config: Optional[Dict] = None,
+        track_history: bool = False,
+        history_window_size: int = 10,
+        max_turns_per_epoch: int = 100,
     ):
         """Initialize the state punishment agent.
 
@@ -67,6 +70,9 @@ class StatePunishmentAgent(Agent):
             punishment_observable: Whether to show pending punishment in third observation feature
             use_norm_enforcer: Whether to enable norm enforcer for intrinsic penalties
             norm_enforcer_config: Configuration dict for norm enforcer (optional)
+            track_history: Whether to enable epoch history tracking (default: False)
+            history_window_size: Number of epochs to aggregate over for history observation (default: 10)
+            max_turns_per_epoch: Maximum turns per epoch for normalization (default: 100)
         """
         super().__init__(observation_spec, action_spec, model)
         self.agent_id = agent_id
@@ -126,6 +132,20 @@ class StatePunishmentAgent(Agent):
 
         # Turn counter for debugging
         self.turn = 0
+
+        # History tracking configuration
+        self.track_history = track_history
+        self.history_window_size = history_window_size
+        self.max_turns_per_epoch = max_turns_per_epoch
+
+        # Per-epoch history storage (for aggregation)
+        self.epoch_history: List[Dict] = []
+
+        # Current epoch tracking (reset at epoch start)
+        self.current_epoch_punishments = 0
+        self.current_epoch_return = 0.0
+        self.current_epoch_vote_increases = 0
+        self.current_epoch_vote_decreases = 0
 
     def _validate_me_vector(self, state: np.ndarray):
         """Validate that "me" vector exists in observation (for slot-based encoding).
@@ -302,6 +322,11 @@ class StatePunishmentAgent(Agent):
             [punishment_level, social_harm, is_phased_voting], dtype=visual_field.dtype
         ).reshape(1, -1)
         
+        # Add history observation if enabled
+        if self.track_history:
+            history_obs = self.get_history_observation()  # Shape: (1, 4)
+            extra_features = np.concatenate([extra_features, history_obs], axis=1)
+        
         # Add other agents' punishment status if enabled
         if punishment_tracker is not None:
             other_punishments = punishment_tracker.get_other_punishments(
@@ -343,6 +368,11 @@ class StatePunishmentAgent(Agent):
         extra_features = np.array(
             [punishment_level, social_harm, is_phased_voting], dtype=composite_state.dtype
         ).reshape(1, -1)
+        
+        # Add history observation if enabled
+        if self.track_history:
+            history_obs = self.get_history_observation()  # Shape: (1, 4)
+            extra_features = np.concatenate([extra_features, history_obs], axis=1)
         
         # Add other agents' punishment status if enabled
         if punishment_tracker is not None:
@@ -387,6 +417,9 @@ class StatePunishmentAgent(Agent):
             delayed_punishment = self.apply_delayed_punishments()
             # Apply the delayed punishment as a negative reward
             base_reward, base_info = self._execute_action(action, world, state_system, social_harm_dict, return_info)
+            # Track delayed punishment as negative reward for history tracking
+            if self.track_history:
+                self.record_reward(-delayed_punishment)  # Delayed punishment reduces return
             if return_info:
                 return base_reward - delayed_punishment, base_info
             else:
@@ -507,6 +540,9 @@ class StatePunishmentAgent(Agent):
             # Reset social harm to 0 after applying it
             social_harm_dict[self.agent_id] = 0.0
 
+        # Record final reward for history tracking (after all modifications)
+        self.record_reward(reward)
+
         if return_info:
             return reward, info
         else:
@@ -568,6 +604,8 @@ class StatePunishmentAgent(Agent):
             
             if punishment > 0:  # Only record if there was actual punishment
                 is_punished = True
+                # Record punishment for history tracking
+                self.record_punishment()
             
             if self.delayed_punishment:
                 # Defer punishment to next turn
@@ -632,6 +670,8 @@ class StatePunishmentAgent(Agent):
 
         # Record vote (no cost for voting)
         self.vote_history.append(1 if voting_action == 1 else -1)
+        # Record vote for history tracking
+        self.record_vote(voting_action)
         return 0.0  # No cost for voting
 
     def apply_delayed_punishments(self) -> float:
@@ -655,6 +695,15 @@ class StatePunishmentAgent(Agent):
     def reset_epoch_tracking(self) -> None:
         """Reset epoch-specific tracking counters."""
         self.social_harm_received_epoch = 0.0
+        
+        # Reset history tracking if enabled
+        if self.track_history:
+            # Don't clear epoch_history here - it persists across epochs
+            # Only reset current epoch counters
+            self.current_epoch_punishments = 0
+            self.current_epoch_return = 0.0
+            self.current_epoch_vote_increases = 0
+            self.current_epoch_vote_decreases = 0
 
     @override
     def reset(self) -> None:
@@ -697,6 +746,140 @@ class StatePunishmentAgent(Agent):
     def is_done(self, world) -> bool:
         """Returns whether this Agent is done."""
         return world.is_done
+
+    def start_epoch_tracking(self, epoch: int) -> None:
+        """Initialize tracking for a new epoch. Called at epoch start."""
+        if not self.track_history:
+            return
+        
+        # Reset current epoch counters (also done in reset_epoch_tracking(), but this ensures clean start)
+        self.current_epoch_punishments = 0
+        self.current_epoch_return = 0.0
+        self.current_epoch_vote_increases = 0
+        self.current_epoch_vote_decreases = 0
+
+    def record_punishment(self) -> None:
+        """Record that this agent was punished."""
+        if self.track_history:
+            self.current_epoch_punishments += 1
+
+    def record_reward(self, reward: float) -> None:
+        """Record reward for current epoch."""
+        if self.track_history:
+            self.current_epoch_return += reward
+
+    def record_vote(self, vote_action: int) -> None:
+        """Record vote action for current epoch.
+        
+        Args:
+            vote_action: 0 = no vote, 1 = increase, 2 = decrease
+        
+        Note: vote_history is already updated in _execute_voting(), so we just count here.
+        """
+        if not self.track_history:
+            return
+        
+        if vote_action == 1:
+            self.current_epoch_vote_increases += 1
+        elif vote_action == 2:
+            self.current_epoch_vote_decreases += 1
+        # vote_action == 0 means no vote, so we don't track it
+
+    def end_epoch_tracking(self, epoch: int) -> None:
+        """Finalize tracking for completed epoch and store in history."""
+        if not self.track_history:
+            return
+        
+        # Create epoch record
+        epoch_record = {
+            'epoch': epoch,
+            'punishments_received': self.current_epoch_punishments,
+            'total_return': self.current_epoch_return,
+            'vote_increases': self.current_epoch_vote_increases,
+            'vote_decreases': self.current_epoch_vote_decreases,
+        }
+        
+        # Add to history
+        self.epoch_history.append(epoch_record)
+        
+        # Maintain window size (keep only last X epochs)
+        if len(self.epoch_history) > self.history_window_size:
+            self.epoch_history.pop(0)  # Remove oldest epoch
+
+    def get_history_observation(self) -> np.ndarray:
+        """Get aggregated history statistics over last X epochs (where X = self.history_window_size).
+        
+        **Aggregated Sum Statistics Approach**: Instead of per-epoch history, compute sum totals
+        across the last X epochs. This is more compact (4 features vs 4×X features) and still
+        provides sufficient information about recent performance.
+        
+        Args:
+            None (uses self.history_window_size as X)
+        
+        Returns:
+            Array of shape (1, 4) containing aggregated statistics (normalized):
+            - total_punishments_received: Sum of punishments across last X epochs
+            - total_returns: Sum of returns across last X epochs
+            - total_vote_increases: Sum of vote increases across last X epochs
+            - total_vote_decreases: Sum of vote decreases across last X epochs
+            
+            All values are normalized to [0, 1] range.
+            If history is shorter than history_window_size, only available epochs are summed.
+        """
+        if not self.track_history:
+            return np.zeros((1, 4), dtype=np.float32)
+        
+        # Get last X epochs (or all available if fewer than X)
+        recent_history = self.epoch_history[-self.history_window_size:] if len(self.epoch_history) >= self.history_window_size else self.epoch_history
+        
+        # Compute aggregated sums
+        total_punishments = sum(record['punishments_received'] for record in recent_history)
+        total_returns = sum(record['total_return'] for record in recent_history)
+        total_vote_increases = sum(record['vote_increases'] for record in recent_history)
+        total_vote_decreases = sum(record['vote_decreases'] for record in recent_history)
+        
+        # Normalize values
+        # Use max_turns_per_epoch stored in agent (passed during initialization)
+        max_turns = self.max_turns_per_epoch
+        
+        # Normalize punishments: max possible = X epochs * max_turns per epoch
+        max_punishments = self.history_window_size * max_turns
+        normalized_punishments = total_punishments / max_punishments if max_punishments > 0 else 0.0
+        
+        # Normalize returns: max possible = X epochs * max_return per epoch
+        # Estimate max_return per epoch = max_turns * max_resource_value (e.g., 100 * 25 = 2500)
+        max_return_per_epoch = max_turns * 25.0  # Resource A value = 25
+        max_returns = self.history_window_size * max_return_per_epoch
+        normalized_returns = total_returns / max_returns if max_returns > 0 else 0.0
+        
+        # Normalize vote increases: max possible = X epochs * max_turns per epoch
+        max_votes = self.history_window_size * max_turns
+        normalized_vote_increases = total_vote_increases / max_votes if max_votes > 0 else 0.0
+        
+        # Normalize vote decreases: max possible = X epochs * max_turns per epoch
+        normalized_vote_decreases = total_vote_decreases / max_votes if max_votes > 0 else 0.0
+        
+        # Clip to [0, 1] range (may exceed 1.0 if actual values exceed estimates)
+        obs = np.array([
+            np.clip(normalized_punishments, 0.0, 1.0),
+            np.clip(normalized_returns, 0.0, 1.0),
+            np.clip(normalized_vote_increases, 0.0, 1.0),
+            np.clip(normalized_vote_decreases, 0.0, 1.0),
+        ], dtype=np.float32)
+        
+        return obs.reshape(1, -1)  # Shape: (1, 4)
+
+    def start_epoch(self, epoch: int) -> None:
+        """Called at the start of each epoch. Safe to call even if track_history=False."""
+        if self.track_history:
+            self.start_epoch_tracking(epoch)
+        # If track_history=False, this is a no-op (minimal overhead: single boolean check)
+
+    def end_epoch(self, epoch: int) -> None:
+        """Called at the end of each epoch. Safe to call even if track_history=False."""
+        if self.track_history:
+            self.end_epoch_tracking(epoch)
+        # If track_history=False, this is a no-op (minimal overhead: single boolean check)
 
 
 class WindowStats:
