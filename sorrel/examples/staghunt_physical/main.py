@@ -193,6 +193,10 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
                 "initial_stag_rate": None,  # Optional: starting stag rate (defaults to 1.0)
                 "initial_hare_rate": None,  # Optional: starting hare rate (defaults to 1.0)
             },
+            # Resource respawn cap configuration
+            "max_resources": 30,  # Maximum total resources (None = unlimited)
+            "max_stags": 15,  # Maximum stag resources (None = unlimited, overrides max_resources for stags)
+            "max_hares": 15,  # Maximum hare resources (None = unlimited, overrides max_resources for hares)
             # legacy parameter for backward compatibility
             # "taste_reward": 10,
             # zap hits required to destroy a resource (legacy parameter)

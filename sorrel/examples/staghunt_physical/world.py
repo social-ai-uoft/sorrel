@@ -29,6 +29,8 @@ except ImportError:  # pragma: no cover
 
 from typing import Any
 
+import numpy as np
+
 from sorrel.examples.staghunt_physical.map_generator import MapBasedWorldGenerator
 from sorrel.worlds import Gridworld
 
@@ -157,6 +159,16 @@ class StagHuntWorld(Gridworld):
         self.skip_spawn_validation: bool = bool(get_world_param("skip_spawn_validation", False))
         self.current_turn: int = 0  # Track current turn for regeneration
 
+        # Resource respawn cap parameters
+        max_resources_val = get_world_param("max_resources", None)
+        self.max_resources: int | None = int(max_resources_val) if max_resources_val is not None else None
+
+        max_stags_val = get_world_param("max_stags", None)
+        self.max_stags: int | None = int(max_stags_val) if max_stags_val is not None else None
+
+        max_hares_val = get_world_param("max_hares", None)
+        self.max_hares: int | None = int(max_hares_val) if max_hares_val is not None else None
+
         # Dynamic resource density parameters (3-step process with resource-specific rates)
         # Note: get_world_param doesn't support nested paths, so access nested config directly
         dynamic_cfg = world_cfg.get("dynamic_resource_density", {})
@@ -230,6 +242,51 @@ class StagHuntWorld(Gridworld):
         """
         self.agent_spawn_points = [(2, 2, 1), (3, 3, 1), (4, 4, 1), (5, 5, 1)]
         self.resource_spawn_points = []
+
+    def count_resources(self) -> int:
+        """Count the total number of resource entities (StagResource and HareResource) in the world.
+        
+        Returns:
+            int: Number of resource entities currently in the world.
+        """
+        count = 0
+        for y, x, layer in np.ndindex(self.map.shape):
+            if layer == self.dynamic_layer:
+                entity = self.observe((y, x, layer))
+                # Check by name attribute to avoid circular imports
+                if hasattr(entity, 'name') and entity.name in ['stag', 'hare']:
+                    count += 1
+        return count
+
+    def count_stags(self) -> int:
+        """Count the number of StagResource entities in the world.
+        
+        Returns:
+            int: Number of stag resources currently in the world.
+        """
+        count = 0
+        for y, x, layer in np.ndindex(self.map.shape):
+            if layer == self.dynamic_layer:
+                entity = self.observe((y, x, layer))
+                # Check by name attribute to avoid circular imports
+                if hasattr(entity, 'name') and entity.name == 'stag':
+                    count += 1
+        return count
+
+    def count_hares(self) -> int:
+        """Count the number of HareResource entities in the world.
+        
+        Returns:
+            int: Number of hare resources currently in the world.
+        """
+        count = 0
+        for y, x, layer in np.ndindex(self.map.shape):
+            if layer == self.dynamic_layer:
+                entity = self.observe((y, x, layer))
+                # Check by name attribute to avoid circular imports
+                if hasattr(entity, 'name') and entity.name == 'hare':
+                    count += 1
+        return count
 
     def update_resource_density_at_epoch_start(self) -> None:
         """Update resource spawn success rates at the start of each epoch.

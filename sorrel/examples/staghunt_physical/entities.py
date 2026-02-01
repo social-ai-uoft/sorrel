@@ -172,19 +172,34 @@ class Empty(Entity["StagHuntWorld"]):
                 
                 # Only spawn if Step 3 filter passes (or feature disabled)
                 if should_spawn:
-                    # Use separate reward values for stag and hare
-                    if res_cls == StagResource:
-                        reward_value = world.stag_reward
-                        health_value = world.stag_health
-                        cooldown_value = world.stag_regeneration_cooldown
-                    else:  # HareResource
-                        reward_value = world.hare_reward
-                        health_value = world.hare_health
-                        cooldown_value = world.hare_regeneration_cooldown
+                    # Step 4: Check resource respawn cap (if enabled)
+                    # Check separate caps first (more specific), then total cap
+                    if world.max_stags is not None and res_cls.name == "stag":
+                        if world.count_stags() >= world.max_stags:
+                            should_spawn = False  # Cap reached for stags
+                    elif world.max_hares is not None and res_cls.name == "hare":
+                        if world.count_hares() >= world.max_hares:
+                            should_spawn = False  # Cap reached for hares
+                    elif world.max_resources is not None:
+                        # Check total resource cap (only if separate caps not set)
+                        if world.count_resources() >= world.max_resources:
+                            should_spawn = False  # Total cap reached
                     
-                    world.add(
-                        self.location, res_cls(reward_value, health_value, regeneration_cooldown=cooldown_value)
-                    )
+                    # Only create resource if cap check passed (nested check)
+                    if should_spawn:
+                        # Use separate reward values for stag and hare
+                        if res_cls == StagResource:
+                            reward_value = world.stag_reward
+                            health_value = world.stag_health
+                            cooldown_value = world.stag_regeneration_cooldown
+                        else:  # HareResource
+                            reward_value = world.hare_reward
+                            health_value = world.hare_health
+                            cooldown_value = world.hare_regeneration_cooldown
+                        
+                        world.add(
+                            self.location, res_cls(reward_value, health_value, regeneration_cooldown=cooldown_value)
+                        )
                 # else: filtered out by Step 3, don't spawn (Empty entity remains)
 
 
