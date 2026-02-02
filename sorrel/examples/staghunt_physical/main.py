@@ -164,6 +164,9 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
             "resource_density": 0.15,
             # If True in random mode, agents spawn randomly in valid locations instead of fixed spawn points
             "random_agent_spawning": True,
+            # If True, resources can respawn at any valid Sand location (not just original spawn points)
+            # When enabled, resource type is randomly determined on respawn (not remembered)
+            "random_resource_respawn": True,  # Default: False (original behavior)
             # If True, movement actions automatically change orientation to face movement direction
             "simplified_movement": True,
             # If True, attack only hits tiles directly in front of agent (number controlled by attack_range)

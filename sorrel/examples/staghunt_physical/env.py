@@ -342,21 +342,27 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     if not world.random_agent_spawning:
                         world.add(index, Spawn())
                     else:
-                        # When random spawning, these locations get regular Sand like other cells
-                        if (y, x, world.dynamic_layer) not in world.resource_spawn_points:
-                            world.add(index, Sand(can_convert_to_resource=False, respawn_ready=True))
-                        else:
-                            world.add(index, Sand(can_convert_to_resource=True, respawn_ready=True))
-                elif (y, x, world.dynamic_layer) not in world.resource_spawn_points:
-                    # Non-resource locations get Sand that cannot convert to resources
-                    world.add(
-                        index, Sand(can_convert_to_resource=False, respawn_ready=True)
-                    )
+                        # When random spawning, agent spawn points get Sand
+                        # Don't allow resource conversion at agent spawn points (even in random mode)
+                        # to avoid conflicts, even though Empty.transition() checks for agents
+                        can_convert = False
+                        if not world.random_resource_respawn:
+                            # In original mode, check if it's also a resource spawn point
+                            can_convert = (y, x, world.dynamic_layer) in world.resource_spawn_points
+                        world.add(index, Sand(can_convert_to_resource=can_convert, respawn_ready=True, resource_type=None))
                 else:
-                    # Resource spawn points get Sand that can convert to resources
-                    # We'll set the resource type later after resources are placed
+                    # Determine if this Sand can convert to resources
+                    if world.random_resource_respawn:
+                        # Random mode: all non-agent-spawn Sand can convert
+                        can_convert = True
+                        resource_type = None  # Random type on respawn
+                    else:
+                        # Original: only resource spawn points can convert
+                        can_convert = (y, x, world.dynamic_layer) in world.resource_spawn_points
+                        resource_type = None  # Will be set later if resource spawns here
+                    
                     world.add(
-                        index, Sand(can_convert_to_resource=True, respawn_ready=True)
+                        index, Sand(can_convert_to_resource=can_convert, respawn_ready=True, resource_type=resource_type)
                     )
             elif layer == world.dynamic_layer:
                 # dynamic layer: optionally place initial resources
@@ -412,18 +418,20 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     )
 
             # Update the Sand entity below to remember this resource type
-            terrain_loc = (y, x, world.terrain_layer)
-            if world.valid_location(terrain_loc):
-                terrain_entity = world.observe(terrain_loc)
-                if (
-                    hasattr(terrain_entity, "can_convert_to_resource")
-                    and terrain_entity.can_convert_to_resource
-                ):
-                    # Only update resource_type if resource actually spawned
-                    # Check if dynamic layer has a resource (not Empty)
-                    dynamic_entity = world.observe(dynamic)
-                    if hasattr(dynamic_entity, 'name') and dynamic_entity.name in ['stag', 'hare']:
-                        terrain_entity.resource_type = resource_type
+            # Skip this update in random_resource_respawn mode (resource_type should stay None for random respawns)
+            if not world.random_resource_respawn:
+                terrain_loc = (y, x, world.terrain_layer)
+                if world.valid_location(terrain_loc):
+                    terrain_entity = world.observe(terrain_loc)
+                    if (
+                        hasattr(terrain_entity, "can_convert_to_resource")
+                        and terrain_entity.can_convert_to_resource
+                    ):
+                        # Only update resource_type if resource actually spawned
+                        # Check if dynamic layer has a resource (not Empty)
+                        dynamic_entity = world.observe(dynamic)
+                        if hasattr(dynamic_entity, 'name') and dynamic_entity.name in ['stag', 'hare']:
+                            terrain_entity.resource_type = resource_type
 
         # Determine how many agents to spawn
         # Get num_agents_to_spawn from config (defaults to num_agents for backward compatibility)
@@ -521,20 +529,28 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 # Place Sand entity for all locations (including spawn points - no Spawn entities)
                 else:
                     # Use original Sand logic - can_convert_to_resource based on resource locations
-                    can_convert = (
-                        y,
-                        x,
-                        world.dynamic_layer,
-                    ) in world.resource_spawn_points
-
-                    # Determine resource type for this location
-                    resource_type = None
-                    if can_convert:
-                        # Find the resource type for this location
-                        for ry, rx, rtype in map_data.resource_locations:
-                            if ry == y and rx == x:
-                                resource_type = rtype
-                                break
+                    if world.random_resource_respawn:
+                        # Random respawn mode: all Sand can convert (except walls and agent spawns)
+                        can_convert = (y, x) not in map_data.wall_locations and (
+                            y, x, world.dynamic_layer
+                        ) not in world.agent_spawn_points
+                        resource_type = None  # Random type on respawn
+                    else:
+                        # Original behavior: only original resource locations
+                        can_convert = (
+                            y,
+                            x,
+                            world.dynamic_layer,
+                        ) in world.resource_spawn_points
+                        
+                        # Determine resource type for this location (existing logic)
+                        resource_type = None
+                        if can_convert:
+                            # Find the resource type for this location
+                            for ry, rx, rtype in map_data.resource_locations:
+                                if ry == y and rx == x:
+                                    resource_type = rtype
+                                    break
 
                     world.add(
                         terrain_loc,

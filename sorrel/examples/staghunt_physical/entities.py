@@ -271,9 +271,11 @@ class Resource(Entity["StagHuntWorld"]):
                 ):
                     terrain_entity.respawn_ready = False
                     terrain_entity.respawn_timer = 0
-                    terrain_entity.resource_type = (
-                        self.name
-                    )  # Remember the resource type
+                    # In random mode, don't remember resource type (allows random selection on respawn)
+                    if not getattr(world, 'random_resource_respawn', False):
+                        terrain_entity.resource_type = self.name  # Remember type (original behavior)
+                    else:
+                        terrain_entity.resource_type = None  # Random type on respawn
 
             # replace with empty cell (attributes inherited from terrain layer)
             world.add(self.location, Empty())

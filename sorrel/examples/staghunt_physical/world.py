@@ -151,6 +151,7 @@ class StagHuntWorld(Gridworld):
         self.use_wounded_stag: bool = bool(get_world_param("use_wounded_stag", False))
         self.stag_probability: float = float(get_world_param("stag_probability", 0.2))
         self.random_agent_spawning: bool = bool(get_world_param("random_agent_spawning", False))
+        self.random_resource_respawn: bool = bool(get_world_param("random_resource_respawn", False))
         self.simplified_movement: bool = bool(get_world_param("simplified_movement", False))
         self.single_tile_attack: bool = bool(get_world_param("single_tile_attack", False))
         # Number of tiles to attack in front when single_tile_attack is True (default: 2)
