@@ -1,0 +1,46 @@
+{
+  "experiment": {
+    "seed": 7,
+    "total_timesteps": 250000,
+    "output_dir": "data"
+  },
+  "world": {
+    "height": 21,
+    "width": 21,
+    "gem_value": 10,
+    "food_value": 5,
+    "bone_value": -10,
+    "spawn_prob": 0.005
+  },
+  "agent": {
+    "num_agents": 2,
+    "vision_radius": 2
+  },
+  "env": {
+    "max_cycles": 100
+  },
+  "model": {
+    "hidden_size": 128
+  },
+  "training": {
+    "device": "cpu",
+    "learning_rate": 0.0003,
+    "num_steps": 500,
+    "update_epochs": 4,
+    "minibatch_size": 100,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_coef": 0.2,
+    "ent_coef": 0.01,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "target_kl": 0.03,
+    "norm_adv": true,
+    "clip_vloss": true
+  },
+  "logging": {
+    "eval_every_updates": 10,
+    "eval_episodes": 3,
+    "gif_every_updates": 25
+  }
+}
