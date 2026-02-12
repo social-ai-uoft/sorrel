@@ -1,0 +1,8 @@
+from sorrel.worlds.gridworld import Gridworld
+from sorrel.entities.basic_entities import Wall, Gem, EmptyEntity
+
+class {{ project_name }}World(Gridworld):
+    def __init__(self, height={{ height }}, width={{ width }}, layers=1):
+        super().__init__(
+            height=height, width=width, layers=layers, default_entity=EmptyEntity()
+        )

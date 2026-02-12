@@ -1,0 +1,21 @@
+from sorrel.agents import Agent
+from sorrel.action.action_spec import ActionSpec
+from sorrel.observation.observation_spec import ObservationSpec
+from sorrel.models.base_model import BaseModel
+{% if base_class == "MovingAgent" %}
+from sorrel.agents.agent import MovingAgent
+{% endif %}
+
+class {{ project_name }}Agent({{ base_class }}):
+    def __init__(
+        self,
+        observation_spec: ObservationSpec,
+        action_spec: ActionSpec,
+        model: BaseModel,
+    ):
+        super().__init__(observation_spec, action_spec, model)
+
+    def step(self, observation):
+        # Default agent logic using the model
+        action = self.model.get_action(observation)
+        return action

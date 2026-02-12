@@ -1,0 +1,33 @@
+from .env import {{ project_name }}Env
+from .world import {{ project_name }}World
+from omegaconf import OmegaConf
+
+def main():
+    # Basic configuration
+    config = OmegaConf.create({
+        "agent": {
+            "agent": {
+                "num": {{ num_agents }},
+                "obs": {"vision": {{ vision }}, "n_frames": 1}
+            }
+        },
+        "experiment": {"layout": "default"}
+    })
+    
+    world = {{ project_name }}World()
+    env = {{ project_name }}Env(world, config)
+    
+    print("Environment created successfully!")
+    print(f"World Size: {world.height}x{world.width}")
+    
+    obs = env.reset()
+    print("Reset successful.")
+    
+    # Run a few steps
+    for _ in range(10):
+        actions = [agent.model.get_action(None) for agent in env.agents]
+        obs, reward, done, info = env.step(actions)
+        print("Step taken.")
+
+if __name__ == "__main__":
+    main()

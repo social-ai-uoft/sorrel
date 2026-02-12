@@ -1,0 +1,15 @@
+from sorrel.entities import Entity
+
+{% for entity in entities %}
+{% if entity.get("type", "custom") == "custom" %}
+class {{ entity.name }}(Entity):
+    def __init__(self):
+        super().__init__()
+        self.passable = {{ entity.passable }}
+        self.pickupable = {{ entity.pickupable }}
+        self.interactive = {{ entity.interactive }}
+        self.symbol = "{{ entity.symbol }}"
+        self.color = "{{ entity.color }}"
+
+{% endif %}
+{% endfor %}
