@@ -585,7 +585,59 @@ class VisionTransformer(nn.Module):
 
         return state_inputs, action_inputs, state_targets, action_targets
 
-    def train_model(self) -> tuple:
+    def random_mask(self, state_targets) -> torch.Tensor:
+        B, T, C, H, W = state_targets.shape
+        mask = torch.ones_like(state_targets, dtype=torch.bool)
+
+        # Flattening
+        mask = mask.reshape(-1)
+
+        # Getting number of elements in the mask
+        num_element = mask.numel()
+
+        # Generating random number of 0s
+        num_zeros = torch.randint(0, num_element + 1, (1,)).item()
+
+        # Making random indicies to 0 out
+        indicies = torch.randperm(num_element, device=state_targets.device)[:num_zeros]
+        mask[indicies] = False
+
+        # Unflattenting
+        mask = mask.view(state_targets.shape)
+
+        # Debug print
+        # print(mask)
+
+        return mask
+
+    def channel_mask(self, state_targets, channel) -> torch.Tensor:
+        B, T, C, H, W = state_targets.shape
+        mask = torch.ones_like(state_targets, dtype=torch.bool)
+        """
+        entity_list = [
+                "EmptyEntity",
+                "Wall",
+                "Gem",
+                "Bone",
+                "Food",
+                "TreasurehuntAgent",
+            ]
+        """
+        if channel == "gem":
+            mask[:, :, 2, :, :] = False
+        elif channel == "bone":
+            mask[:, :, 3, :, :] = False
+        elif channel == "food":
+            mask[:, :, 4, :, :] = False
+        elif channel == "wall":
+            mask[:, :, 1, :, :] = False
+
+        # Debug print
+        # print(mask)
+
+        return mask
+
+    def train_model(self, mask_type="full") -> tuple:
         """Training loop for the transformer model.
 
         Get batched (S', A) inputs and (S", A') targets from the stored memories.
@@ -598,12 +650,25 @@ class VisionTransformer(nn.Module):
         state_inputs = state_inputs.to(self.device)
         action_inputs = action_inputs.to(self.device)
 
+        if mask_type == "full":
+            # Mask testing (all valid)
+            state_mask = torch.ones(
+                state_targets.shape,  # Dynammically matching shape
+                dtype=torch.bool,
+                device=state_targets.device,
+            )
+        elif mask_type == "random":
+            state_mask = self.random_mask(state_targets)
+        elif mask_type == "gem":
+            state_mask = self.channel_mask(state_targets, mask_type)
+
         # Forward pass through the model
         state_predictions, action_predictions = self.forward(
             state_inputs, action_inputs
         )
 
-        state_loss = self.state_loss(state_predictions, state_targets)
+        # Calling state_loss with mask
+        state_loss = self.state_loss(state_predictions, state_targets, state_mask)
         action_loss = self.action_loss(action_predictions, action_targets)
 
         loss = state_loss + action_loss
@@ -758,6 +823,30 @@ class ViTOneHot(VisionTransformer):
         state_predictions = state_predictions.permute(0, 2, 1, 5, 3, 4)
 
         return loss(state_predictions, state_targets)
+
+    # Overload state_loss for mask
+
+    def state_loss(
+        self, state_predictions: torch.Tensor, state_targets: torch.Tensor, mask
+    ):
+
+        # Moving class dimension to back
+        state_predictions = state_predictions.permute(0, 1, 5, 3, 4, 2)
+
+        # Flattening to 1D
+        predictions_flat = state_predictions.reshape(-1, 2)
+        targets_flat = state_targets.long().reshape(-1)
+
+        # Flattening mask to match
+        mask_flat = mask.reshape(-1)
+
+        loss = nn.CrossEntropyLoss()
+
+        # Extracting only the visibles (1 = visible, 0 = masked)
+        predictions_masked = predictions_flat[mask_flat == 1]
+        targets_masked = targets_flat[mask_flat == 1]
+
+        return loss(predictions_masked, targets_masked)
 
     def plot_trajectory(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Using the current forward model, create a T x C x H x W video of one game and
