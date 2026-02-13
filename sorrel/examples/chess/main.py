@@ -16,8 +16,8 @@ if __name__ == "__main__":
     # the random model implementation.
     config = {
         "experiment": {
-            "epochs": 3,
-            "max_turns": 50,
+            "epochs": 1,
+            "max_turns": 100,
             "record_period": 1,
             "output_dir": Path(__file__).parent / "./data",
         },
