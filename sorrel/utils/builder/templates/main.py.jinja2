@@ -1,5 +1,5 @@
-from .env import {{ project_name }}Env
-from .world import {{ project_name }}World
+from sorrel.examples.{{ project_name_lower }}.env import {{ project_name }}Env
+from sorrel.examples.{{ project_name_lower }}.world import {{ project_name }}World
 from omegaconf import OmegaConf
 
 def main():
@@ -25,9 +25,9 @@ def main():
     
     # Run a few steps
     for _ in range(10):
-        actions = [agent.model.get_action(None) for agent in env.agents]
-        obs, reward, done, info = env.step(actions)
-        print("Step taken.")
+        env.take_turn()
+    for agent in env.agents:
+        print(agent.model.memory.actions[0:agent.model.memory.idx])
 
 if __name__ == "__main__":
     main()

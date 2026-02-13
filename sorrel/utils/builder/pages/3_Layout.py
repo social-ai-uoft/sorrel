@@ -75,7 +75,7 @@ column_config = {
 edited_df = st.data_editor(
     st.session_state["grid_state"],
     column_config=column_config,
-    use_container_width=True,
+    width="stretch",
     hide_index=True,
     height=400,
 )
@@ -111,6 +111,22 @@ with st.expander("Bulk Paint Tools", expanded=False):
     if st.button(f"Fill Entire Grid with '{selected_entity}'", type="secondary"):
         st.session_state["grid_state"][:] = selected_entity
         st.rerun()
+
+    # Paint Outer Walls Tool
+    if "Wall" in entities:
+        if st.button("Paint Outer Walls"):
+            new_df = st.session_state["grid_state"].copy()
+            # Top and Bottom rows
+            new_df.iloc[0, :] = "Wall"
+            new_df.iloc[rows - 1, :] = "Wall"
+            # Left and Right columns
+            new_df.iloc[:, 0] = "Wall"
+            new_df.iloc[:, cols - 1] = "Wall"
+
+            st.session_state["grid_state"] = new_df
+            st.rerun()
+    else:
+        st.caption("Define a 'Wall' entity to use the perimeter tool.")
 
 # Save state
 if not edited_df.equals(st.session_state["grid_state"]):

@@ -91,7 +91,7 @@ if st.session_state["entities"]:
     df = pd.DataFrame.from_dict(st.session_state["entities"], orient="index")
     st.dataframe(
         df[["symbol", "color", "passable", "pickupable", "type"]],
-        use_container_width=True,
+        width="stretch",
     )
 
     # Option to delete

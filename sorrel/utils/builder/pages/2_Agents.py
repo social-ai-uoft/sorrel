@@ -17,8 +17,10 @@ with st.expander("General Settings", expanded=True):
     )
     base_class = st.selectbox(
         "Base Agent Class",
-        ["Agent", "MovingAgent"],
-        index=0 if current_config.get("base_class", "Agent") == "Agent" else 1,
+        ["MovingAgent"],
+        index=(
+            0 if current_config.get("base_class", "MovingAgent") == "MovingAgent" else 1
+        ),
         help="MovingAgent includes default movement logic and sprites.",
     )
 
