@@ -31,14 +31,14 @@ class Sand(Entity[StaghuntWorld]):
         self.kind = "EmptyEntity"
 
 
-class Gem(Entity[StaghuntWorld]):
-    """An entity that represents a gem in the staghunt environment."""
+class Food(Entity[StaghuntWorld]):
+    """An entity that represents food in the staghunt environment."""
 
     def __init__(self, value):
         super().__init__()
-        self.passable = True  # Agents can move onto Gems
+        self.passable = True  # Agents can move onto Foods
         self.value = value
-        self.sprite = Path(__file__).parent / "./assets/gem.png"
+        self.sprite = Path(__file__).parent / "./assets/food.png"
         self.num_attacks = 0
         self.max_hp = 2
         self.hp = 2
@@ -50,26 +50,26 @@ class Gem(Entity[StaghuntWorld]):
             self.hp = self.max_hp  # If not successfully attacked, return to full hp.
 
 
-class Food(Gem):
-    """An entity that represents food in the staghunt environment."""
+class Stag(Food):
+    """An entity that represents a stag in the staghunt environment."""
 
     def __init__(self, value):
         super().__init__(value)
-        self.sprite = Path(__file__).parent / "./assets/food.png"
-        self.hp = 1
-        self.max_hp = 1
-        self.has_transitions = False
+        self.sprite = Path(__file__).parent / "./assets/stag.png"  # TODO: change this
+        self.hp = 2
+        self.max_hp = 2
+        self.has_transitions = True
 
 
-class Bone(Gem):
-    """An entity that represents a bone in the staghunt environment."""
+class Hare(Food):
+    """An entity that represents a hare in the staghunt environment."""
 
     def __init__(self, value):
         super().__init__(value)
-        self.sprite = Path(__file__).parent / "./assets/bone.png"
+        self.sprite = Path(__file__).parent / "./assets/hare.png"  # TODO: change this
         self.hp = 1
         self.max_hp = 1
-        self.has_transitions = False
+        self.has_transitions = True
 
 
 class SpawnTile(Entity[StaghuntWorld]):
@@ -78,7 +78,9 @@ class SpawnTile(Entity[StaghuntWorld]):
         self.passable = True  # Agents can enter EmptySpaces
         self.has_transitions = True  # EmptyEntity can transition into Gems
         self.sprite = Path(__file__).parent / "./assets/empty.png"
-        self.kind = "EmptyEntity"
+        self.kind = (
+            "EmptyEntity"  # ObservationSpec treats this as identical to EmptyEntity
+        )
 
     def transition(self, world: StaghuntWorld):
         """EmptySpaces can randomly spawn into Gems based on the item spawn
@@ -89,9 +91,9 @@ class SpawnTile(Entity[StaghuntWorld]):
             entity: Entity = np.random.choice(
                 np.array(
                     [
-                        Gem(world.values["gem"]),
-                        Food(world.values["food"]),
-                        Bone(world.values["bone"]),
+                        # Gem(world.values["gem"]),
+                        Stag(world.values["stag"]),
+                        Hare(world.values["hare"]),
                     ],
                     dtype=object,
                 ),
@@ -105,6 +107,6 @@ class EmptyEntity(Entity[StaghuntWorld]):
 
     def __init__(self):
         super().__init__()
-        self.passable = True  # Agents can enter EmptySpaces
-        self.has_transitions = True  # EmptyEntity can transition into Gems
+        self.passable = True
+        self.has_transitions = False
         self.sprite = Path(__file__).parent / "./assets/empty.png"

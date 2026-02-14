@@ -432,6 +432,40 @@ class iRainbowModel(DoublePyTorchModel):
         #     else:
         #         kwargs["losses"] += kwargs["loss"]
 
+    def state_value(self, state):
+        """Compute maximum state value from Q-values using a greedy policy.
+
+        Args:
+            state: The state.
+
+        Returns:
+            np.ndarray: The max Q-value for the given state.
+        """
+        q_values = self.qnetwork_local.get_qvalues(state)
+        return q_values.max(dim=1).values.detach().numpy()
+
+    def state_values(self, state):
+        """Compute Q(s, a) for all state, action pairs.
+
+        Args:
+            state: The state.
+
+        Returns:
+            np.ndarray: An array of length n_actions with the corresponding Q(s, a).
+        """
+        # Convert to tensor if needed
+        if not isinstance(state, torch.Tensor):
+            state = torch.from_numpy(state).float().to(self.device)
+
+        # Add batch dimension if missing
+        if state.dim() == 1:
+            state = state.unsqueeze(0)
+
+        # Get Q-values
+        q_values = self.qnetwork_local.get_qvalues(state)
+
+        return q_values.detach().cpu().numpy().squeeze()
+
 
 # ------------------------ #
 # endregion                #

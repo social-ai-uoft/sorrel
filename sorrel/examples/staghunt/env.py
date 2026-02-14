@@ -1,14 +1,21 @@
 # begin imports
 # general imports
+from typing import Optional
+
 import numpy as np
 import torch
+from typing_extensions import override
 
 from sorrel.action.action_spec import ActionSpec
 from sorrel.environment import Environment
 
 # imports from our example
 from sorrel.examples.staghunt.agents import StaghuntAgent
+from sorrel.examples.staghunt.custom_observation_spec import (
+    EmotionalStaghuntObservationSpec,
+)
 from sorrel.examples.staghunt.entities import EmptyEntity, Sand, SpawnTile, Wall
+from sorrel.examples.staghunt.metrics_collector import StaghuntMetricsCollector
 from sorrel.examples.staghunt.world import StaghuntWorld
 
 # sorrel imports
@@ -24,6 +31,8 @@ class StaghuntEnv(Environment[StaghuntWorld]):
 
     def __init__(self, world: StaghuntWorld, config: dict) -> None:
         super().__init__(world, config)
+        world.environment = self  # type: ignore[attr-defined]
+        self.metrics_collector: Optional[StaghuntMetricsCollector] = None
 
     # end constructor
 
@@ -33,24 +42,25 @@ class StaghuntEnv(Environment[StaghuntWorld]):
         Requires self.config.model.agent_vision_radius to be defined.
         """
         agent_num = 2
+        emotion_length = self.config.model.emotion_length
         agents = []
-        for _ in range(agent_num):
+        for agent_id in range(agent_num):
             # create the observation spec
             entity_list = [
                 "EmptyEntity",
                 "Wall",
-                "Gem",
-                "Bone",
-                "Food",
+                "Stag",
+                "Hare",
                 "StaghuntAgent",
                 "Beam",
             ]
-            observation_spec = OneHotObservationSpec(
+            observation_spec = EmotionalStaghuntObservationSpec(
                 entity_list,
                 full_view=False,
                 # note that here we require self.config to have the entry model.agent_vision_radius
                 # don't forget to pass it in as part of config when creating this experiment!
                 vision_radius=self.config.model.agent_vision_radius,
+                emotion_length=emotion_length,
             )
             observation_spec.override_input_size(
                 (int(np.prod(observation_spec.input_size)),)
@@ -84,6 +94,8 @@ class StaghuntEnv(Environment[StaghuntWorld]):
                     observation_spec=observation_spec,
                     action_spec=action_spec,
                     model=model,
+                    emotion_length=emotion_length,
+                    agent_id=agent_id,
                 )
             )
 
@@ -124,3 +136,21 @@ class StaghuntEnv(Environment[StaghuntWorld]):
         for loc, agent in zip(agent_locations, self.agents):
             loc = tuple(loc)
             self.world.add(loc, agent)
+
+    @override
+    def take_turn(self) -> None:
+        """Performs a full step in the environment with agent state updates."""
+        super().take_turn()
+
+        # Collect metrics for this step
+        self.collect_metrics_for_step()
+
+    def collect_metrics_for_step(self) -> None:
+        """Collect metrics for the current step."""
+        if hasattr(self, "metrics_collector") and self.metrics_collector:
+            self.metrics_collector.collect_agent_positions(self.agents)
+
+    def log_epoch_metrics(self, epoch: int, writer) -> None:
+        """Log metrics for the current epoch."""
+        if hasattr(self, "metrics_collector") and self.metrics_collector:
+            self.metrics_collector.log_epoch_metrics(self.agents, epoch, writer)

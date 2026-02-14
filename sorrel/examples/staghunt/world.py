@@ -2,8 +2,11 @@
 
 # begin imports
 
+from typing import Any, Optional
+
 from omegaconf import DictConfig, OmegaConf
 
+from sorrel.examples.staghunt.env import StaghuntEnv
 from sorrel.worlds import Gridworld
 
 # end imports
@@ -22,13 +25,14 @@ class StaghuntWorld(Gridworld):
         )
 
         self.values = {
-            "gem": config.world.gem_value,
-            "food": config.world.food_value,
-            "bone": config.world.bone_value,
+            "stag": config.world.stag_value,
+            "hare": config.world.hare_value,
         }
         self.spawn_prob = config.world.spawn_prob
         self.spawn_props = config.world.spawn_props
         self.beam_radius = config.world.beam_radius
+
+        self.environment: Optional[StaghuntEnv] = None
 
 
 # end treasurehunt

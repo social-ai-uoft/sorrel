@@ -7,7 +7,7 @@ import numpy as np
 
 from sorrel.agents import MovingAgent
 from sorrel.entities import Entity
-from sorrel.examples.staghunt.entities import EmptyEntity, Gem, SpawnTile
+from sorrel.examples.staghunt.entities import EmptyEntity, Food, Hare, SpawnTile, Stag
 from sorrel.examples.staghunt.world import StaghuntWorld
 from sorrel.location import Location, Vector
 
@@ -18,12 +18,17 @@ from sorrel.location import Location, Vector
 class StaghuntAgent(MovingAgent[StaghuntWorld]):
     """A treasurehunt agent that uses the iqn model."""
 
-    def __init__(self, observation_spec, action_spec, model):
+    def __init__(
+        self, observation_spec, action_spec, model, emotion_length=1, agent_id: int = 0
+    ):
         super().__init__(observation_spec, action_spec, model)
         self.sprite = Path(__file__).parent / "./assets/hero.png"
         self.direction = 2  # 90 degree rotation: default at 180 degrees (facing down)
         self.last_turn_reward = 0
-        self.last_attacked: list[Gem] = []
+        self.last_attacked: list[Food] = []
+        self.emotion = np.zeros(emotion_length)  # YQ ADDED
+        self.emotion_length = emotion_length  # YQ ADDED
+        self.agent_id = agent_id  # YQ ADDED
 
     # end constructor
 
@@ -43,6 +48,7 @@ class StaghuntAgent(MovingAgent[StaghuntWorld]):
         stacked_states = np.vstack((prev_states, state))
 
         model_input = stacked_states.reshape(1, -1)
+        self.update_emotion(model_input)  # YQ ADDED
         action = self.model.take_action(model_input)
         return action
 
@@ -106,20 +112,40 @@ class StaghuntAgent(MovingAgent[StaghuntWorld]):
             zapped_obj = world.observe(target_loc)
             # self.last_turn_reward += zapped_obj.value
             # zapped_obj.value = 0
-            if isinstance(zapped_obj, Gem):
+            if isinstance(zapped_obj, Food):
                 self.last_attacked.append(zapped_obj)
-                zapped_obj.num_attacks += 1
+                zapped_obj.num_attacks += (
+                    1  # here, we are assuming all zaps inflict 1 damage
+                )
+
+                # Explicitly determine target type - must be either stag or hare
+                if isinstance(zapped_obj, Stag):
+                    target_type = "stag"
+                else:  # Must be Hare
+                    target_type = "hare"
+
+                env = getattr(world, "environment", None)
+                if env is not None and env.metrics_collector is not None:
+                    env.metrics_collector.collect_attack_metrics(self, target_type)
+
                 if zapped_obj.num_attacks >= zapped_obj.hp:
                     world.remove(target_loc)
                     world.add(target_loc, SpawnTile())
 
+                    env = getattr(world, "environment", None)
+                    if env is not None and env.metrics_collector is not None:
+                        env.metrics_collector.collect_resource_defeat_metrics(
+                            self, target_type
+                        )
+
     def act(self, world: StaghuntWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
         # Add the rewards from eating
-        for i, gem in enumerate(self.last_attacked):
-            if gem.num_attacks >= gem.hp:
-                self.last_turn_reward += gem.value
-                self.last_attacked.pop(i)
+        for i, food in enumerate(self.last_attacked):
+            if food.num_attacks >= food.hp:
+                self.last_turn_reward += food.value
+        # self.last_attacked.pop(i) TODO: this should not be popped; it will ruin the indexing, since you iterate forward
+        self.last_attacked = []
 
         reward = self.last_turn_reward
         self.last_turn_reward = 0
@@ -146,11 +172,33 @@ class StaghuntAgent(MovingAgent[StaghuntWorld]):
         # try moving to new_location
         world.move(self, new_location)
 
+        # Record reward metrics
+        env = getattr(world, "environment", None)
+        if env is not None and env.metrics_collector is not None:
+            env.metrics_collector.collect_agent_reward_metrics(self, reward)
+
         return reward
 
     def is_done(self, world: StaghuntWorld) -> bool:
         """Returns whether this Agent is done."""
         return world.is_done
+
+    # YQ ADDED
+    def update_emotion(self, state: np.ndarray) -> None:
+        """Update the agent's emotion based on its state value approximation.
+
+        Args:
+            state: The observed input.
+        """
+        if self.emotion_length == 1:
+            self.emotion = self.model.state_value(state)  # type: ignore
+        elif self.emotion_length == 5:
+            # self.emotion = self.model.state_values(state) #type: ignore
+            self.emotion = np.zeros(
+                self.emotion_length
+            )  # this is if emotion is zeroed out
+        # self.emotion = self.model.state_value(state)  # type: ignore
+        # self.emotion = 0.0  # type: ignore # for zero-ing out emotion layer
 
 
 class Beam(Entity):
