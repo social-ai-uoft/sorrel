@@ -91,7 +91,6 @@ class SpawnTile(Entity[StaghuntWorld]):
             entity: Entity = np.random.choice(
                 np.array(
                     [
-                        # Gem(world.values["gem"]),
                         Stag(world.values["stag"]),
                         Hare(world.values["hare"]),
                     ],

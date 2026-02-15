@@ -1,8 +1,8 @@
-# Stag Hunt
+# Stag Hunt in the Matrix
 
-A game where two or more agents explore to find valuable items (food, gems) and avoiding punishment items (bones).
+A gridworld game where two or more agents explore to find valuable items (stags, hares).
 
-Gems require the cooperation of two agents to cooperate to simultaneously attack in order to obtain them.
+Stags require the cooperation of two agents to simultaneously attack in order to obtain them. Hares can be hunted by a single agent.
 
 ## Running the example
 
@@ -16,14 +16,16 @@ The script runs the experiment for the default number of epochs (1000) with a ma
 
 ```
 staghunt/ 
-├─ assets/                # Sprite images for game entities
-├─ data/                  # Generated during runs: logs, checkpoints, GIFs
+├─ assets/                    # Sprite images for game entities
+├─ data/                      # Generated during runs: logs, checkpoints, GIFs
 │   ├─ checkpoints/
 │   ├─ gifs/
 │   └─ logs/
-├─ agents.py              # Agent implementation
-├─ entities.py            # Entity definitions
-├─ env.py                 # Environment wrapper and setup
-├─ main.py                # Experiment entry point
-└─ world.py               # Gridworld definition (TreasurehuntWorld)
+├─ agents.py                  # Agent implementation
+├─ custom_observation_spec.py # Custom observation spec
+├─ entities.py                # Entity definitions
+├─ env.py                     # Environment wrapper and setup
+├─ main.py                    # Experiment entry point
+├─ metrics_collector.py       # Metrics collector
+└─ world.py                   # Gridworld definition (StaghuntWorld)
 ```
