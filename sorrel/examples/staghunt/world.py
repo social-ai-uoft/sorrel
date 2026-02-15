@@ -2,11 +2,13 @@
 
 # begin imports
 
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from omegaconf import DictConfig, OmegaConf
 
-from sorrel.examples.staghunt.env import StaghuntEnv
+if TYPE_CHECKING:
+    from sorrel.examples.staghunt.env import StaghuntEnv
+
 from sorrel.worlds import Gridworld
 
 # end imports
