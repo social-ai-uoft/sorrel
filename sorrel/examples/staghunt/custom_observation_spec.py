@@ -146,58 +146,69 @@ class EmotionalStaghuntObservationSpec(OneHotObservationSpec):
         return np.concatenate((appearance, agent_qvalues_layer), axis=0)
 
 
-# class InteroceptiveObservationSpec(EmotionalStaghuntObservationSpec):
-#     """An ablated version of the Leaky Emotions observation specification in which agents
-#     only observe their own emotional state.
+class InteroceptiveObservationSpec(EmotionalStaghuntObservationSpec):
+    """An ablated version of the Leaky Emotions observation specification in which
+    agents only observe their own emotional state.
 
-#     Attributes:
-#         entity_map: A mapping of the kinds of entities in the environment to their appearances.
-#         vision_radius: The radius of the agent's vision. If None, the agent can see the entire environment.
-#         full_view: A boolean that determines whether the agent can see the entire environment.
-#         input_size: An int or sequence of ints that indicates the size of the observation."""
+    Attributes:
+        entity_map: A mapping of the kinds of entities in the environment to their appearances.
+        vision_radius: The radius of the agent's vision. If None, the agent can see the entire environment.
+        full_view: A boolean that determines whether the agent can see the entire environment.
+        input_size: An int or sequence of ints that indicates the size of the observation.
+    """
 
-#     def emotion_helper(
-#         self,
-#         entity,
-#         location: tuple | None = None,
-#     ) -> np.ndarray:
-#         # Only returns the emotion if the entity being observed is the observer itself
-#         return entity.emotion if entity.location == location else np.zeros(self.emotion_length)
-
-
-# class OtherOnlyObservationSpec(EmotionalStaghuntObservationSpec):
-#     """An ablated version of the Leaky Emotions observation specification in which agents
-#     only observe others' emotional state but not their own.
-
-#     Attributes:
-#         entity_map: A mapping of the kinds of entities in the environment to their appearances.
-#         vision_radius: The radius of the agent's vision. If None, the agent can see the entire environment.
-#         full_view: A boolean that determines whether the agent can see the entire environment.
-#         input_size: An int or sequence of ints that indicates the size of the observation."""
-
-#     def emotion_helper(
-#         self,
-#         entity,
-#         location: tuple | None = None,
-#     ) -> np.ndarray:
-#         # Only returns the emotion if the entity being observed is NOT the observer
-#         return entity.emotion if entity.location != location else np.zeros(self.emotion_length)
+    def emotion_helper(
+        self,
+        entity,
+        location: tuple | None = None,
+    ) -> np.ndarray:
+        # Only returns the emotion if the entity being observed is the observer itself
+        return (
+            entity.emotion
+            if entity.location == location
+            else np.zeros(self.emotion_length)
+        )
 
 
-# class NoEmotionObservationSpec(EmotionalStaghuntObservationSpec):
-#     """An ablated version of the Leaky Emotions observation specification in which agents
-#     observe only the bush ripeness.
+class OtherOnlyObservationSpec(EmotionalStaghuntObservationSpec):
+    """An ablated version of the Leaky Emotions observation specification in which
+    agents only observe others' emotional state but not their own.
 
-#     Attributes:
-#         entity_map: A mapping of the kinds of entities in the environment to their appearances.
-#         vision_radius: The radius of the agent's vision. If None, the agent can see the entire environment.
-#         full_view: A boolean that determines whether the agent can see the entire environment.
-#         input_size: An int or sequence of ints that indicates the size of the observation."""
+    Attributes:
+        entity_map: A mapping of the kinds of entities in the environment to their appearances.
+        vision_radius: The radius of the agent's vision. If None, the agent can see the entire environment.
+        full_view: A boolean that determines whether the agent can see the entire environment.
+        input_size: An int or sequence of ints that indicates the size of the observation.
+    """
 
-#     def emotion_helper(
-#         self,
-#         entity,
-#         location: tuple | None = None,
-#     ) -> np.ndarray:
-#         # No emotion observation
-#         return np.zeros(self.emotion_length)
+    def emotion_helper(
+        self,
+        entity,
+        location: tuple | None = None,
+    ) -> np.ndarray:
+        # Only returns the emotion if the entity being observed is NOT the observer
+        return (
+            entity.emotion
+            if entity.location != location
+            else np.zeros(self.emotion_length)
+        )
+
+
+class NoEmotionObservationSpec(EmotionalStaghuntObservationSpec):
+    """An ablated version of the Leaky Emotions observation specification in which
+    agents observe only the bush ripeness.
+
+    Attributes:
+        entity_map: A mapping of the kinds of entities in the environment to their appearances.
+        vision_radius: The radius of the agent's vision. If None, the agent can see the entire environment.
+        full_view: A boolean that determines whether the agent can see the entire environment.
+        input_size: An int or sequence of ints that indicates the size of the observation.
+    """
+
+    def emotion_helper(
+        self,
+        entity,
+        location: tuple | None = None,
+    ) -> np.ndarray:
+        # No emotion observation
+        return np.zeros(self.emotion_length)

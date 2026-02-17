@@ -193,10 +193,10 @@ class StaghuntAgent(MovingAgent[StaghuntWorld]):
         if self.emotion_length == 1:
             self.emotion = self.model.state_value(state)  # type: ignore
         elif self.emotion_length == 5:
-            # self.emotion = self.model.state_values(state) #type: ignore
-            self.emotion = np.zeros(
-                self.emotion_length
-            )  # this is if emotion is zeroed out
+            self.emotion = self.model.state_values(state)  # type: ignore
+            # self.emotion = np.zeros(
+            #     self.emotion_length
+            # )
         # self.emotion = self.model.state_value(state)  # type: ignore
         # self.emotion = 0.0  # type: ignore # for zero-ing out emotion layer
 

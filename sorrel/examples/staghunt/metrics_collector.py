@@ -12,10 +12,11 @@ from typing import TYPE_CHECKING, List, Optional, Sequence
 
 import numpy as np
 
+from .agents import StaghuntAgent
+
 if TYPE_CHECKING:
     from sorrel.agents import Agent
 
-    from .agents import StaghuntAgent
     from .world import StaghuntWorld
 
 

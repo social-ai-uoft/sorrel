@@ -13,6 +13,9 @@ from sorrel.environment import Environment
 from sorrel.examples.staghunt.agents import StaghuntAgent
 from sorrel.examples.staghunt.custom_observation_spec import (
     EmotionalStaghuntObservationSpec,
+    InteroceptiveObservationSpec,
+    NoEmotionObservationSpec,
+    OtherOnlyObservationSpec,
 )
 from sorrel.examples.staghunt.entities import EmptyEntity, Sand, SpawnTile, Wall
 from sorrel.examples.staghunt.metrics_collector import StaghuntMetricsCollector
@@ -41,7 +44,7 @@ class StaghuntEnv(Environment[StaghuntWorld]):
 
         Requires self.config.model.agent_vision_radius to be defined.
         """
-        agent_num = 2
+        agent_num = self.config.world.num_of_agents
         emotion_length = self.config.model.emotion_length
         agents = []
         for agent_id in range(agent_num):
@@ -54,7 +57,19 @@ class StaghuntEnv(Environment[StaghuntWorld]):
                 "StaghuntAgent",
                 "Beam",
             ]
-            observation_spec = EmotionalStaghuntObservationSpec(
+
+            match self.config.model.emotion_condition:
+                case "full":
+                    observation_spec_class = EmotionalStaghuntObservationSpec
+                case "self":
+                    observation_spec_class = InteroceptiveObservationSpec
+                case "other":
+                    observation_spec_class = OtherOnlyObservationSpec
+                # Default case: no emotions
+                case _:
+                    observation_spec_class = NoEmotionObservationSpec
+
+            observation_spec = observation_spec_class(
                 entity_list,
                 full_view=False,
                 # note that here we require self.config to have the entry model.agent_vision_radius
