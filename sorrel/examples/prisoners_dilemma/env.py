@@ -18,11 +18,17 @@ from sorrel.examples.prisoners_dilemma.entities import (
     SpawnTile,
     Wall,
 )
+from sorrel.examples.prisoners_dilemma.metrics_collector import (
+    PrisonersDilemmaMetricsCollector,
+)
 from sorrel.examples.prisoners_dilemma.world import PrisonersDilemmaWorld
 
 # Reusing the existing observation spec from staghunt for now as it seems generic enough for these gridworlds
 from sorrel.examples.staghunt.custom_observation_spec import (
     EmotionalStaghuntObservationSpec,
+    InteroceptiveObservationSpec,
+    NoEmotionObservationSpec,
+    OtherOnlyObservationSpec,
 )
 from sorrel.models.pytorch import PyTorchIQN
 
@@ -34,7 +40,7 @@ class PrisonersDilemmaEnv(Environment[PrisonersDilemmaWorld]):
         super().__init__(world, config)
         world.environment = self
         # Metrics collector not implemented yet
-        self.metrics_collector = None
+        self.metrics_collector: Optional[PrisonersDilemmaMetricsCollector] = None
 
     def setup_agents(self):
         """Create the agents for this experiment."""
@@ -57,7 +63,18 @@ class PrisonersDilemmaEnv(Environment[PrisonersDilemmaWorld]):
             # Using default vision radius if not specified
             vision_radius = self.config.model.get("agent_vision_radius", 4)
 
-            observation_spec = EmotionalStaghuntObservationSpec(
+            match self.config.model.emotion_condition:
+                case "full":
+                    observation_spec_class = EmotionalStaghuntObservationSpec
+                case "self":
+                    observation_spec_class = InteroceptiveObservationSpec
+                case "other":
+                    observation_spec_class = OtherOnlyObservationSpec
+                # Default case: no emotions
+                case _:
+                    observation_spec_class = NoEmotionObservationSpec
+
+            observation_spec = observation_spec_class(
                 entity_list,
                 full_view=False,
                 vision_radius=vision_radius,
@@ -144,4 +161,14 @@ class PrisonersDilemmaEnv(Environment[PrisonersDilemmaWorld]):
     def take_turn(self) -> None:
         """Performs a full step in the environment."""
         super().take_turn()
-        # Metrics collection skipped for now
+        self.collect_metrics_for_step()
+
+    def collect_metrics_for_step(self) -> None:
+        """Collect metrics for the current step."""
+        if hasattr(self, "metrics_collector") and self.metrics_collector:
+            self.metrics_collector.collect_agent_positions(self.agents)
+
+    def log_epoch_metrics(self, epoch: int, writer) -> None:
+        """Log metrics for the current epoch."""
+        if hasattr(self, "metrics_collector") and self.metrics_collector:
+            self.metrics_collector.log_epoch_metrics(self.agents, epoch, writer)

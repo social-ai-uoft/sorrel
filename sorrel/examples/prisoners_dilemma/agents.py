@@ -141,6 +141,10 @@ class PrisonersDilemmaAgent(MovingAgent[PrisonersDilemmaWorld]):
             # Coordination failure (e.g. maybe same agent hit twice? or 3 agents?)
             return 0
 
+        env = getattr(world, "environment", None)
+        if env and getattr(env, "metrics_collector", None):
+            env.metrics_collector.collect_successful_action(self, my_action)
+
         # Payoff Matrix Logic
         # R: Reward for cooperation (C, C)
         # P: Punishment for mutual defection (D, D)
@@ -178,10 +182,17 @@ class PrisonersDilemmaAgent(MovingAgent[PrisonersDilemmaWorld]):
             new_location = self.movement(action)
 
         if action_name in ["cooperate", "defect"]:
+            env = getattr(world, "environment", None)
+            if env and getattr(env, "metrics_collector", None):
+                env.metrics_collector.collect_attempted_action(self, action_name)
             beam_locs = self.spawn_beam(world, action_name)
             self.zap(world, beam_locs, action_name)
 
         world.move(self, new_location)
+
+        env = getattr(world, "environment", None)
+        if env and getattr(env, "metrics_collector", None):
+            env.metrics_collector.collect_agent_reward_metrics(self, reward)
 
         return reward
 

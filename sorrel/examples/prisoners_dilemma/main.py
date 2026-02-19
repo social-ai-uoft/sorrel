@@ -5,6 +5,9 @@ from pathlib import Path
 
 from sorrel.examples.prisoners_dilemma.entities import EmptyEntity
 from sorrel.examples.prisoners_dilemma.env import PrisonersDilemmaEnv
+from sorrel.examples.prisoners_dilemma.metrics_collector import (
+    PrisonersDilemmaMetricsCollector,
+)
 from sorrel.examples.prisoners_dilemma.world import PrisonersDilemmaWorld
 from sorrel.utils.logging import Logger, TensorboardLogger
 
@@ -72,9 +75,9 @@ if __name__ == "__main__":
     # construct the environment
     env = PrisonersDilemmaEnv(world, config)
 
-    # Initialize metrics collection (Placeholder for now as we don't have a specific collector yet)
-    # metrics_collector = PrisonersDilemmaMetricsCollector()
-    # env.metrics_collector = metrics_collector
+    # Initialize metrics collection
+    metrics_collector = PrisonersDilemmaMetricsCollector()
+    env.metrics_collector = metrics_collector
 
     # run the experiment
     env.run_experiment(
