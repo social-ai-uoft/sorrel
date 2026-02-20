@@ -1,30 +1,32 @@
-# Prisoner's Dilemma Gridworld
+# Hawk-Dove (Chicken) Game Example
 
-This is an example implementation of a gridworld environment inspired by the Prisoner's Dilemma game.
+This directory contains an implementation of the Hawk-Dove (also known as Chicken) game within the Sorrel environment. 
 
 ## Overview
+In this gridworld simulation, two agents wander around an environment and randomly encounter `Resource` entities. Agents must choose their behavior toward the resource by taking one of two actions:
+- **Hawk**: Play aggressively to take all of the resource.
+- **Dove**: Play peacefully and share the resource.
 
-In this environment, agents move around a grid and interact with "Exchange" entities.
-When two agents "zap" an Exchange entity, they receive rewards based on the Prisoner's Dilemma payoff matrix.
+The payoffs are modeled with the classic Hawk-Dove payoff matrix:
 
 ### Payoff Matrix
-The rewards are determined by the combination of actions on the Exchange:
+The rewards are determined by the combination of actions on the Resource entity:
 
-| | Cooperate | Defect |
+| | Hawk | Dove |
 |---|---|---|
-| **Cooperate** | R (Reward) | S (Sucker) |
-| **Defect** | T (Temptation) | P (Punishment) |
+| **Hawk** | R (Reward) | S (Sucker) |
+| **Dove** | T (Temptation) | P (Punishment) |
 
 Default values:
-- **T** = 5
-- **R** = 3
-- **P** = 1
+- **T** = 2
+- **R** = 1
+- **P** = -4
 - **S** = 0
 
 ## Running the example
 
 ```bash
-python sorrel/examples/prisoners_dilemma/main.py
+python sorrel/examples/hawk_dove/main.py
 ```
 
 The script runs the experiment for the default number of epochs (1000) with a maximum of 100 turns per epoch. TensorBoard logs, model checkpoints, and animated GIFs are saved under `data/`.
@@ -32,7 +34,7 @@ The script runs the experiment for the default number of epochs (1000) with a ma
 ## Project structure
 
 ```
-prisoners_dilemma/ 
+hawk_dove/ 
 ├─ assets/                    # Sprite images for game entities
 ├─ data/                      # Generated during runs: logs, checkpoints, GIFs
 │   ├─ checkpoints/
@@ -44,5 +46,5 @@ prisoners_dilemma/
 ├─ env.py                     # Environment wrapper and setup
 ├─ main.py                    # Experiment entry point
 ├─ metrics_collector.py       # Metrics collector
-└─ world.py                   # Gridworld definition (PrisonersDilemmaWorld)
+└─ world.py                   # Gridworld definition (HawkDoveWorld)
 ```

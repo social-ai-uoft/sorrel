@@ -27,5 +27,5 @@ staghunt/
 ├─ env.py                     # Environment wrapper and setup
 ├─ main.py                    # Experiment entry point
 ├─ metrics_collector.py       # Metrics collector
-└─ world.py                   # Gridworld definition (StaghuntWorld)
+└─ world.py                   # Gridworld definition (StagHuntWorld)
 ```
