@@ -799,12 +799,11 @@ class ViTOneHot(VisionTransformer):
 
         action_prediction = self.action_head(x)
 
-        state_predictions = torch.tensor([], requires_grad=True)
+        state_predictions = torch.tensor([], requires_grad=True, device=x.device)
         for _, state_head in enumerate(self.state_heads):
             state_prediction = state_head(x).view(B, T, 2, H, W)
-            # Softmax along the channel dimension to give yes/no probability
-            state_prediction = F.softmax(state_prediction, dim=2)
-            # Cat on the last dimension to create a six-dimensional array (B, T, 2, H, W, C)
+            # Keep logits (no softmax here); CrossEntropyLoss in state_loss expects logits
+            # Cat on the last dimension to create (B, T, 2, H, W, C)
             state_predictions = torch.cat(
                 (state_predictions, state_prediction.unsqueeze(-1)), dim=-1
             )
@@ -830,7 +829,7 @@ class ViTOneHot(VisionTransformer):
 
     def state_loss(self, state_predictions: torch.Tensor, state_targets: torch.Tensor, mask):
     
-        # Moving class dimension to back
+        # Moving class dimension to back 
         state_predictions = state_predictions.permute(0, 1, 5, 3, 4, 2)  
 
         # Flattening to 1D
@@ -845,6 +844,10 @@ class ViTOneHot(VisionTransformer):
         # Extracting only the visibles (1 = visible, 0 = masked)
         predictions_masked = predictions_flat[mask_flat == 1]
         targets_masked = targets_flat[mask_flat == 1]
+
+        # Handling empty mask
+        if predictions_masked.numel() == 0:
+            return torch.tensor(0.0, device=predictions_flat.device, dtype=predictions_flat.dtype)
 
         return loss(predictions_masked, targets_masked)
 
@@ -869,6 +872,8 @@ class ViTOneHot(VisionTransformer):
             state_predictions, action_predictions = self.forward(
                 state_inputs.unsqueeze(0), action_inputs.unsqueeze(0)
             )
+            # Forward returns logits; softmax for visualization
+            state_predictions = F.softmax(state_predictions, dim=2)
 
         T, C, H, W = state_targets.size()
         state_targets = state_targets.detach()
