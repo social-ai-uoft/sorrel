@@ -483,13 +483,17 @@ class VisionTransformer(nn.Module):
         return state_prediction, action_prediction
 
     def state_loss(
-        self, state_predictions: torch.Tensor, state_targets: torch.Tensor
+        self,
+        state_predictions: torch.Tensor,
+        state_targets: torch.Tensor,
+        mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute loss on state trajectories.
 
         Parameters:
             state_predictions: A tensor of size B x T x (C H W) indicating the predicted state output. \n
             state_targets: A tensor of size B x T x C x H x W indicating the true next states. \n
+            mask: An optional boolean tensor indicating which elements to include in the loss.
 
         Returns:
             A tensor of MSE loss between the states and the targets.
@@ -499,6 +503,9 @@ class VisionTransformer(nn.Module):
         # Reshape the targets
         B, T, C, H, W = state_targets.size()
         state_predictions = state_predictions.view(B, T, C, H, W)
+
+        if mask is not None:
+            return loss(state_predictions[mask], state_targets[mask])
 
         return loss(state_predictions, state_targets)
 
@@ -613,16 +620,8 @@ class VisionTransformer(nn.Module):
     def channel_mask(self, state_targets, channel) -> torch.Tensor:
         B, T, C, H, W = state_targets.shape
         mask = torch.ones_like(state_targets, dtype=torch.bool)
-        """
-        entity_list = [
-                "EmptyEntity",
-                "Wall",
-                "Gem",
-                "Bone",
-                "Food",
-                "TreasurehuntAgent",
-            ]
-        """
+        """entity_list = [ "EmptyEntity", "Wall", "Gem", "Bone", "Food",
+        "TreasurehuntAgent", ]"""
         if channel == "gem":
             mask[:, :, 2, :, :] = False
         elif channel == "bone":
@@ -650,17 +649,18 @@ class VisionTransformer(nn.Module):
         state_inputs = state_inputs.to(self.device)
         action_inputs = action_inputs.to(self.device)
 
-        if mask_type == "full":
-            # Mask testing (all valid)
-            state_mask = torch.ones(
-                state_targets.shape,  # Dynammically matching shape
-                dtype=torch.bool,
-                device=state_targets.device,
-            )
-        elif mask_type == "random":
+        if mask_type == "random":
             state_mask = self.random_mask(state_targets)
         elif mask_type == "gem":
             state_mask = self.channel_mask(state_targets, mask_type)
+        else:  # By default, mask_type == "full"
+            state_mask = None
+            # Mask testing (all valid)
+            # state_mask = torch.ones(
+            #     state_targets.shape,  # Dynamically matching shape
+            #     dtype=torch.bool,
+            #     device=state_targets.device,
+            # )
 
         # Forward pass through the model
         state_predictions, action_predictions = self.forward(
@@ -808,7 +808,12 @@ class ViTOneHot(VisionTransformer):
 
         return state_predictions, action_prediction
 
-    def state_loss(self, state_predictions: torch.Tensor, state_targets: torch.Tensor):
+    def state_loss(
+        self,
+        state_predictions: torch.Tensor,
+        state_targets: torch.Tensor,
+        mask: torch.Tensor | None = None,
+    ):
         """Overriden state loss function.
 
         Cross entropy loss computed on the yes/no probability of each channel.
@@ -818,26 +823,24 @@ class ViTOneHot(VisionTransformer):
 
         # State targets are in the form: B T C H W
         state_targets = state_targets.long()  # Classification requires long type
-        # State preds are in the form: B 2 T C H W
-        state_predictions = state_predictions.permute(0, 2, 1, 5, 3, 4)
 
-        return loss(state_predictions, state_targets)
+        if mask is None:
+            # State preds are in the form: B 2 T C H W
+            state_predictions = state_predictions.permute(0, 2, 1, 5, 3, 4)
+            return loss(state_predictions, state_targets)
 
-    # Overload state_loss for mask
+        # Mask logic
 
-    def state_loss(self, state_predictions: torch.Tensor, state_targets: torch.Tensor, mask):
-    
-        # Moving class dimension to back 
-        state_predictions = state_predictions.permute(0, 1, 5, 3, 4, 2)  
+        # Moving class dimension to back
+        # State preds are in the form: B T C H W 2
+        state_predictions = state_predictions.permute(0, 1, 5, 3, 4, 2)
 
         # Flattening to 1D
         predictions_flat = state_predictions.reshape(-1, 2)
-        targets_flat = state_targets.long().reshape(-1)
+        targets_flat = state_targets.reshape(-1)
 
         # Flattening mask to match
         mask_flat = mask.reshape(-1)
-
-        loss = nn.CrossEntropyLoss()
 
         # Extracting only the visibles (1 = visible, 0 = masked)
         predictions_masked = predictions_flat[mask_flat == 1]
