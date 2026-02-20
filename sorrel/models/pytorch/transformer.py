@@ -848,7 +848,9 @@ class ViTOneHot(VisionTransformer):
 
         # Handling empty mask
         if predictions_masked.numel() == 0:
-            return torch.tensor(0.0, device=predictions_flat.device, dtype=predictions_flat.dtype)
+            return torch.tensor(
+                0.0, device=predictions_flat.device, dtype=predictions_flat.dtype
+            )
 
         return loss(predictions_masked, targets_masked)
 
