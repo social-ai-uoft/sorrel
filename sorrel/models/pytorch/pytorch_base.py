@@ -88,7 +88,8 @@ class PyTorchModel(nn.Module, BaseModel):
     # ---------------------------------- #
 
     def _copy_module_snapshot_locked(self, module: nn.Module) -> nn.Module:
-        """Create an inference-only copy of a torch module while holding the model lock."""
+        """Create an inference-only copy of a torch module while holding the model
+        lock."""
         snapshot_module = copy.deepcopy(module)
         snapshot_module.load_state_dict(module.state_dict())
         snapshot_module.to(self.device)
