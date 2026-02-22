@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.agents import Agent, MovingAgent
-from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_threadsafe.world import TreasurehuntWorld
 
 # end imports
 

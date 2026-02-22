@@ -278,6 +278,37 @@ class iRainbowModel(DoublePyTorchModel):
     def __str__(self):
         return f"iRainbowModel(input_size={np.array(self.input_size).prod() * self.n_frames},action_space={self.action_space})"
 
+    def _q_values_from_policy(self, policy: IQN, state: np.ndarray) -> np.ndarray:
+        """Compute action values for state using the provided policy network."""
+        torch_state = torch.from_numpy(state)
+        torch_state = torch_state.float().to(self.device)
+
+        was_training = policy.training
+        policy.eval()
+        with torch.no_grad():
+            action_values = policy.get_qvalues(torch_state)
+        if was_training:
+            policy.train()
+
+        return action_values.detach().cpu().numpy()
+
+    def _greedy_action_from_policy(self, policy: IQN, state: np.ndarray) -> int:
+        """Return greedy action from q-values produced by `policy`."""
+        action_values = self._q_values_from_policy(policy, state)
+        action = np.argmax(action_values, axis=1)
+        return int(action[0])
+
+    def _sample_random_action(self) -> int:
+        """Sample a random action for the exploration branch."""
+        action = random.choices(np.arange(self.action_space), k=1)
+        return int(action[0])
+
+    def take_action_from_policy(self, state: np.ndarray, policy: IQN) -> int:
+        """Select action with master epsilon and greedy inference from `policy`."""
+        if random.random() > self.epsilon:
+            return self._greedy_action_from_policy(policy, state)
+        return self._sample_random_action()
+
     def take_action(self, state: np.ndarray) -> int:
         """Returns actions for given state as per current policy.
 
@@ -287,21 +318,7 @@ class iRainbowModel(DoublePyTorchModel):
         Returns:
             int: The action to take.
         """
-        # Epsilon-greedy action selection
-        if random.random() > self.epsilon:
-            torch_state = torch.from_numpy(state)
-            torch_state = torch_state.float().to(self.device)
-
-            self.qnetwork_local.eval()
-            with torch.no_grad():
-                action_values = self.qnetwork_local.get_qvalues(torch_state)  # .mean(0)
-            self.qnetwork_local.train()
-            action = np.argmax(action_values.cpu().data.numpy(), axis=1)
-            return action[0]
-        else:
-
-            action = random.choices(np.arange(self.action_space), k=1)
-            return action[0]
+        return self.take_action_from_policy(state, self.qnetwork_local)
 
     def train_step(self) -> np.ndarray:
         """Update value parameters using given batch of experience tuples.
