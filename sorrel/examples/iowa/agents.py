@@ -39,7 +39,7 @@ class GamblingAgent(MovingAgent[GamblingWorld]):
         stacked_states = np.vstack((prev_states, state))
 
         model_input = stacked_states.reshape(1, -1)
-        action = self.model.take_action(model_input)
+        action = self.model_take_action(model_input)
         return action
 
     def act(self, world: GamblingWorld, action: int) -> float:

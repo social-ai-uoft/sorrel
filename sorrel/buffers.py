@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Sequence
 
@@ -24,6 +25,7 @@ class Buffer:
     """
 
     def __init__(self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1):
+        self._lock = threading.RLock()
         self.capacity = capacity
         self.obs_shape = obs_shape
         self.states = np.zeros((capacity, *obs_shape), dtype=np.float32)
@@ -43,39 +45,48 @@ class Buffer:
             reward (float): The reward received.
             done (bool): Whether the episode terminated after this step.
         """
-        self.states[self.idx] = obs
-        self.actions[self.idx] = action
-        self.rewards[self.idx] = reward
-        self.dones[self.idx] = done
-        self.idx = (self.idx + 1) % self.capacity
-        self.size = min(self.size + 1, self.capacity)
+        with self._lock:
+            self.states[self.idx] = obs
+            self.actions[self.idx] = action
+            self.rewards[self.idx] = reward
+            self.dones[self.idx] = done
+            self.idx = (self.idx + 1) % self.capacity
+            self.size = min(self.size + 1, self.capacity)
 
     def add_empty(self):
         """Advancing the id by `self.n_frames`, adding empty frames to the replay
         buffer."""
-        self.idx = (self.idx + self.n_frames - 1) % self.capacity
-        self.size = min(self.size + 1, self.capacity)
+        with self._lock:
+            self.idx = (self.idx + self.n_frames - 1) % self.capacity
+            self.size = min(self.size + 1, self.capacity)
 
     def add_from_buffer(self, buffer: Buffer) -> None:
         assert (
             self.obs_shape == buffer.obs_shape
         ), "Cannot add from a buffer with different state shapes."
-        # If the buffer is too long to add to the existing saved game buffer, truncate it
-        buffer_slice_point = min(self.capacity - self.idx, buffer.size)
-        # Add the S, A, R, D, to the saved game buffer
-        self.states[self.idx : self.idx + buffer_slice_point] = buffer.states[
-            :buffer_slice_point
-        ]
-        self.actions[self.idx : self.idx + buffer_slice_point] = buffer.actions[
-            :buffer_slice_point
-        ]
-        self.rewards[self.idx : self.idx + buffer_slice_point] = buffer.rewards[
-            :buffer_slice_point
-        ]
-        self.dones[self.idx : self.idx + buffer_slice_point] = buffer.dones[
-            :buffer_slice_point
-        ]
-        self.idx = self.idx + buffer_slice_point
+        with buffer._lock:
+            buffer_size = buffer.size
+            buffer_states = np.copy(buffer.states[:buffer_size])
+            buffer_actions = np.copy(buffer.actions[:buffer_size])
+            buffer_rewards = np.copy(buffer.rewards[:buffer_size])
+            buffer_dones = np.copy(buffer.dones[:buffer_size])
+        with self._lock:
+            # If the buffer is too long to add to the existing saved game buffer, truncate it
+            buffer_slice_point = min(self.capacity - self.idx, buffer_size)
+            # Add the S, A, R, D, to the saved game buffer
+            self.states[self.idx : self.idx + buffer_slice_point] = buffer_states[
+                :buffer_slice_point
+            ]
+            self.actions[self.idx : self.idx + buffer_slice_point] = buffer_actions[
+                :buffer_slice_point
+            ]
+            self.rewards[self.idx : self.idx + buffer_slice_point] = buffer_rewards[
+                :buffer_slice_point
+            ]
+            self.dones[self.idx : self.idx + buffer_slice_point] = buffer_dones[
+                :buffer_slice_point
+            ]
+            self.idx = self.idx + buffer_slice_point
 
     def sample(self, batch_size: int):
         """Sample a batch of experiences from the replay buffer.
@@ -88,31 +99,38 @@ class Buffer:
                 A tuple containing the states, actions, rewards, next states, dones, and
                 invalid (meaning stacked frames cross episode boundary).
         """
-        indices = np.random.choice(
-            max(1, self.size - self.n_frames - 1), batch_size, replace=False
-        )
-        indices = indices[:, np.newaxis]
-        indices = indices + np.arange(self.n_frames)
+        with self._lock:
+            indices = np.random.choice(
+                max(1, self.size - self.n_frames - 1), batch_size, replace=False
+            )
+            indices = indices[:, np.newaxis]
+            indices = indices + np.arange(self.n_frames)
 
-        states = self.states[indices].reshape(batch_size, -1)
-        next_states = self.states[indices + 1].reshape(batch_size, -1)
-        actions = self.actions[indices[:, -1]].reshape(batch_size, -1)
-        rewards = self.rewards[indices[:, -1]].reshape(batch_size, -1)
-        dones = self.dones[indices[:, -1]].reshape(batch_size, -1)
-        valid = (1.0 - np.any(self.dones[indices[:, :-1]], axis=-1)).reshape(
-            batch_size, -1
-        )
+            sampled_states = np.copy(self.states[indices])
+            sampled_next_states = np.copy(self.states[indices + 1])
+            sampled_actions = np.copy(self.actions[indices[:, -1]])
+            sampled_rewards = np.copy(self.rewards[indices[:, -1]])
+            sampled_dones = np.copy(self.dones[indices[:, -1]])
+            sampled_valid_dones = np.copy(self.dones[indices[:, :-1]])
+
+        states = sampled_states.reshape(batch_size, -1)
+        next_states = sampled_next_states.reshape(batch_size, -1)
+        actions = sampled_actions.reshape(batch_size, -1)
+        rewards = sampled_rewards.reshape(batch_size, -1)
+        dones = sampled_dones.reshape(batch_size, -1)
+        valid = (1.0 - np.any(sampled_valid_dones, axis=-1)).reshape(batch_size, -1)
 
         return states, actions, rewards, next_states, dones, valid
 
     def clear(self):
         """Zero out the arrays."""
-        self.states = np.zeros((self.capacity, *self.obs_shape), dtype=np.float32)
-        self.actions = np.zeros(self.capacity, dtype=np.int64)
-        self.rewards = np.zeros(self.capacity, dtype=np.float32)
-        self.dones = np.zeros(self.capacity, dtype=np.float32)
-        self.idx = 0
-        self.size = 0
+        with self._lock:
+            self.states = np.zeros((self.capacity, *self.obs_shape), dtype=np.float32)
+            self.actions = np.zeros(self.capacity, dtype=np.int64)
+            self.rewards = np.zeros(self.capacity, dtype=np.float32)
+            self.dones = np.zeros(self.capacity, dtype=np.float32)
+            self.idx = 0
+            self.size = 0
 
     def getidx(self):
         """Get the current index.
@@ -120,7 +138,8 @@ class Buffer:
         Returns:
             int: The current index
         """
-        return self.idx
+        with self._lock:
+            return self.idx
 
     def current_state(self) -> np.ndarray:
         """Get the current state.
@@ -128,13 +147,15 @@ class Buffer:
         Returns:
             np.ndarray: An array with the last `self.n_frames` observations stacked together as the current state.
         """
-
-        if self.idx < (self.n_frames - 1):
-            diff = self.idx - (self.n_frames - 1)
-            return np.concatenate(
-                (self.states[diff % self.capacity :], self.states[: self.idx])
-            )
-        return self.states[self.idx - (self.n_frames - 1) : self.idx]
+        with self._lock:
+            if self.idx < (self.n_frames - 1):
+                diff = self.idx - (self.n_frames - 1)
+                return np.copy(
+                    np.concatenate(
+                        (self.states[diff % self.capacity :], self.states[: self.idx])
+                    )
+                )
+            return np.copy(self.states[self.idx - (self.n_frames - 1) : self.idx])
 
     def __repr__(self):
         return f"Buffer(capacity={self.capacity}, obs_shape={self.obs_shape})"
@@ -143,21 +164,35 @@ class Buffer:
         return repr(self)
 
     def __len__(self):
-        return self.size
+        with self._lock:
+            return self.size
 
     def __getitem__(self, idx):
-        return (self.states[idx], self.actions[idx], self.rewards[idx], self.dones[idx])
+        with self._lock:
+            return (
+                np.copy(self.states[idx]),
+                np.copy(self.actions[idx]),
+                np.copy(self.rewards[idx]),
+                np.copy(self.dones[idx]),
+            )
 
     def save(self, output_file: str | Path) -> None:
         output_file = Path(output_file)
+        with self._lock:
+            states = np.copy(self.states)
+            actions = np.copy(self.actions)
+            rewards = np.copy(self.rewards)
+            dones = np.copy(self.dones)
+            n_frames = self.n_frames
+            idx = self.idx
         np.savez_compressed(
             output_file,
-            states=self.states,
-            actions=self.actions,
-            rewards=self.rewards,
-            dones=self.dones,
-            n_frames=self.n_frames,
-            idx=self.idx,
+            states=states,
+            actions=actions,
+            rewards=rewards,
+            dones=dones,
+            n_frames=n_frames,
+            idx=idx,
         )
 
     @classmethod
@@ -211,20 +246,26 @@ class TransformerBuffer(Buffer):
             Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
                 A tuple containing the states, actions, next states, next actions, dones, and invalid (meaning stacked frames cross episode boundary).
         """
-        indices = np.random.choice(
-            max(1, self.size - self.n_frames - 1), batch_size, replace=False
-        )
-        indices = indices[:, np.newaxis]
-        indices = indices + np.arange(self.n_frames)
+        with self._lock:
+            indices = np.random.choice(
+                max(1, self.size - self.n_frames - 1), batch_size, replace=False
+            )
+            indices = indices[:, np.newaxis]
+            indices = indices + np.arange(self.n_frames)
 
-        states = self.states[indices].reshape(batch_size, -1)
-        next_states = self.states[indices + 1].reshape(batch_size, -1)
-        actions = self.actions[indices].reshape(batch_size, -1)
-        next_actions = self.actions[indices + 1].reshape(batch_size, -1)
-        dones = self.dones[indices[:, -1]].reshape(batch_size, -1)
-        valid = (1.0 - np.any(self.dones[indices[:, :-1]], axis=-1)).reshape(
-            batch_size, -1
-        )
+            sampled_states = np.copy(self.states[indices])
+            sampled_next_states = np.copy(self.states[indices + 1])
+            sampled_actions = np.copy(self.actions[indices])
+            sampled_next_actions = np.copy(self.actions[indices + 1])
+            sampled_dones = np.copy(self.dones[indices[:, -1]])
+            sampled_valid_dones = np.copy(self.dones[indices[:, :-1]])
+
+        states = sampled_states.reshape(batch_size, -1)
+        next_states = sampled_next_states.reshape(batch_size, -1)
+        actions = sampled_actions.reshape(batch_size, -1)
+        next_actions = sampled_next_actions.reshape(batch_size, -1)
+        dones = sampled_dones.reshape(batch_size, -1)
+        valid = (1.0 - np.any(sampled_valid_dones, axis=-1)).reshape(batch_size, -1)
 
         next_actions = np.array(
             next_actions, dtype=np.float32

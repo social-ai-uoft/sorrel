@@ -1,3 +1,4 @@
+import copy
 import os
 import re
 from abc import abstractmethod
@@ -86,6 +87,22 @@ class PyTorchModel(nn.Module, BaseModel):
     # region: Helper functions           #
     # ---------------------------------- #
 
+    def _copy_module_snapshot_locked(self, module: nn.Module) -> nn.Module:
+        """Create an inference-only copy of a torch module while holding the model lock."""
+        snapshot_module = copy.deepcopy(module)
+        snapshot_module.load_state_dict(module.state_dict())
+        snapshot_module.to(self.device)
+        snapshot_module.eval()
+        for param in snapshot_module.parameters():
+            param.requires_grad_(False)
+        return snapshot_module
+
+    def _build_snapshot_locked(self):
+        policy = getattr(self, "policy", None)
+        if isinstance(policy, nn.Module):
+            return self._copy_module_snapshot_locked(policy)
+        return self
+
     def save(self, file_path: str | os.PathLike) -> None:
         """Save the model weights and parameters in the specified location.
 
@@ -170,6 +187,12 @@ class DoublePyTorchModel(PyTorchModel):
             "local": nn.Module(),
             "target": nn.Module(),
         }
+
+    def _build_snapshot_locked(self):
+        local_model = self.models.get("local")
+        if isinstance(local_model, nn.Module):
+            return self._copy_module_snapshot_locked(local_model)
+        return super()._build_snapshot_locked()
 
     def save(self, file_path: str | os.PathLike) -> None:
         """Save the model weights and parameters in the specified location.

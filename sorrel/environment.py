@@ -144,7 +144,10 @@ class Environment[W: Gridworld]:
 
             # start epoch action for each agent model
             for agent in self.agents:
-                agent.model.start_epoch_action(epoch=epoch)
+                if hasattr(agent.model, "threadsafe_start_epoch_action"):
+                    agent.model.threadsafe_start_epoch_action(epoch=epoch)
+                else:
+                    agent.model.start_epoch_action(epoch=epoch)
 
             # run the environment for the specified number of turns
             while not self.turn >= self.config.experiment.max_turns:
@@ -164,7 +167,10 @@ class Environment[W: Gridworld]:
 
             # end epoch action for each agent model
             for agent in self.agents:
-                agent.model.end_epoch_action(epoch=epoch)
+                if hasattr(agent.model, "threadsafe_end_epoch_action"):
+                    agent.model.threadsafe_end_epoch_action(epoch=epoch)
+                else:
+                    agent.model.end_epoch_action(epoch=epoch)
 
             # # At the end of each epoch, train the agents.
             # with Pool() as pool:
@@ -173,7 +179,10 @@ class Environment[W: Gridworld]:
             #     total_loss = sum(pool.map(lambda model: model.train_step(), models))
             total_loss = 0
             for agent in self.agents:
-                total_loss = agent.model.train_step()
+                if hasattr(agent.model, "threadsafe_train_step"):
+                    total_loss = agent.model.threadsafe_train_step()
+                else:
+                    total_loss = agent.model.train_step()
 
             # Log the information
             if logging:
@@ -259,7 +268,10 @@ class Environment[W: Gridworld]:
 
             # start epoch action for each agent model
             for agent in self.agents:
-                agent.model.start_epoch_action(epoch=game)
+                if hasattr(agent.model, "threadsafe_start_epoch_action"):
+                    agent.model.threadsafe_start_epoch_action(epoch=game)
+                else:
+                    agent.model.start_epoch_action(epoch=game)
 
             # run the environment for the specified number of turns
             while not self.turn >= self.config.experiment.max_turns:
@@ -279,7 +291,10 @@ class Environment[W: Gridworld]:
 
             # end epoch action for each agent model
             for agent, agent_saved_games in zip(self.agents, saved_games):
-                agent.model.end_epoch_action(epoch=game)
+                if hasattr(agent.model, "threadsafe_end_epoch_action"):
+                    agent.model.threadsafe_end_epoch_action(epoch=game)
+                else:
+                    agent.model.end_epoch_action(epoch=game)
                 agent_saved_games.add_from_buffer(agent.model.memory)
 
         for i, agent_saved_games in enumerate(saved_games):

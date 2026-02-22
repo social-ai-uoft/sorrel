@@ -69,10 +69,10 @@ class CookingAgent(MovingAgent[CookingWorld]):
             # Take action
             model_input = stacked_states.reshape(1, -1)
             # Update the agent emotion.
-            action = self.model.take_action(model_input)
+            action = self.model_take_action(model_input)
 
         else:
-            action = self.model.take_action(state)
+            action = self.model_take_action(state)
 
         return action
 
