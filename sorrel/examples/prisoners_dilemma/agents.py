@@ -27,6 +27,7 @@ class PrisonersDilemmaAgent(MovingAgent[PrisonersDilemmaWorld]):
         self.last_turn_reward = 0
         self.last_attacked: list[Exchange] = []
         self.agent_id = agent_id
+        self.emotion_length = emotion_length
 
     def reset(self) -> None:
         """Resets the agent."""
@@ -199,3 +200,14 @@ class PrisonersDilemmaAgent(MovingAgent[PrisonersDilemmaWorld]):
     def is_done(self, world: PrisonersDilemmaWorld) -> bool:
         # Assuming is_done is a property of world
         return getattr(world, "is_done", False)
+
+    def update_emotion(self, state: np.ndarray) -> None:
+        """Update the agent's emotion based on its state value approximation.
+
+        Args:
+            state: The observed input.
+        """
+        if self.emotion_length == 1:
+            self.emotion = self.model.state_value(state)  # type: ignore
+        elif self.emotion_length == self.action_spec.n_actions:
+            self.emotion = self.model.state_values(state)  # type: ignore
