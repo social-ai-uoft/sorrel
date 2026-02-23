@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.entities import Entity
+
+# from sorrel.examples.staghunt.agents import Beam
 from sorrel.examples.staghunt.world import StaghuntWorld
 
 # end imports
@@ -107,5 +109,38 @@ class EmptyEntity(Entity[StaghuntWorld]):
     def __init__(self):
         super().__init__()
         self.passable = True
-        self.has_transitions = False
+        self.has_transitions = True
+        self.zapped_by = "none"
         self.sprite = Path(__file__).parent / "./assets/empty.png"
+
+    def transition(self, world: StaghuntWorld):
+        """EmptyEntities are replaced by a Beam if zapped_by is "zap"."""
+        if self.zapped_by == "zap":
+            world.remove(self.location)
+            world.add(self.location, Beam())
+
+
+class Beam(Entity):
+    """Generic beam class for agent beams."""
+
+    def __init__(self):
+        super().__init__()
+        self.sprite = Path(__file__).parent / "./assets/beam.png"
+        self.turn_counter = 0
+        self.beam_strength = 1
+        self.has_transitions = True
+        self.zapped_by = "none"
+
+    def transition(self, world: StaghuntWorld):
+        # Beams persist for one full turn, then disappear.
+
+        # If Beam has been zapped again, restart the turn_counter.
+
+        if self.zapped_by == "zap":
+            # if zapped again, restart counter
+            self.turn_counter = 0
+            self.zapped_by = "none"
+        elif self.turn_counter >= 1:
+            world.add(self.location, EmptyEntity())
+        else:
+            self.turn_counter += 1

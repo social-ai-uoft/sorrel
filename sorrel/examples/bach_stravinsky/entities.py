@@ -41,6 +41,7 @@ class Concert(Entity[BachStravinskyWorld]):
         self.max_hp = 2
         self.hp = 2
         self.has_transitions = True
+        self.zapped_by = "none"
 
         # Track which type of beam hit this concert
         # "bach" or "stravinsky"
@@ -76,8 +77,20 @@ class EmptyEntity(Entity[BachStravinskyWorld]):
     def __init__(self):
         super().__init__()
         self.passable = True
+        self.zapped_by = "none"
         self.has_transitions = False
         self.sprite = Path(__file__).parent / "./assets/empty.png"
+
+    def transition(self, world: BachStravinskyWorld):
+        """EmptyEntities are replaced by a Beam if zapped_by is "zap"."""
+        if self.zapped_by == "zap_bach":
+            world.remove(self.location)
+            world.add(self.location, BachBeam())
+            self.zapped_by = "none"
+        elif self.zapped_by == "zap_stravinsky":
+            world.remove(self.location)
+            world.add(self.location, StravinskyBeam())
+            self.zapped_by = "none"
 
 
 class Beam(Entity):
@@ -90,9 +103,14 @@ class Beam(Entity):
         self.beam_strength = 1
         self.has_transitions = True
         self.beam_type = "generic"
+        self.zapped_by = "none"
 
     def transition(self, world: BachStravinskyWorld):
-        if self.turn_counter >= 1:
+        if self.zapped_by != "none":
+            # if zapped again, restart counter
+            self.turn_counter = 0
+            self.zapped_by = "none"
+        elif self.turn_counter >= 1:
             world.add(self.location, EmptyEntity())
         else:
             self.turn_counter += 1
@@ -106,6 +124,19 @@ class BachBeam(Beam):
         self.beam_type = "bach"
         self.sprite = Path(__file__).parent / "./assets/beam.png"
 
+    def transition(self, world: BachStravinskyWorld):
+        if self.zapped_by == "zap_bach":
+            # if zapped again, restart counter
+            self.turn_counter = 0
+            self.zapped_by = "none"
+        elif self.zapped_by == "zap_stravinsky":
+            world.add(self.location, StravinskyBeam())
+            self.zapped_by = "none"
+        elif self.turn_counter >= 1:
+            world.add(self.location, EmptyEntity())
+        else:
+            self.turn_counter += 1
+
 
 class StravinskyBeam(Beam):
     """Beam that represents choosing Stravinsky."""
@@ -114,3 +145,16 @@ class StravinskyBeam(Beam):
         super().__init__()
         self.beam_type = "stravinsky"
         self.sprite = Path(__file__).parent / "./assets/zap.png"
+
+    def transition(self, world: BachStravinskyWorld):
+        if self.zapped_by == "zap_stravinsky":
+            # if zapped again, restart counter
+            self.turn_counter = 0
+            self.zapped_by = "none"
+        elif self.zapped_by == "zap_bach":
+            world.add(self.location, BachBeam())
+            self.zapped_by = "none"
+        elif self.turn_counter >= 1:
+            world.add(self.location, EmptyEntity())
+        else:
+            self.turn_counter += 1

@@ -8,10 +8,9 @@ from typing import TYPE_CHECKING, List, Optional, Sequence
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from sorrel.agents import Agent
-
-    from .agents import BachStravinskyAgent
+# if TYPE_CHECKING:
+from sorrel.agents import Agent
+from sorrel.examples.bach_stravinsky.agents import BachStravinskyAgent
 
 
 class BachStravinskyMetricsCollector:

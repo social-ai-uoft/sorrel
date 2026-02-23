@@ -6,10 +6,11 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from omegaconf import DictConfig, OmegaConf
 
-if TYPE_CHECKING:
-    from sorrel.examples.staghunt.env import StaghuntEnv
-
 from sorrel.worlds import Gridworld
+
+# if TYPE_CHECKING:
+#    from sorrel.examples.staghunt.env import StaghuntEnv
+
 
 # end imports
 
@@ -34,7 +35,7 @@ class StaghuntWorld(Gridworld):
         self.spawn_props = config.world.spawn_props
         self.beam_radius = config.world.beam_radius
 
-        self.environment: Optional[StaghuntEnv] = None
+        # self.environment: Optional[StaghuntEnv] = None
 
 
 # end treasurehunt

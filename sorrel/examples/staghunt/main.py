@@ -34,83 +34,85 @@ class EmotionalStaghuntLogger(Logger):
 if __name__ == "__main__":
 
     GRID_SIZES = [11]
-    SPAWN_PROBS = [0.002]
-    SPAWN_PROPS = [[0.5, 0.5]]  # [stag, hare]
-    NUM_AGENTS = [2]  # TODO: not currently implemented
-    EMOTION_COND = ["full"]  # TODO: add "full" back
-    # AGENT_VISION_RADIUS = [2, 3]
+    SPAWN_PROBS = [0.002, 0.005]  # [0.002, 0.005]
+    SPAWN_PROPS = [[0.5, 0.5], [1.0, 0.0]]  # [[0.5, 0.5], [1.0, 0.0]]  # [stag, hare]
+    NUM_AGENTS = [2, 4]  # [2, 4]
+    EMOTION_COND = ["full", "none"]  # ["full", "none"]
+    VISION_RADIUS = [3]
 
     for grid_size in GRID_SIZES:
         for spawn_prob in SPAWN_PROBS:
             for spawn_prop in SPAWN_PROPS:
                 for num_agents in NUM_AGENTS:
                     for emotion_cond in EMOTION_COND:
+                        for vision_radius in VISION_RADIUS:
 
-                        print("========================================")
-                        print(f"Grid size: {grid_size}")
-                        print(f"Spawn prob: {spawn_prob}")
-                        print(f"Spawn prop: {spawn_prop}")
-                        print(f"Number of agents: {num_agents}")
-                        print(f"Emotion spec: {emotion_cond}")
-                        print("========================================")
+                            print("========================================")
+                            print(f"Grid size: {grid_size}")
+                            print(f"Spawn prob: {spawn_prob}")
+                            print(f"Spawn prop: {spawn_prop}")
+                            print(f"Number of agents: {num_agents}")
+                            print(f"Emotion spec: {emotion_cond}")
+                            print(f"Vision radius: {vision_radius}")
+                            print("========================================")
 
-                        run_name = (
-                            f"ESH_gridsize_{grid_size}_spawn_prob_{spawn_prob}_spawn_prop_{spawn_prop}_num_agents_{num_agents}_emotion_cond_{emotion_cond}_"
-                            f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-                        )
+                            run_name = (
+                                f"ESH_gridsize_{grid_size}_spawn_prob_{spawn_prob}_spawn_prop_{spawn_prop}_num_agents_{num_agents}_emotion_cond_{emotion_cond}_vision_radius_{vision_radius}_"
+                                f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+                            )
 
-                        # object configurations
-                        config = {
-                            "experiment": {
-                                "epochs": 10000,
-                                "max_turns": 100,
-                                "record_period": 50,
-                                "log_dir": Path(__file__).parent
-                                / f"./data/logs/{datetime.now().strftime('%Y-%m-%d %H-%M-%S')}",
-                                "device": "cpu",
-                                "run_name": run_name,
-                            },
-                            "model": {
-                                "agent_vision_radius": 2,
-                                "epsilon_decay": 0.0005,
-                                "emotion_length": 5,
-                                "emotion_condition": emotion_cond,
-                            },
-                            "world": {
-                                "height": grid_size,
-                                "width": grid_size,
-                                "stag_value": 5,
-                                "hare_value": 1,
-                                "spawn_prob": spawn_prob,
-                                "spawn_props": spawn_prop,  # stag, hare
-                                "beam_radius": 2,
-                                "num_of_agents": num_agents,
-                            },
-                        }
+                            # object configurations
+                            config = {
+                                "experiment": {
+                                    "epochs": 10000,
+                                    "max_turns": 100,
+                                    "record_period": 50,
+                                    "log_dir": Path(__file__).parent
+                                    / f"./data/logs/{datetime.now().strftime('%Y-%m-%d %H-%M-%S')}",
+                                    "device": "cpu",
+                                    "run_name": run_name,
+                                },
+                                "model": {
+                                    "agent_vision_radius": vision_radius,
+                                    "epsilon_decay": 0.0005,
+                                    "emotion_length": 5,
+                                    "emotion_condition": emotion_cond,
+                                },
+                                "world": {
+                                    "height": grid_size,
+                                    "width": grid_size,
+                                    "stag_value": 5,
+                                    "hare_value": 1,
+                                    "spawn_prob": spawn_prob,
+                                    "spawn_props": spawn_prop,  # stag, hare
+                                    "beam_radius": 2,
+                                    "num_of_agents": num_agents,
+                                },
+                            }
 
-                        # construct the world
-                        world = StaghuntWorld(
-                            config=config, default_entity=EmptyEntity()
-                        )
-                        # construct the environment
-                        env = StaghuntEnv(world, config)
-                        # run the experiment with default parameters
+                            # construct the world
+                            world = StaghuntWorld(
+                                config=config, default_entity=EmptyEntity()
+                            )
+                            # construct the environment
+                            env = StaghuntEnv(world, config)
+                            # run the experiment with default parameters
 
-                        # Initialize metrics collection (no separate tracker needed)
-                        metrics_collector = StaghuntMetricsCollector()
+                            # Initialize metrics collection (no separate tracker needed)
+                            metrics_collector = StaghuntMetricsCollector()
 
-                        # Add metrics collector to environment for agent access
-                        env.metrics_collector = metrics_collector
+                            # Add metrics collector to environment for agent access
+                            env.metrics_collector = metrics_collector
 
-                        env.run_experiment(
-                            logger=EmotionalStaghuntLogger(
-                                max_epochs=config["experiment"]["epochs"],
-                                log_dir=Path(__file__).parent
-                                / f'runs/{config["experiment"]["run_name"]}',
-                                experiment_env=env,
-                            ),
-                            output_dir=Path(__file__).parent
-                            / f'data/{config["experiment"]["run_name"]}',
-                        )
+                            env.run_experiment(
+                                logger=EmotionalStaghuntLogger(
+                                    max_epochs=config["experiment"]["epochs"],
+                                    log_dir=Path(__file__).parent
+                                    / f'runs/{config["experiment"]["run_name"]}',
+                                    experiment_env=env,
+                                ),
+                                output_dir=Path(__file__).parent
+                                / f'data/{config["experiment"]["run_name"]}',
+                            )
 
 # end main

@@ -9,6 +9,7 @@ from sorrel.agents import MovingAgent
 from sorrel.entities import Entity
 from sorrel.examples.bach_stravinsky.entities import (
     BachBeam,
+    Beam,
     Concert,
     EmptyEntity,
     SpawnTile,
@@ -96,6 +97,22 @@ class BachStravinskyAgent(MovingAgent[BachStravinskyWorld]):
             world.remove(loc.to_tuple())
             world.add(loc.to_tuple(), beam_entity)
 
+        # We still call spawn_beam where it's currently called, but we no longer remove and add a Beam within this function.
+        # below, we will observe the entity at the zapped location, and set its .zapped_by = "zap"
+        # in that entity's transition function, we check if .zapped_by = "zap". If it is,
+        #   If EmptyEntity, it turns into a beam.
+        #   If it's a Beam (i.e. was already a beam before), reset turn_counter to 0 (so it counts up again).
+        #   Then, set is_zapped = False.
+        #   (the only thing on beam layer is EmptyEntity or Beams)
+        for loc in placeable_locs:
+            zapped_entity = world.observe(loc.to_tuple())
+            if isinstance(zapped_entity, EmptyEntity) or isinstance(
+                zapped_entity, Beam
+            ):
+                if action_name == "zap_bach":
+                    zapped_entity.zapped_by = "zap_bach"
+                else:
+                    zapped_entity.zapped_by = "zap_stravinsky"
         return placeable_locs
 
     def zap(

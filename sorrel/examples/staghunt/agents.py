@@ -7,7 +7,14 @@ import numpy as np
 
 from sorrel.agents import MovingAgent
 from sorrel.entities import Entity
-from sorrel.examples.staghunt.entities import EmptyEntity, Food, Hare, SpawnTile, Stag
+from sorrel.examples.staghunt.entities import (
+    Beam,
+    EmptyEntity,
+    Food,
+    Hare,
+    SpawnTile,
+    Stag,
+)
 from sorrel.examples.staghunt.world import StaghuntWorld
 from sorrel.location import Location, Vector
 
@@ -100,10 +107,23 @@ class StaghuntAgent(MovingAgent[StaghuntWorld]):
         ]
 
         # Then, place beams in all of the remaining valid locations.
+
+        # We still call spawn_beam where it's currently called, but we no longer remove and add a Beam within this function.
+        # below, we will observe the entity at the zapped location, and set its .zapped_by = "zap"
+        # in that entity's transition function, we check if .zapped_by = "zap". If it is,
+        #   If EmptyEntity, it turns into a beam.
+        #   If it's a Beam (i.e. was already a beam before), reset turn_counter to 0 (so it counts up again).
+        #   Then, set is_zapped = False.
+        #   (the only thing on beam layer is EmptyEntity or Beams)
         for loc in placeable_locs:
             if action == "zap":
-                world.remove(loc.to_tuple())
-                world.add(loc.to_tuple(), Beam())
+                zapped_entity = world.observe(loc.to_tuple())
+                if isinstance(zapped_entity, Beam) or isinstance(
+                    zapped_entity, EmptyEntity
+                ):
+                    zapped_entity.zapped_by = "zap"
+                    # world.remove(loc.to_tuple())
+                    # world.add(loc.to_tuple(), Beam())
         return placeable_locs
 
     def zap(self, world: StaghuntWorld, beam_locs: list[Location]) -> None:
@@ -199,21 +219,3 @@ class StaghuntAgent(MovingAgent[StaghuntWorld]):
             # )
         # self.emotion = self.model.state_value(state)  # type: ignore
         # self.emotion = 0.0  # type: ignore # for zero-ing out emotion layer
-
-
-class Beam(Entity):
-    """Generic beam class for agent beams."""
-
-    def __init__(self):
-        super().__init__()
-        self.sprite = Path(__file__).parent / "./assets/beam.png"
-        self.turn_counter = 0
-        self.beam_strength = 1
-        self.has_transitions = True
-
-    def transition(self, world: StaghuntWorld):
-        # Beams persist for one full turn, then disappear.
-        if self.turn_counter >= 1:
-            world.add(self.location, EmptyEntity())
-        else:
-            self.turn_counter += 1
