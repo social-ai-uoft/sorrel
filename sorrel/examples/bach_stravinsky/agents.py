@@ -202,5 +202,5 @@ class BachStravinskyAgent(MovingAgent[BachStravinskyWorld]):
     def update_emotion(self, state: np.ndarray) -> None:
         if self.emotion_length == 1:
             self.emotion = self.model.state_value(state)  # type: ignore
-        elif self.emotion_length == 5:
-            self.emotion = np.zeros(self.emotion_length)  # type: ignore
+        elif self.emotion_length == self.action_spec.n_actions:
+            self.emotion = self.model.state_values(state)  # type: ignore

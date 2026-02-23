@@ -1,4 +1,4 @@
-"""The environment for Prisoner's Dilemma example."""
+"""The environment for Hawk-Dove example."""
 
 from typing import Optional
 
@@ -8,22 +8,20 @@ from typing_extensions import override
 
 from sorrel.action.action_spec import ActionSpec
 from sorrel.environment import Environment
-from sorrel.examples.prisoners_dilemma.agents import PrisonersDilemmaAgent
-from sorrel.examples.prisoners_dilemma.entities import (
-    CooperateBeam,
-    DefectBeam,
+from sorrel.examples.hawk_dove.agents import HawkDoveAgent
+from sorrel.examples.hawk_dove.entities import (
+    DoveBeam,
     EmptyEntity,
-    Exchange,
+    HawkBeam,
+    Resource,
     Sand,
     SpawnTile,
     Wall,
 )
-from sorrel.examples.prisoners_dilemma.metrics_collector import (
-    PrisonersDilemmaMetricsCollector,
-)
-from sorrel.examples.prisoners_dilemma.world import PrisonersDilemmaWorld
+from sorrel.examples.hawk_dove.metrics_collector import HawkDoveMetricsCollector
+from sorrel.examples.hawk_dove.world import HawkDoveWorld
 
-# Reusing the existing observation spec from staghunt for now as it seems generic enough for these gridworlds
+# Reusing the existing observation spec from staghunt
 from sorrel.examples.staghunt.custom_observation_spec import (
     EmotionalStaghuntObservationSpec,
     InteroceptiveObservationSpec,
@@ -33,34 +31,29 @@ from sorrel.examples.staghunt.custom_observation_spec import (
 from sorrel.models.pytorch import PyTorchIQN
 
 
-class PrisonersDilemmaEnv(Environment[PrisonersDilemmaWorld]):
-    """The environment for Prisoner's Dilemma."""
+class HawkDoveEnv(Environment[HawkDoveWorld]):
+    """The environment for Hawk-Dove."""
 
-    def __init__(self, world: PrisonersDilemmaWorld, config: dict) -> None:
+    def __init__(self, world: HawkDoveWorld, config: dict) -> None:
         super().__init__(world, config)
         world.environment = self
-        # Metrics collector not implemented yet
-        self.metrics_collector: Optional[PrisonersDilemmaMetricsCollector] = None
+        self.metrics_collector: Optional[HawkDoveMetricsCollector] = None
 
     def setup_agents(self):
         """Create the agents for this experiment."""
         agent_num = 2
-        emotion_length = self.config.model.get(
-            "emotion_length", 1
-        )  # Default to 1 if not in config
+        emotion_length = self.config.model.get("emotion_length", 1)
         agents = []
         for agent_id in range(agent_num):
-            # create the observation spec
             entity_list = [
                 "EmptyEntity",
                 "Wall",
-                "Exchange",
-                "PrisonersDilemmaAgent",
-                "CooperateBeam",
-                "DefectBeam",
+                "Resource",
+                "HawkDoveAgent",
+                "HawkBeam",
+                "DoveBeam",
             ]
 
-            # Using default vision radius if not specified
             vision_radius = self.config.model.get("agent_vision_radius", 4)
 
             match self.config.model.emotion_condition:
@@ -70,7 +63,6 @@ class PrisonersDilemmaEnv(Environment[PrisonersDilemmaWorld]):
                     observation_spec_class = InteroceptiveObservationSpec
                 case "other":
                     observation_spec_class = OtherOnlyObservationSpec
-                # Default case: no emotions
                 case _:
                     observation_spec_class = NoEmotionObservationSpec
 
@@ -80,18 +72,12 @@ class PrisonersDilemmaEnv(Environment[PrisonersDilemmaWorld]):
                 vision_radius=vision_radius,
                 emotion_length=emotion_length,
             )
-            # Flatten observation
             observation_spec.override_input_size(
                 (int(np.prod(observation_spec.input_size)),)
             )
 
-            # create the action spec
-            action_spec = ActionSpec(
-                ["up", "down", "left", "right", "cooperate", "defect"]
-            )
+            action_spec = ActionSpec(["up", "down", "left", "right", "hawk", "dove"])
 
-            # create the model
-            # defaulting some params if not in config
             device = self.config.experiment.get("device", "cpu")
             batch_size = self.config.model.get("batch_size", 64)
 
@@ -112,7 +98,7 @@ class PrisonersDilemmaEnv(Environment[PrisonersDilemmaWorld]):
             )
 
             agents.append(
-                PrisonersDilemmaAgent(
+                HawkDoveAgent(
                     observation_spec=observation_spec,
                     action_spec=action_spec,
                     model=model,
@@ -132,18 +118,16 @@ class PrisonersDilemmaEnv(Environment[PrisonersDilemmaWorld]):
             if (y in [0, self.world.height - 1] or x in [0, self.world.width - 1]) and (
                 z == 2
             ):
-                # Add walls around the edge of the world
                 self.world.add(index, Wall())
-            elif z == 0:  # if location is on the bottom layer, put sand there
+            elif z == 0:
                 self.world.add(index, Sand())
-            elif z == 1:  # level 1: objects spawning (Exchanges via SpawnTile)
+            elif z == 1:
                 self.world.add(index, SpawnTile())
-            elif z == 2:  # level 2: valid spawn location for agents
+            elif z == 2:
                 valid_spawn_locations.append(index)
-            elif z == 3:  # beam layer
+            elif z == 3:
                 self.world.add(index, EmptyEntity())
 
-        # spawn the agents
         if len(valid_spawn_locations) >= len(self.agents):
             agent_locations_indices = np.random.choice(
                 len(valid_spawn_locations), size=len(self.agents), replace=False
