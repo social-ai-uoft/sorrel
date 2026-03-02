@@ -56,6 +56,14 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
             if hasattr(self.world, 'dynamic_resource_density_enabled') and self.world.dynamic_resource_density_enabled:
                 self.world.update_resource_density_at_epoch_start()
             
+            # Check if appearance switching should occur (BEFORE reset)
+            # Follow same pattern as dynamic_resource_density
+            if (hasattr(self.world, 'appearance_switching_enabled') and 
+                self.world.appearance_switching_enabled and 
+                epoch > 0 and 
+                epoch % self.world.appearance_switch_period == 0):
+                self.world.switch_appearances()
+            
             # Reset the environment at the start of each epoch
             self.reset()
 

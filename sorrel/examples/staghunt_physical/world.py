@@ -18,6 +18,10 @@ entity for empty cells is provided when constructing the world.
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 try:
     # Optional dependency used in the original sorrel examples.  If
     # OmegaConf is unavailable, we fall back to treating the config as a
@@ -118,6 +122,7 @@ class StagHuntWorld(Gridworld):
             get_world_param("num_agents", 2)
         )  # TODO: ideally the default should be 8
         self.resource_density: float = float(get_world_param("resource_density", 0.05))
+        self.respawn_rate: float = float(get_world_param("respawn_rate", 0.05))
         # Separate reward values for stag and hare
         self.stag_reward: float = float(get_world_param("stag_reward", 1.0))
         self.hare_reward: float = float(get_world_param("hare_reward", 0.1))
@@ -170,6 +175,21 @@ class StagHuntWorld(Gridworld):
         max_hares_val = get_world_param("max_hares", None)
         self.max_hares: int | None = int(max_hares_val) if max_hares_val is not None else None
 
+        # Cached resource counters for O(1) performance
+        self._cached_stag_count = 0
+        self._cached_hare_count = 0
+        self._cached_total_resource_count = 0
+
+        # Resource respawn cap mode
+        # "specified": Use max_resources, max_stags, max_hares parameters (default)
+        # "initial_count": Automatically set caps based on initial spawn counts
+        self.resource_cap_mode: str = str(get_world_param("resource_cap_mode", "specified"))
+        if self.resource_cap_mode not in ["specified", "initial_count"]:
+            raise ValueError(
+                f"Invalid resource_cap_mode: {self.resource_cap_mode}. "
+                f"Must be 'specified' or 'initial_count'"
+            )
+
         # Dynamic resource density parameters (3-step process with resource-specific rates)
         # Note: get_world_param doesn't support nested paths, so access nested config directly
         dynamic_cfg = world_cfg.get("dynamic_resource_density", {})
@@ -206,6 +226,14 @@ class StagHuntWorld(Gridworld):
             # When disabled, rates are always 1.0 (no filtering, backward compatible)
             self.current_stag_rate: float = 1.0
             self.current_hare_rate: float = 1.0
+
+        # Appearance switching configuration
+        appearance_cfg = world_cfg.get("appearance_switching", {})
+        self.appearance_switching_enabled: bool = bool(appearance_cfg.get("enabled", False))
+        switch_period = appearance_cfg.get("switch_period", 1000)
+        if switch_period <= 0:
+            switch_period = 1000  # Use safe default
+        self.appearance_switch_period: int = int(switch_period)
 
         # Agent configuration system
         use_agent_config = bool(get_world_param("use_agent_config", False))  # Default to False for backward compatibility
@@ -244,20 +272,79 @@ class StagHuntWorld(Gridworld):
         self.agent_spawn_points = [(2, 2, 1), (3, 3, 1), (4, 4, 1), (5, 5, 1)]
         self.resource_spawn_points = []
 
+    def create_world(self) -> None:
+        """Create a new world map and reset cached resource counts.
+        
+        Overrides parent method to reset cached counts when world is recreated.
+        """
+        # Call parent to create the map
+        super().create_world()
+        
+        # Reset cached resource counts to 0 (world is empty after creation)
+        self._cached_stag_count = 0
+        self._cached_hare_count = 0
+        self._cached_total_resource_count = 0
+
+    def add(self, target_location: tuple[int, ...], entity) -> None:
+        """Adds an entity to the world at a location, replacing any existing entity.
+        
+        Updates cached resource counts when resources are added/removed.
+        Also verifies that resources maintain correct passable attribute after storage.
+        """
+        # Check what's currently at this location
+        old_entity = self.map[target_location]
+        
+        # Decrement counters if old entity was a resource
+        if hasattr(old_entity, 'name') and old_entity.name == 'stag':
+            self._decrement_stag_count()
+        elif hasattr(old_entity, 'name') and old_entity.name == 'hare':
+            self._decrement_hare_count()
+        
+        # Call parent add() to actually place the entity
+        super().add(target_location, entity)
+        
+        # VERIFICATION: Check if stored entity matches what we added and has correct attributes
+        stored_entity = self.map[target_location]
+        
+        # For resources, verify passable is False and entity identity is preserved
+        if hasattr(entity, 'name') and entity.name in ('stag', 'hare'):
+            # Check if stored entity is the same object
+            if id(stored_entity) != id(entity):
+                import warnings
+                warnings.warn(
+                    f"Resource {entity.name} at {target_location} - stored entity is different object. "
+                    f"Original id: {id(entity)}, Stored id: {id(stored_entity)}",
+                    RuntimeWarning,
+                    stacklevel=2
+                )
+            
+            # Verify passable is False (critical for movement blocking)
+            if stored_entity.passable != False:
+                # Force correct value - this should not happen but fix it if it does
+                stored_entity.passable = False
+                import warnings
+                warnings.warn(
+                    f"Resource {entity.name} at {target_location} had passable={stored_entity.passable} "
+                    f"after storage. Corrected to False. "
+                    f"Stored entity type: {type(stored_entity).__name__}, "
+                    f"Original entity type: {type(entity).__name__}",
+                    RuntimeWarning,
+                    stacklevel=2
+                )
+        
+        # Increment counters if new entity is a resource
+        if hasattr(entity, 'name') and entity.name == 'stag':
+            self._increment_stag_count()
+        elif hasattr(entity, 'name') and entity.name == 'hare':
+            self._increment_hare_count()
+
     def count_resources(self) -> int:
         """Count the total number of resource entities (StagResource and HareResource) in the world.
         
         Returns:
             int: Number of resource entities currently in the world.
         """
-        count = 0
-        for y, x, layer in np.ndindex(self.map.shape):
-            if layer == self.dynamic_layer:
-                entity = self.observe((y, x, layer))
-                # Check by name attribute to avoid circular imports
-                if hasattr(entity, 'name') and entity.name in ['stag', 'hare']:
-                    count += 1
-        return count
+        return self._cached_total_resource_count
 
     def count_stags(self) -> int:
         """Count the number of StagResource entities in the world.
@@ -265,14 +352,7 @@ class StagHuntWorld(Gridworld):
         Returns:
             int: Number of stag resources currently in the world.
         """
-        count = 0
-        for y, x, layer in np.ndindex(self.map.shape):
-            if layer == self.dynamic_layer:
-                entity = self.observe((y, x, layer))
-                # Check by name attribute to avoid circular imports
-                if hasattr(entity, 'name') and entity.name == 'stag':
-                    count += 1
-        return count
+        return self._cached_stag_count
 
     def count_hares(self) -> int:
         """Count the number of HareResource entities in the world.
@@ -280,14 +360,92 @@ class StagHuntWorld(Gridworld):
         Returns:
             int: Number of hare resources currently in the world.
         """
+        return self._cached_hare_count
+
+    def _count_stags_actual(self) -> int:
+        """Actual count implementation (used for initialization)."""
         count = 0
         for y, x, layer in np.ndindex(self.map.shape):
             if layer == self.dynamic_layer:
                 entity = self.observe((y, x, layer))
-                # Check by name attribute to avoid circular imports
+                if hasattr(entity, 'name') and entity.name == 'stag':
+                    count += 1
+        return count
+
+    def _count_hares_actual(self) -> int:
+        """Actual count implementation (used for initialization)."""
+        count = 0
+        for y, x, layer in np.ndindex(self.map.shape):
+            if layer == self.dynamic_layer:
+                entity = self.observe((y, x, layer))
                 if hasattr(entity, 'name') and entity.name == 'hare':
                     count += 1
         return count
+
+    def _count_resources_actual(self) -> int:
+        """Actual count implementation (used for initialization)."""
+        count = 0
+        for y, x, layer in np.ndindex(self.map.shape):
+            if layer == self.dynamic_layer:
+                entity = self.observe((y, x, layer))
+                if hasattr(entity, 'name') and entity.name in ['stag', 'hare']:
+                    count += 1
+        return count
+
+    def _increment_stag_count(self) -> None:
+        """Increment cached stag count."""
+        self._cached_stag_count += 1
+        self._cached_total_resource_count += 1
+
+    def _decrement_stag_count(self) -> None:
+        """Decrement cached stag count."""
+        self._cached_stag_count = max(0, self._cached_stag_count - 1)
+        self._cached_total_resource_count = max(0, self._cached_total_resource_count - 1)
+
+    def _increment_hare_count(self) -> None:
+        """Increment cached hare count."""
+        self._cached_hare_count += 1
+        self._cached_total_resource_count += 1
+
+    def _decrement_hare_count(self) -> None:
+        """Decrement cached hare count."""
+        self._cached_hare_count = max(0, self._cached_hare_count - 1)
+        self._cached_total_resource_count = max(0, self._cached_total_resource_count - 1)
+
+    def _initialize_counts(self) -> None:
+        """Initialize cached counts from actual world state.
+        
+        Should be called once after world population is complete.
+        """
+        self._cached_stag_count = self._count_stags_actual()
+        self._cached_hare_count = self._count_hares_actual()
+        self._cached_total_resource_count = self._count_resources_actual()
+
+    def set_caps_from_initial_counts(self) -> None:
+        """Set resource caps based on current resource counts in the world.
+        
+        This method counts all resources currently in the world and sets:
+        - max_stags to current stag count
+        - max_hares to current hare count
+        - max_resources to total resource count
+        
+        Uses actual count methods (not cached) to ensure caps are always based on
+        the current epoch's actual world state, independent of previous epochs.
+        
+        Should be called after initial spawning is complete.
+        """
+        # Use actual count methods to read current world state directly
+        # This ensures caps are always based on this epoch's resources, not cached values
+        stag_count = self._count_stags_actual()
+        hare_count = self._count_hares_actual()
+        total_count = self._count_resources_actual()
+        
+        # Set specific caps
+        self.max_stags = stag_count
+        self.max_hares = hare_count
+        
+        # Set total cap to the sum (for consistency, though specific caps take priority)
+        self.max_resources = total_count
 
     def update_resource_density_at_epoch_start(self) -> None:
         """Update resource spawn success rates at the start of each epoch.
@@ -330,3 +488,24 @@ class StagHuntWorld(Gridworld):
         # Apply bounds: ensure rates stay within [minimum_rate, 1.0]
         self.current_stag_rate = max(self.minimum_rate, min(1.0, self.current_stag_rate))
         self.current_hare_rate = max(self.minimum_rate, min(1.0, self.current_hare_rate))
+
+    def switch_appearances(self) -> None:
+        """Switch the functional properties (rewards, health, cooldowns) of stag and hare resources.
+        
+        This method swaps the world attributes that control resource properties, creating a mismatch
+        between visual appearance (which stays the same) and functional properties (which are swapped).
+        The swap occurs before any resources are spawned, ensuring all resources use the swapped values.
+        
+        Note: This does NOT swap sprites - visual appearances remain the same (stag looks like stag,
+        hare looks like hare), but their functional properties are swapped.
+        """
+        if not self.appearance_switching_enabled:
+            return
+        
+        # Swap rewards
+        self.stag_reward, self.hare_reward = self.hare_reward, self.stag_reward
+        # Swap health
+        self.stag_health, self.hare_health = self.hare_health, self.stag_health
+        # Swap regeneration cooldowns
+        self.stag_regeneration_cooldown, self.hare_regeneration_cooldown = \
+            self.hare_regeneration_cooldown, self.stag_regeneration_cooldown

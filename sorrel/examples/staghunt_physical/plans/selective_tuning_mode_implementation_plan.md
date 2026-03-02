@@ -74,10 +74,10 @@ class PunishBeam(Beam):
 **Change:** Always pass `self.agent_id` when creating beams (needed for both modes, but only used in selective tuning mode):
 
 ```python
-# In spawn_attack_beam(), around line 1216:
+# In spawn_attack_beam(), around line 1665:
 world.add(loc, AttackBeam(creator_agent_id=self.agent_id))
 
-# In spawn_punish_beam(), around line 1288:
+# In spawn_punish_beam(), around line 1737:
 world.add(loc, PunishBeam(creator_agent_id=self.agent_id))
 ```
 
@@ -428,62 +428,62 @@ if self.selective_tuning_mode:
     # We need to override this to use Me/Other variants based on creator_agent_id
     # First, clear AttackBeam/PunishBeam channels and set appropriate Me/Other channels
     if "AttackBeam" in self.entity_list and observer_agent is not None:
-    attack_beam_idx = self.entity_list.index("AttackBeam")
-    me_attack_idx = self.entity_list.index("MeAttackBeam") if "MeAttackBeam" in self.entity_list else None
-    other_attack_idx = self.entity_list.index("OtherAttackBeam") if "OtherAttackBeam" in self.entity_list else None
-    
-    # Check beam layer for each cell
-    for y in range(height):
-        for x in range(width):
-            world_y = obs_y - vision_radius + y
-            world_x = obs_x - vision_radius + x
-            beam_loc = (world_y, world_x, world.beam_layer)
-            
-            if world.valid_location(beam_loc):
-                beam_entity = world.observe(beam_loc)
-                if getattr(beam_entity, 'kind', type(beam_entity).__name__) == "AttackBeam":
-                    # Clear original AttackBeam encoding
-                    entity_channels[attack_beam_idx, y, x] = 0.0
-                    
-                    # Check if beam was created by observer
-                    is_observer_beam = False
-                    if hasattr(beam_entity, 'creator_agent_id') and hasattr(observer_agent, 'agent_id'):
-                        is_observer_beam = (beam_entity.creator_agent_id == observer_agent.agent_id)
-                    
-                    # Set appropriate Me/Other channel
-                    if is_observer_beam and me_attack_idx is not None:
-                        entity_channels[me_attack_idx, y, x] = 1.0
-                    elif not is_observer_beam and other_attack_idx is not None:
-                        entity_channels[other_attack_idx, y, x] = 1.0
+        attack_beam_idx = self.entity_list.index("AttackBeam")
+        me_attack_idx = self.entity_list.index("MeAttackBeam") if "MeAttackBeam" in self.entity_list else None
+        other_attack_idx = self.entity_list.index("OtherAttackBeam") if "OtherAttackBeam" in self.entity_list else None
+
+        # Check beam layer for each cell
+        for y in range(height):
+            for x in range(width):
+                world_y = obs_y - vision_radius + y
+                world_x = obs_x - vision_radius + x
+                beam_loc = (world_y, world_x, world.beam_layer)
+
+                if world.valid_location(beam_loc):
+                    beam_entity = world.observe(beam_loc)
+                    if getattr(beam_entity, 'kind', type(beam_entity).__name__) == "AttackBeam":
+                        # Clear original AttackBeam encoding
+                        entity_channels[attack_beam_idx, y, x] = 0.0
+
+                        # Check if beam was created by observer
+                        is_observer_beam = False
+                        if hasattr(beam_entity, 'creator_agent_id') and hasattr(observer_agent, 'agent_id'):
+                            is_observer_beam = (beam_entity.creator_agent_id == observer_agent.agent_id)
+
+                        # Set appropriate Me/Other channel
+                        if is_observer_beam and me_attack_idx is not None:
+                            entity_channels[me_attack_idx, y, x] = 1.0
+                        elif not is_observer_beam and other_attack_idx is not None:
+                            entity_channels[other_attack_idx, y, x] = 1.0
 
     if "PunishBeam" in self.entity_list and observer_agent is not None:
-    punish_beam_idx = self.entity_list.index("PunishBeam")
-    me_punish_idx = self.entity_list.index("MePunishBeam") if "MePunishBeam" in self.entity_list else None
-    other_punish_idx = self.entity_list.index("OtherPunishBeam") if "OtherPunishBeam" in self.entity_list else None
-    
-    # Check beam layer for each cell
-    for y in range(height):
-        for x in range(width):
-            world_y = obs_y - vision_radius + y
-            world_x = obs_x - vision_radius + x
-            beam_loc = (world_y, world_x, world.beam_layer)
-            
-            if world.valid_location(beam_loc):
-                beam_entity = world.observe(beam_loc)
-                if getattr(beam_entity, 'kind', type(beam_entity).__name__) == "PunishBeam":
-                    # Clear original PunishBeam encoding
-                    entity_channels[punish_beam_idx, y, x] = 0.0
-                    
-                    # Check if beam was created by observer
-                    is_observer_beam = False
-                    if hasattr(beam_entity, 'creator_agent_id') and hasattr(observer_agent, 'agent_id'):
-                        is_observer_beam = (beam_entity.creator_agent_id == observer_agent.agent_id)
-                    
-                    # Set appropriate Me/Other channel
-                    if is_observer_beam and me_punish_idx is not None:
-                        entity_channels[me_punish_idx, y, x] = 1.0
-                    elif not is_observer_beam and other_punish_idx is not None:
-                        entity_channels[other_punish_idx, y, x] = 1.0
+        punish_beam_idx = self.entity_list.index("PunishBeam")
+        me_punish_idx = self.entity_list.index("MePunishBeam") if "MePunishBeam" in self.entity_list else None
+        other_punish_idx = self.entity_list.index("OtherPunishBeam") if "OtherPunishBeam" in self.entity_list else None
+
+        # Check beam layer for each cell
+        for y in range(height):
+            for x in range(width):
+                world_y = obs_y - vision_radius + y
+                world_x = obs_x - vision_radius + x
+                beam_loc = (world_y, world_x, world.beam_layer)
+
+                if world.valid_location(beam_loc):
+                    beam_entity = world.observe(beam_loc)
+                    if getattr(beam_entity, 'kind', type(beam_entity).__name__) == "PunishBeam":
+                        # Clear original PunishBeam encoding
+                        entity_channels[punish_beam_idx, y, x] = 0.0
+
+                        # Check if beam was created by observer
+                        is_observer_beam = False
+                        if hasattr(beam_entity, 'creator_agent_id') and hasattr(observer_agent, 'agent_id'):
+                            is_observer_beam = (beam_entity.creator_agent_id == observer_agent.agent_id)
+
+                        # Set appropriate Me/Other channel
+                        if is_observer_beam and me_punish_idx is not None:
+                            entity_channels[me_punish_idx, y, x] = 1.0
+                        elif not is_observer_beam and other_punish_idx is not None:
+                            entity_channels[other_punish_idx, y, x] = 1.0
 
 # Step 3.6: Concatenate channels (conditionally include self-reference)
 if self.selective_tuning_mode:
@@ -633,3 +633,4 @@ config = {
 - Beam entities always get `creator_agent_id` attribute (for backward compatibility), but it's only used in selective tuning mode
 - Entity list conditionally includes Me/Other beam types only when `selective_tuning_mode=True`
 - Self-reference channel is only added when `selective_tuning_mode=True` and is set to 1 only when the entity at that cell is the observer agent
+is set to 1 only when the entity at that cell is the observer agent

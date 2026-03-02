@@ -29,6 +29,7 @@ from sorrel.examples.staghunt_physical.config_loader import (
     merge_agent_configs,
 )
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
+from sorrel.utils.helpers import set_seed
 
 
 class CombinedLogger(Logger):
@@ -52,12 +53,32 @@ class CombinedLogger(Logger):
             self.experiment_env.log_epoch_metrics(epoch, self.tensorboard_logger.writer)
 
 
-def run_stag_hunt(run_name_base: str | None = None) -> None:
+def run_stag_hunt(
+    run_name_base: str | None = None,
+    resource_density: float | None = None,
+    max_resources: int | None = None,
+    max_stags: int | None = None,
+    max_hares: int | None = None,
+    resource_cap_mode: str | None = None,
+    seed: int | None = None,
+) -> None:
     """Run a single stag hunt experiment with default hyperparameters.
     
     Args:
         run_name_base: Optional base name for the run. If not provided, uses default from config.
+        resource_density: Optional resource density override (0.0-1.0).
+        max_resources: Optional max resources cap override (None = unlimited).
+        max_stags: Optional max stags cap override (None = unlimited).
+        max_hares: Optional max hares cap override (None = unlimited).
+        resource_cap_mode: Optional resource cap mode override ("specified" or "initial_count").
+        seed: Optional random seed for reproducibility. If provided, sets seed for random, numpy, and torch.
     """
+    # Set random seed for reproducibility if provided
+    # This sets seeds for: Python random, NumPy, PyTorch, CUDA, and cuDNN
+    if seed is not None:
+        set_seed(seed)
+        print(f"Random seed set to: {seed} (Python random, NumPy, PyTorch, CUDA, cuDNN)")
+    
     # configuration dictionary specifying hyperparameters
     config = {
         "experiment": {
@@ -68,7 +89,7 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
             # If True, randomly sample number of turns per epoch from [1, max_turns] instead of using fixed max_turns
             "random_max_turns": True,
             # recording period for animation (unused here)
-            "record_period": 1000,
+            "record_period": 500,
             # Base run name (max_turns and epsilon will be automatically appended)
             # Can be overridden via CLI argument
             "run_name_base": run_name_base if run_name_base is not None else "test_onehot_new_observation_format", 
@@ -153,15 +174,17 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
             "generation_mode": "random",  # "random" or "ascii_map"
             "ascii_map_file": "test_intention_onlystag.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 27, # 13
-            "width": 27,
+            "height": 13, # 13
+            "width": 13,
             # number of players in the game
-            "num_agents": 20,
+            "num_agents": 4,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
             # Only the spawned agents will act and learn in each epoch
-            "num_agents_to_spawn": 20,  # Spawn 2 out of 3 agents each epoch
-            # probability an empty cell spawns a resource each step
-            "resource_density": 0.15,
+            "num_agents_to_spawn": 4,  # Spawn 2 out of 3 agents each epoch
+            # probability an empty cell spawns a resource each step (for initial spawning)
+            "resource_density": 0.04,
+            # probability a resource respawns each step after respawn_lag (for respawning)
+            "respawn_rate": 0.9,
             # If True in random mode, agents spawn randomly in valid locations instead of fixed spawn points
             "random_agent_spawning": True,
             # If True, resources can respawn at any valid Sand location (not just original spawn points)
@@ -197,9 +220,15 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
                 "initial_hare_rate": None,  # Optional: starting hare rate (defaults to 1.0)
             },
             # Resource respawn cap configuration
-            "max_resources": 30,  # Maximum total resources (None = unlimited)
-            "max_stags": 15,  # Maximum stag resources (None = unlimited, overrides max_resources for stags)
-            "max_hares": 15,  # Maximum hare resources (None = unlimited, overrides max_resources for hares)
+            "resource_cap_mode": "initial_count",  # Options: "specified" (use max_resources/max_stags/max_hares) or "initial_count" (auto-set from initial spawns)
+            "max_resources": 40,  # Maximum total resources (None = unlimited, ignored if resource_cap_mode == "initial_count")
+            "max_stags": 20,  # Maximum stag resources (None = unlimited, overrides max_resources for stags, ignored if resource_cap_mode == "initial_count")
+            "max_hares": 20,  # Maximum hare resources (None = unlimited, overrides max_resources for hares, ignored if resource_cap_mode == "initial_count")
+            # Appearance switching configuration
+            "appearance_switching": {
+                "enabled": True,  # Set to True to enable appearance switching
+                "switch_period": 30000,  # Switch appearances every X epochs
+            },
             # legacy parameter for backward compatibility
             # "taste_reward": 10,
             # zap hits required to destroy a resource (legacy parameter)
@@ -213,7 +242,7 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
             "punish_cooldown": 5,  # Separate cooldown for PUNISH action
             "punish_cost": 0.1,  # Cost to use punish action
             # respawn timing
-            "respawn_lag": 10,  # number of turns before a resource can respawn
+            "respawn_lag": 1,  # number of turns before a resource can respawn
             # payoff matrix for the row player (stag=0, hare=1)
             "payoff_matrix": [[4, 0], [2, 2]],
             # bonus awarded for participating in an interaction
@@ -236,7 +265,8 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
             # Optional: Path to CSV file for agent configuration (alternative to agent_config dict)
             # If provided, CSV will be loaded and merged with agent_config (CSV takes precedence)
             # Path is resolved relative to main.py's directory if not absolute
-            "agent_config_csv": "configs/agents_example.csv",  # Uncomment to use CSV-based agent config
+            "agent_config_csv": None,
+            # "configs/agents_example.csv",  # Uncomment to use CSV-based agent config
             # Agent configuration - mapping from agent_id to kind and attributes
             # Only used if use_agent_config is True
             # Can be supplemented/overridden by agent_config_csv if provided
@@ -254,17 +284,17 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
                         "exclusive_reward": False,
                     },
                     2: {
-                        "kind": "AgentKindB",
-                        "can_hunt": False,
+                        "kind": "AgentKindA",
+                        "can_hunt": True,
                         "can_receive_shared_reward": True,
                         "exclusive_reward": False,
                     },
-                    # 3: {
-                    #     "kind": "AgentKindB",
-                    #     "can_hunt": False,
-                    #     "can_receive_shared_reward": True,
-                    #     "exclusive_reward": False,
-                    # },
+                    3: {
+                        "kind": "AgentKindA",
+                        "can_hunt": True,
+                        "can_receive_shared_reward": True,
+                        "exclusive_reward": False,
+                    },
                 # ... etc
             },
             # Agent identity system configuration
@@ -295,9 +325,10 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
     # Load and merge CSV agent config if provided
     world_cfg = config.get("world", {})
     agent_config_csv = world_cfg.get("agent_config_csv", None)
+    use_agent_config = world_cfg.get("use_agent_config", False)
     
     # Only process CSV if a non-empty string path is provided (None or empty string skip CSV loading)
-    if agent_config_csv and isinstance(agent_config_csv, str) and agent_config_csv.strip():
+    if agent_config_csv and isinstance(agent_config_csv, str) and agent_config_csv.strip() and use_agent_config:
         # Resolve CSV path relative to main.py's directory if not absolute
         csv_path = Path(agent_config_csv)
         if not csv_path.is_absolute():
@@ -313,10 +344,11 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
                 f"Failed to load agent config from CSV file '{agent_config_csv}': {e}"
             ) from e
         
-        # Get existing dict config (if any)
-        dict_config = world_cfg.get("agent_config", None)
+        # When CSV is provided, use ONLY CSV (ignore dict config in main.py)
+        # Set dict_config to None to use CSV exclusively
+        dict_config = None
         
-        # Merge configs (CSV takes precedence)
+        # Merge configs (CSV takes precedence, but since dict_config is None, only CSV is used)
         merged_config = merge_agent_configs(dict_config, csv_config)
         
         # Validate agent count matches num_agents
@@ -325,20 +357,35 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
             num_agents_in_config = len(merged_config)
             if num_agents_in_config != num_agents:
                 raise ValueError(
-                    f"Number of agents in merged config ({num_agents_in_config}) does not match "
-                    f"num_agents ({num_agents}). Please ensure agent_config_csv and/or agent_config "
-                    f"define exactly {num_agents} agents (with agent IDs 0 through {num_agents - 1})."
+                    f"Number of agents in CSV config ({num_agents_in_config}) does not match "
+                    f"num_agents ({num_agents}). Please ensure agent_config_csv "
+                    f"defines exactly {num_agents} agents (with agent IDs 0 through {num_agents - 1})."
                 )
         
-        # Update config with merged agent_config
+        # Update config with CSV-only agent_config
         config["world"]["agent_config"] = merged_config
         
         # Remove agent_config_csv from config before saving (saved YAMLs should be self-contained)
-        # Store it temporarily for the message, then remove
         config["world"].pop("agent_config_csv", None)
         
-        if dict_config:
-            print(f"  Merged with {len(dict_config)} agents from dict config (CSV took precedence for overlaps)")
+        print(f"  Using CSV-only agent config (dict config ignored when CSV is provided)")
+    
+    # Override parameters if provided via CLI
+    if resource_density is not None:
+        config["world"]["resource_density"] = resource_density
+    if max_resources is not None:
+        config["world"]["max_resources"] = max_resources
+    if max_stags is not None:
+        config["world"]["max_stags"] = max_stags
+    if max_hares is not None:
+        config["world"]["max_hares"] = max_hares
+    if resource_cap_mode is not None:
+        if resource_cap_mode not in ["specified", "initial_count"]:
+            raise ValueError(
+                f"Invalid resource_cap_mode: {resource_cap_mode}. "
+                f"Must be 'specified' or 'initial_count'"
+            )
+        config["world"]["resource_cap_mode"] = resource_cap_mode
     
     # Automatically construct run_name from base name and key parameters
     run_name_base = config["experiment"].get("run_name_base", "staghunt_experiment")
@@ -415,7 +462,7 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
         logger=CombinedLogger(
             max_epochs=config["experiment"]["epochs"],
             log_dir=Path(__file__).parent
-            / f'runs_validate_probe_test/{config["experiment"]["run_name"]}_{timestamp}',
+            / f'runs_env_shock/{config["experiment"]["run_name"]}_{timestamp}',
             experiment_env=experiment,
         ),
         output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}',
@@ -423,6 +470,16 @@ def run_stag_hunt(run_name_base: str | None = None) -> None:
     
     print(f"Metrics tracking completed - all metrics integrated into main TensorBoard logs")
     print(f"To view metrics, run: tensorboard --logdir runs/{config['experiment']['run_name']}_{timestamp}")
+
+
+def parse_none_or_int(value: str) -> int | None:
+    """Parse 'None' string or integer."""
+    if value.lower() == "none":
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{value}' is not a valid integer or 'None'")
 
 
 if __name__ == "__main__":
@@ -434,5 +491,51 @@ if __name__ == "__main__":
         help="Base name for the run (max_turns and epsilon will be automatically appended). "
              "If not provided, uses default from config."
     )
+    parser.add_argument(
+        "--resource-density",
+        type=float,
+        default=None,
+        help="Override resource_density parameter (0.0-1.0)"
+    )
+    parser.add_argument(
+        "--max-resources",
+        type=parse_none_or_int,
+        default=None,
+        help="Override max_resources parameter (use 'None' for unlimited)"
+    )
+    parser.add_argument(
+        "--max-stags",
+        type=parse_none_or_int,
+        default=None,
+        help="Override max_stags parameter (use 'None' for unlimited)"
+    )
+    parser.add_argument(
+        "--max-hares",
+        type=parse_none_or_int,
+        default=None,
+        help="Override max_hares parameter (use 'None' for unlimited)"
+    )
+    parser.add_argument(
+        "--resource-cap-mode",
+        type=str,
+        choices=["specified", "initial_count"],
+        default=None,
+        help="Resource cap mode: 'specified' (use max_resources/max_stags/max_hares) or 'initial_count' (auto-set from initial spawns)"
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for reproducibility. Sets seed for random, numpy, and torch."
+    )
     args = parser.parse_args()
-    run_stag_hunt(run_name_base=args.run_name_base)
+    
+    run_stag_hunt(
+        run_name_base=args.run_name_base,
+        resource_density=args.resource_density,
+        max_resources=args.max_resources,
+        max_stags=args.max_stags,
+        max_hares=args.max_hares,
+        resource_cap_mode=args.resource_cap_mode,
+        seed=args.seed,
+    )

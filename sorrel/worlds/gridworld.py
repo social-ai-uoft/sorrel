@@ -49,7 +49,9 @@ class Gridworld:
         resetting environments.
         """
 
-        self.map = np.full((self.height, self.width, self.layers), Entity())
+        # Explicitly use dtype=object to ensure proper Python object storage
+        # This prevents numpy from creating views or copies that could lose attributes
+        self.map = np.full((self.height, self.width, self.layers), Entity(), dtype=object)
 
         # Define the location of each entity
         for index, x in np.ndenumerate(self.map):

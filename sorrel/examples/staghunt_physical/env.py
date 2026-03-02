@@ -47,9 +47,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
     """Environment wrapper for the stag hunt game."""
 
     def __init__(self, world: StagHuntWorld, config: dict | Any) -> None:
-        # assign a reference from the world back to this environment so
-        # that agents can call ``handle_interaction``.  This is a bit of
-        # plumbing to bridge between the agent and environment logic.
+        # assign a reference from the world back to this environment
         world.environment = self  # type: ignore[attr-defined]
         super().__init__(world, config)
         
@@ -481,6 +479,13 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             dynamic = (loc[0], loc[1], world.dynamic_layer)
             world.add(dynamic, agent)
 
+        # Set resource caps from initial counts if mode is "initial_count"
+        if world.resource_cap_mode == "initial_count":
+            world.set_caps_from_initial_counts()
+        
+        # Initialize cached resource counts
+        world._initialize_counts()
+
     def _populate_from_ascii_map(self, manually_set_spawn_points=None) -> None:
         """Populate environment using ASCII map layout - PRESERVES ALL ORIGINAL LOGIC.
         
@@ -602,6 +607,13 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 # Only place Empty if it's not a wall location
                 if (y, x) not in map_data.wall_locations:
                     world.add((y, x, layer), Empty())
+
+        # Set resource caps from initial counts if mode is "initial_count"
+        if world.resource_cap_mode == "initial_count":
+            world.set_caps_from_initial_counts()
+        
+        # Initialize cached resource counts
+        world._initialize_counts()
 
         # Determine how many agents to spawn
         # Get num_agents_to_spawn from config (defaults to num_agents for backward compatibility)
@@ -767,6 +779,39 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 print(f"Warning: Error loading orientation reference: {e}")
                 print("Agents will use default orientations.")
     
+    def _are_all_resource_caps_reached(self) -> bool:
+        """Check if all resource caps that are set have been reached.
+        
+        Returns:
+            True if all set caps (max_stags, max_hares, max_resources) are reached,
+            False otherwise. If no caps are set, returns False.
+        """
+        world = self.world
+        
+        # Track if any caps are set
+        caps_set = False
+        
+        # Check stag cap
+        if world.max_stags is not None:
+            caps_set = True
+            if world.count_stags() < world.max_stags:
+                return False
+        
+        # Check hare cap
+        if world.max_hares is not None:
+            caps_set = True
+            if world.count_hares() < world.max_hares:
+                return False
+        
+        # Check total resource cap
+        if world.max_resources is not None:
+            caps_set = True
+            if world.count_resources() < world.max_resources:
+                return False
+        
+        # Return True only if caps are set AND all are reached
+        return caps_set
+
     @override
     def take_turn(self) -> None:
         """Performs a full step in the environment with agent state updates."""
@@ -778,10 +823,34 @@ class StagHuntEnv(Environment[StagHuntWorld]):
 
         # Handle entity transitions (from parent class)
         self.turn += 1
-        for _, x in ndenumerate(self.world.map):
-            x: Entity
-            if x.has_transitions and not isinstance(x, Agent):
-                x.transition(self.world)
+        
+        # Separate entities into Empty and non-Empty groups
+        empty_entities = []
+        non_empty_entities = []
+        for loc, entity in ndenumerate(self.world.map):
+            if entity.has_transitions and not isinstance(entity, Agent):
+                if isinstance(entity, Empty):
+                    empty_entities.append((loc, entity))
+                else:
+                    non_empty_entities.append((loc, entity))
+        
+        # Shuffle both groups for random processing order
+        random.shuffle(empty_entities)
+        random.shuffle(non_empty_entities)
+        
+        # Process Empty entities first - check caps before each entity to prevent exceeding limits
+        processed_count = 0
+        for loc, entity in empty_entities:
+            # Check if all caps are reached before processing this entity
+            if self._are_all_resource_caps_reached():
+                break  # Stop processing Empty entities when all caps reached
+            entity.transition(self.world)
+            processed_count += 1
+
+        
+        # Process non-Empty entities (Sand, Resources, etc.) - always process all
+        for loc, entity in non_empty_entities:
+            entity.transition(self.world)
         
         # Handle agent transitions - SKIP removed agents AND non-spawned agents
         # Collect spawned agents that can act, then shuffle for random execution order

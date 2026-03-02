@@ -21,26 +21,50 @@ import torch
 
 def set_seed(seed: int) -> None:
     r"""Sets a seed for replication. Sets the seed for :meth:`random.seed()`,
-    :meth:`numpy.random.seed()`, and :meth:`torch.manual_seed()`.
+    :meth:`numpy.random.seed()`, and :meth:`torch.manual_seed()`, as well as
+    CUDA and cuDNN settings for full reproducibility.
 
     Args:
         seed: An int setting the seed.
     """
+    # Python's built-in random module
     random.seed(seed)
+    
+    # NumPy random
     np.random.seed(seed)
+    
+    # PyTorch random
     torch.manual_seed(seed)
+    
+    # CUDA random (if CUDA is available)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # For all CUDA devices
+    
+    # cuDNN deterministic mode (for reproducibility)
+    # Note: This may reduce performance but ensures reproducibility
+    if hasattr(torch.backends, 'cudnn'):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    
+    # PyTorch deterministic algorithms (if available, PyTorch 1.8+)
+    # Note: This may cause errors if some operations don't have deterministic implementations
+    try:
+        if hasattr(torch, 'use_deterministic_algorithms'):
+            torch.use_deterministic_algorithms(True, warn_only=True)
+    except (AttributeError, RuntimeError):
+        # Fall back silently if not available or if it causes issues
+        pass
 
 
 def random_seed() -> int:
-    r"""Generates a random seed.
+    r"""Generates a random seed and sets it for all random number generators.
 
     Returns:
         The value of the seed generated
     """
     seed = random.randint(0, 10000)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    set_seed(seed)  # Use the comprehensive set_seed function
     return seed
 
 

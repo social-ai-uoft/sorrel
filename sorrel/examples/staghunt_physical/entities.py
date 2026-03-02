@@ -96,7 +96,8 @@ class Empty(Entity["StagHuntWorld"]):
 
     Empty cells hold no resources and allow agents to move through.  In the
     regeneration step, empty cells can spawn new resources with probability
-    determined by the world's ``resource_density`` hyperparameter. The ability
+    determined by the world's ``respawn_rate`` hyperparameter (for respawning)
+    or ``resource_density`` (for initial spawning). The ability
     to spawn resources is inherited from the terrain layer below.
     """
 
@@ -104,6 +105,7 @@ class Empty(Entity["StagHuntWorld"]):
         super().__init__()
         self.passable = True
         self.value = 0
+        self.has_transitions = True  # Enable transition() to be called for respawning
         self.sprite = Path(__file__).parent / "./assets/empty.png"
 
     def transition(self, world: StagHuntWorld) -> None:
@@ -112,7 +114,7 @@ class Empty(Entity["StagHuntWorld"]):
         When the world performs its regeneration step, empty cells may spawn
         either a StagResource or HareResource, but only if the terrain below
         can convert to a resource and is ready to respawn. The probability is
-        given by ``world.resource_density`` and the class is selected based on
+        given by ``world.respawn_rate`` (for respawning) and the class is selected based on
         the resource type remembered by the Sand entity below.  If a resource
         is spawned, the empty entity is replaced.
         """
@@ -139,7 +141,7 @@ class Empty(Entity["StagHuntWorld"]):
                 and terrain_entity.can_convert_to_resource
                 and terrain_entity.respawn_ready
                 and not has_agent  # Don't spawn if there's an agent above
-                and np.random.random() < world.resource_density
+                and np.random.random() < world.respawn_rate
             ):
 
                 # Choose resource type based on what's remembered in the Sand entity
@@ -187,19 +189,19 @@ class Empty(Entity["StagHuntWorld"]):
                     
                     # Only create resource if cap check passed (nested check)
                     if should_spawn:
-                        # Use separate reward values for stag and hare
-                        if res_cls == StagResource:
-                            reward_value = world.stag_reward
-                            health_value = world.stag_health
-                            cooldown_value = world.stag_regeneration_cooldown
-                        else:  # HareResource
-                            reward_value = world.hare_reward
-                            health_value = world.hare_health
-                            cooldown_value = world.hare_regeneration_cooldown
-                        
-                        world.add(
-                            self.location, res_cls(reward_value, health_value, regeneration_cooldown=cooldown_value)
-                        )
+                            # Use separate reward values for stag and hare
+                            if res_cls == StagResource:
+                                reward_value = world.stag_reward
+                                health_value = world.stag_health
+                                cooldown_value = world.stag_regeneration_cooldown
+                            else:  # HareResource
+                                reward_value = world.hare_reward
+                                health_value = world.hare_health
+                                cooldown_value = world.hare_regeneration_cooldown
+                            
+                            world.add(
+                                self.location, res_cls(reward_value, health_value, regeneration_cooldown=cooldown_value)
+                            )
                 # else: filtered out by Step 3, don't spawn (Empty entity remains)
 
 
@@ -222,16 +224,25 @@ class Spawn(Entity["StagHuntWorld"]):
 class Resource(Entity["StagHuntWorld"]):
     """Base class for resources.
 
-    Resources are passable but deliver a small intrinsic reward when collected.  They
-    have health indicating how many zap hits are required to destroy them.  Specific
-    subclasses encode which strategy they represent.
+    Resources are NOT passable - agents must attack them to destroy them.  They
+    deliver a small intrinsic reward when collected.  They have health indicating 
+    how many zap hits are required to destroy them.  Specific subclasses encode 
+    which strategy they represent.
+    
+    Note: Resources are always non-passable. The passable attribute is set to False
+    in __init__ and should never be changed. Movement code also explicitly checks
+    for Resource instances to prevent any edge cases.
     """
 
     name: str  # overridden in subclasses
 
     def __init__(self, taste_reward: float, max_health: int, regeneration_rate: float = 0.1, regeneration_cooldown: int = 1) -> None:
         super().__init__()
-        self.passable = False  # Resources are not passable - agents must attack them
+        # Resources are NEVER passable - this is enforced in multiple places:
+        # 1. Here in __init__
+        # 2. In agent movement code (explicit isinstance check)
+        # 3. In world.move() (passability check)
+        self.passable = False
         self.max_health = max_health
         self.health = max_health
         self.value = taste_reward
@@ -241,6 +252,20 @@ class Resource(Entity["StagHuntWorld"]):
         self.attack_history: list[int] = []  # Track agent IDs that have successfully damaged this resource
         self.has_transitions = True
         # sprite will be set in subclasses
+    
+    def __setattr__(self, name: str, value) -> None:
+        """Override to prevent passable from being set to True for resources."""
+        if name == "passable" and value is True:
+            # Resources should never be passable - log a warning if someone tries
+            import warnings
+            warnings.warn(
+                f"Attempted to set {self.__class__.__name__}.passable = True. "
+                "Resources are never passable. Ignoring this change.",
+                RuntimeWarning,
+                stacklevel=2
+            )
+            value = False
+        super().__setattr__(name, value)
 
     def on_attack(self, world: StagHuntWorld, current_turn: int, attacker_id: int | None = None) -> bool:
         """Handle an attack on this resource.

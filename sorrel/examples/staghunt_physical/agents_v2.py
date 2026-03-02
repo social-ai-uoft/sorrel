@@ -1313,13 +1313,36 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             if world.valid_location(new_pos):
                 # check if target location is passable
                 target_entity = world.observe(new_pos)
-                if target_entity.passable:
-                    # move into the cell
-                    world.move(self, new_pos)
-                    # In simplified movement mode, change orientation to face movement direction
-                    if simplified_movement:
-                        self.orientation = self._get_orientation_from_move(dy, dx)
-                        self.update_agent_kind()
+                # Robust resource check: use multiple methods to detect resources
+                # Method 1: isinstance (preferred if it works)
+                is_resource = isinstance(target_entity, (StagResource, HareResource))
+                # Method 2: Check name attribute (most reliable fallback)
+                if not is_resource and hasattr(target_entity, 'name'):
+                    is_resource = target_entity.name in ('stag', 'hare')
+                # Method 3: Check class name (final fallback)
+                if not is_resource:
+                    class_name = type(target_entity).__name__
+                    is_resource = class_name in ('StagResource', 'HareResource', 'WoundedStagResource')
+                
+                if target_entity.passable and not is_resource:
+                    # Double-check right before moving: re-observe to catch any race conditions
+                    final_check_entity = world.observe(new_pos)
+                    # Robust check again for final entity
+                    final_is_resource = isinstance(final_check_entity, (StagResource, HareResource))
+                    if not final_is_resource and hasattr(final_check_entity, 'name'):
+                        final_is_resource = final_check_entity.name in ('stag', 'hare')
+                    if not final_is_resource:
+                        class_name = type(final_check_entity).__name__
+                        final_is_resource = class_name in ('StagResource', 'HareResource', 'WoundedStagResource')
+                    
+                    if final_check_entity.passable and not final_is_resource:
+                        # move into the cell - check return value to ensure move succeeded
+                        move_success = world.move(self, new_pos)
+                        if move_success:
+                            # In simplified movement mode, change orientation to face movement direction
+                            if simplified_movement:
+                                self.orientation = self._get_orientation_from_move(dy, dx)
+                                self.update_agent_kind()
                 else:
                     # target is not passable (e.g., resource, wall) - movement blocked
                     pass
@@ -1342,13 +1365,36 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             if world.valid_location(new_pos):
                 # check if target location is passable
                 target_entity = world.observe(new_pos)
-                if target_entity.passable:
-                    # move into the cell
-                    world.move(self, new_pos)
-                    # In simplified movement mode, change orientation to face movement direction
-                    if simplified_movement:
-                        self.orientation = self._get_orientation_from_move(step_dy, step_dx)
-                        self.update_agent_kind()
+                # Robust resource check: use multiple methods to detect resources
+                # Method 1: isinstance (preferred if it works)
+                is_resource = isinstance(target_entity, (StagResource, HareResource))
+                # Method 2: Check name attribute (most reliable fallback)
+                if not is_resource and hasattr(target_entity, 'name'):
+                    is_resource = target_entity.name in ('stag', 'hare')
+                # Method 3: Check class name (final fallback)
+                if not is_resource:
+                    class_name = type(target_entity).__name__
+                    is_resource = class_name in ('StagResource', 'HareResource', 'WoundedStagResource')
+                
+                if target_entity.passable and not is_resource:
+                    # Double-check right before moving: re-observe to catch any race conditions
+                    final_check_entity = world.observe(new_pos)
+                    # Robust check again for final entity
+                    final_is_resource = isinstance(final_check_entity, (StagResource, HareResource))
+                    if not final_is_resource and hasattr(final_check_entity, 'name'):
+                        final_is_resource = final_check_entity.name in ('stag', 'hare')
+                    if not final_is_resource:
+                        class_name = type(final_check_entity).__name__
+                        final_is_resource = class_name in ('StagResource', 'HareResource', 'WoundedStagResource')
+                    
+                    if final_check_entity.passable and not final_is_resource:
+                        # move into the cell - check return value to ensure move succeeded
+                        move_success = world.move(self, new_pos)
+                        if move_success:
+                            # In simplified movement mode, change orientation to face movement direction
+                            if simplified_movement:
+                                self.orientation = self._get_orientation_from_move(step_dy, step_dx)
+                                self.update_agent_kind()
                 else:
                     # target is not passable (e.g., resource, wall) - movement blocked
                     pass
@@ -1804,59 +1850,3 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         Agents act until the world signals termination via ``world.is_done``.
         """
         return world.is_done
-
-    # ------------------------------------------------------------------ #
-    # Interaction logic                                                   #
-    # ------------------------------------------------------------------ #
-    def handle_interaction(
-        self: StagHuntAgent, other: StagHuntAgent, world: StagHuntWorld
-    ) -> float:
-        """Resolve an interaction between two ready agents.
-
-        Determines each agent's strategy by taking the majority vote over
-        their inventories.  Computes the row and column payoffs using
-        ``world.payoff_matrix`` (with the column player's payoff being the
-        transpose).  Adds a constant bonus for initiating an interaction
-        (``interaction_reward`` hyperparameter if present).  Resets both
-        agents' inventories, respawns them at random spawn points and
-        returns the reward to assign to the initiating agent.
-
-        Parameters
-        ----------
-        agent : StagHuntAgent
-            The agent initiating the interaction (the ``row" player).
-        other : StagHuntAgent
-            The opponent agent (the ``column" player).
-
-        Returns
-        -------
-        float
-            The reward received by the initiating agent.
-        """
-
-        # determine strategies via majority resource counts; tie breaks in favour of stag
-        def majority_resource(inv: dict[str, int]) -> int:
-            stag_count = inv.get("stag", 0)
-            hare_count = inv.get("hare", 0)
-            return 0 if stag_count >= hare_count else 1
-
-        row_strategy = majority_resource(self.inventory)
-        col_strategy = majority_resource(other.inventory)
-        # compute payoffs
-        row_payoff = world.payoff_matrix[row_strategy][col_strategy]
-        col_payoff = world.payoff_matrix[col_strategy][row_strategy]
-        # interaction bonus from config; default to 1.0
-        # extract interaction bonus from configuration; support both dict and OmegaConf
-        bonus = self.interaction_reward
-        # clear inventories and ready flags
-        self.inventory = {"stag": 0, "hare": 0}
-        self.ready = False
-        other.inventory = {"stag": 0, "hare": 0}
-        other.ready = False
-
-        # store the other agent's reward to be given on their next turn
-        other.pending_reward += col_payoff + bonus
-        # accumulate reward for both agents in world.total_reward
-        world.total_reward += row_payoff + col_payoff + 2 * bonus
-        # return the initiating agent's reward
-        return row_payoff + bonus
