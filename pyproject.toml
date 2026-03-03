@@ -28,6 +28,7 @@ packages = [{ include = "sorrel" }]
 python = "^3.12.0"
 matplotlib = "^3.6.1"
 numpy = "^1.26.4"
+pandas = "^2.0.0"
 pyyaml = "^6.0.2"
 pytest = "^8.3.5"
 
@@ -65,8 +66,8 @@ pythonpath = [
   "sorrel"
 ]
 addopts = [
-  "--doctest-modules", 
-  "--import-mode=importlib"
+  "--doctest-modules",
+  "--import-mode=importlib",
 ]
 
 [build-system]
