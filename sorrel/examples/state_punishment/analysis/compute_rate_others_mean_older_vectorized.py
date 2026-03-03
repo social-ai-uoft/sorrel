@@ -3,7 +3,6 @@ Vectorized "mean rate of strictly older agents" per (epoch, agent).
 No Python loop over epochs — scales to many epochs.
 """
 import numpy as np
-import pandas as pd
 
 
 def compute_rate_others_mean_older_vectorized(df):
