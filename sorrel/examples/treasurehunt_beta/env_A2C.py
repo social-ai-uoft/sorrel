@@ -13,7 +13,7 @@ from sorrel.examples.treasurehunt_beta.world import TreasurehuntWorld
 
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.models.pytorch.a2c_deepmind import A2C_DeepMind
+from sorrel.models.pytorch.deprecated.a2c_deepmind import A2C_DeepMind
 from sorrel.observation.observation_spec import OneHotObservationSpec
 
 # end imports

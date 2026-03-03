@@ -1,0 +1,84 @@
+================================================================================
+COMPREHENSIVE CPC SANITY CHECK REPORT
+Expected vs Actual Results
+================================================================================
+Generated: 2026-01-18 01:40:50
+Reference: Priority Ranking of CPC Sanity Checks.pdf
+================================================================================
+
+EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+Total Checks: 0
+  Tier S (Critical): 0/0 passed
+  Tier A (Monitor): 0/0 passed
+  Tier B (Optimization): 0/0 passed
+Overall: 0/0 checks passed
+
+
+================================================================================
+DETAILED RESULTS: EXPECTED vs ACTUAL
+================================================================================
+
+TIER S: CRITICAL PRE-DEPLOYMENT (MUST PASS)
+--------------------------------------------------------------------------------
+
+Check #7: Sequence Length Sufficiency
+  Priority: 4/8 - Prevents impossible configuration
+  Expected: rollout_length >= cpc_horizon (e.g., 50 >= 30)
+  Actual: Not found in output
+
+Check #5: Gradient Flow to Encoder
+  Priority: 3/8 - Detects frozen encoder bug
+  Expected: Gradients flow to encoder (fc_shared has gradients)
+  Actual: Not found in output
+
+Check #3: Latent Collapse
+  Priority: 2/8 - Detects trivial solution
+  Expected: Mean std > 0.001 (latents not collapsed)
+  Actual: Not found in output
+
+Check #4: Episode Boundary Masking
+  Priority: 1/8 (HIGHEST) - Most critical check
+  Expected: Episode boundaries masked, no cross-episode predictions
+  Actual: Not found in output
+
+TIER A: CRITICAL DURING TRAINING (SHOULD MONITOR)
+--------------------------------------------------------------------------------
+
+Check #2: Temporal Order Preservation
+  Priority: 5/8 - Detects subtle bug
+  Expected: Sequences in correct temporal order
+  Actual: Not found in output
+
+Check #6: CPC Weight Balance
+  Priority: 6/8 - Monitors training balance
+  Expected: RL and CPC losses balanced (neither > 90%)
+  Actual: Not found in output
+
+TIER B: IMPORTANT FOR OPTIMIZATION (NICE TO HAVE)
+--------------------------------------------------------------------------------
+
+Check #1: CPC Loss Magnitude
+  Priority: 7/8 - Diagnostic only
+  Expected: Loss valid (not NaN/Inf), reasonable magnitude
+  Actual: Not found in output
+
+Check #8: Update Frequency
+  Priority: 8/8 (LOWEST) - Hyperparameter
+  Expected: CPC updates per learn() (design choice)
+  Actual: Not found in output
+
+================================================================================
+FULL TEST OUTPUTS
+================================================================================
+
+SANITY CHECKS OUTPUT:
+--------------------------------------------------------------------------------
+
+
+CPC LOSS TEST OUTPUT:
+--------------------------------------------------------------------------------
+
+================================================================================
+END OF REPORT
+================================================================================

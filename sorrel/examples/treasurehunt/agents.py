@@ -7,6 +7,8 @@ import numpy as np
 
 from sorrel.agents import Agent
 from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.models.pytorch.recurrent_ppo_lstm_generic import RecurrentPPOLSTM
+from sorrel.models.pytorch.recurrent_ppo_lstm_cpc_refactored_ import RecurrentPPOLSTMCPC
 
 # end imports
 
@@ -33,12 +35,45 @@ class TreasurehuntAgent(Agent[TreasurehuntWorld]):
 
     def get_action(self, state: np.ndarray) -> int:
         """Gets the action from the model, using the stacked states."""
-        prev_states = self.model.memory.current_state()
-        stacked_states = np.vstack((prev_states, state))
+        # For PPO models: handle differently (no frame stacking needed)
+        from sorrel.models.pytorch.recurrent_ppo_generic import RecurrentPPO
+        if isinstance(self.model, (RecurrentPPO, RecurrentPPOLSTM, RecurrentPPOLSTMCPC)):
+            # PPO models use recurrent memory (GRU/LSTM), no frame stacking needed
+            # PPO models handle state conversion internally
+            action = self.model.take_action(state)
+            return action
+        else:
+            # IQN: use frame stacking (stateless model needs temporal context)
+            prev_states = self.model.memory.current_state()
+            stacked_states = np.vstack((prev_states, state))
 
-        model_input = stacked_states.reshape(1, -1)
-        action = self.model.take_action(model_input)
-        return action
+            model_input = stacked_states.reshape(1, -1)
+            action = self.model.take_action(model_input)
+            return action
+
+    def add_memory(
+        self, state: np.ndarray, action: int, reward: float, done: bool
+    ) -> None:
+        """Add an experience to the memory.
+        
+        For PPO models, this calls add_memory_ppo which uses the pending
+        transition stored during take_action().
+        
+        Args:
+            state: the state to be added.
+            action: the action taken by the agent.
+            reward: the reward received by the agent.
+            done: whether the episode terminated after this experience.
+        """
+        from sorrel.models.pytorch.recurrent_ppo_generic import RecurrentPPO
+        if isinstance(self.model, (RecurrentPPO, RecurrentPPOLSTM, RecurrentPPOLSTMCPC)):
+            # PPO: use special method that uses pending transition
+            self.model.add_memory_ppo(reward, done)
+        else:
+            # IQN: use standard memory.add
+            if state.ndim == 2 and state.shape[0] == 1:
+                state = state.flatten()
+            self.model.memory.add(state, action, reward, done)
 
     def act(self, world: TreasurehuntWorld, action: int) -> float:
         """Act on the environment, returning the reward."""

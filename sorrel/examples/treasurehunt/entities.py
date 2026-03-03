@@ -46,7 +46,7 @@ class EmptyEntity(Entity[TreasurehuntWorld]):
     def __init__(self):
         super().__init__()
         self.passable = True  # Agents can enter EmptySpaces
-        self.has_transitions = True  # EmptyEntity can transition into Gems
+        self.has_transitions = False  # EmptyEntity can transition into Gems (disabled)
         self.sprite = Path(__file__).parent / "./assets/empty.png"
 
     def transition(self, world: TreasurehuntWorld):

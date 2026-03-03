@@ -134,3 +134,8 @@ python main.py --max_resources 20 --respawn_prob 0.1
 - **Entity Transition**: `sorrel/examples/state_punishment/entities.py` (lines 22-26)
 - **Command Line Arguments**: `sorrel/examples/state_punishment/main.py` (lines 582-587)
 
+
+
+
+
+

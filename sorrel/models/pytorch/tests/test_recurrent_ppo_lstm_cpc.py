@@ -10,7 +10,7 @@ sys.path.insert(0, str(project_root))
 import torch
 import numpy as np
 
-from sorrel.models.pytorch.recurrent_ppo_lstm_cpc import RecurrentPPOLSTMCPC
+from sorrel.models.pytorch.recurrent_ppo_lstm_cpc_refactored_ import RecurrentPPOLSTMCPC
 
 
 def test_recurrent_ppo_lstm_cpc_initialization():

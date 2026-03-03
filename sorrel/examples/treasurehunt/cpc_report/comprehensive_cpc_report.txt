@@ -1,0 +1,31 @@
+================================================================================
+COMPREHENSIVE CPC SANITY CHECK REPORT
+================================================================================
+Generated: 2026-01-18 01:39:32
+Reference: Priority Ranking of CPC Sanity Checks.pdf
+================================================================================
+
+================================================================================
+TEST: Sanity Checks Suite
+================================================================================
+
+
+STDERR:
+Traceback (most recent call last):
+  File "/Users/socialai/Documents/sorrel/sorrel/examples/treasurehunt/run_sanity_checks.py", line 15, in <module>
+    from sorrel.examples.treasurehunt.entities import EmptyEntity
+ModuleNotFoundError: No module named 'sorrel'
+
+
+================================================================================
+TEST: CPC Loss Testing
+================================================================================
+
+
+STDERR:
+Traceback (most recent call last):
+  File "/Users/socialai/Documents/sorrel/sorrel/examples/treasurehunt/test_cpc_loss.py", line 15, in <module>
+    from sorrel.examples.treasurehunt.entities import EmptyEntity
+ModuleNotFoundError: No module named 'sorrel'
+
+
