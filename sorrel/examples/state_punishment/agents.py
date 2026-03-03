@@ -19,6 +19,8 @@ from sorrel.agents import Agent
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
 from sorrel.models.pytorch.recurrent_ppo_lstm_generic import RecurrentPPOLSTM
+from sorrel.models.pytorch.recurrent_ppo_lstm_cpc import RecurrentPPOLSTMCPC
+from sorrel.models.pytorch.recurrent_iqn_lstm_cpc_fixed import RecurrentIQNModelCPC
 from sorrel.observation.observation_spec import OneHotObservationSpec
 
 
@@ -207,10 +209,15 @@ class StatePunishmentAgent(Agent):
                 if dual_action is not None:
                     self._last_dual_action = dual_action
             return action
-        elif isinstance(self.model, RecurrentPPOLSTM):
-            # PPO LSTM uses LSTM for temporal memory, no frame stacking needed
+        elif isinstance(self.model, (RecurrentPPOLSTM, RecurrentPPOLSTMCPC)):
+            # PPO LSTM (with or without CPC) uses LSTM for temporal memory, no frame stacking needed
             # PPO LSTM handles state conversion internally
             # Single-head mode only (no dual actions)
+            action = self.model.take_action(state)
+            return action
+        elif isinstance(self.model, RecurrentIQNModelCPC):
+            # Recurrent IQN with LSTM uses LSTM for temporal memory, no frame stacking needed
+            # RecurrentIQNModelCPC handles state conversion internally
             action = self.model.take_action(state)
             return action
         else:
@@ -247,10 +254,13 @@ class StatePunishmentAgent(Agent):
             reward: the reward received by the agent.
             done: whether the episode terminated after this experience.
         """
-        if isinstance(self.model, (DualHeadRecurrentPPO, RecurrentPPOLSTM)):
+        if isinstance(self.model, (DualHeadRecurrentPPO, RecurrentPPOLSTM, RecurrentPPOLSTMCPC)):
             # PPO: use special method that uses pending transition
-            # Works for both GRU-based and LSTM-based PPO
+            # Works for both GRU-based and LSTM-based PPO (with or without CPC)
             self.model.add_memory_ppo(reward, done)
+        elif isinstance(self.model, RecurrentIQNModelCPC):
+            # Recurrent IQN: use its own add_memory method (handles seq_memory internally)
+            self.model.add_memory(state, action, reward, done)
         else:
             # IQN: use standard memory.add
             if state.ndim == 2 and state.shape[0] == 1:

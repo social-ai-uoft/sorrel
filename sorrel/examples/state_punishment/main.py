@@ -193,6 +193,10 @@ def parse_arguments():
     parser.add_argument("--memory_size", type=int, default=1024, help="Memory size")
     parser.add_argument("--save_models_every", type=int, default=1000, help="Save models every X epochs")
     parser.add_argument(
+        "--initial_model_path", type=str, default=None,
+        help="Path to pretrained model checkpoint to load for all initial agents (default: None, use random initialization)"
+    )
+    parser.add_argument(
         "--device", type=str, default="cpu",
         help="Device to use for training (default: 'cpu', use 'cuda'/'cuda:0' for NVIDIA GPU, 'mps' for Apple Silicon GPU)"
     )
@@ -336,16 +340,10 @@ def parse_arguments():
         help="IQN CPC temperature for InfoNCE loss (default: 0.07)"
     )
     parser.add_argument(
-        "--iqn_cpc_memory_bank_size",
-        type=int,
-        default=1000,
-        help="IQN CPC memory bank size: number of past sequences to keep (default: 1000)"
-    )
-    parser.add_argument(
         "--iqn_cpc_sample_size",
         type=int,
         default=64,
-        help="IQN CPC sample size: number of sequences to sample from memory bank (default: 64)"
+        help="IQN CPC sample size: ignored by RecurrentIQNModelCPC (uses most recent episode), but used by other IQN CPC models (default: 64)"
     )
     parser.add_argument(
         "--iqn_cpc_start_epoch",
@@ -358,6 +356,24 @@ def parse_arguments():
         type=int,
         default=256,
         help="IQN hidden size for encoder and LSTM (default: 256)"
+    )
+    parser.add_argument(
+        "--iqn_max_episode_length",
+        type=int,
+        default=200,
+        help="IQN max episode length for replay buffer (default: 200)"
+    )
+    parser.add_argument(
+        "--iqn_burn_in_len",
+        type=int,
+        default=20,
+        help="IQN burn-in length for truncated BPTT (default: 20)"
+    )
+    parser.add_argument(
+        "--iqn_unroll_len",
+        type=int,
+        default=40,
+        help="IQN unroll length for truncated BPTT (default: 40)"
     )
 
     # PPO factored action space parameters
@@ -488,19 +504,25 @@ def parse_arguments():
         "--cpc_memory_bank_size",
         type=int,
         default=1000,
-        help="CPC memory bank size: number of past sequences to keep (default: 1000)"
+        help="CPC memory bank size: ignored by standalone model (uses temporal negatives), but used by refactored model (default: 1000)"
     )
     parser.add_argument(
         "--cpc_sample_size",
         type=int,
         default=64,
-        help="CPC sample size: number of sequences to sample from memory bank for training (default: 64)"
+        help="CPC sample size: ignored by standalone model (uses temporal negatives), but used by refactored model (default: 64)"
     )
     parser.add_argument(
         "--cpc_start_epoch",
         type=int,
         default=1,
         help="Epoch to start CPC training. 0 = start immediately (B=1, loss=0), 1+ = wait for memory bank (default: 1)"
+    )
+    parser.add_argument(
+        "--min_trajectory_length",
+        type=int,
+        default=5,
+        help="Minimum trajectory length to save for training (for standalone PPO LSTM CPC, default: 5)"
     )
 
     # Phased voting parameters
@@ -689,6 +711,18 @@ def run_experiment(args):
         print("No random seed specified - using default random state (not reproducible)")
         run_experiment._seed = None
     
+    # Validate initial model path if provided
+    if args.initial_model_path:
+        model_path = Path(args.initial_model_path)
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"Initial model file not found: {args.initial_model_path}"
+            )
+        if not model_path.is_file():
+            raise ValueError(
+                f"Initial model path is not a file: {args.initial_model_path}"
+            )
+    
     # Parse replacement_agent_ids if provided
     replacement_agent_ids = None
     if args.replacement_agent_ids:
@@ -859,6 +893,7 @@ def run_experiment(args):
         cpc_memory_bank_size=args.cpc_memory_bank_size,
         cpc_sample_size=args.cpc_sample_size,
         cpc_start_epoch=args.cpc_start_epoch,
+        min_trajectory_length=args.min_trajectory_length,
         # Phased voting parameters
         enable_phased_voting=args.enable_phased_voting,
         phased_voting_interval=args.phased_voting_interval,
@@ -882,10 +917,12 @@ def run_experiment(args):
         iqn_cpc_weight=args.iqn_cpc_weight,
         iqn_cpc_projection_dim=args.iqn_cpc_projection_dim,
         iqn_cpc_temperature=args.iqn_cpc_temperature,
-        iqn_cpc_memory_bank_size=args.iqn_cpc_memory_bank_size,
         iqn_cpc_sample_size=args.iqn_cpc_sample_size,
         iqn_cpc_start_epoch=args.iqn_cpc_start_epoch,
         iqn_hidden_size=args.iqn_hidden_size,
+        iqn_max_episode_length=args.iqn_max_episode_length,
+        iqn_burn_in_len=args.iqn_burn_in_len,
+        iqn_unroll_len=args.iqn_unroll_len,
         # PPO factored action space parameters
         ppo_use_factored_actions=args.ppo_use_factored_actions,
         ppo_action_dims=ppo_action_dims_str,
@@ -893,6 +930,7 @@ def run_experiment(args):
         history_window_size=args.history_window_size,
         respawn_prob=args.respawn_prob,
         max_resources=args.max_resources,
+        initial_model_path=args.initial_model_path,
     )
 
     # Print expected rewards (use config value, not CLI arg, so it reflects the actual config)
@@ -907,7 +945,7 @@ def run_experiment(args):
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_debug5" / run_folder
+    log_dir = Path(__file__).parent / "runs_debug8" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder
@@ -997,6 +1035,7 @@ def run_experiment(args):
         logger=logger,
         output_dir=anim_dir,
         probe_test_logger=probe_test_logger,
+        log_dir=log_dir,  # Pass log_dir for per-run model saving
     )
 
     print("Experiment completed!")

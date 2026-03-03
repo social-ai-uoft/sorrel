@@ -15,6 +15,7 @@ from sorrel.models.pytorch import PyTorchIQN, PyTorchIQNCPC
 from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
 from sorrel.models.pytorch.recurrent_ppo_lstm_generic import RecurrentPPOLSTM
 from sorrel.models.pytorch.recurrent_ppo_lstm_cpc import RecurrentPPOLSTMCPC
+from sorrel.models.pytorch.recurrent_iqn_lstm_cpc_fixed import RecurrentIQNModelCPC
 from sorrel.observation.observation_spec import OneHotObservationSpec
 from sorrel.utils.logging import Logger
 from sorrel.utils.visualization import ImageRenderer
@@ -151,6 +152,10 @@ class PunishmentHistoryTracker:
             if window_start <= step <= current_step:
                 return True
         return False
+    
+    def reset(self):
+        """Reset punishment history for all agents."""
+        self.punishment_history = {i: [] for i in range(self.num_agents)}
     
     def step(self):
         """Optional: cleanup old entries if needed."""
@@ -859,6 +864,10 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         self.world.is_done = False
         # Reset shared social harm centrally
         self.shared_social_harm = {i: 0.0 for i in range(len(self.individual_envs))}
+        
+        # Reset punishment history tracker if it exists
+        if self.punishment_history_tracker is not None:
+            self.punishment_history_tracker.reset()
 
         for env in self.individual_envs:
             env.reset()
@@ -1007,21 +1016,73 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 # LSTM-specific parameters
                 hidden_size=256,
             )
+        elif model_type == "ppo_lstm_cpc":
+            # Parse factored actions (if enabled) - same logic as in setup_agents
+            use_factored_actions = env.config.model.get("ppo_use_factored_actions", False)
+            action_dims = None
+            if use_factored_actions:
+                action_dims_str = env.config.model.get("ppo_action_dims", None)
+                if action_dims_str:
+                    action_dims = [int(d.strip()) for d in action_dims_str.split(",")]
+            
+            obs_dim = (
+                observation_spec.input_size[0],
+                observation_spec.input_size[1],
+                observation_spec.input_size[2],
+            )
+            new_model = RecurrentPPOLSTMCPC(
+                input_size=(flattened_size,),
+                action_space=action_spec.n_actions,
+                layer_size=env.config.model.layer_size,
+                epsilon=env.config.model.epsilon,
+                epsilon_min=env.config.model.epsilon_min,
+                device=env.config.model.device,
+                seed=torch.random.seed(),  # Fresh random seed
+                # Observation processing - use "flattened" since we have extra scalar features
+                obs_type="flattened",
+                obs_dim=obs_dim,
+                # PPO hyperparameters
+                gamma=env.config.model.GAMMA,
+                lr=env.config.model.LR,
+                clip_param=env.config.model.ppo_clip_param,
+                K_epochs=env.config.model.ppo_k_epochs,
+                batch_size=env.config.model.batch_size,
+                entropy_start=env.config.model.ppo_entropy_start,
+                entropy_end=env.config.model.ppo_entropy_end,
+                entropy_decay_steps=env.config.model.ppo_entropy_decay_steps,
+                max_grad_norm=env.config.model.ppo_max_grad_norm,
+                gae_lambda=env.config.model.ppo_gae_lambda,
+                rollout_length=env.config.model.ppo_rollout_length,
+                # LSTM-specific parameters
+                hidden_size=256,  # LSTM hidden size (can match layer_size if desired)
+                # Factored action space parameters
+                use_factored_actions=use_factored_actions,
+                action_dims=action_dims,
+                # CPC-specific parameters
+                use_cpc=env.config.model.get("use_cpc", True),
+                cpc_horizon=env.config.model.get("cpc_horizon", 30),
+                cpc_weight=env.config.model.get("cpc_weight", 1.0),
+                cpc_projection_dim=env.config.model.get("cpc_projection_dim", None),  # Ignored by standalone model but kept for compatibility
+                cpc_temperature=env.config.model.get("cpc_temperature", 0.07),
+                cpc_memory_bank_size=0,  # Standalone model ignores this (uses temporal negatives)
+                # NOTE: cpc_sample_size is NOT in standalone model signature - removed
+                cpc_start_epoch=env.config.model.get("cpc_start_epoch", 1),
+            )
         else:
             # Check if CPC is enabled for IQN replacement models
             iqn_use_cpc = env.config.model.get("iqn_use_cpc", False)
             
             if iqn_use_cpc:
-                # Use IQN with CPC wrapper for replacement
-                new_model = PyTorchIQNCPC(
+                # Use RecurrentIQNModelCPC for replacement
+                new_model = RecurrentIQNModelCPC(
                     input_size=(flattened_size,),
                     action_space=action_spec.n_actions,
                     layer_size=env.config.model.layer_size,
                     epsilon=env.config.model.epsilon,
                     epsilon_min=env.config.model.epsilon_min,
                     device=env.config.model.device,
-                    seed=torch.random.seed(),  # Fresh random seed
-                    n_frames=env.config.model.n_frames,
+                    seed=int(torch.randint(0, 2**31 - 1, (1,)).item()),  # Fresh random seed
+                    n_frames=1,  # Always 1 for recurrent model
                     n_step=env.config.model.n_step,
                     sync_freq=env.config.model.sync_freq,
                     model_update_freq=env.config.model.model_update_freq,
@@ -1034,17 +1095,20 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_factored_actions=False,  # Replacement models use default (can be updated if needed)
                     action_dims=None,
                     factored_target_variant="A",
+                    # Recurrent model parameters
+                    hidden_size=env.config.model.get("iqn_hidden_size", 256),
+                    max_episode_length=env.config.model.get("iqn_max_episode_length", 200),
+                    burn_in_len=env.config.model.get("iqn_burn_in_len", 20),
+                    unroll_len=env.config.model.get("iqn_unroll_len", 40),
                     # CPC-specific parameters
                     use_cpc=True,
                     cpc_horizon=env.config.model.get("iqn_cpc_horizon", 30),
                     cpc_weight=env.config.model.get("iqn_cpc_weight", 1.0),
-                    cpc_projection_dim=env.config.model.get("iqn_cpc_projection_dim", None),
+                    cpc_projection_dim=env.config.model.get("iqn_cpc_projection_dim", None),  # Ignored by model but kept for compatibility
                     cpc_temperature=env.config.model.get("iqn_cpc_temperature", 0.07),
-                    cpc_memory_bank_size=env.config.model.get("iqn_cpc_memory_bank_size", 1000),
-                    cpc_sample_size=env.config.model.get("iqn_cpc_sample_size", 64),
+                    cpc_sample_size=env.config.model.get("iqn_cpc_sample_size", 64),  # Ignored by model but kept for compatibility
                     cpc_start_epoch=env.config.model.get("iqn_cpc_start_epoch", 1),
-                    hidden_size=env.config.model.get("iqn_hidden_size", 256),
-                    max_sequence_length=env.config.model.get("iqn_cpc_max_sequence_length", 1000),
+                    cpc_max_sequence_length=env.config.model.get("iqn_cpc_max_sequence_length", 500),
                 )
             else:
                 # Use standard IQN (no CPC) for replacement
@@ -1330,8 +1394,11 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         logger: Logger | None = None,
         output_dir: Path | None = None,
         probe_test_logger = None,
+        log_dir: Path | None = None,
     ) -> None:
         """Run the multi-agent experiment with coordination and optional probe tests."""
+        # Store log_dir for model saving
+        self.log_dir = log_dir
         renderer = None
         if animate:
             renderer = MultiWorldImageRenderer(
@@ -1577,7 +1644,14 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                         from sorrel.models.pytorch.recurrent_ppo_lstm_cpc import RecurrentPPOLSTMCPC
                         if isinstance(agent.model, (DualHeadRecurrentPPO, RecurrentPPOLSTM, RecurrentPPOLSTMCPC)):
                             # PPO: train if we have any data (train_step handles the rest)
-                            if len(agent.model.rollout_memory["states"]) > 0:
+                            # Standalone RecurrentPPOLSTMCPC now uses "states" key (matches refactored version)
+                            if hasattr(agent.model, 'rollout_memory') and isinstance(agent.model.rollout_memory, dict):
+                                # Check for flat list structure (standalone now uses "states" key)
+                                has_data = len(agent.model.rollout_memory.get("states", [])) > 0
+                            else:
+                                has_data = False
+                            
+                            if has_data:
                                 loss = agent.model.train_step()
                                 if loss is not None and loss != 0.0:
                                     total_loss += float(loss)
@@ -1668,7 +1742,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 print("--- End Probe Test ---\n")
 
             # Save models every X epochs
-            if epoch > 0 and epoch % self.config.experiment.save_models_every == 0:
+            save_models_every = self.config.experiment.get("save_models_every", 1000)
+            if epoch > 0 and save_models_every > 0 and epoch % save_models_every == 0:
+                print(f"Epoch {epoch}: Triggering model save (save_models_every={save_models_every})")
                 self._save_models(epoch)
 
             # NEW: Record agent names for this epoch
@@ -1690,7 +1766,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 )
 
         # Save final models at the end of training
-        self._save_models(self.config.experiment.epochs)
+        final_epoch = self.config.experiment.epochs
+        print(f"Training completed. Saving final models at epoch {final_epoch}...")
+        self._save_models(final_epoch)
         
         # Save final probe test results if probe test logger was used
         if probe_test_logger is not None:
@@ -1704,24 +1782,45 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         """
         from pathlib import Path
         
-        # Create models directory if it doesn't exist
-        models_dir = Path(__file__).parent / "models"
-        models_dir.mkdir(exist_ok=True)
+        # Use log_dir if available (per-run models), otherwise fall back to global models folder
+        if hasattr(self, 'log_dir') and self.log_dir is not None:
+            models_dir = self.log_dir / "models"
+            print(f"Using per-run models directory: {models_dir}")
+        else:
+            models_dir = Path(__file__).parent / "models"
+            print(f"WARNING: log_dir not set, using global models directory: {models_dir}")
+        
+        try:
+            models_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"ERROR: Failed to create models directory {models_dir}: {e}")
+            return
         
         # Get experiment name from config
         experiment_name = self.config.experiment.get("run_name", "experiment")
         
-        # Save each agent's model (overwrite previous versions)
+        # Save each agent's model (overwrite previous version, no epoch in filename)
+        saved_count = 0
         for env_idx, env in enumerate(self.individual_envs):
             for agent_idx, agent in enumerate(env.agents):
                 # Create filename with experiment name, environment, and agent info (no epoch)
                 model_filename = f"{experiment_name}_env_{env_idx}_agent_{agent_idx}.pth"
                 model_path = models_dir / model_filename
                 
-                # Save the model (overwrites previous version)
-                agent.model.save(model_path)
-                
-        print(f"Saved models for epoch {epoch} to {models_dir.absolute()}")
+                try:
+                    # Save the model
+                    agent.model.save(model_path)
+                    saved_count += 1
+                    print(f"  Saved model: {model_path.name}")
+                except Exception as e:
+                    print(f"  ERROR: Failed to save model for env_{env_idx}_agent_{agent_idx}: {e}")
+                    import traceback
+                    traceback.print_exc()
+        
+        if saved_count > 0:
+            print(f"Successfully saved {saved_count} model(s) for epoch {epoch} to {models_dir.absolute()}")
+        else:
+            print(f"WARNING: No models were saved for epoch {epoch}")
 
 
 class StatePunishmentEnv(Environment[StatePunishmentWorld]):
@@ -1992,6 +2091,24 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_composite_actions=self.use_composite_actions,
                     rollout_length=self.config.model.ppo_rollout_length,
                 )
+                
+                # Load initial model if specified (reuse pattern from replace_agent_model)
+                initial_model_path = self.config.experiment.get("initial_model_path", None)
+                if initial_model_path is not None and initial_model_path != "":
+                    from pathlib import Path
+                    model_file = Path(initial_model_path)
+                    if not model_file.exists():
+                        raise FileNotFoundError(
+                            f"Initial model checkpoint not found: {initial_model_path}"
+                        )
+                    
+                    try:
+                        model.load(model_file)
+                        print(f"Loaded initial model for agent {i} from {initial_model_path}")
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"Failed to load initial model from {initial_model_path} for agent {i}: {e}"
+                        )
             elif model_type == "ppo_lstm":
                 # PPO LSTM model (LSTM-based, single-head)
                 # use_factored_actions and action_dims already parsed above for action_spec
@@ -2030,6 +2147,24 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_factored_actions=use_factored_actions,
                     action_dims=action_dims,
                 )
+                
+                # Load initial model if specified (reuse pattern from replace_agent_model)
+                initial_model_path = self.config.experiment.get("initial_model_path", None)
+                if initial_model_path is not None and initial_model_path != "":
+                    from pathlib import Path
+                    model_file = Path(initial_model_path)
+                    if not model_file.exists():
+                        raise FileNotFoundError(
+                            f"Initial model checkpoint not found: {initial_model_path}"
+                        )
+                    
+                    try:
+                        model.load(model_file)
+                        print(f"Loaded initial model for agent {i} from {initial_model_path}")
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"Failed to load initial model from {initial_model_path} for agent {i}: {e}"
+                        )
             elif model_type == "ppo_lstm_cpc":
                 # PPO LSTM with CPC model (LSTM-based with Contrastive Predictive Coding)
                 # use_factored_actions and action_dims already parsed above for action_spec
@@ -2071,12 +2206,30 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     use_cpc=self.config.model.get("use_cpc", True),
                     cpc_horizon=self.config.model.get("cpc_horizon", 30),
                     cpc_weight=self.config.model.get("cpc_weight", 1.0),
-                    cpc_projection_dim=self.config.model.get("cpc_projection_dim", None),
+                    cpc_projection_dim=self.config.model.get("cpc_projection_dim", None),  # Ignored by standalone model but kept for compatibility
                     cpc_temperature=self.config.model.get("cpc_temperature", 0.07),
-                    cpc_memory_bank_size=self.config.model.get("cpc_memory_bank_size", 1000),
-                    cpc_sample_size=self.config.model.get("cpc_sample_size", 64),
+                    cpc_memory_bank_size=0,  # Standalone model ignores this (uses temporal negatives)
+                    # NOTE: cpc_sample_size is NOT in standalone model signature - removed
                     cpc_start_epoch=self.config.model.get("cpc_start_epoch", 1),
                 )
+                
+                # Load initial model if specified (reuse pattern from replace_agent_model)
+                initial_model_path = self.config.experiment.get("initial_model_path", None)
+                if initial_model_path is not None and initial_model_path != "":
+                    from pathlib import Path
+                    model_file = Path(initial_model_path)
+                    if not model_file.exists():
+                        raise FileNotFoundError(
+                            f"Initial model checkpoint not found: {initial_model_path}"
+                        )
+                    
+                    try:
+                        model.load(model_file)
+                        print(f"Loaded initial model for agent {i} from {initial_model_path}")
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"Failed to load initial model from {initial_model_path} for agent {i}: {e}"
+                        )
             else:
                 # IQN model (default)
                 # use_factored_actions and action_dims already parsed above
@@ -2086,16 +2239,16 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 iqn_use_cpc = self.config.model.get("iqn_use_cpc", False)
                 
                 if iqn_use_cpc:
-                    # Use IQN with CPC wrapper
-                    model = PyTorchIQNCPC(
+                    # Use RecurrentIQNModelCPC (recurrent IQN with CPC)
+                    model = RecurrentIQNModelCPC(
                         input_size=(flattened_size,),
                         action_space=action_spec.n_actions,
                         layer_size=self.config.model.layer_size,
                         epsilon=self.config.model.epsilon,
                         epsilon_min=self.config.model.epsilon_min,
                         device=self.config.model.device,
-                        seed=torch.random.seed(),
-                        n_frames=self.config.model.n_frames,
+                        seed=int(torch.randint(0, 2**31 - 1, (1,)).item()) if torch.random.seed() is None else torch.random.seed(),
+                        n_frames=1,  # Always 1 for recurrent model (handles sequences internally)
                         n_step=self.config.model.n_step,
                         sync_freq=self.config.model.sync_freq,
                         model_update_freq=self.config.model.model_update_freq,
@@ -2108,18 +2261,39 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                         use_factored_actions=use_factored_actions,
                         action_dims=action_dims,
                         factored_target_variant=factored_target_variant,
+                        # Recurrent model parameters
+                        hidden_size=self.config.model.get("iqn_hidden_size", 256),
+                        max_episode_length=self.config.model.get("iqn_max_episode_length", 200),
+                        burn_in_len=self.config.model.get("iqn_burn_in_len", 20),
+                        unroll_len=self.config.model.get("iqn_unroll_len", 40),
                         # CPC-specific parameters
                         use_cpc=True,
                         cpc_horizon=self.config.model.get("iqn_cpc_horizon", 30),
                         cpc_weight=self.config.model.get("iqn_cpc_weight", 1.0),
-                        cpc_projection_dim=self.config.model.get("iqn_cpc_projection_dim", None),
+                        cpc_projection_dim=self.config.model.get("iqn_cpc_projection_dim", None),  # Ignored by model but kept for compatibility
                         cpc_temperature=self.config.model.get("iqn_cpc_temperature", 0.07),
-                        cpc_memory_bank_size=self.config.model.get("iqn_cpc_memory_bank_size", 1000),
-                        cpc_sample_size=self.config.model.get("iqn_cpc_sample_size", 64),
+                        cpc_sample_size=self.config.model.get("iqn_cpc_sample_size", 64),  # Ignored by model but kept for compatibility
                         cpc_start_epoch=self.config.model.get("iqn_cpc_start_epoch", 1),
-                        hidden_size=self.config.model.get("iqn_hidden_size", 256),
-                        max_sequence_length=self.config.model.get("iqn_cpc_max_sequence_length", 1000),
+                        cpc_max_sequence_length=self.config.model.get("iqn_cpc_max_sequence_length", 500),
                     )
+                    
+                    # Load initial model if specified (reuse pattern from replace_agent_model)
+                    initial_model_path = self.config.experiment.get("initial_model_path", None)
+                    if initial_model_path is not None and initial_model_path != "":
+                        from pathlib import Path
+                        model_file = Path(initial_model_path)
+                        if not model_file.exists():
+                            raise FileNotFoundError(
+                                f"Initial model checkpoint not found: {initial_model_path}"
+                            )
+                        
+                        try:
+                            model.load(model_file)
+                            print(f"Loaded initial model for agent {i} from {initial_model_path}")
+                        except Exception as e:
+                            raise RuntimeError(
+                                f"Failed to load initial model from {initial_model_path} for agent {i}: {e}"
+                            )
                 else:
                     # Use standard IQN (no CPC)
                     model = PyTorchIQN(
@@ -2144,6 +2318,24 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                         action_dims=action_dims,
                         factored_target_variant=factored_target_variant,
                     )
+                    
+                    # Load initial model if specified (reuse pattern from replace_agent_model)
+                    initial_model_path = self.config.experiment.get("initial_model_path", None)
+                    if initial_model_path is not None and initial_model_path != "":
+                        from pathlib import Path
+                        model_file = Path(initial_model_path)
+                        if not model_file.exists():
+                            raise FileNotFoundError(
+                                f"Initial model checkpoint not found: {initial_model_path}"
+                            )
+                        
+                        try:
+                            model.load(model_file)
+                            print(f"Loaded initial model for agent {i} from {initial_model_path}")
+                        except Exception as e:
+                            raise RuntimeError(
+                                f"Failed to load initial model from {initial_model_path} for agent {i}: {e}"
+                            )
 
             # Extract norm enforcer config
             norm_enforcer_config = None
@@ -2196,6 +2388,24 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     n_quantiles=self.config.model.n_quantiles,
                 )
                 
+                # Load initial move model if specified (reuse pattern from replace_agent_model)
+                initial_model_path = self.config.experiment.get("initial_model_path", None)
+                if initial_model_path is not None and initial_model_path != "":
+                    from pathlib import Path
+                    model_file = Path(initial_model_path)
+                    if not model_file.exists():
+                        raise FileNotFoundError(
+                            f"Initial model checkpoint not found: {initial_model_path}"
+                        )
+                    
+                    try:
+                        move_model.load(model_file)
+                        print(f"Loaded initial move model for agent {i} from {initial_model_path}")
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"Failed to load initial move model from {initial_model_path} for agent {i}: {e}"
+                        )
+                
                 # Vote model uses low-dimensional summary
                 vote_window_size = self.config.experiment.get("vote_window_size", 10)
                 use_window_stats = self.config.experiment.get("use_window_stats", False)
@@ -2225,6 +2435,24 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     GAMMA=self.config.model.GAMMA,
                     n_quantiles=self.config.model.n_quantiles,
                 )
+                
+                # Load initial vote model if specified (use same path as move model)
+                initial_model_path = self.config.experiment.get("initial_model_path", None)
+                if initial_model_path is not None and initial_model_path != "":
+                    from pathlib import Path
+                    model_file = Path(initial_model_path)
+                    if not model_file.exists():
+                        raise FileNotFoundError(
+                            f"Initial model checkpoint not found: {initial_model_path}"
+                        )
+                    
+                    try:
+                        vote_model.load(model_file)
+                        print(f"Loaded initial vote model for agent {i} from {initial_model_path}")
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"Failed to load initial vote model from {initial_model_path} for agent {i}: {e}"
+                        )
                 
                 agents.append(
                     SeparateModelStatePunishmentAgent(

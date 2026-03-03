@@ -69,9 +69,10 @@ def create_config(
     cpc_weight: float = 1.0,  # NEW: Weight for CPC loss
     cpc_projection_dim: Optional[int] = None,  # NEW: CPC projection dimension (None = use hidden_size)
     cpc_temperature: float = 0.07,  # NEW: Temperature for InfoNCE loss
-    cpc_memory_bank_size: int = 1000,  # NEW: Number of past sequences to keep in memory bank
-    cpc_sample_size: int = 64,  # NEW: Number of sequences to sample from memory bank for CPC training
+    cpc_memory_bank_size: int = 1000,  # NEW: Number of past sequences to keep in memory bank (ignored by standalone model, but used by refactored model)
+    cpc_sample_size: int = 64,  # NEW: Number of sequences to sample from memory bank for CPC training (ignored by standalone model, but used by refactored model)
     cpc_start_epoch: int = 1,  # NEW: Epoch to start CPC training (0 = start immediately, 1 = wait for memory bank)
+    min_trajectory_length: int = 5,  # NEW: Minimum trajectory length to save for training (for standalone PPO LSTM CPC)
     norm_enforcer_decay_rate: float = 0.995,  # NEW: Norm strength decay rate
     norm_enforcer_internalization_threshold: float = 5.0,  # NEW: Threshold for guilt penalties
     norm_enforcer_max_norm_strength: float = 10.0,  # NEW: Maximum norm strength
@@ -108,10 +109,13 @@ def create_config(
     iqn_cpc_weight: float = 1.0,  # Weight for CPC loss
     iqn_cpc_projection_dim: Optional[int] = None,  # CPC projection dimension (None = use hidden_size)
     iqn_cpc_temperature: float = 0.07,  # Temperature for InfoNCE loss
-    iqn_cpc_memory_bank_size: int = 1000,  # Number of past sequences to keep in memory bank
-    iqn_cpc_sample_size: int = 64,  # Number of sequences to sample from memory bank
+    iqn_cpc_sample_size: int = 64,  # Number of sequences to sample for CPC training (ignored by RecurrentIQNModelCPC, but used by other IQN CPC models)
     iqn_cpc_start_epoch: int = 1,  # Epoch to start CPC training
     iqn_hidden_size: int = 256,  # Hidden size for encoder and LSTM
+    # Recurrent IQN model parameters (for RecurrentIQNModelCPC)
+    iqn_max_episode_length: int = 200,  # Max episode length for replay buffer
+    iqn_burn_in_len: int = 20,  # Burn-in length for truncated BPTT
+    iqn_unroll_len: int = 40,  # Unroll length for truncated BPTT
     # PPO factored action space parameters
     ppo_use_factored_actions: bool = False,  # Enable factored actions for PPO
     ppo_action_dims: Optional[str] = None,  # Comma-separated action dimensions (e.g., "5,3")
@@ -120,6 +124,7 @@ def create_config(
     history_window_size: int = 10,  # Number of epochs to aggregate over for history observation
     respawn_prob: float = 0.0,  # Probability of resource respawning
     max_resources: Optional[int] = None,  # Maximum number of resources allowed in the world (None = unlimited)
+    initial_model_path: Optional[str] = None,  # Path to pretrained model checkpoint for initial agents
 ) -> Dict[str, Any]:
     """Create a configuration dictionary for the state punishment experiment."""
 
@@ -287,6 +292,7 @@ def create_config(
             "use_predefined_punishment_schedule": use_predefined_punishment_schedule,
             "social_harm_accessible": social_harm_accessible,
             "save_models_every": save_models_every,
+            "initial_model_path": initial_model_path,
             "delayed_punishment": delayed_punishment,
             "important_rule": important_rule,
             "punishment_observable": punishment_observable,
@@ -381,6 +387,7 @@ def create_config(
             "cpc_memory_bank_size": cpc_memory_bank_size if model_type == "ppo_lstm_cpc" else None,
             "cpc_sample_size": cpc_sample_size if model_type == "ppo_lstm_cpc" else None,
             "cpc_start_epoch": cpc_start_epoch if model_type == "ppo_lstm_cpc" else None,
+            "min_trajectory_length": min_trajectory_length if model_type == "ppo_lstm_cpc" else None,
             # IQN factored action space parameters
             "iqn_use_factored_actions": iqn_use_factored_actions if model_type == "iqn" else False,
             "iqn_action_dims": iqn_action_dims if model_type == "iqn" else None,
@@ -391,10 +398,13 @@ def create_config(
             "iqn_cpc_weight": iqn_cpc_weight if model_type == "iqn" else None,
             "iqn_cpc_projection_dim": iqn_cpc_projection_dim if model_type == "iqn" else None,
             "iqn_cpc_temperature": iqn_cpc_temperature if model_type == "iqn" else None,
-            "iqn_cpc_memory_bank_size": iqn_cpc_memory_bank_size if model_type == "iqn" else None,
             "iqn_cpc_sample_size": iqn_cpc_sample_size if model_type == "iqn" else None,
             "iqn_cpc_start_epoch": iqn_cpc_start_epoch if model_type == "iqn" else None,
             "iqn_hidden_size": iqn_hidden_size if model_type == "iqn" else None,
+            # Recurrent IQN model parameters (only for RecurrentIQNModelCPC)
+            "iqn_max_episode_length": iqn_max_episode_length if model_type == "iqn" else None,
+            "iqn_burn_in_len": iqn_burn_in_len if model_type == "iqn" else None,
+            "iqn_unroll_len": iqn_unroll_len if model_type == "iqn" else None,
             # PPO factored action space parameters
             "ppo_use_factored_actions": ppo_use_factored_actions if model_type in ["ppo", "ppo_lstm", "ppo_lstm_cpc"] else False,
             "ppo_action_dims": ppo_action_dims if model_type in ["ppo", "ppo_lstm", "ppo_lstm_cpc"] else None,
