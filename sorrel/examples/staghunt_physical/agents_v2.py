@@ -11,7 +11,7 @@ collecting resources and larger payoffs via the interaction matrix when
 engaging another player.
 
 This version includes a custom observation spec that handles inventory
-and ready flag as extra scalar observations, similar to the cleanup example.
+and own health (normalized) as extra scalar observations, similar to the cleanup example.
 """
 
 from __future__ import annotations
@@ -232,7 +232,7 @@ class AgentIdentityEncoder:
 class StagHuntObservation(observation_spec.OneHotObservationSpec):
     """Custom observation function for the StagHunt agent class.
 
-    This observation spec includes inventory, ready flag, and position embedding as
+    This observation spec includes inventory, own health (normalized), and position embedding as
     extra features, similar to the cleanup example's positional embedding approach.
     """
     
@@ -349,6 +349,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 4 +  # Other orientation
                 3 +  # Groups (AgentGroupA, B, C)
                 self.agent_id_dim  # Agent ID encoding (onehot or random vector)
+                + 2  # Frozen: ME_FROZEN, OTHER_FROZEN
             )
         else:
             self.agent_id_vectors = None
@@ -464,7 +465,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 self.input_size = (
                 1,
                 visual_field_size
-                + 4  # Extra features: inv_stag, inv_hare, ready_flag, interaction_reward_flag
+                + 4  # Extra features: inv_stag, inv_hare, own_health, interaction_reward_flag
                 + (4 * self.embedding_size)  # Positional embedding
             )
 
@@ -550,7 +551,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 # This shouldn't happen, but truncate if it does
                 visual_field = visual_field[:expected_visual_size]
 
-            # Get the agent at this location to extract inventory and ready state
+            # Get the agent at this location to extract inventory and own health
             agent = None
             if hasattr(world, "agents"):
                 for a in world.agents:
@@ -562,13 +563,14 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 # If no agent found, use default values
                 extra_features = np.array([0, 0, 0, 0], dtype=np.float32)
             else:
-                # Extract inventory, ready flag, and interaction reward flag from the agent
+                # Extract inventory, own_health (normalized), and interaction reward flag from the agent
                 inv_stag = agent.inventory.get("stag", 0)
                 inv_hare = agent.inventory.get("hare", 0)
-                ready_flag = 1 if agent.ready else 0
+                max_h = max(getattr(agent, "max_health", 1), 1)
+                own_health = min(1.0, agent.health / max_h)
                 interaction_reward_flag = 1 if agent.received_interaction_reward else 0
                 extra_features = np.array(
-                    [inv_stag, inv_hare, ready_flag, interaction_reward_flag],
+                    [inv_stag, inv_hare, own_health, interaction_reward_flag],
                     dtype=np.float32,
                 )
 
@@ -675,7 +677,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             # This shouldn't happen, but truncate if it does
             visual_field_flat = visual_field_flat[:expected_visual_size]
         
-        # Step 3.9: Get the agent at observation location to extract inventory and ready state
+        # Step 3.9: Get the agent at observation location to extract inventory and own health
         agent = None
         if hasattr(world, "agents"):
             for a in world.agents:
@@ -689,10 +691,11 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         else:
                 inv_stag = agent.inventory.get("stag", 0)
                 inv_hare = agent.inventory.get("hare", 0)
-                ready_flag = 1 if agent.ready else 0
+                max_h = max(getattr(agent, "max_health", 1), 1)
+                own_health = min(1.0, agent.health / max_h)
                 interaction_reward_flag = 1 if agent.received_interaction_reward else 0
                 extra_features = np.array(
-                [inv_stag, inv_hare, ready_flag, interaction_reward_flag],
+                [inv_stag, inv_hare, own_health, interaction_reward_flag],
                 dtype=np.float32,
             )
         
@@ -783,6 +786,8 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         FEAT_GROUP_B = 21
         FEAT_GROUP_C = 22
         FEAT_AGENT_ID_START = 23  # Agent ID vector starts here
+        FEAT_ME_FROZEN = FEAT_AGENT_ID_START + self.agent_id_dim
+        FEAT_OTHER_FROZEN = FEAT_ME_FROZEN + 1
         
         # Orientation mapping
         orientation_map = {0: 'north', 1: 'east', 2: 'south', 3: 'west'}
@@ -838,6 +843,8 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                             if entity_orientation_str:
                                 feat_idx = orientation_to_feat[entity_orientation_str][0]
                                 feature_tensor[feat_idx, y, x] = 1.0
+                            if getattr(observer_agent, 'is_frozen', False):
+                                feature_tensor[FEAT_ME_FROZEN, y, x] = 1.0
                         else:
                             # Other agent features
                             feature_tensor[FEAT_OTHER, y, x] = 1.0
@@ -879,6 +886,8 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                             if 0 <= entity_id < len(self.agent_id_vectors):
                                 id_vector = self.agent_id_vectors[entity_id]
                                 feature_tensor[FEAT_AGENT_ID_START:FEAT_AGENT_ID_START+self.agent_id_dim, y, x] = id_vector
+                            if getattr(entity, 'is_frozen', False):
+                                feature_tensor[FEAT_OTHER_FROZEN, y, x] = 1.0
                 # Encode beam features
                 if world.valid_location(beam_loc):
                     beam_entity = world.observe(beam_loc)
@@ -918,10 +927,11 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         # Step 6: Add extra features and positional embedding
         inv_stag = observer_agent.inventory.get("stag", 0)
         inv_hare = observer_agent.inventory.get("hare", 0)
-        ready_flag = 1 if observer_agent.ready else 0
+        max_h = max(getattr(observer_agent, "max_health", 1), 1)
+        own_health = min(1.0, observer_agent.health / max_h)
         interaction_reward_flag = 1 if observer_agent.received_interaction_reward else 0
         extra_features = np.array(
-            [inv_stag, inv_hare, ready_flag, interaction_reward_flag],
+            [inv_stag, inv_hare, own_health, interaction_reward_flag],
             dtype=np.float32,
         )
         
@@ -949,7 +959,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     Parameters
     ----------
     observation_spec : StagHuntObservation
-        Custom observation specification that includes inventory and ready flag.
+        Custom observation specification that includes inventory and own health (normalized).
     action_spec : ActionSpec
         Specification of the agent's discrete action space.  The
         ``actions`` list passed into the spec should define readable
@@ -1025,15 +1035,14 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # separate cooldown timers for ATTACK and PUNISH
         self.attack_cooldown_timer = 0
         self.punish_cooldown_timer = 0
-        # removal state tracking
-        self.is_removed: bool = False
+        # freeze state (when health reaches 0 from punishment)
+        self.is_frozen: bool = False
+        self.freeze_timer: int = 0
         # pending reward from interactions
         self.pending_reward: float = 0.0
         # flag indicating if agent received interaction reward in previous step
         self.received_interaction_reward: bool = False
-        self.respawn_timer: int = 0
-        self._removed_from_world: bool = False
-        
+
         # Health system
         self.max_health = max_health
         self.health = max_health
@@ -1142,22 +1151,28 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         if self.punish_cooldown_timer > 0:
             self.punish_cooldown_timer -= 1
 
-    def update_removal_state(self) -> None:
-        """Update agent removal and respawn states."""
-        if self.is_removed and self.respawn_timer > 0:
-            self.respawn_timer -= 1
+    def update_freeze_state(self) -> None:
+        """Update freeze state: decrement timer; on thaw restore health and clear freeze."""
+        if self.freeze_timer > 0:
+            self.freeze_timer -= 1
+            if self.freeze_timer <= 0:
+                self.is_frozen = False
+                self.health = self.max_health  # Revive in place
 
-    def on_punishment_hit(self) -> None:
-        """Handle being hit by a punishment beam."""
+    def on_punishment_hit(self, world: "StagHuntWorld | None" = None) -> None:
+        """Handle being hit by a punishment beam. Each hit reduces health; freeze only when health <= 0."""
         self.health -= 1
         if self.health <= 0:
-            self.is_removed = True
-            self.respawn_timer = 10  # Remove for 10 turns
-            self._removed_from_world = False  # Reset flag for removal
+            self.health = 0
+            freeze_duration = 5
+            if world is not None:
+                freeze_duration = getattr(world, "punish_freeze_duration", 5)
+            self.freeze_timer = freeze_duration
+            self.is_frozen = True
 
     def can_act(self) -> bool:
-        """Check if the agent can take actions (not removed)."""
-        return not self.is_removed
+        """Check if the agent can take actions (not frozen)."""
+        return self.freeze_timer <= 0
 
     # ------------------------------------------------------------------ #
     # Agent lifecycle methods                                             #
@@ -1176,11 +1191,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.punish_cooldown_timer = 0  # Reset punish cooldown
         self.pending_reward = 0.0  # Reset pending reward
         self.received_interaction_reward = False  # Reset interaction reward flag
-        # Reset removal state
-        self.is_removed = False
-        self.respawn_timer = 0
-        self._removed_from_world = False
-        
+        # Reset freeze state
+        self.is_frozen = False
+        self.freeze_timer = 0
+
         # Reset health system
         self.health = self.max_health
         self.update_agent_kind()  # Initialize agent kind based on orientation
@@ -1278,12 +1292,16 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         turning or interaction.  The reward arises from picking up
         resources (taste reward) and from interacting with another agent
         (stag‑hunt payoff handled by the environment).
-        """
-        # Skip action if agent is frozen or removed
-        if not self.can_act():
-            return 0.0
 
+        When the agent is frozen, the policy's action is still used for
+        learning (transition/get_action unchanged), but the action executed
+        in the environment is forced to NOOP (no movement, attack, or punish).
+        """
         action_name = self.action_spec.get_readable_action(action)
+        if self.is_frozen:
+            # Frozen: execute as NOOP in env; policy action still used for memory in transition()
+            action_name = "NOOP"
+
         reward = 0.0
 
         # apply any pending reward from interactions
@@ -1492,23 +1510,16 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     target = (beam_loc[0], beam_loc[1], world.dynamic_layer)
                     if world.valid_location(target):
                         entity = world.observe(target)
-                        if isinstance(entity, StagHuntAgent):
+                        if isinstance(entity, StagHuntAgent) and entity is not self:
+                            # Skip self: agents are not hit by their own punishment beam
                             # Record punishment metrics
                             if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
                                 world.environment.metrics_collector.collect_punishment_metrics(
                                     self, entity
                                 )
                             
-                            # Punish the agent
-                            entity.on_punishment_hit()
-                            
-                            # # Force immediate removal if agent should be removed
-                            # if entity.is_removed and not entity._removed_from_world:
-                                #     # Remove agent from world immediately
-                            #     world.remove(entity.location)
-                            #     entity._removed_from_world = True
-                            #     entity.location = None
-                            
+                            # Punish the agent (pass world for punish_freeze_duration)
+                            entity.on_punishment_hit(world)
                             break  # Only punish one agent per beam
 
                 # set cooldown timer after using punish beam
@@ -1772,7 +1783,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 # Find agent by ID
                 agent = None
                 for a in world.environment.agents:
-                    if a.agent_id == agent_id and not a.is_removed:
+                    if a.agent_id == agent_id and a.can_act():
                         agent = a
                         break
                 
@@ -1801,13 +1812,16 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                             agent, shared_reward
                         )
         else:
-                # Use existing radius-based reward sharing
-            # Find all agents within reward sharing radius
+            # Radius-based reward sharing: only stag is shared; hare goes to defeating agent only
+            resource_name = getattr(resource, "name", None)
+            if resource_name == "hare":
+                return resource.value
+            # Stag: find all agents within reward sharing radius
             sharing_radius = getattr(world, "reward_sharing_radius", 3)
             agents_in_radius = []
             
             for agent in world.environment.agents:
-                if agent != self and not agent.is_removed:
+                if agent != self and agent.can_act():
                     # Calculate distance
                     dx = abs(agent.location[0] - resource.location[0])
                     dy = abs(agent.location[1] - resource.location[1])

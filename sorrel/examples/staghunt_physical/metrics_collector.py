@@ -6,15 +6,33 @@ and agents during gameplay, integrating directly with TensorBoard.
 
 from __future__ import annotations
 
-import math
 from collections import defaultdict
 from typing import List, Optional, TYPE_CHECKING
 
 import numpy as np
+from scipy.spatial import KDTree
 
 if TYPE_CHECKING:
     from .agents_v2 import StagHuntAgent
     from .world import StagHuntWorld
+
+
+def _default_agent_metrics():
+    """Default agent metrics dict (shared shape for training and probe)."""
+    return {
+        'attacks_to_hares': 0,
+        'attacks_to_stags': 0,
+        'punishments_given': 0,
+        'punishments_received': 0,
+        'punishments_to_agent': defaultdict(int),
+        'total_reward': 0.0,
+        'attack_cost_paid': 0.0,
+        'punish_cost_paid': 0.0,
+        'resources_defeated': 0,
+        'stags_defeated': 0,
+        'hares_defeated': 0,
+        'shared_rewards_received': 0.0,
+    }
 
 
 class StagHuntMetricsCollector:
@@ -33,20 +51,7 @@ class StagHuntMetricsCollector:
         }
         
         # Agent-specific metrics storage
-        self.agent_metrics = defaultdict(lambda: {
-            'attacks_to_hares': 0,
-            'attacks_to_stags': 0,
-            'punishments_given': 0,
-            'punishments_received': 0,
-            'punishments_to_agent': defaultdict(int),  # target_agent_id -> count
-            'total_reward': 0.0,
-            'attack_cost_paid': 0.0,
-            'punish_cost_paid': 0.0,
-            'resources_defeated': 0,
-            'stags_defeated': 0,  # Number of stags defeated by this agent
-            'hares_defeated': 0,  # Number of hares defeated by this agent
-            'shared_rewards_received': 0.0,
-        })
+        self.agent_metrics = defaultdict(_default_agent_metrics)
         
     def collect_agent_positions(self, agents: List[StagHuntAgent]) -> None:
         """Collect current positions of all active agents.
@@ -154,56 +159,71 @@ class StagHuntMetricsCollector:
         agent_id = agent.agent_id
         self.agent_metrics[agent_id]['shared_rewards_received'] += shared_reward
         
-    def calculate_clustering(self) -> float:
-        """Calculate average clustering of all agents.
+    def calculate_clustering(self, area: Optional[float] = None) -> float:
+        """Clark–Evans nearest-neighbor ratio R (social clustering metric).
+        
+        R = mean(observed nearest-neighbor distance) / expected under complete spatial randomness (2D Poisson).
+        R < 1: clustering; R > 1: dispersion; R ≈ 1: random.
+        
+        Args:
+            area: Total area of the study region (e.g. width * height). If None, uses bounding box of agent positions.
         
         Returns:
-            Average clustering coefficient (0-1, higher = more clustered)
+            R (float). Returns 0.0 when N < 2 (not defined).
         """
         positions = self.epoch_metrics['agent_positions']
-        if len(positions) < 2:
+        coords = np.asarray([[x, y] for _, x, y in positions], dtype=float)
+        n = coords.shape[0]
+        if n < 2:
             return 0.0
-            
-        # Extract coordinates
-        coords = [(x, y) for _, x, y in positions]
+
+        # Nearest-neighbor distances: k=2 because nearest is the point itself (distance 0)
+        tree = KDTree(coords)
+        dists, _ = tree.query(coords, k=2)
+        nn = dists[:, 1]  # nearest-neighbor distance for each point
+        d_obs = float(np.mean(nn))
+
+        if area is None:
+            # Bounding box of positions
+            x_min, y_min = coords.min(axis=0)
+            x_max, y_max = coords.max(axis=0)
+            area = (x_max - x_min + 1.0) * (y_max - y_min + 1.0)
+        area = float(area)
+
+        # Intensity (lambda) = N / A
+        lam = n / area
+        # Expected NN distance under CSR (2D Poisson)
+        d_exp = 1.0 / (2.0 * np.sqrt(lam))
+        return d_obs / d_exp
         
-        # Calculate pairwise distances
-        distances = []
-        for i in range(len(coords)):
-            for j in range(i + 1, len(coords)):
-                x1, y1 = coords[i]
-                x2, y2 = coords[j]
-                dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-                distances.append(dist)
-                
-        if not distances:
-            return 0.0
-            
-        # Calculate clustering based on distance variance
-        # Lower variance = more clustered
-        mean_dist = np.mean(distances)
-        variance = np.var(distances)
-        
-        # Normalize clustering (0 = spread out, 1 = tightly clustered)
-        # Use inverse of normalized variance
-        max_variance = mean_dist ** 2  # Theoretical maximum variance
-        clustering = max(0, 1 - (variance / max_variance)) if max_variance > 0 else 0
-        
-        return clustering
-        
-    def log_epoch_metrics(self, agents: List[StagHuntAgent], epoch: int, writer) -> None:
+    def log_epoch_metrics(
+        self,
+        agents: List[StagHuntAgent],
+        epoch: int,
+        writer,
+        area: Optional[float] = None,
+        stag_count: int = 0,
+        hare_count: int = 0,
+        total_resource_count: int = 0,
+        log_resource_counts: bool = True,
+    ) -> None:
         """Log all metrics for the current epoch to TensorBoard.
         
         Args:
             agents: List of agents in the environment
             epoch: Current epoch number
             writer: TensorBoard SummaryWriter
+            area: Study region area for Clark–Evans R (e.g. world.height * world.width). If None, uses bounding box of positions.
+            stag_count: Current number of stags in the world (0 if not available).
+            hare_count: Current number of hares in the world (0 if not available).
+            total_resource_count: Current total resource count (0 if not available).
+            log_resource_counts: If False, do not log Resources/* scalars (e.g. during probe test epochs).
         """
         # Collect final agent positions
         self.collect_agent_positions(agents)
         
-        # Calculate clustering
-        clustering = self.calculate_clustering()
+        # Calculate clustering (Clark–Evans R)
+        clustering = self.calculate_clustering(area=area)
         
         # Initialize totals and means for aggregation
         total_attacks_to_hares = 0
@@ -248,7 +268,12 @@ class StagHuntMetricsCollector:
                               agent_data['shared_rewards_received'], epoch)
             
             # Individual punishment metrics - track punishments to each other agent
-            for target_agent_id, count in agent_data['punishments_to_agent'].items():
+            # Log for every other agent so 0 is saved when no punishment was given
+            all_agent_ids = [a.agent_id for a in agents]
+            for target_agent_id in all_agent_ids:
+                if target_agent_id == agent_id:
+                    continue
+                count = agent_data['punishments_to_agent'].get(target_agent_id, 0)
                 writer.add_scalar(f'Agent_{agent_id}/punishments_to_agent_{target_agent_id}', 
                                   count, epoch)
             
@@ -322,6 +347,12 @@ class StagHuntMetricsCollector:
         # Log step count
         writer.add_scalar('Global/Steps', self.epoch_metrics['step_count'], epoch)
         
+        # Log resource counts (end-of-epoch); skip during probe test epochs
+        if log_resource_counts:
+            writer.add_scalar('Resources/stags', stag_count, epoch)
+            writer.add_scalar('Resources/hares', hare_count, epoch)
+            writer.add_scalar('Resources/total', total_resource_count, epoch)
+        
         # Reset for next epoch
         self.reset_epoch_metrics()
         
@@ -337,17 +368,91 @@ class StagHuntMetricsCollector:
         }
         
         # Reset agent-specific metrics
-        self.agent_metrics = defaultdict(lambda: {
+        self.agent_metrics = defaultdict(_default_agent_metrics)
+
+
+class ProbeMetricsCollector:
+    """Metrics collector for probe tests. Only records attack counts (trust metric).
+
+    Punishment, cost, reward, and other metrics are not collected so that probe
+    tests focus solely on the central trust metric (stag vs hare attacks).
+    """
+
+    def __init__(self):
+        self.epoch_metrics = {
             'attacks_to_hares': 0,
             'attacks_to_stags': 0,
-            'punishments_given': 0,
-            'punishments_received': 0,
-            'punishments_to_agent': defaultdict(int),  # target_agent_id -> count
-            'total_reward': 0.0,
-            'attack_cost_paid': 0.0,
-            'punish_cost_paid': 0.0,
-            'resources_defeated': 0,
-            'stags_defeated': 0,  # Number of stags defeated by this agent
-            'hares_defeated': 0,  # Number of hares defeated by this agent
-            'shared_rewards_received': 0.0,
-        })
+            'total_punishments': 0,
+            'punishments_by_target': defaultdict(int),
+            'agent_positions': [],
+            'step_count': 0,
+        }
+        self.agent_metrics = defaultdict(_default_agent_metrics)
+
+    def collect_agent_positions(self, agents: List["StagHuntAgent"]) -> None:
+        pass
+
+    def collect_attack_metrics(
+        self, agent: "StagHuntAgent", target_type: str, target_entity=None
+    ) -> None:
+        agent_id = agent.agent_id
+        if target_type.lower() == "hare":
+            self.epoch_metrics['attacks_to_hares'] += 1
+            self.agent_metrics[agent_id]['attacks_to_hares'] += 1
+        elif target_type.lower() == "stag":
+            self.epoch_metrics['attacks_to_stags'] += 1
+            self.agent_metrics[agent_id]['attacks_to_stags'] += 1
+
+    def collect_punishment_metrics(
+        self, punisher: "StagHuntAgent", target: "StagHuntAgent"
+    ) -> None:
+        pass
+
+    def collect_step_metrics(self) -> None:
+        pass
+
+    def collect_agent_reward_metrics(self, agent: "StagHuntAgent", reward: float) -> None:
+        pass
+
+    def collect_agent_cost_metrics(
+        self, agent: "StagHuntAgent", attack_cost: float = 0.0, punish_cost: float = 0.0
+    ) -> None:
+        pass
+
+    def collect_resource_defeat_metrics(
+        self, agent: "StagHuntAgent", shared_reward: float, resource_type: str = None
+    ) -> None:
+        pass
+
+    def collect_shared_reward_metrics(
+        self, agent: "StagHuntAgent", shared_reward: float
+    ) -> None:
+        pass
+
+    def calculate_clustering(self, area: Optional[float] = None) -> float:
+        return 0.0
+
+    def log_epoch_metrics(
+        self,
+        agents: List["StagHuntAgent"],
+        epoch: int,
+        writer,
+        area: Optional[float] = None,
+        stag_count: int = 0,
+        hare_count: int = 0,
+        total_resource_count: int = 0,
+        log_resource_counts: bool = True,
+    ) -> None:
+        """Probe test: do not log any metrics (including resources) to TensorBoard."""
+        pass
+
+    def reset_epoch_metrics(self) -> None:
+        self.epoch_metrics = {
+            'attacks_to_hares': 0,
+            'attacks_to_stags': 0,
+            'total_punishments': 0,
+            'punishments_by_target': defaultdict(int),
+            'agent_positions': [],
+            'step_count': 0,
+        }
+        self.agent_metrics = defaultdict(_default_agent_metrics)

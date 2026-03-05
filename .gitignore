@@ -162,3 +162,4 @@ sorrel/examples/*/models/
 sorrel/examples/*/argv/
 /sorrel/examples/state_punishment/test
 /sorrel/examples/state_punishment/env_shock
+*PLAN*

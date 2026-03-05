@@ -10,12 +10,33 @@ from pathlib import Path
 
 from sorrel.utils.logging import Logger
 
+from sorrel.examples.staghunt_physical.entities import Empty, Wall
 from sorrel.examples.staghunt_physical.env import StagHuntEnv
 from sorrel.examples.staghunt_physical.probe_test_runner import run_probe_test
 
 
 class StagHuntEnvWithProbeTest(StagHuntEnv):
     """StagHuntEnv with integrated probe testing."""
+
+    def log_epoch_metrics(self, epoch: int, writer) -> None:
+        """Log metrics for the current epoch; do not log resource counts on probe test epochs."""
+        if hasattr(self, 'metrics_collector') and self.metrics_collector:
+            area = float(self.world.height * self.world.width) if hasattr(self, 'world') and self.world is not None else None
+            if hasattr(self, 'world') and self.world is not None:
+                stag_count = self.world.count_stags()
+                hare_count = self.world.count_hares()
+                total_resources = self.world.count_resources()
+            else:
+                stag_count = hare_count = total_resources = 0
+            probe_config = self.config.get("probe_test", {})
+            probe_enabled = probe_config.get("enabled", False)
+            test_interval = probe_config.get("test_interval", 100)
+            is_probe_epoch = probe_enabled and epoch > 0 and epoch % test_interval == 0
+            self.metrics_collector.log_epoch_metrics(
+                self.agents, epoch, writer, area=area,
+                stag_count=stag_count, hare_count=hare_count, total_resource_count=total_resources,
+                log_resource_counts=not is_probe_epoch,
+            )
     
     def run_experiment(
         self,
@@ -49,23 +70,41 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
         if not hasattr(self, 'first_probe_test_exported'):
             self.first_probe_test_exported = False
         
+        preserve_continuity = self.config.experiment.get("preserve_continuity", False)
+
         for epoch in range(self.config.experiment.epochs + 1):
-            # Update dynamic resource spawn success rates at epoch start (BEFORE reset)
-            # This must happen before reset() because reset() calls populate_environment()
-            # which uses current_stag_rate and current_hare_rate in Step 3 of _populate_randomly()
-            if hasattr(self.world, 'dynamic_resource_density_enabled') and self.world.dynamic_resource_density_enabled:
-                self.world.update_resource_density_at_epoch_start()
+            # Run "before reset" updates only when we are about to call reset()
+            if not preserve_continuity or epoch == 0:
+                # Update dynamic resource spawn success rates at epoch start (BEFORE reset)
+                # This must happen before reset() because reset() calls populate_environment()
+                # which uses current_stag_rate and current_hare_rate in Step 3 of _populate_randomly()
+                if hasattr(self.world, 'dynamic_resource_density_enabled') and self.world.dynamic_resource_density_enabled:
+                    self.world.update_resource_density_at_epoch_start()
+                
+                # Check if appearance switching should occur (BEFORE reset)
+                # Follow same pattern as dynamic_resource_density
+                if (hasattr(self.world, 'appearance_switching_enabled') and 
+                    self.world.appearance_switching_enabled and 
+                    epoch > 0 and 
+                    epoch % self.world.appearance_switch_period == 0):
+                    self.world.switch_appearances()
             
-            # Check if appearance switching should occur (BEFORE reset)
-            # Follow same pattern as dynamic_resource_density
-            if (hasattr(self.world, 'appearance_switching_enabled') and 
-                self.world.appearance_switching_enabled and 
-                epoch > 0 and 
-                epoch % self.world.appearance_switch_period == 0):
-                self.world.switch_appearances()
-            
-            # Reset the environment at the start of each epoch
-            self.reset()
+            # Reset the environment at the start of each epoch, or continue without reset (continuity mode)
+            if not preserve_continuity or epoch == 0:
+                self.reset()
+            else:
+                # Continuity mode (epoch > 0): no reset; prepare for next segment
+                self.turn = 0
+                self.world.is_done = False
+                # Reset world state that would normally be reset in reset() -> create_world()
+                self.world.total_reward = 0.0
+                # Clear the beam layer so no beams from the previous epoch persist
+                for y in range(self.world.height):
+                    for x in range(self.world.width):
+                        terrain_entity = self.world.observe((y, x, self.world.terrain_layer))
+                        if isinstance(terrain_entity, Wall):
+                            continue
+                        self.world.add((y, x, self.world.beam_layer), Empty())
 
             # Sample random max turns if random_max_turns is enabled
             random_max_turns = self.config.experiment.get("random_max_turns", False)
@@ -150,7 +189,7 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
                     self.agents[0].model.epsilon,
                 )
 
-            # Run probe test if enabled and it's time (new functionality)
+            # Run probe test if enabled and it's time
             if probe_enabled and epoch > 0 and epoch % test_interval == 0:
                 if output_dir is None:
                     output_dir = Path(os.getcwd()) / "./data/"

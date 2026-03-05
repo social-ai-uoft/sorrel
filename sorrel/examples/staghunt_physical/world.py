@@ -137,6 +137,7 @@ class StagHuntWorld(Gridworld):
         self.attack_cost: float = float(get_world_param("attack_cost", 0.05))
         self.punish_cooldown: int = int(get_world_param("punish_cooldown", 5))
         self.punish_cost: float = float(get_world_param("punish_cost", 0.1))
+        self.punish_freeze_duration: int = int(get_world_param("punish_freeze_duration", 5))
         self.respawn_delay: int = int(get_world_param("respawn_delay", 10))
         self.payoff_matrix: list[list[int]] = [
             list(row) for row in get_world_param("payoff_matrix", [[4, 0], [2, 2]])

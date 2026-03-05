@@ -61,6 +61,8 @@ def run_stag_hunt(
     max_hares: int | None = None,
     resource_cap_mode: str | None = None,
     seed: int | None = None,
+    no_punishment: bool = False,
+    preserve_continuity: bool = False,
 ) -> None:
     """Run a single stag hunt experiment with default hyperparameters.
     
@@ -72,6 +74,8 @@ def run_stag_hunt(
         max_hares: Optional max hares cap override (None = unlimited).
         resource_cap_mode: Optional resource cap mode override ("specified" or "initial_count").
         seed: Optional random seed for reproducibility. If provided, sets seed for random, numpy, and torch.
+        no_punishment: If True, disable the PUNISH action (include_punish_action=False).
+        preserve_continuity: If True, do not reset environment after epoch 0 (continuity mode).
     """
     # Set random seed for reproducibility if provided
     # This sets seeds for: Python random, NumPy, PyTorch, CUDA, and cuDNN
@@ -85,9 +89,11 @@ def run_stag_hunt(
             # number of episodes/epochs to run
             "epochs": 3000000,
             # maximum number of turns per episode
-            "max_turns": 100,
+            "max_turns": 50,
             # If True, randomly sample number of turns per epoch from [1, max_turns] instead of using fixed max_turns
-            "random_max_turns": True,
+            "random_max_turns": False,
+            # If True, do not call reset() after epoch 0; world and agents continue across epochs (continuity mode)
+            "preserve_continuity": False,
             # recording period for animation (unused here)
             "record_period": 500,
             # Base run name (max_turns and epsilon will be automatically appended)
@@ -95,8 +101,8 @@ def run_stag_hunt(
             "run_name_base": run_name_base if run_name_base is not None else "test_onehot_new_observation_format", 
             # # Base name without max_turns/epsilon
             # Model saving configuration
-            "save_models": False,  # Enable model saving
-            "save_interval": 2000,  # Save models every X epochs
+            "save_models": True,  # Enable model saving
+            "save_interval": 1000,  # Save models every X epochs
         },
         "probe_test": {
             # Enable probe testing
@@ -174,13 +180,13 @@ def run_stag_hunt(
             "generation_mode": "random",  # "random" or "ascii_map"
             "ascii_map_file": "test_intention_onlystag.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 13, # 13
-            "width": 13,
+            "height": 27, # 13
+            "width": 27,
             # number of players in the game
-            "num_agents": 4,
+            "num_agents": 20,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
             # Only the spawned agents will act and learn in each epoch
-            "num_agents_to_spawn": 4,  # Spawn 2 out of 3 agents each epoch
+            "num_agents_to_spawn": 20,  # Number of agents to spawn per epoch (must be <= num_agents)
             # probability an empty cell spawns a resource each step (for initial spawning)
             "resource_density": 0.04,
             # probability a resource respawns each step after respawn_lag (for respawning)
@@ -202,7 +208,7 @@ def run_stag_hunt(
             "skip_spawn_validation": True,
             # probability that a spawned resource is a stag (vs hare)
             # stag_probability + hare_probability = 1.0
-            "stag_probability": 0.5,  # 20% stag, 80% hare
+            "stag_probability": 0.5,  # 50% stag, 50% hare
             # separate reward values for stag and hare
             "stag_reward": 100,  # Higher reward for stag (requires coordination)
             "hare_reward": 3,  # Lower reward for hare (solo achievable)
@@ -212,7 +218,7 @@ def run_stag_hunt(
             # Dynamic resource density configuration (3-step process with resource-specific rates)
             "dynamic_resource_density": {
                 "enabled": False,  # Set to True to enable dynamic density
-                "rate_increase_multiplier": 3,  # Increase rates by 10% each epoch
+                "rate_increase_multiplier": 3,  # Multiplier for rate updates each epoch
                 "stag_decrease_rate": 0.1,  # Decrease stag_rate by 0.1 per stag consumed
                 "hare_decrease_rate": 0.1,  # Decrease hare_rate by 0.1 per hare consumed
                 "minimum_rate": 0.1,  # Minimum rate (prevents rates from reaching 0.0, allows recovery)
@@ -226,7 +232,7 @@ def run_stag_hunt(
             "max_hares": 20,  # Maximum hare resources (None = unlimited, overrides max_resources for hares, ignored if resource_cap_mode == "initial_count")
             # Appearance switching configuration
             "appearance_switching": {
-                "enabled": True,  # Set to True to enable appearance switching
+                "enabled": False,  # Set to True to enable appearance switching
                 "switch_period": 30000,  # Switch appearances every X epochs
             },
             # legacy parameter for backward compatibility
@@ -239,37 +245,42 @@ def run_stag_hunt(
             "beam_cooldown": 3,  # Legacy parameter, kept for compatibility
             "attack_cooldown": 1,  # Separate cooldown for ATTACK action
             "attack_cost": 0.00,  # Cost to use attack action
-            "punish_cooldown": 5,  # Separate cooldown for PUNISH action
-            "punish_cost": 0.1,  # Cost to use punish action
+            "include_punish_action": True,  # If True, PUNISH is included in action_spec for RL agents
+            "punish_cooldown": 0,  # Separate cooldown for PUNISH action
+            "punish_cost": 0.0,  # Cost to use punish action
+            "punish_freeze_duration": 20,  # Turns agent is frozen when health reaches 0 from punishment
             # respawn timing
             "respawn_lag": 1,  # number of turns before a resource can respawn
             # payoff matrix for the row player (stag=0, hare=1)
             "payoff_matrix": [[4, 0], [2, 2]],
             # bonus awarded for participating in an interaction
             "interaction_reward": 1.0,
-            # agent respawn parameters
-            "respawn_delay": 10,  # Y: number of frames before agent respawns after removal
+            # agent respawn parameters (legacy; agent removal/respawn removed in favor of freeze)
+            "respawn_delay": 10,  # Unused when using freeze-only punishment
             
             # New health system parameters
             "stag_health": 2,  # Health points for stags (requires coordination)
             "hare_health": 1,   # Health points for hares (solo defeatable)
-            "agent_health": 5,  # Health points for agents
+            "agent_health": 1,  # Health points for agents
             "health_regeneration_rate": 1,  # How fast resources regenerate health
-            "reward_sharing_radius": 2,  # Radius for reward sharing when resources are defeated
+            "reward_sharing_radius": 5,  # Radius for reward sharing when resources are defeated
             # Accurate reward allocation mode
-            "accurate_reward_allocation": True,  # If True, only agents that attacked and damaged the resource receive rewards (instead of radius-based sharing)
+            "accurate_reward_allocation": False,  # If True, only agents that attacked and damaged the resource receive rewards (instead of radius-based sharing)
             # Wounded stag mechanism
             "use_wounded_stag": False,  # If True, stags change kind to 'WoundedStagResource' when health < max_health
             # Agent configuration system
             "use_agent_config": True,  # If True, use agent_config to assign kinds and attributes
-            # Optional: Path to CSV file for agent configuration (alternative to agent_config dict)
-            # If provided, CSV will be loaded and merged with agent_config (CSV takes precedence)
-            # Path is resolved relative to main.py's directory if not absolute
-            "agent_config_csv": None,
+            # Optional: Path to CSV file for agent configuration (alternative to agent_config dict).
+            # If provided and file exists, CSV is used exclusively and must define exactly num_agents agents.
+            # If file is missing, run will fail; set to None to use agent_config dict below instead.
+            # Path is resolved relative to main.py's directory if not absolute.
+            "agent_config_csv": 'configs/agents_example.csv',
             # "configs/agents_example.csv",  # Uncomment to use CSV-based agent config
             # Agent configuration - mapping from agent_id to kind and attributes
-            # Only used if use_agent_config is True
-            # Can be supplemented/overridden by agent_config_csv if provided
+            # Only used if use_agent_config is True and agent_config_csv is not used.
+            # When agent_config_csv is used, it replaces this dict and must define exactly num_agents agents.
+            # When CSV is not used, this dict must have exactly num_agents entries (e.g. 0..num_agents-1).
+            # Below is an example with 4 entries; for num_agents=20 add entries 4..19 or use agent_config_csv.
             "agent_config": {
                     0: {
                         "kind": "AgentKindA",
@@ -372,6 +383,10 @@ def run_stag_hunt(
     
     # Override parameters if provided via CLI
     if resource_density is not None:
+        if not (0.0 <= resource_density <= 1.0):
+            raise ValueError(
+                f"resource_density must be in [0.0, 1.0], got {resource_density}"
+            )
         config["world"]["resource_density"] = resource_density
     if max_resources is not None:
         config["world"]["max_resources"] = max_resources
@@ -386,7 +401,10 @@ def run_stag_hunt(
                 f"Must be 'specified' or 'initial_count'"
             )
         config["world"]["resource_cap_mode"] = resource_cap_mode
-    
+    if no_punishment:
+        config["world"]["include_punish_action"] = False
+    config["experiment"]["preserve_continuity"] = preserve_continuity
+
     # Automatically construct run_name from base name and key parameters
     run_name_base = config["experiment"].get("run_name_base", "staghunt_experiment")
     max_turns = config["experiment"]["max_turns"]
@@ -462,14 +480,15 @@ def run_stag_hunt(
         logger=CombinedLogger(
             max_epochs=config["experiment"]["epochs"],
             log_dir=Path(__file__).parent
-            / f'runs_env_shock/{config["experiment"]["run_name"]}_{timestamp}',
+            / f'runs_punishment/{config["experiment"]["run_name"]}_{timestamp}',
             experiment_env=experiment,
         ),
         output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}',
     )
     
     print(f"Metrics tracking completed - all metrics integrated into main TensorBoard logs")
-    print(f"To view metrics, run: tensorboard --logdir runs/{config['experiment']['run_name']}_{timestamp}")
+    log_dir_name = f"runs_punishment/{config['experiment']['run_name']}_{timestamp}"
+    print(f"To view metrics, run: tensorboard --logdir {Path(__file__).parent / log_dir_name}")
 
 
 def parse_none_or_int(value: str) -> int | None:
@@ -528,8 +547,19 @@ if __name__ == "__main__":
         default=None,
         help="Random seed for reproducibility. Sets seed for random, numpy, and torch."
     )
+    parser.add_argument(
+        "--no-punishment",
+        action="store_true",
+        help="Disable the PUNISH action (agents cannot punish each other)."
+    )
+    parser.add_argument(
+        "--preserve-continuity",
+        action="store_true",
+        default=False,
+        help="Do not reset environment after epoch 0; world and agents continue across epochs (continuity mode)."
+    )
     args = parser.parse_args()
-    
+
     run_stag_hunt(
         run_name_base=args.run_name_base,
         resource_density=args.resource_density,
@@ -538,4 +568,6 @@ if __name__ == "__main__":
         max_hares=args.max_hares,
         resource_cap_mode=args.resource_cap_mode,
         seed=args.seed,
+        no_punishment=args.no_punishment,
+        preserve_continuity=args.preserve_continuity,
     )
