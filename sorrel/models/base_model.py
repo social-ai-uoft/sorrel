@@ -100,3 +100,10 @@ class BaseModel:
     def model_name(self):
         """Get the name of the model class."""
         return self.__class__.__name__
+
+
+class RandomModel(BaseModel):
+    """A non-trainable model that chooses a random action."""
+
+    def take_action(self, state):
+        return np.random.randint(0, self.action_space)

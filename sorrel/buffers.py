@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -53,6 +54,28 @@ class Buffer:
         """Advancing the id by `self.n_frames`, adding empty frames to the replay
         buffer."""
         self.idx = (self.idx + self.n_frames - 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
+
+    def add_from_buffer(self, buffer: Buffer) -> None:
+        assert (
+            self.obs_shape == buffer.obs_shape
+        ), "Cannot add from a buffer with different state shapes."
+        # If the buffer is too long to add to the existing saved game buffer, truncate it
+        buffer_slice_point = min(self.capacity - self.idx, buffer.size)
+        # Add the S, A, R, D, to the saved game buffer
+        self.states[self.idx : self.idx + buffer_slice_point] = buffer.states[
+            :buffer_slice_point
+        ]
+        self.actions[self.idx : self.idx + buffer_slice_point] = buffer.actions[
+            :buffer_slice_point
+        ]
+        self.rewards[self.idx : self.idx + buffer_slice_point] = buffer.rewards[
+            :buffer_slice_point
+        ]
+        self.dones[self.idx : self.idx + buffer_slice_point] = buffer.dones[
+            :buffer_slice_point
+        ]
+        self.idx = self.idx + buffer_slice_point
 
     def sample(self, batch_size: int):
         """Sample a batch of experiences from the replay buffer.
@@ -63,7 +86,7 @@ class Buffer:
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
                 A tuple containing the states, actions, rewards, next states, dones, and
-                invalid (meaning stacked frmaes cross episode boundary).
+                invalid (meaning stacked frames cross episode boundary).
         """
         indices = np.random.choice(
             max(1, self.size - self.n_frames - 1), batch_size, replace=False
@@ -125,6 +148,41 @@ class Buffer:
     def __getitem__(self, idx):
         return (self.states[idx], self.actions[idx], self.rewards[idx], self.dones[idx])
 
+    def save(self, output_file: str | Path) -> None:
+        output_file = Path(output_file)
+        np.savez_compressed(
+            output_file,
+            states=self.states,
+            actions=self.actions,
+            rewards=self.rewards,
+            dones=self.dones,
+            n_frames=self.n_frames,
+            idx=self.idx,
+        )
+
+    @classmethod
+    def load(cls, input_file: str | Path) -> Buffer:
+        input_file = Path(input_file)
+        with np.load(input_file) as data:
+            states = data["states"]
+            actions = data["actions"]
+            rewards = data["rewards"]
+            dones = data["dones"]
+            n_frames = data["n_frames"]
+            idx = data["idx"]
+            size = len(states)
+        output = cls(
+            capacity=len(actions), obs_shape=states.shape[1:], n_frames=n_frames
+        )
+        # Overwrite the default values for the buffer.
+        output.states = states
+        output.actions = actions
+        output.rewards = rewards
+        output.dones = dones
+        output.idx = idx
+        output.size = size
+        return output
+
 
 class StrBuffer(Buffer):
     """String buffer for LLM memories."""
@@ -137,3 +195,45 @@ class StrBuffer(Buffer):
             fill_value=empty_state_sentinel,
             dtype=f"<U{(obs_shape[0] + 1)*obs_shape[1] + 100}",
         )
+
+
+class TransformerBuffer(Buffer):
+    """Buffer class equivalent to the base class with the exception that actions also
+    include a time dimension in the same way that states are."""
+
+    def sample(self, batch_size: int):
+        """Sample a batch of experiences from the replay buffer.
+
+        Args:
+            batch_size (int): The number of experiences to sample.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                A tuple containing the states, actions, next states, next actions, dones, and invalid (meaning stacked frames cross episode boundary).
+        """
+        indices = np.random.choice(
+            max(1, self.size - self.n_frames - 1), batch_size, replace=False
+        )
+        indices = indices[:, np.newaxis]
+        indices = indices + np.arange(self.n_frames)
+
+        states = self.states[indices].reshape(batch_size, -1)
+        next_states = self.states[indices + 1].reshape(batch_size, -1)
+        actions = self.actions[indices].reshape(batch_size, -1)
+        next_actions = self.actions[indices + 1].reshape(batch_size, -1)
+        dones = self.dones[indices[:, -1]].reshape(batch_size, -1)
+        valid = (1.0 - np.any(self.dones[indices[:, :-1]], axis=-1)).reshape(
+            batch_size, -1
+        )
+
+        next_actions = np.array(
+            next_actions, dtype=np.float32
+        )  # cast it to be compatible with reward shape for now
+
+        return states, actions, next_actions, next_states, dones, valid
+
+
+class SavedGames(Buffer):
+    """A buffer used for saving games to and loading from disk."""
+
+    ...

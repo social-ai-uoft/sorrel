@@ -4,6 +4,8 @@
 
 import csv
 import os
+from datetime import datetime
+from pathlib import Path
 from typing import Mapping
 
 import numpy as np
@@ -90,6 +92,19 @@ class Logger:
             for epoch in range(len(self.losses)):
                 writer.writerow([value[epoch] for value in records.values()])
 
+    @classmethod
+    def from_config(cls, config: dict | Mapping):
+        """Create a logger from a configuration dictionary.
+
+        Args:
+            config (dict | Mapping): The configuration file.
+
+        Returns:
+            Logger: a Logger instance using the configuration file to initialize it.
+        """
+        assert isinstance(config["experiment"]["epochs"], int)
+        return cls(max_epochs=config["experiment"]["epochs"])
+
 
 class ConsoleLogger(Logger):
     """Logs elements to the console.
@@ -114,7 +129,7 @@ class ConsoleLogger(Logger):
             f"║ Epoch:{str(epoch).rjust(6)} ║ Loss:{str(loss).rjust(7)} ║ Reward:{str(reward).rjust(5)} ║"
         )
         print(f"╚══════════════╩══════════════╩══════════════╝", end="\r")
-        if epoch == self.max_epochs - 1:
+        if epoch == self.max_epochs:
             print(f"╚══════════════╩══════════════╩══════════════╝")
         super().record_turn(epoch, loss, reward, epsilon, **kwargs)
 
@@ -160,9 +175,9 @@ class TensorboardLogger(Logger):
             log_dir (str | PathLike): Where the Tensorboard log files should be stored.
             *args: Additional optional values to be stored in a dictionary.
         """
-        super().__init__(max_epochs=max_epochs, *args)
+        super().__init__(max_epochs, *args)
         if not os.path.exists(log_dir):
-            os.mkdir(log_dir)
+            os.makedirs(log_dir)
         self.writer = SummaryWriter(log_dir=log_dir)
 
     def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
@@ -170,7 +185,30 @@ class TensorboardLogger(Logger):
         self.writer.add_scalar("score", reward, epoch)
         self.writer.add_scalar("epsilon", epsilon, epoch)
         for key, value in kwargs.items():
-            self.writer.add_scalar(key, value, epoch)
+            if isinstance(value, dict):
+                self.writer.add_scalars(key, value, epoch)
+            else:
+                self.writer.add_scalar(key, value, epoch)
+
+    @classmethod
+    def from_config(cls, config: dict | Mapping):
+        assert "epochs" in config["experiment"].keys()
+        assert ("log_dir" in config["experiment"].keys()) or (
+            "output_dir" in config["experiment"].keys()
+        )
+
+        if not "log_dir" in config["experiment"].keys():
+            log_dir = (
+                Path(config["experiment"]["output_dir"])
+                / f"./logs/{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}"
+            )
+        else:
+            log_dir = config["experiment"]["log_dir"]
+
+        return cls(
+            max_epochs=config["experiment"]["epochs"],
+            log_dir=log_dir,
+        )
 
 
 # --------------------------- #

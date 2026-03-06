@@ -4,25 +4,29 @@ import numpy as np
 import torch
 
 from sorrel.action.action_spec import ActionSpec
+from sorrel.entities.basic_entities import Wall
 from sorrel.environment import Environment
 
 # imports from our example
 from sorrel.examples.tag.agents import TagAgent
-from sorrel.examples.tag.entities import EmptyEntity, Wall
-from sorrel.examples.tag.world import TagWorld
 
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
 from sorrel.observation.observation_spec import OneHotObservationSpec
+from sorrel.worlds import Gridworld
+
+# from sorrel.examples.tag.entities import EmptyEntity, Wall
+# from sorrel.examples.tag.world import Gridworld
+
 
 # end imports
 
 
 # begin tag environment
-class TagEnv(Environment[TagWorld]):
+class TagEnv(Environment[Gridworld]):
     """The experiment for tag."""
 
-    def __init__(self, world: TagWorld, config: dict) -> None:
+    def __init__(self, world: Gridworld, config: dict) -> None:
         super().__init__(world, config)
 
     # end constructor
@@ -32,20 +36,19 @@ class TagEnv(Environment[TagWorld]):
 
         Requires self.config.model.agent_vision_radius to be defined.
         """
-        agent_num = 2
+        agent_num = self.config.agent.num_agents
         agents = []
         for _ in range(agent_num):
             # create the observation spec
-            entity_list = ["EmptyEntity", "Wall", "TagAgent", "ItAgent"]
+            entity_list = ["EmptyEntity", "Wall", "It", "NotIt"]
             observation_spec = OneHotObservationSpec(
                 entity_list,
-                # agents always have full view in tag
-                full_view=True,
-                env_dims=(self.world.height, self.world.width, self.world.layers),
+                full_view=False,
+                vision_radius=self.config.agent.vision_radius,
             )
-            observation_spec.override_input_size(
-                np.array(observation_spec.input_size).reshape(1, -1).tolist()
-            )
+            # Add one more input for self.it
+            input_size = (int(np.prod(observation_spec.input_size) + 1), 1)
+            observation_spec.override_input_size(input_size)
 
             # create the action spec
             action_spec = ActionSpec(["up", "down", "left", "right"])
@@ -81,8 +84,7 @@ class TagEnv(Environment[TagWorld]):
         # randomly choose one agent to be "it"
         it_agent_index = np.random.choice(len(agents))
         it_agent = agents[it_agent_index]
-        it_agent.is_it = True
-        it_agent.kind = "ItAgent"
+        it_agent.it = True
 
         self.agents = agents
 

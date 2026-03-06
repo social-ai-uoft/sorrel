@@ -18,6 +18,7 @@ class Gridworld(World):
         default_entity: An entity that the gridworld is filled with at creation by default.
         world: A representation of the gridworld as a Numpy array of Entities, with dimensions height x width x layers.
         turn: The number of turns taken by the environment.
+        max_turns: The total number of turns possible in an epoch.
         total_reward: The total reward accumulated by all agents in the environment.
     """
 
@@ -28,6 +29,7 @@ class Gridworld(World):
 
     map: np.ndarray
     turn: int
+    max_turns: int
     total_reward: float
     is_done: bool
 
@@ -38,6 +40,8 @@ class Gridworld(World):
         self.default_entity = default_entity
         self.create_world()
         self.total_reward = 0.0
+        self.turn = 0
+        self.max_turns = 0
         self.is_done = False
 
     def create_world(self) -> None:

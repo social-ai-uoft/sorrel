@@ -1,0 +1,29 @@
+# Stag Hunt
+
+A game where two or more agents explore to find valuable items (food, gems) and avoiding punishment items (bones).
+
+Gems require the cooperation of two agents to cooperate to simultaneously attack in order to obtain them.
+
+## Running the example
+
+```bash
+python sorrel/examples/staghunt/main.py
+```
+
+The script runs the experiment for the default number of epochs (1000) with a maximum of 100 turns per epoch. TensorBoard logs, model checkpoints, and animated GIFs are saved under `data/`.
+
+## Project structure
+
+```
+staghunt/ 
+├─ assets/                # Sprite images for game entities
+├─ data/                  # Generated during runs: logs, checkpoints, GIFs
+│   ├─ checkpoints/
+│   ├─ gifs/
+│   └─ logs/
+├─ agents.py              # Agent implementation
+├─ entities.py            # Entity definitions
+├─ env.py                 # Environment wrapper and setup
+├─ main.py                # Experiment entry point
+└─ world.py               # Gridworld definition (TreasurehuntWorld)
+```
