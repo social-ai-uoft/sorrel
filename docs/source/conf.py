@@ -24,6 +24,7 @@ extensions = [
     # "sphinx.ext.autodoc",
     "sphinx.ext.imgmath",
     "sphinx.ext.napoleon",
+    "sphinxcontrib.autoprogram",
 ]
 
 # extensions for math support and other qol in markdown files
