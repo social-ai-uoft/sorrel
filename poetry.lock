@@ -4197,6 +4197,21 @@ standalone = ["Sphinx (>=5)"]
 test = ["pytest"]
 
 [[package]]
+name = "sphinxcontrib-autoprogram"
+version = "0.1.9"
+description = "Documenting CLI programs"
+optional = false
+python-versions = ">=3.8"
+groups = ["dev"]
+files = [
+    {file = "sphinxcontrib-autoprogram-0.1.9.tar.gz", hash = "sha256:219655507fadca29b3062b5d86c37d94db48f03bde4b58d61526872bf72f57cc"},
+    {file = "sphinxcontrib_autoprogram-0.1.9-py2.py3-none-any.whl", hash = "sha256:79a5282d7640337e4bf11f624970a43709f1b704c5c59a59756d45e824db5301"},
+]
+
+[package.dependencies]
+Sphinx = ">=1.2"
+
+[[package]]
 name = "sphinxcontrib-devhelp"
 version = "2.0.0"
 description = "sphinxcontrib-devhelp is a sphinx extension which outputs Devhelp documents"
@@ -4940,4 +4955,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12.0"
-content-hash = "9050e34e4ceed022bedd05970fbdde4e5c6ed6a05d0fb2c1de5d636d1262994f"
+content-hash = "2dc78522458aef656d7970736aa310df076c1d6f995fca8ed5f37d317179ad36"
