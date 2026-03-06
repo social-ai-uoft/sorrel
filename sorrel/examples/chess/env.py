@@ -7,7 +7,7 @@ policy.
 from __future__ import annotations
 
 from sorrel.environment import Environment
-from sorrel.examples.chess.agents import make_random_chess_agent
+from sorrel.examples.chess.agents import make_chess_api_agent, make_random_chess_agent
 from sorrel.examples.chess.entities import Bishop, King, Knight, Pawn, Queen, Rook
 from sorrel.examples.chess.world import Chessboard
 
@@ -28,9 +28,10 @@ class ChessEnvironment(Environment[Chessboard]):
     def setup_agents(self) -> None:
         """Create two agents (white and black) and assigns them to `self.agents`."""
 
+        # White is random, Black is API
         agents = []
-        for colour in ["white", "black"]:
-            agents.append(make_random_chess_agent(colour=colour, world=self.world))
+        agents.append(make_random_chess_agent(colour="white", world=self.world))
+        agents.append(make_chess_api_agent(colour="black", world=self.world))
         self.agents = agents
 
     # ---------------------------------------------------------------------

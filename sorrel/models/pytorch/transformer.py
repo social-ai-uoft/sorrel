@@ -483,13 +483,17 @@ class VisionTransformer(nn.Module):
         return state_prediction, action_prediction
 
     def state_loss(
-        self, state_predictions: torch.Tensor, state_targets: torch.Tensor
+        self,
+        state_predictions: torch.Tensor,
+        state_targets: torch.Tensor,
+        mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute loss on state trajectories.
 
         Parameters:
             state_predictions: A tensor of size B x T x (C H W) indicating the predicted state output. \n
             state_targets: A tensor of size B x T x C x H x W indicating the true next states. \n
+            mask: An optional boolean tensor indicating which elements to include in the loss.
 
         Returns:
             A tensor of MSE loss between the states and the targets.
@@ -499,6 +503,9 @@ class VisionTransformer(nn.Module):
         # Reshape the targets
         B, T, C, H, W = state_targets.size()
         state_predictions = state_predictions.view(B, T, C, H, W)
+
+        if mask is not None:
+            return loss(state_predictions[mask], state_targets[mask])
 
         return loss(state_predictions, state_targets)
 
@@ -585,7 +592,51 @@ class VisionTransformer(nn.Module):
 
         return state_inputs, action_inputs, state_targets, action_targets
 
-    def train_model(self) -> tuple:
+    def random_mask(self, state_targets) -> torch.Tensor:
+        B, T, C, H, W = state_targets.shape
+        mask = torch.ones_like(state_targets, dtype=torch.bool)
+
+        # Flattening
+        mask = mask.reshape(-1)
+
+        # Getting number of elements in the mask
+        num_element = mask.numel()
+
+        # Generating random number of 0s
+        num_zeros = torch.randint(0, num_element + 1, (1,)).item()
+
+        # Making random indicies to 0 out
+        indicies = torch.randperm(num_element, device=state_targets.device)[:num_zeros]
+        mask[indicies] = False
+
+        # Unflattenting
+        mask = mask.view(state_targets.shape)
+
+        # Debug print
+        # print(mask)
+
+        return mask
+
+    def channel_mask(self, state_targets, channel) -> torch.Tensor:
+        B, T, C, H, W = state_targets.shape
+        mask = torch.ones_like(state_targets, dtype=torch.bool)
+        """entity_list = [ "EmptyEntity", "Wall", "Gem", "Bone", "Food",
+        "TreasurehuntAgent", ]"""
+        if channel == "gem":
+            mask[:, :, 2, :, :] = False
+        elif channel == "bone":
+            mask[:, :, 3, :, :] = False
+        elif channel == "food":
+            mask[:, :, 4, :, :] = False
+        elif channel == "wall":
+            mask[:, :, 1, :, :] = False
+
+        # Debug print
+        # print(mask)
+
+        return mask
+
+    def train_model(self, mask_type="full") -> tuple:
         """Training loop for the transformer model.
 
         Get batched (S', A) inputs and (S", A') targets from the stored memories.
@@ -598,12 +649,26 @@ class VisionTransformer(nn.Module):
         state_inputs = state_inputs.to(self.device)
         action_inputs = action_inputs.to(self.device)
 
+        if mask_type == "random":
+            state_mask = self.random_mask(state_targets)
+        elif mask_type == "gem":
+            state_mask = self.channel_mask(state_targets, mask_type)
+        else:  # By default, mask_type == "full"
+            state_mask = None
+            # Mask testing (all valid)
+            # state_mask = torch.ones(
+            #     state_targets.shape,  # Dynamically matching shape
+            #     dtype=torch.bool,
+            #     device=state_targets.device,
+            # )
+
         # Forward pass through the model
         state_predictions, action_predictions = self.forward(
             state_inputs, action_inputs
         )
 
-        state_loss = self.state_loss(state_predictions, state_targets)
+        # Calling state_loss with mask
+        state_loss = self.state_loss(state_predictions, state_targets, state_mask)
         action_loss = self.action_loss(action_predictions, action_targets)
 
         loss = state_loss + action_loss
@@ -732,19 +797,23 @@ class ViTOneHot(VisionTransformer):
 
         action_prediction = self.action_head(x)
 
-        state_predictions = torch.tensor([], requires_grad=True)
+        state_predictions = torch.tensor([], requires_grad=True, device=x.device)
         for _, state_head in enumerate(self.state_heads):
             state_prediction = state_head(x).view(B, T, 2, H, W)
-            # Softmax along the channel dimension to give yes/no probability
-            state_prediction = F.softmax(state_prediction, dim=2)
-            # Cat on the last dimension to create a six-dimensional array (B, T, 2, H, W, C)
+            # Keep logits (no softmax here); CrossEntropyLoss in state_loss expects logits
+            # Cat on the last dimension to create (B, T, 2, H, W, C)
             state_predictions = torch.cat(
                 (state_predictions, state_prediction.unsqueeze(-1)), dim=-1
             )
 
         return state_predictions, action_prediction
 
-    def state_loss(self, state_predictions: torch.Tensor, state_targets: torch.Tensor):
+    def state_loss(
+        self,
+        state_predictions: torch.Tensor,
+        state_targets: torch.Tensor,
+        mask: torch.Tensor | None = None,
+    ):
         """Overriden state loss function.
 
         Cross entropy loss computed on the yes/no probability of each channel.
@@ -754,10 +823,36 @@ class ViTOneHot(VisionTransformer):
 
         # State targets are in the form: B T C H W
         state_targets = state_targets.long()  # Classification requires long type
-        # State preds are in the form: B 2 T C H W
-        state_predictions = state_predictions.permute(0, 2, 1, 5, 3, 4)
 
-        return loss(state_predictions, state_targets)
+        if mask is None:
+            # State preds are in the form: B 2 T C H W
+            state_predictions = state_predictions.permute(0, 2, 1, 5, 3, 4)
+            return loss(state_predictions, state_targets)
+
+        # Mask logic
+
+        # Moving class dimension to back
+        # State preds are in the form: B T C H W 2
+        state_predictions = state_predictions.permute(0, 1, 5, 3, 4, 2)
+
+        # Flattening to 1D
+        predictions_flat = state_predictions.reshape(-1, 2)
+        targets_flat = state_targets.reshape(-1)
+
+        # Flattening mask to match
+        mask_flat = mask.reshape(-1)
+
+        # Extracting only the visibles (1 = visible, 0 = masked)
+        predictions_masked = predictions_flat[mask_flat == 1]
+        targets_masked = targets_flat[mask_flat == 1]
+
+        # Handling empty mask
+        if predictions_masked.numel() == 0:
+            return torch.tensor(
+                0.0, device=predictions_flat.device, dtype=predictions_flat.dtype
+            )
+
+        return loss(predictions_masked, targets_masked)
 
     def plot_trajectory(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Using the current forward model, create a T x C x H x W video of one game and
@@ -779,6 +874,8 @@ class ViTOneHot(VisionTransformer):
             state_predictions, action_predictions = self.forward(
                 state_inputs.unsqueeze(0), action_inputs.unsqueeze(0)
             )
+            # Forward returns logits; softmax for visualization
+            state_predictions = F.softmax(state_predictions, dim=2)
 
         T, C, H, W = state_targets.size()
         state_targets = state_targets.detach()

@@ -24,6 +24,9 @@ Paper = "https://doi.org/10.48550/arXiv.2506.00228"
 [tool.poetry]
 packages = [{ include = "sorrel" }]
 
+[tool.poetry.scripts]
+sorrel = "sorrel.cli:main"
+
 [tool.poetry.dependencies]
 python = "^3.12.0"
 matplotlib = "^3.6.1"
