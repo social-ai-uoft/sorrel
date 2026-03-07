@@ -40,7 +40,7 @@ class Gem(Entity):
     By default, Gems are passable.
     """
 
-    def __init__(self, value: float | int):
+    def __init__(self, value: float | int = 1):
         super().__init__()
         self.passable = True
         self.value = value

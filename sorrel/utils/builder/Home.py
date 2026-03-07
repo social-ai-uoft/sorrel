@@ -15,9 +15,10 @@ Welcome to the Sorrel Environment Builder! This tool helps you create new Sorrel
 ### Workflow:
 1. **Entities**: Define the objects in your world (walls, items, etc.).
 2. **Agents**: Configure your agents (vision, actions).
-3. **Layout**: Draw your world grid.
+3. **Layout**: Draw your world grid, set random spawning rules.
 4. **Rules**: Define interaction rules for entities in the environment.
-5. **Export**: Generate the Python code for your new environment.
+5. **Logging**: Configure what metrics to record during training.
+6. **Export**: Generate the Python code for your new environment.
 
 Use the sidebar to navigate between steps.
 """
@@ -36,3 +37,14 @@ if "layout" not in st.session_state:
     st.session_state["layout"] = {}  # (row, col) -> entity_name
 if "grid_size" not in st.session_state:
     st.session_state["grid_size"] = {"rows": 10, "cols": 10}
+if "rules" not in st.session_state:
+    st.session_state["rules"] = []
+if "random_spawns" not in st.session_state:
+    st.session_state["random_spawns"] = []  # [{"entity": str, "probability": float}]
+if "random_starts" not in st.session_state:
+    st.session_state["random_starts"] = []  # [{"entity": str, "count": int}]
+if "logging" not in st.session_state:
+    st.session_state["logging"] = {
+        "logger_type": "TensorboardLogger",
+        "measures": [],
+    }

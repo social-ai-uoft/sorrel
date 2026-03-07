@@ -1,8 +1,20 @@
+from typing import Optional
+
+from sorrel.entities import Entity
+from sorrel.entities.basic_entities import EmptyEntity
 from sorrel.worlds.gridworld import Gridworld
-from sorrel.entities.basic_entities import Wall, Gem, EmptyEntity
+
 
 class {{ project_name }}World(Gridworld):
-    def __init__(self, height={{ height }}, width={{ width }}, layers=2):
+    def __init__(
+        self,
+        height: int = {{ height }},
+        width: int = {{ width }},
+        layers: int = 2,
+        default_entity: Optional[Entity] = None,
+    ):
+        if default_entity is None:
+            default_entity = EmptyEntity()
         super().__init__(
-            height=height, width=width, layers=layers, default_entity=EmptyEntity()
+            height=height, width=width, layers=layers, default_entity=default_entity
         )

@@ -1,6 +1,6 @@
 # Sorrel GUI Builder Interface
 
-A web-based interface for creating Sorrel environments without writing code.
+A code-free web-based interface for creating Sorrel environments.
 
 ## How to run
 

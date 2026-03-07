@@ -1,33 +1,61 @@
+from datetime import datetime
+from pathlib import Path
+
+{% if random_spawns %}
+from sorrel.examples.{{ project_name_lower }}.entities import SpawningEmptyEntity
+{% else %}
+from sorrel.entities.basic_entities import EmptyEntity
+{% endif %}
 from sorrel.examples.{{ project_name_lower }}.env import {{ project_name }}Env
 from sorrel.examples.{{ project_name_lower }}.world import {{ project_name }}World
-from omegaconf import OmegaConf
+from sorrel.utils.logging import {{ logger_type }}
+
 
 def main():
     # Basic configuration
-    config = OmegaConf.create({
-        "agent": {
-            "agent": {
-                "num": {{ num_agents }},
-                "obs": {"vision": {{ vision }}, "n_frames": 1}
-            }
+    config = {
+        "experiment": {
+            "epochs": 1000,
+            "max_turns": 100,
+            "record_period": 50,
+            {% if logger_type == "TensorboardLogger" %}
+            "log_dir": Path(__file__).parent / "./{{ log_dir }}" / datetime.now().strftime("%Y-%m-%d %H-%M-%S"),
+            {% endif %}
         },
-        "experiment": {"layout": "default"}
-    })
-    
-    world = {{ project_name }}World()
+        "model": {},
+    }
+
+    {% if random_spawns %}
+    world = {{ project_name }}World(default_entity=SpawningEmptyEntity())
+    {% else %}
+    world = {{ project_name }}World(default_entity=EmptyEntity())
+    {% endif %}
     env = {{ project_name }}Env(world, config)
-    
+
+    # Configure logger
+    {% if logger_type == "TensorboardLogger" %}
+    logger = {{ logger_type }}(
+        config["experiment"]["epochs"],
+        config["experiment"]["log_dir"],
+        {% for measure in log_measures %}"{{ measure }}",
+        {% endfor %}
+    )
+    {% else %}
+    logger = {{ logger_type }}(
+        config["experiment"]["epochs"],
+        {% for measure in log_measures %}"{{ measure }}",
+        {% endfor %}
+    )
+    {% endif %}
+
     print("Environment created successfully!")
     print(f"World Size: {world.height}x{world.width}")
-    
-    obs = env.reset()
-    print("Reset successful.")
-    
-    # Run a few steps
-    for _ in range(10):
-        env.take_turn()
-    for agent in env.agents:
-        print(agent.model.memory.actions[0:agent.model.memory.idx])
+
+    env.run_experiment(
+        output_dir=Path(__file__).parent / "./data",
+        logger=logger,
+    )
+
 
 if __name__ == "__main__":
     main()

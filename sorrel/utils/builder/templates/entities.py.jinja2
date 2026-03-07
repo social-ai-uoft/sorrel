@@ -1,4 +1,9 @@
+from pathlib import Path
+
+import numpy as np
+
 from sorrel.entities import Entity
+from sorrel.entities.basic_entities import EmptyEntity
 
 {% for entity in entities %}
 {% if entity.get("type", "custom") == "custom" %}
@@ -6,10 +11,27 @@ class {{ entity.name }}(Entity):
     def __init__(self):
         super().__init__()
         self.passable = {{ entity.passable }}
-        self.pickupable = {{ entity.pickupable }}
-        self.interactive = {{ entity.interactive }}
+        self.pickupable = {{ entity.pickupable if entity.get("pickupable") else False }}
+        self.interactive = {{ entity.interactive if entity.get("interactive") else False }}
         self.symbol = "{{ entity.symbol }}"
         self.color = "{{ entity.color }}"
+        self.value = {{ entity.get("reward", 0.0) }}
+        self.sprite = Path(__file__).parent / "./assets/{{ entity.name|lower }}.png"
 
 {% endif %}
 {% endfor %}
+
+{% if random_spawns %}
+class SpawningEmptyEntity(EmptyEntity):
+    """EmptyEntity subclass that randomly spawns configured entity types each turn."""
+    def __init__(self):
+        super().__init__()
+        self.kind = "EmptyEntity" # Always looks like an empty entity
+
+    def transition(self, world) -> None:
+        {% for spawn in random_spawns %}
+        if np.random.random() < {{ spawn.probability }}:
+            world.add(self.location, {{ spawn.entity }}({{ entity_init_args.get(spawn.entity, "") }}))
+            return
+        {% endfor %}
+{% endif %}

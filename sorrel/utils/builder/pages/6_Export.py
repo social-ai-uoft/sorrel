@@ -7,7 +7,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Export - Sorrel Builder", page_icon="📦")
 
-st.header("Step 4: Export Environment")
+st.header("Step 6: Export Environment")
 
 project_name = st.text_input("Project Name (CamelCase)", "MyNewEnv")
 
@@ -18,21 +18,43 @@ if st.button("Generate Code"):
     )
     template_env = jinja2.Environment(loader=template_loader)
 
+    # Determine logger type and log dir
+    logging_cfg = st.session_state.get("logging", {})
+    logger_type = logging_cfg.get("logger_type", "TensorboardLogger")
+    log_dir = logging_cfg.get("log_dir", "data/logs")
+    measures = logging_cfg.get("measures", [])
+
+    # Build a flat string-form of constructor args for each entity, for use in templates.
+    # e.g. Gem → "value=1.0", custom entities → ""
+    def _fmt_init_args(kwargs: dict) -> str:
+        return ", ".join(f"{k}={repr(v)}" for k, v in kwargs.items())
+
+    entity_init_args = {
+        e["name"]: _fmt_init_args(e.get("init_kwargs", {}))
+        for e in st.session_state["entities"].values()
+    }
+
     # Prepare data context
     context = {
         "project_name": project_name,
         "project_name_lower": project_name.lower(),
         "entities": list(st.session_state["entities"].values()),
+        "entity_init_args": entity_init_args,
         "num_agents": st.session_state["agents"]["count"],
         "vision": st.session_state["agents"]["vision"],
         "actions": st.session_state["agents"]["actions"],
-        "base_class": st.session_state["agents"].get("base_class", "Agent"),
+        "base_class": st.session_state["agents"].get("base_class", "MovingAgent"),
         "model": st.session_state["agents"].get("model", "RandomModel"),
         "model_params": st.session_state["agents"].get("model_params", {}),
         "height": st.session_state["grid_size"]["rows"],
         "width": st.session_state["grid_size"]["cols"],
         "layout_data": st.session_state.get("layout", []),
         "rules": st.session_state.get("rules", []),
+        "random_spawns": st.session_state.get("random_spawns", []),
+        "random_starts": st.session_state.get("random_starts", []),
+        "logger_type": logger_type,
+        "log_dir": log_dir,
+        "log_measures": measures,
     }
 
     # Render files
@@ -50,12 +72,13 @@ if st.button("Generate Code"):
 if "generated_files" in st.session_state:
     files = st.session_state["generated_files"]
     p_name = st.session_state["generated_project_name"]
+    entities = st.session_state.get("entities", {})
 
     # Preview
     st.subheader("Preview: env.py")
     st.code(files["env.py"], language="python")
 
-    # Create Zip
+    # Create Zip (including asset PNGs)
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         for f_name, content in files.items():
@@ -63,6 +86,14 @@ if "generated_files" in st.session_state:
 
         # Add basic __init__.py
         zip_file.writestr(f"{p_name.lower()}/__init__.py", "")
+
+        # Add entity sprite assets
+        for ename, edata in entities.items():
+            if "asset_bytes" in edata:
+                zip_file.writestr(
+                    f"{p_name.lower()}/assets/{ename.lower()}.png",
+                    edata["asset_bytes"],
+                )
 
     col1, col2 = st.columns(2)
 
@@ -87,6 +118,20 @@ if "generated_files" in st.session_state:
                             f.write(content)
                     with open(os.path.join(example_dir, "__init__.py"), "w") as f:
                         f.write("")
-                    st.success(f"Successfully installed '{p_name}' into examples!")
+
+                    # Write entity asset PNGs
+                    assets_dir = os.path.join(example_dir, "assets")
+                    os.makedirs(assets_dir, exist_ok=True)
+                    for ename, edata in entities.items():
+                        if "asset_bytes" in edata:
+                            asset_path = os.path.join(
+                                assets_dir, f"{ename.lower()}.png"
+                            )
+                            with open(asset_path, "wb") as f:
+                                f.write(edata["asset_bytes"])
+
+                    st.success(
+                        f"Successfully installed '{p_name}' into examples (including assets)!"
+                    )
             except Exception as e:
                 st.error(f"Error installing to examples: {e}")
