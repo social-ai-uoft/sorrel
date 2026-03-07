@@ -59,16 +59,9 @@ poetry install
 ```
 in the folder containing the ``pyproject.toml`` file.
 
-If you wish to install additional dependencies, such as tensorboard for logging needs, 
-you can include the extra dependencies by running the following instead:
-```
-poetry install --with extras
-```
-in the folder containing the ``pyproject.toml`` file.
-
 To install Sorrel in development mode, include the optional dependency groups like so:
 ```
-poetry install --with dev,extras
+poetry install --with dev
 ```
 in the folder containing the ``pyproject.toml`` file.
 
