@@ -100,8 +100,8 @@ logs_parser = subparsers.add_parser(
 )
 logs_parser.add_argument("example", help="Name of the example (e.g., cleanup, chess).")
 
-if __name__ == "__main__":
 
+def main():
     # Parse known args to separate the command/example from the rest
     args, extra_args = parser.parse_known_args()
 
@@ -111,3 +111,7 @@ if __name__ == "__main__":
         sys.exit(show_logs(args, extra_args))
     else:
         parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
