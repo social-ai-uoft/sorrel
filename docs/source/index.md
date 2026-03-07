@@ -11,6 +11,7 @@ We include a few basic examples of environments with the package, as well as a s
 tutorials/how_to
 tutorials/configuration_files
 tutorials/model_wrapping
+tutorials/gui_builder
 ```
 
 ```{toctree}
