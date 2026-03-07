@@ -78,6 +78,25 @@ def show_logs(args, extra_args):
     return 0
 
 
+def gui(args, extra_args):
+    cmd = ["streamlit", "run", "sorrel/utils/builder/Home.py"]
+    try:
+        print(f"Starting Streamlit GUI...")
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running Streamlit GUI: {e}")
+        return e.returncode
+    except KeyboardInterrupt:
+        pass
+    except FileNotFoundError:
+        print(
+            "Error: 'streamlit' command not found. Please ensure it is installed and in your PATH."
+        )
+        return 1
+
+    return 0
+
+
 parser = argparse.ArgumentParser(
     description="Sorrel CLI tool. Use 'sorrel --help' for more information."
 )
@@ -100,8 +119,11 @@ logs_parser = subparsers.add_parser(
 )
 logs_parser.add_argument("example", help="Name of the example (e.g., cleanup, chess).")
 
-if __name__ == "__main__":
+# 'gui' subcommand
+gui_parser = subparsers.add_parser("gui", help="Start the Sorrel GUI.")
 
+
+def main():
     # Parse known args to separate the command/example from the rest
     args, extra_args = parser.parse_known_args()
 
@@ -109,5 +131,12 @@ if __name__ == "__main__":
         sys.exit(run_example(args, extra_args))
     elif args.command == "show-logs":
         sys.exit(show_logs(args, extra_args))
+    elif args.command == "gui":
+        sys.exit(gui(args, extra_args))
     else:
         parser.print_help()
+
+
+if __name__ == "__main__":
+
+    main()
