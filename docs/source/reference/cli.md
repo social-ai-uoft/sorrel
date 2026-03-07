@@ -1,4 +1,4 @@
-g# Command-Line Interface
+# Command-Line Interface
 
 ```{eval-rst}
 .. autoprogram:: sorrel.cli:parser
