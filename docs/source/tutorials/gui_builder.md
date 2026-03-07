@@ -4,13 +4,19 @@ The Sorrel GUI Builder is a graphical tool that allows you to easily design and 
 
 ## Launching the GUI Builder
 
-To launch the GUI Builder, open your terminal and run the following command using the Sorrel CLI:
+To launch the GUI Builder, open your terminal, follow the instructions to activate your virtual environment in the repository's README.md, and run the following command using the Sorrel CLI:
 
 ```bash
 sorrel gui
 ```
 
-This command starts a local Streamlit server and automatically opens the GUI Builder in your default web browser (typically at `http://localhost:8501`).
+If your virtual environment is not activated, you can also run the GUI Builder by running the following command:
+
+```bash
+poetry run sorrel gui
+```
+
+These commands start a local Streamlit server and automatically open the GUI Builder in your default web browser (typically at `http://localhost:8501`).
 
 ![Sorrel GUI Builder Home](images/gui_home.png)
 
