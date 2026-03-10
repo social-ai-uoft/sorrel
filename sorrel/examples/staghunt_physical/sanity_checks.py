@@ -963,16 +963,19 @@ def test_learning_behavior_runtime(results: SanityCheckResults, env: StagHuntEnv
                 f"Action execution returned invalid reward: {reward}",
             )
 
-        # Test that model memory works
-        memory_state = agent.model.memory.current_state()
-        if memory_state is not None:
-            results.add_result(
-                "Model Memory Runtime",
-                True,
-                f"Memory state shape: {memory_state.shape}",
-            )
+        # Test that model memory works (skip for PPO-style models with no replay memory)
+        if hasattr(agent.model, "memory") and hasattr(agent.model.memory, "current_state"):
+            memory_state = agent.model.memory.current_state()
+            if memory_state is not None:
+                results.add_result(
+                    "Model Memory Runtime",
+                    True,
+                    f"Memory state shape: {memory_state.shape}",
+                )
+            else:
+                results.add_result("Model Memory Runtime", False, "Memory state is None")
         else:
-            results.add_result("Model Memory Runtime", False, "Memory state is None")
+            results.add_result("Model Memory Runtime", True, "Model has no replay memory (e.g. PPO)")
 
     except Exception as e:
         results.add_result("Learning Behavior Runtime", False, f"Exception: {str(e)}")

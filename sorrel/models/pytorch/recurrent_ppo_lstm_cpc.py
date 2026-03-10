@@ -609,6 +609,20 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         # Could trigger learn() here if desired, but train_step() handles it
         pass
 
+    def reset(self) -> None:
+        """Clear LSTM hidden state and pending transition (e.g. on env reset).
+        Does not clear rollout_memory; training uses it at end of epoch.
+        """
+        self._current_hidden = None
+        self._pending_state = None
+        self._pending_action = None
+        self._pending_log_prob = None
+        self._pending_value = None
+
+    def epsilon_decay(self, decay_rate: float) -> None:
+        """No-op for PPO (policy sampling); keeps training loop compatible."""
+        pass
+
     # ------------------------ #
     # endregion                #
     # ------------------------ #

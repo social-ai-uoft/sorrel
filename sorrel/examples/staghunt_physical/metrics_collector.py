@@ -17,6 +17,29 @@ if TYPE_CHECKING:
     from .world import StagHuntWorld
 
 
+def gini_index(values: List[float]) -> float:
+    """Compute Gini coefficient of inequality (0 = perfect equality, 1 = maximal inequality).
+
+    Args:
+        values: Per-agent returns or rewards (non-negative).
+
+    Returns:
+        Gini index in [0, 1], or 0.0 if sum is 0 or len <= 1.
+    """
+    if not values or len(values) <= 1:
+        return 0.0
+    x = np.asarray(values, dtype=np.float64)
+    x = np.maximum(x, 0.0)
+    s = float(np.sum(x))
+    if s <= 0:
+        return 0.0
+    x = np.sort(x)
+    n = len(x)
+    # B = sum_i (2*(i+1) - n - 1) * x_i  (0-indexed i)
+    B = np.sum((2 * np.arange(1, n + 1) - n - 1) * x)
+    return float(B) / (n * s)
+
+
 def _default_agent_metrics():
     """Default agent metrics dict (shared shape for training and probe)."""
     return {
@@ -238,10 +261,14 @@ class StagHuntMetricsCollector:
         total_hares_defeated = 0
         total_shared_rewards = 0.0
         
+        # Per-agent rewards for Gini (equity) and accumulate totals
+        per_agent_rewards: List[float] = []
+
         # Log individual agent metrics and accumulate totals
         for agent in agents:
             agent_id = agent.agent_id
             agent_data = self.agent_metrics[agent_id]
+            per_agent_rewards.append(agent_data['total_reward'])
             
             # Individual agent metrics
             writer.add_scalar(f'Agent_{agent_id}/attacks_to_hares', 
@@ -318,6 +345,10 @@ class StagHuntMetricsCollector:
             writer.add_scalar('Mean/mean_hares_defeated', total_hares_defeated / num_agents, epoch)
             writer.add_scalar('Mean/mean_shared_rewards', total_shared_rewards / num_agents, epoch)
         
+        # Gini index of per-agent returns (equity: 0 = equal, 1 = maximal inequality)
+        gini = gini_index(per_agent_rewards)
+        writer.add_scalar('Global/gini_index', gini, epoch)
+
         # Log global environment metrics (legacy format for compatibility)
         writer.add_scalar('Global/Attacks_to_Hares', 
                           self.epoch_metrics['attacks_to_hares'], epoch)

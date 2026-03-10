@@ -22,13 +22,17 @@ class ProbeTestAgent:
     
     def __init__(self, original_agent):
         """Create a frozen copy of the original agent.
-        
+
         Args:
             original_agent: The original agent to copy and freeze
         """
-        # Deep copy the agent
-        self.agent = copy.deepcopy(original_agent)
-        
+        # PPO/recurrent models hold non-leaf tensors (e.g. LSTM hidden state) that
+        # cannot be deepcopied. Use a shallow copy and share the model in that case.
+        if getattr(original_agent.model, "add_memory_ppo", None) is not None:
+            self.agent = copy.copy(original_agent)
+        else:
+            self.agent = copy.deepcopy(original_agent)
+
         # Freeze the model parameters (no gradients)
         if hasattr(self.agent.model, 'qnetwork_local'):
             for param in self.agent.model.qnetwork_local.parameters():

@@ -163,3 +163,5 @@ sorrel/examples/*/argv/
 /sorrel/examples/state_punishment/test
 /sorrel/examples/state_punishment/env_shock
 *PLAN*
+/sorrel/examples/treasurehunt_jax
+/sorrel/models/jax

@@ -63,9 +63,30 @@ def run_stag_hunt(
     seed: int | None = None,
     no_punishment: bool = False,
     preserve_continuity: bool = False,
+    power_mode: bool = False,
+    observe_own_power_only: bool = False,
+    aggression_enabled: bool | None = None,
+    accurate_reward_allocation: bool | None = None,
+    # Model type and PPO LSTM CPC (overrides config when provided)
+    model_type: str | None = None,
+    ppo_clip_param: float | None = None,
+    ppo_k_epochs: int | None = None,
+    ppo_rollout_length: int | None = None,
+    ppo_entropy_start: float | None = None,
+    ppo_entropy_end: float | None = None,
+    ppo_entropy_decay_steps: int | None = None,
+    ppo_max_grad_norm: float | None = None,
+    ppo_gae_lambda: float | None = None,
+    hidden_size: int | None = None,
+    use_cpc: bool | None = None,
+    cpc_horizon: int | None = None,
+    cpc_weight: float | None = None,
+    cpc_temperature: float | None = None,
+    cpc_projection_dim: int | None = None,
+    cpc_start_epoch: int | None = None,
 ) -> None:
     """Run a single stag hunt experiment with default hyperparameters.
-    
+
     Args:
         run_name_base: Optional base name for the run. If not provided, uses default from config.
         resource_density: Optional resource density override (0.0-1.0).
@@ -76,6 +97,13 @@ def run_stag_hunt(
         seed: Optional random seed for reproducibility. If provided, sets seed for random, numpy, and torch.
         no_punishment: If True, disable the PUNISH action (include_punish_action=False).
         preserve_continuity: If True, do not reset environment after epoch 0 (continuity mode).
+        power_mode: If True, enable power (punish begets power, power-weighted stag sharing).
+        observe_own_power_only: If True (and power_mode), agents observe only their own power in obs.
+        aggression_enabled: If True, enable aggression mechanism; if False, disable; if None, use config default (False).
+        accurate_reward_allocation: If True, only agents that attacked and damaged the resource get rewards; if False, radius-based sharing; if None, use config default.
+        model_type: Override config model type: "iqn" or "ppo_lstm_cpc".
+        ppo_*: PPO hyperparameters (only used when model_type is ppo_lstm_cpc).
+        use_cpc, cpc_*: CPC options for ppo_lstm_cpc.
     """
     # Set random seed for reproducibility if provided
     # This sets seeds for: Python random, NumPy, PyTorch, CUDA, and cuDNN
@@ -154,6 +182,8 @@ def run_stag_hunt(
             "orientation_reference_file": "agent_init_orientation_reference_probe_test.txt",  # Path to orientation reference file
         },
         "model": {
+            # "iqn" (default) or "ppo_lstm_cpc" (RecurrentPPOLSTMCPC; same as state_punishment)
+            "model_type": "iqn",
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
             "agent_vision_radius": 3,
             # epsilon decay hyperparameter for the IQN model
@@ -180,8 +210,8 @@ def run_stag_hunt(
             "generation_mode": "random",  # "random" or "ascii_map"
             "ascii_map_file": "test_intention_onlystag.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 27, # 13
-            "width": 27,
+            "height": 12, # 13
+            "width": 12,
             # number of players in the game
             "num_agents": 20,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
@@ -227,9 +257,9 @@ def run_stag_hunt(
             },
             # Resource respawn cap configuration
             "resource_cap_mode": "initial_count",  # Options: "specified" (use max_resources/max_stags/max_hares) or "initial_count" (auto-set from initial spawns)
-            "max_resources": 40,  # Maximum total resources (None = unlimited, ignored if resource_cap_mode == "initial_count")
-            "max_stags": 20,  # Maximum stag resources (None = unlimited, overrides max_resources for stags, ignored if resource_cap_mode == "initial_count")
-            "max_hares": 20,  # Maximum hare resources (None = unlimited, overrides max_resources for hares, ignored if resource_cap_mode == "initial_count")
+            "max_resources": 10,  # Maximum total resources (None = unlimited, ignored if resource_cap_mode == "initial_count")
+            "max_stags": 5,  # Maximum stag resources (None = unlimited, overrides max_resources for stags, ignored if resource_cap_mode == "initial_count")
+            "max_hares": 5,  # Maximum hare resources (None = unlimited, overrides max_resources for hares, ignored if resource_cap_mode == "initial_count")
             # Appearance switching configuration
             "appearance_switching": {
                 "enabled": False,  # Set to True to enable appearance switching
@@ -249,6 +279,16 @@ def run_stag_hunt(
             "punish_cooldown": 0,  # Separate cooldown for PUNISH action
             "punish_cost": 0.0,  # Cost to use punish action
             "punish_freeze_duration": 20,  # Turns agent is frozen when health reaches 0 from punishment
+            # Power mode (punish-beget-power): when True, punishment changes power and stag sharing is power-weighted
+            "power_mode": False,
+            "observe_own_power_only": False,  # When True (and power_mode), agents observe only their own power in obs
+            # Aggression mechanism (default False): punishment increases victim aggression; punishing gives intrinsic reward and satiation
+            "aggression_enabled": False,
+            "aggression_increase_per_punishment": 1.0,
+            "aggression_decay_per_step": 0.02,
+            "aggression_reward_scale": 0.3,
+            "aggression_satiation_reduction": 1.0,
+            "aggression_cap": 4,  # Upper bound for aggression; must be in range (0, 4]. None = no cap (use 4 for default)
             # respawn timing
             "respawn_lag": 1,  # number of turns before a resource can respawn
             # payoff matrix for the row player (stag=0, hare=1)
@@ -265,7 +305,7 @@ def run_stag_hunt(
             "health_regeneration_rate": 1,  # How fast resources regenerate health
             "reward_sharing_radius": 5,  # Radius for reward sharing when resources are defeated
             # Accurate reward allocation mode
-            "accurate_reward_allocation": False,  # If True, only agents that attacked and damaged the resource receive rewards (instead of radius-based sharing)
+            "accurate_reward_allocation": True,  # If True, only agents that attacked and damaged the resource receive rewards (instead of radius-based sharing)
             # Wounded stag mechanism
             "use_wounded_stag": False,  # If True, stags change kind to 'WoundedStagResource' when health < max_health
             # Agent configuration system
@@ -319,15 +359,17 @@ def run_stag_hunt(
             },
             # Standard observation mode configuration
             "standard_obs": True,  # Set to True to enable standard observation mode
-            "agent_id_vector_dim": 8,  # Dimensionality of agent identity vectors (only used when agent_id_encoding_mode="random_vector")
-            "agent_id_encoding_mode": "random_vector",  # Options: "random_vector" (default) or "onehot"
+            "agent_id_vector_dim": 8,  # For random_vector: dimension; for binary: bit length X (must have 2^X >= num_agents)
+            "agent_id_encoding_mode": "random_vector",  # Options: "random_vector" (default), "onehot", or "binary"
             "use_agent_id_in_standard_obs": True,  # Enable/disable agent ID encoding in standard obs mode
+            # "agent_id_shuffle_seed": 42,  # Optional: if set, shuffle agent ID vector assignment (shared by all modes)
             # When False: all agents get zero ID vectors (indistinguishable by unique ID)
             # When True: agents have unique ID vectors based on agent_id_encoding_mode (default)
             # Only applies when standard_obs=True
             # When standard_obs=True: uses flat feature list with agent IDs encoded as either:
             #   - "random_vector": Fixed random vectors of dimension agent_id_vector_dim (default: 8)
             #   - "onehot": One-hot vectors of dimension num_agents
+            #   - "binary": Binary vectors from product([0,1], repeat=X), X=agent_id_vector_dim (2^X >= num_agents)
             #   - When use_agent_id_in_standard_obs=False: all agents get zero ID vectors
             # NOTE: Cannot be True when agent_identity.enabled is True (mutually exclusive)
         },
@@ -404,6 +446,46 @@ def run_stag_hunt(
     if no_punishment:
         config["world"]["include_punish_action"] = False
     config["experiment"]["preserve_continuity"] = preserve_continuity
+    config["world"]["power_mode"] = power_mode
+    config["world"]["observe_own_power_only"] = observe_own_power_only
+    if aggression_enabled is not None:
+        config["world"]["aggression_enabled"] = aggression_enabled
+    if accurate_reward_allocation is not None:
+        config["world"]["accurate_reward_allocation"] = accurate_reward_allocation
+
+    # Model type and PPO LSTM CPC overrides (from CLI or run_stag_hunt kwargs)
+    if model_type is not None:
+        config["model"]["model_type"] = model_type
+    if ppo_clip_param is not None:
+        config["model"]["ppo_clip_param"] = ppo_clip_param
+    if ppo_k_epochs is not None:
+        config["model"]["ppo_k_epochs"] = ppo_k_epochs
+    if ppo_rollout_length is not None:
+        config["model"]["ppo_rollout_length"] = ppo_rollout_length
+    if ppo_entropy_start is not None:
+        config["model"]["ppo_entropy_start"] = ppo_entropy_start
+    if ppo_entropy_end is not None:
+        config["model"]["ppo_entropy_end"] = ppo_entropy_end
+    if ppo_entropy_decay_steps is not None:
+        config["model"]["ppo_entropy_decay_steps"] = ppo_entropy_decay_steps
+    if ppo_max_grad_norm is not None:
+        config["model"]["ppo_max_grad_norm"] = ppo_max_grad_norm
+    if ppo_gae_lambda is not None:
+        config["model"]["ppo_gae_lambda"] = ppo_gae_lambda
+    if hidden_size is not None:
+        config["model"]["hidden_size"] = hidden_size
+    if use_cpc is not None:
+        config["model"]["use_cpc"] = use_cpc
+    if cpc_horizon is not None:
+        config["model"]["cpc_horizon"] = cpc_horizon
+    if cpc_weight is not None:
+        config["model"]["cpc_weight"] = cpc_weight
+    if cpc_temperature is not None:
+        config["model"]["cpc_temperature"] = cpc_temperature
+    if cpc_projection_dim is not None:
+        config["model"]["cpc_projection_dim"] = cpc_projection_dim
+    if cpc_start_epoch is not None:
+        config["model"]["cpc_start_epoch"] = cpc_start_epoch
 
     # Automatically construct run_name from base name and key parameters
     run_name_base = config["experiment"].get("run_name_base", "staghunt_experiment")
@@ -480,7 +562,7 @@ def run_stag_hunt(
         logger=CombinedLogger(
             max_epochs=config["experiment"]["epochs"],
             log_dir=Path(__file__).parent
-            / f'runs_punishment/{config["experiment"]["run_name"]}_{timestamp}',
+            / f'runs_punishment_v2/{config["experiment"]["run_name"]}_{timestamp}',
             experiment_env=experiment,
         ),
         output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}',
@@ -558,7 +640,86 @@ if __name__ == "__main__":
         default=False,
         help="Do not reset environment after epoch 0; world and agents continue across epochs (continuity mode)."
     )
+    parser.add_argument(
+        "--power-mode",
+        action="store_true",
+        default=False,
+        help="Enable power mode: punish begets power, power-weighted stag sharing, power in observation."
+    )
+    parser.add_argument(
+        "--observe-own-power-only",
+        action="store_true",
+        default=False,
+        help="When --power-mode is on, agents observe only their own power (not others')."
+    )
+    parser.add_argument(
+        "--enable-aggression",
+        action="store_true",
+        default=False,
+        help="Enable aggression mechanism: punishment increases victim aggression; punishing gives intrinsic reward and satiation."
+    )
+    parser.add_argument(
+        "--no-aggression",
+        action="store_true",
+        default=False,
+        help="Disable aggression mechanism (default when neither flag is passed)."
+    )
+    parser.add_argument(
+        "--accurate-reward-allocation",
+        action="store_true",
+        default=False,
+        help="Only give reward to agents that attacked and damaged the resource (attack-history-based). Default: radius-based sharing."
+    )
+    parser.add_argument(
+        "--no-accurate-reward-allocation",
+        action="store_true",
+        default=False,
+        help="Use radius-based reward sharing (default when neither flag is passed)."
+    )
+    # Model type and PPO LSTM CPC
+    parser.add_argument(
+        "--model-type",
+        type=str,
+        choices=["iqn", "ppo_lstm_cpc"],
+        default=None,
+        help="Model type: 'iqn' (default from config) or 'ppo_lstm_cpc'. Overrides config['model']['model_type']."
+    )
+    parser.add_argument("--ppo-clip-param", type=float, default=0.2, help="PPO clip parameter (default: 0.2)")
+    parser.add_argument("--ppo-k-epochs", type=int, default=4, help="PPO epochs per update (default: 4)")
+    parser.add_argument("--ppo-rollout-length", type=int, default=50, help="PPO min rollout length before training (default: 50, matches state_punishment)")
+    parser.add_argument("--ppo-entropy-start", type=float, default=0.01, help="PPO initial entropy coefficient (default: 0.01)")
+    parser.add_argument("--ppo-entropy-end", type=float, default=0.01, help="PPO final entropy coefficient (default: 0.01)")
+    parser.add_argument("--ppo-entropy-decay-steps", type=int, default=0, help="PPO entropy decay steps (default: 0)")
+    parser.add_argument("--ppo-max-grad-norm", type=float, default=0.5, help="PPO max gradient norm (default: 0.5)")
+    parser.add_argument("--ppo-gae-lambda", type=float, default=0.95, help="PPO GAE lambda (default: 0.95)")
+    parser.add_argument("--hidden-size", type=int, default=256, help="LSTM hidden size for ppo_lstm_cpc (default: 256)")
+    parser.add_argument(
+        "--use-cpc",
+        action="store_true",
+        help="Enable CPC for ppo_lstm_cpc. If not set, config value is used (default False in config)."
+    )
+    parser.add_argument("--no-cpc", action="store_true", help="Disable CPC for ppo_lstm_cpc (overrides config).")
+    parser.add_argument("--cpc-horizon", type=int, default=30, help="CPC prediction horizon (default: 30)")
+    parser.add_argument("--cpc-weight", type=float, default=1.0, help="CPC loss weight (default: 1.0)")
+    parser.add_argument("--cpc-temperature", type=float, default=0.07, help="CPC InfoNCE temperature (default: 0.07)")
+    parser.add_argument("--cpc-projection-dim", type=int, default=None, help="CPC projection dim (default: None, uses hidden_size)")
+    parser.add_argument("--cpc-start-epoch", type=int, default=1, help="Epoch to start CPC training (default: 1)")
     args = parser.parse_args()
+    aggression_enabled = None
+    if args.enable_aggression:
+        aggression_enabled = True
+    elif args.no_aggression:
+        aggression_enabled = False
+    use_cpc = None
+    if args.use_cpc:
+        use_cpc = True
+    elif args.no_cpc:
+        use_cpc = False
+    accurate_reward_allocation = None
+    if args.accurate_reward_allocation:
+        accurate_reward_allocation = True
+    elif args.no_accurate_reward_allocation:
+        accurate_reward_allocation = False
 
     run_stag_hunt(
         run_name_base=args.run_name_base,
@@ -570,4 +731,24 @@ if __name__ == "__main__":
         seed=args.seed,
         no_punishment=args.no_punishment,
         preserve_continuity=args.preserve_continuity,
+        power_mode=args.power_mode,
+        observe_own_power_only=args.observe_own_power_only,
+        aggression_enabled=aggression_enabled,
+        accurate_reward_allocation=accurate_reward_allocation,
+        model_type=args.model_type,
+        ppo_clip_param=args.ppo_clip_param,
+        ppo_k_epochs=args.ppo_k_epochs,
+        ppo_rollout_length=args.ppo_rollout_length,
+        ppo_entropy_start=args.ppo_entropy_start,
+        ppo_entropy_end=args.ppo_entropy_end,
+        ppo_entropy_decay_steps=args.ppo_entropy_decay_steps,
+        ppo_max_grad_norm=args.ppo_max_grad_norm,
+        ppo_gae_lambda=args.ppo_gae_lambda,
+        hidden_size=args.hidden_size,
+        use_cpc=use_cpc,
+        cpc_horizon=args.cpc_horizon,
+        cpc_weight=args.cpc_weight,
+        cpc_temperature=args.cpc_temperature,
+        cpc_projection_dim=args.cpc_projection_dim,
+        cpc_start_epoch=args.cpc_start_epoch,
     )

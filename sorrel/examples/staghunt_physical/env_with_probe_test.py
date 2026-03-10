@@ -167,10 +167,11 @@ class StagHuntEnvWithProbeTest(StagHuntEnv):
                     agent.model.end_epoch_action(epoch=epoch)
 
             # Train the agents (only spawned agents)
-            total_loss = 0
+            total_loss = 0.0
             for agent in self.agents:
                 if agent.agent_id in self.spawned_agent_ids:
-                    total_loss += agent.model.train_step()
+                    step_loss = agent.model.train_step()
+                    total_loss += float(step_loss) if step_loss is not None else 0.0
 
             # Update epsilon for all agents (only spawned agents)
             for agent in self.agents:

@@ -41,6 +41,7 @@ from sorrel.examples.staghunt_physical.entities import (
 )
 from sorrel.examples.staghunt_physical.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
+from sorrel.models.pytorch.recurrent_ppo_lstm_cpc import RecurrentPPOLSTMCPC
 
 
 class StagHuntEnv(Environment[StagHuntWorld]):
@@ -154,6 +155,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         agent_id_vector_dim = world_cfg.get("agent_id_vector_dim", 8)
         agent_id_encoding_mode = world_cfg.get("agent_id_encoding_mode", "random_vector")
         use_agent_id_in_standard_obs = world_cfg.get("use_agent_id_in_standard_obs", True)
+        agent_id_shuffle_seed = world_cfg.get("agent_id_shuffle_seed", 0)
         
         # Validate: use_agent_id_in_standard_obs only meaningful when standard_obs is enabled
         if not standard_obs and not use_agent_id_in_standard_obs:
@@ -207,6 +209,10 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 agent_id_vector_dim=agent_id_vector_dim,  # NEW: from config["world"]["agent_id_vector_dim"]
                 agent_id_encoding_mode=agent_id_encoding_mode,  # NEW: from config["world"]["agent_id_encoding_mode"]
                 use_agent_id_in_standard_obs=use_agent_id_in_standard_obs,  # NEW: from config["world"]["use_agent_id_in_standard_obs"]
+                agent_id_shuffle_seed=agent_id_shuffle_seed,  # optional: shuffle agent ID assignment (shared by all modes)
+                power_mode=world_cfg.get("power_mode", False),
+                observe_own_power_only=world_cfg.get("observe_own_power_only", False),
+                aggression_enabled=world_cfg.get("aggression_enabled", False),
             )
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size
@@ -234,27 +240,70 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     device = "cpu"
             else:
                 device = device_config
-            
-            # create a simple IQN model; hyperparameters can be tuned via config
-            model = PyTorchIQN(
-                input_size=[full_input_dim],
-                action_space=action_spec.n_actions,
-                layer_size=int(model_cfg.get("layer_size", 250)),
-                epsilon=float(model_cfg.get("epsilon", 0.7)),
-                epsilon_min=float(model_cfg.get("epsilon_min", 0.1)),
-                device=device,
-                seed=torch.random.seed(),
-                n_frames=int(model_cfg.get("n_frames", 5)),
-                n_step=int(model_cfg.get("n_step", 3)),
-                sync_freq=int(model_cfg.get("sync_freq", 200)),
-                model_update_freq=int(model_cfg.get("model_update_freq", 4)),
-                batch_size=int(model_cfg.get("batch_size", 64)),
-                memory_size=int(model_cfg.get("memory_size", 1024)),
-                LR=float(model_cfg.get("LR", 0.00025)),
-                TAU=float(model_cfg.get("TAU", 0.001)),
-                GAMMA=float(model_cfg.get("GAMMA", 0.99)),
-                n_quantiles=int(model_cfg.get("n_quantiles", 12)),
-            )
+
+            model_type = model_cfg.get("model_type", "iqn")
+            ppo_cfg = model_cfg.get("ppo_cpc", {})
+
+            if model_type == "iqn":
+                # create a simple IQN model; hyperparameters can be tuned via config
+                model = PyTorchIQN(
+                    input_size=[full_input_dim],
+                    action_space=action_spec.n_actions,
+                    layer_size=int(model_cfg.get("layer_size", 250)),
+                    epsilon=float(model_cfg.get("epsilon", 0.7)),
+                    epsilon_min=float(model_cfg.get("epsilon_min", 0.1)),
+                    device=device,
+                    seed=torch.random.seed(),
+                    n_frames=int(model_cfg.get("n_frames", 5)),
+                    n_step=int(model_cfg.get("n_step", 3)),
+                    sync_freq=int(model_cfg.get("sync_freq", 200)),
+                    model_update_freq=int(model_cfg.get("model_update_freq", 4)),
+                    batch_size=int(model_cfg.get("batch_size", 64)),
+                    memory_size=int(model_cfg.get("memory_size", 1024)),
+                    LR=float(model_cfg.get("LR", 0.00025)),
+                    TAU=float(model_cfg.get("TAU", 0.001)),
+                    GAMMA=float(model_cfg.get("GAMMA", 0.99)),
+                    n_quantiles=int(model_cfg.get("n_quantiles", 12)),
+                )
+            elif model_type == "ppo_lstm_cpc":
+                # PPO LSTM with CPC (same module as state_punishment); defaults from ppo_cfg or model_cfg
+                def _get(key: str, default: Any) -> Any:
+                    return ppo_cfg.get(key, model_cfg.get(key, default))
+                model = RecurrentPPOLSTMCPC(
+                    input_size=(full_input_dim,),
+                    action_space=action_spec.n_actions,
+                    layer_size=int(_get("layer_size", 250)),
+                    epsilon=float(_get("epsilon", 0.0)),
+                    epsilon_min=float(_get("epsilon_min", 0.05)),
+                    device=device,
+                    seed=torch.random.seed(),
+                    obs_type="flattened",
+                    obs_dim=None,
+                    gamma=float(_get("GAMMA", 0.99)),
+                    lr=float(_get("LR", 3e-4)),
+                    clip_param=float(_get("ppo_clip_param", 0.2)),
+                    K_epochs=int(_get("ppo_k_epochs", 4)),
+                    batch_size=int(_get("batch_size", 64)),
+                    entropy_start=float(_get("ppo_entropy_start", 0.01)),
+                    entropy_end=float(_get("ppo_entropy_end", 0.01)),
+                    entropy_decay_steps=int(_get("ppo_entropy_decay_steps", 0)),
+                    max_grad_norm=float(_get("ppo_max_grad_norm", 0.5)),
+                    gae_lambda=float(_get("ppo_gae_lambda", 0.95)),
+                    rollout_length=int(_get("ppo_rollout_length", 100)),
+                    hidden_size=int(_get("hidden_size", 256)),
+                    use_cnn=False,
+                    use_factored_actions=False,
+                    action_dims=None,
+                    use_cpc=bool(_get("use_cpc", False)),
+                    cpc_horizon=int(_get("cpc_horizon", 30)),
+                    cpc_weight=float(_get("cpc_weight", 1.0)),
+                    cpc_projection_dim=model_cfg.get("cpc_projection_dim") or ppo_cfg.get("cpc_projection_dim"),
+                    cpc_temperature=float(_get("cpc_temperature", 0.07)),
+                    cpc_memory_bank_size=0,
+                    cpc_start_epoch=int(_get("cpc_start_epoch", 1)),
+                )
+            else:
+                raise ValueError(f"Unknown model_type: {model_type!r}. Use 'iqn' or 'ppo_lstm_cpc'.")
 
             # Get agent kind and attributes from config
             assigned_kind = agent_kind_mapping.get(agent_id, None)
@@ -452,13 +501,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             world_cfg = self.config.get("world", {})
         
         num_agents_to_spawn = world_cfg.get("num_agents_to_spawn", len(self.agents))
-        # Ensure num_agents_to_spawn doesn't exceed total agents
-        num_agents_to_spawn = min(num_agents_to_spawn, len(self.agents))
-        
-        # Randomly select which agents to spawn this epoch
-        self.spawned_agent_ids = sorted(random.sample(range(len(self.agents)), num_agents_to_spawn))
-        
-        # choose initial agent positions
+
+        # choose initial agent positions (need valid_spawn_locations when random_agent_spawning to cap correctly)
         if world.random_agent_spawning:
             # Find all valid spawn locations (not walls, not resources, not fixed spawn points)
             valid_spawn_locations = []
@@ -473,7 +517,25 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                             terrain_entity = world.observe(terrain_loc)
                             if hasattr(terrain_entity, 'passable') and terrain_entity.passable:
                                 valid_spawn_locations.append(dynamic)
-            
+
+            # Cap by total agents and by number of valid random locations (fallback uses fixed spawn points)
+            max_locations = max(len(valid_spawn_locations), len(world.agent_spawn_points))
+            num_agents_to_spawn = min(num_agents_to_spawn, len(self.agents), max_locations)
+        else:
+            # Fixed spawn points only: cap by total agents and available spawn points
+            num_agents_to_spawn = min(num_agents_to_spawn, len(self.agents), len(world.agent_spawn_points))
+
+        if num_agents_to_spawn <= 0:
+            raise ValueError(
+                "Cannot spawn agents: num_agents_to_spawn would be 0. "
+                "Check that world has enough spawn locations (random_agent_spawning=True: need valid cells; else need agent_spawn_points)."
+            )
+
+        # Randomly select which agents to spawn this epoch
+        self.spawned_agent_ids = sorted(random.sample(range(len(self.agents)), num_agents_to_spawn))
+
+        # choose initial agent positions
+        if world.random_agent_spawning:
             # Randomly select spawn locations for the selected agents
             if len(valid_spawn_locations) < num_agents_to_spawn:
                 # Fallback: use agent_spawn_points if not enough valid locations
@@ -905,6 +967,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 continue
             if hasattr(agent, "update_freeze_state"):
                 agent.update_freeze_state()
+            if getattr(self.world, "aggression_enabled", False) and hasattr(agent, "update_aggression"):
+                agent.update_aggression(self.world)
 
     
     def collect_metrics_for_step(self) -> None:
@@ -1172,6 +1236,8 @@ def export_agent_identity_codes(
                 encoding_mode = getattr(obs_spec, 'agent_id_encoding_mode', 'random_vector')
                 if encoding_mode == "onehot":
                     f.write("Agent Identity Vectors (One-Hot Encoding)\n")
+                elif encoding_mode == "binary":
+                    f.write("Agent Identity Vectors (Binary Encoding)\n")
                 else:
                     f.write("Agent Identity Vectors (Fixed Random Vectors)\n")
             f.write("=" * 50 + "\n")
