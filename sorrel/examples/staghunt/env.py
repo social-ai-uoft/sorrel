@@ -144,12 +144,45 @@ class StaghuntEnv(Environment[StaghuntWorld]):
 
         # spawn the agents
         # using np.random.choice, we choose indices in valid_spawn_locations
-        agent_locations_indices = np.random.choice(
-            len(valid_spawn_locations), size=len(self.agents), replace=False
-        )
-        agent_locations = [valid_spawn_locations[i] for i in agent_locations_indices]
+        # agent_locations_indices = np.random.choice(
+        #     len(valid_spawn_locations), size=len(self.agents), replace=False
+        # )
+        # agent_locations = [valid_spawn_locations[i] for i in agent_locations_indices]
+        # for loc, agent in zip(agent_locations, self.agents):
+        #     loc = tuple(loc)
+        #     self.world.add(loc, agent)
+
+        # spawn the agents, within 1-3 pixels of the first agent
+        # Spawn the first agent at a random valid location
+        valid_spawn_set = set(map(tuple, valid_spawn_locations))
+        first_location = valid_spawn_locations[
+            np.random.choice(len(valid_spawn_locations))
+        ]
+        first_location = tuple(first_location)
+        agent_locations = [first_location]
+        used_locations = {first_location}
+
+        # Spawn remaining agents within 1-3 pixels of the first agent
+        first_y, first_x, _ = first_location
+        for agent in self.agents[1:]:
+            nearby_valid = [
+                loc
+                for loc in valid_spawn_set
+                if loc not in used_locations
+                and 1 <= max(abs(loc[0] - first_y), abs(loc[1] - first_x)) <= 3
+            ]
+
+            if not nearby_valid:
+                # Fallback: pick any unused valid location if no nearby spots are available
+                fallback = [loc for loc in valid_spawn_set if loc not in used_locations]
+                chosen = fallback[np.random.choice(len(fallback))]
+            else:
+                chosen = nearby_valid[np.random.choice(len(nearby_valid))]
+
+            agent_locations.append(chosen)
+            used_locations.add(chosen)
+
         for loc, agent in zip(agent_locations, self.agents):
-            loc = tuple(loc)
             self.world.add(loc, agent)
 
     @override
