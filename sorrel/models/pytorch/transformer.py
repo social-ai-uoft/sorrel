@@ -674,16 +674,8 @@ class VisionTransformer(nn.Module):
     def channel_mask(self, state_targets, channel) -> torch.Tensor:
         B, T, C, H, W = state_targets.shape
         mask = torch.ones_like(state_targets, dtype=torch.bool)
-        """
-        entity_list = [
-                "EmptyEntity",
-                "Wall",
-                "Gem",
-                "Bone",
-                "Food",
-                "TreasurehuntAgent",
-            ]
-        """
+        """entity_list = [ "EmptyEntity", "Wall", "Gem", "Bone", "Food",
+        "TreasurehuntAgent", ]"""
         if channel == "gem":
             mask[:, :, 2, :, :] = False
         elif channel == "bone":
@@ -769,14 +761,7 @@ class VisionTransformer(nn.Module):
         state_inputs = state_inputs.to(self.device)
         action_inputs = action_inputs.to(self.device)
 
-        if mask_type == "full":
-            # Mask testing (all valid)
-            state_mask = torch.ones(
-                state_targets.shape,  # Dynammically matching shape
-                dtype=torch.bool,
-                device=state_targets.device,
-            )
-        elif mask_type == "random":
+        if mask_type == "random":
             state_mask = self.random_mask(state_targets)
         elif mask_type in ("gem", "bone", "food", "wall"):
             state_mask = self.channel_mask(state_targets, mask_type)
@@ -1085,7 +1070,7 @@ class ViTOneHot(VisionTransformer):
 
         # Flattening to 1D
         predictions_flat = state_predictions.reshape(-1, 2)
-        targets_flat = state_targets.long().reshape(-1)
+        targets_flat = state_targets.reshape(-1)
 
         # Flattening mask to match
         mask_flat = mask.reshape(-1)

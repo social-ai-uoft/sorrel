@@ -6,7 +6,7 @@ to update dynamic stations (e.g., stove timers) each turn.
 
 from __future__ import annotations
 
-from sorrel.examples.cleanup.entities import EmptyEntity, Wall
+from sorrel.entities.basic_entities import EmptyEntity, Wall
 from sorrel.worlds.gridworld import Gridworld
 
 
