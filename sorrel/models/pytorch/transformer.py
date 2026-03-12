@@ -1053,8 +1053,8 @@ class ViTOneHot(VisionTransformer):
     ):
         """Overridden state loss function.
 
-        Cross entropy loss computed on the yes/no probability of each channel.
-        When mask is None, computes loss over all elements.
+        Cross entropy loss computed on the yes/no probability of each channel. When mask
+        is None, computes loss over all elements.
         """
         loss = nn.CrossEntropyLoss()
 

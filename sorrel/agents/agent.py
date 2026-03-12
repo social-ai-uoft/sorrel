@@ -122,7 +122,9 @@ class Agent[W: Gridworld](Entity[W]):
         """
         # Pass position if the buffer supports it (e.g., TransformerBuffer)
         if hasattr(self.model.memory, "positions"):
-            self.model.memory.add(state, action, reward, done, position=tuple(self.location))
+            self.model.memory.add(
+                state, action, reward, done, position=tuple(self.location)
+            )
         else:
             self.model.memory.add(state, action, reward, done)
 
