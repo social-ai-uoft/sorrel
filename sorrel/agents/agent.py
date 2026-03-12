@@ -120,7 +120,13 @@ class Agent[W: Gridworld](Entity[W]):
             reward (float): the reward received by the agent.
             done (bool): whether the episode terminated after this experience.
         """
-        self.model.memory.add(state, action, reward, done)
+        # Pass position if the buffer supports it (e.g., TransformerBuffer)
+        if hasattr(self.model.memory, "positions"):
+            self.model.memory.add(
+                state, action, reward, done, position=tuple(self.location)
+            )
+        else:
+            self.model.memory.add(state, action, reward, done)
 
     def transition(self, world: W) -> None:
         """Processes a full transition step for the agent.
