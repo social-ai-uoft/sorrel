@@ -5,14 +5,14 @@ from pathlib import Path
 
 import numpy as np
 
-from sorrel.agents import Agent
+from sorrel.agents import Agent, MovingAgent
 from sorrel.examples.treasurehunt.world import TreasurehuntWorld
 
 # end imports
 
 
 # begin treasurehunt agent
-class TreasurehuntAgent(Agent[TreasurehuntWorld]):
+class TreasurehuntAgent(MovingAgent[TreasurehuntWorld]):
     """A treasurehunt agent that uses the iqn model."""
 
     def __init__(self, observation_spec, action_spec, model):

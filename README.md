@@ -18,6 +18,16 @@ Our hope is that Sorrel will foster new research ideas, applications, and tools 
 believe Sorrel will accelerate the rate of progress of the RL research space, as well as allow us to experiment 
 with our own solutions to both novel and long-standing RL problems.
 
+To get and use Sorrel as a user, install it from pip:
+```
+pip install sorrel
+```
+You can also install additional optional dependencies. For example, to install sorrel with llm integration support, do:
+```
+pip install sorrel[llm]
+```
+
+
 > [!NOTE]
 > Sorrel is extremely experimental and subject to change!
 
@@ -53,22 +63,9 @@ running ```poetry --version``` in your terminal to make sure you have poetry ins
 > See the [poetry](https://python-poetry.org/) documentation for more information and 
 > installation instructions.
 
-With poetry available, to install Sorrel as an user, run the following command:
+With poetry available, to install Sorrel as a developer, run the following command:
 ```
-poetry install
-```
-in the folder containing the ``pyproject.toml`` file.
-
-If you wish to install additional dependencies, such as tensorboard for logging needs, 
-you can include the extra dependencies by running the following instead:
-```
-poetry install --with extras
-```
-in the folder containing the ``pyproject.toml`` file.
-
-To install Sorrel in development mode, include the optional dependency groups like so:
-```
-poetry install --with dev,extras
+poetry install --with dev,llm
 ```
 in the folder containing the ``pyproject.toml`` file.
 

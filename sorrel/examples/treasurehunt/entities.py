@@ -28,16 +28,33 @@ class Sand(Entity[TreasurehuntWorld]):
         # We technically don't need to make Sand passable here since it's on a different layer from Agent
         self.passable = True
         self.sprite = Path(__file__).parent / "./assets/sand.png"
+        self.kind = "EmptyEntity"
 
 
 class Gem(Entity[TreasurehuntWorld]):
     """An entity that represents a gem in the treasurehunt environment."""
 
-    def __init__(self, gem_value):
+    def __init__(self, value):
         super().__init__()
         self.passable = True  # Agents can move onto Gems
-        self.value = gem_value
+        self.value = value
         self.sprite = Path(__file__).parent / "./assets/gem.png"
+
+
+class Food(Gem):
+    """An entity that represents food in the treasurehunt environment."""
+
+    def __init__(self, value):
+        super().__init__(value)
+        self.sprite = Path(__file__).parent / "./assets/food.png"
+
+
+class Bone(Gem):
+    """An entity that represents a bone in the treasurehunt environment."""
+
+    def __init__(self, value):
+        super().__init__(value)
+        self.sprite = Path(__file__).parent / "./assets/bone.png"
 
 
 class EmptyEntity(Entity[TreasurehuntWorld]):
@@ -55,4 +72,14 @@ class EmptyEntity(Entity[TreasurehuntWorld]):
         if (  # NOTE: If the spawn prob is too high, the environment gets overrun
             np.random.random() < world.spawn_prob
         ):
-            world.add(self.location, Gem(world.gem_value))
+            entity: Entity = np.random.choice(
+                np.array(
+                    [
+                        Gem(world.values["gem"]),
+                        Food(world.values["food"]),
+                        Bone(world.values["bone"]),
+                    ],
+                    dtype=object,
+                )
+            )
+            world.add(self.location, entity)

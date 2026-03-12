@@ -5,10 +5,10 @@ import numpy as np
 
 from sorrel.observation.visual_field import visual_field, visual_field_ascii
 from sorrel.utils.helpers import one_hot_encode
-from sorrel.worlds import Gridworld
+from sorrel.worlds import Gridworld, NodeWorld
 
 
-class ObservationSpec[T: (np.ndarray, str)]():
+class ObservationSpec[T: (np.ndarray, str), W]():
     r"""An abstract class of an object that contains the observation specifications for
     Sorrel agents.
 
@@ -17,12 +17,14 @@ class ObservationSpec[T: (np.ndarray, str)]():
         vision_radius: The radius of the agent's vision if full_view is False, 0 if full_view is True.
         full_view: A boolean that determines whether the agent can see the entire environment.
         input_size: An int or sequence of ints that indicates the size of the observation.
+        fill_entity_kind: if the agent's vision is out of bounds, fill the space with appearances of this entity. Defaults to "Wall".
     """
 
     entity_map: dict[str, T]
     vision_radius: int
     full_view: bool
     input_size: Sequence[int]
+    fill_entity_kind: str
 
     def __init__(
         self,
@@ -30,6 +32,7 @@ class ObservationSpec[T: (np.ndarray, str)]():
         full_view: bool,
         vision_radius: int | None = None,
         env_dims: Sequence[int] | None = None,
+        fill_entity_kind: str = "Wall",
     ):
         r"""Initialize the :py:class:`ObservationSpec` object. This function uses
         generate_map() to create an entity map for the ObservationSpec based on
@@ -49,6 +52,7 @@ class ObservationSpec[T: (np.ndarray, str)]():
         self.vision_radius = vision_radius if vision_radius else 0
         self.entity_map = self.generate_map(entity_list)
         self.input_size = (1,)
+        self.fill_entity_kind = fill_entity_kind
 
     @abstractmethod
     def generate_map(self, entity_list: list[str]) -> dict[str, T]:
@@ -69,7 +73,7 @@ class ObservationSpec[T: (np.ndarray, str)]():
     @abstractmethod
     def observe(
         self,
-        world: Gridworld,
+        world: W,
         location: tuple | None = None,
     ) -> np.ndarray:
         """Basic environment observation function.
@@ -106,7 +110,7 @@ class ObservationSpec[T: (np.ndarray, str)]():
         self.input_size = input_size
 
 
-class OneHotObservationSpec(ObservationSpec[np.ndarray]):
+class OneHotObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
     """A subclass of :py:class:`ObservationSpec` for Sorrel agents whose observations
     take the form of one-hot encodings.
 
@@ -115,6 +119,7 @@ class OneHotObservationSpec(ObservationSpec[np.ndarray]):
         vision_radius: The radius of the agent's vision if full_view is False, 0 if full_view is True.
         full_view: A boolean that determines whether the agent can see the entire environment.
         input_size: An int or sequence of ints that indicates the size of the observation.
+        fill_entity_kind: if the agent's vision is out of bounds, fill the space with appearances of this entity. Defaults to "Wall".
     """
 
     def __init__(
@@ -123,8 +128,11 @@ class OneHotObservationSpec(ObservationSpec[np.ndarray]):
         full_view: bool,
         vision_radius: int | None = None,
         env_dims: Sequence[int] | None = None,
+        fill_entity_kind: str = "Wall",
     ):
-        super().__init__(entity_list, full_view, vision_radius, env_dims)
+        super().__init__(
+            entity_list, full_view, vision_radius, env_dims, fill_entity_kind
+        )
         # By default, input_size is (channels, x, y)
         if self.full_view:
             assert isinstance(env_dims, Sequence)  # safeguarded in super().__init__()
@@ -190,10 +198,11 @@ class OneHotObservationSpec(ObservationSpec[np.ndarray]):
             entity_map=self.entity_map,
             vision=self.vision_radius if not self.full_view else None,
             location=location,
+            fill_entity_kind=self.fill_entity_kind,
         )
 
 
-class AsciiObservationSpec(ObservationSpec[str]):
+class AsciiObservationSpec(ObservationSpec[str, Gridworld]):
     """A subclass of :py:class:`ObservationSpec` for Sorrel agents whose observations
     take the form of ascii representations.
 
@@ -202,6 +211,7 @@ class AsciiObservationSpec(ObservationSpec[str]):
         vision_radius: The radius of the agent's vision if full_view is False, 0 if full_view is True.
         full_view: A boolean that determines whether the agent can see the entire environment.
         input_size: An int or sequence of ints that indicates the size of the observation.
+        fill_entity_kind: if the agent's vision is out of bounds, fill the space with appearances of this entity. Defaults to "Wall".
     """
 
     def __init__(
@@ -210,8 +220,11 @@ class AsciiObservationSpec(ObservationSpec[str]):
         full_view: bool,
         vision_radius: int | None = None,
         env_dims: Sequence[int] | None = None,
+        fill_entity_kind: str = "Wall",
     ):
-        super().__init__(entity_list, full_view, vision_radius, env_dims)
+        super().__init__(
+            entity_list, full_view, vision_radius, env_dims, fill_entity_kind
+        )
         if self.full_view:
             assert isinstance(env_dims, Sequence)  # safeguarded in super().__init__()
             self.input_size = env_dims
@@ -220,6 +233,7 @@ class AsciiObservationSpec(ObservationSpec[str]):
                 (2 * self.vision_radius + 1),
                 (2 * self.vision_radius + 1),
             )
+        self.generate_map_legend()
 
     def generate_map(self, entity_list: list[str]) -> dict[str, str]:
         """Generate a default entity map by automatically creating ascii character
@@ -264,6 +278,18 @@ class AsciiObservationSpec(ObservationSpec[str]):
                         )
         return entity_map
 
+    def generate_map_legend(self) -> None:
+        """Generate a string legend for an ASCII observation using the entity map.
+
+        Returns:
+            str: The legend for an ASCII observation.
+        """
+        self.map_legend = (
+            "Legend:\n=======\n"
+            + "\n".join([f"{value}: {key}" for key, value in self.entity_map.items()])
+            + "\n"
+        )
+
     def observe(
         self,
         world: Gridworld,
@@ -293,4 +319,62 @@ class AsciiObservationSpec(ObservationSpec[str]):
             entity_map=self.entity_map,
             vision=self.vision_radius if not self.full_view else None,
             location=location,
+            fill_entity_kind=self.fill_entity_kind,
         )
+
+    def observe_string(self, world: Gridworld, location: tuple | None = None) -> str:
+        """Observes the environment using :py:func:`.visual_field_ascii()`, and then
+        formats it as a single string including additional context such as the location
+        of the agent on the map."""
+        state = self.observe(world, location)
+        loc_string = "Location: "
+        # The location is the actual location on the grid
+        if self.full_view:
+            loc_string += str(location) + "\n"
+        # If not full view, the agent is centred on the observation.
+        else:
+            loc_string += (
+                f"({state.shape[0] // 2 + 1}, {state.shape[1] // 2 + 1})" + "\n"
+            )
+        replacements = {"[": "", "]": "", " ": "", "'": ""}
+        state_string = "State:\n" + np.array_str(state[:, :, -1]).translate(
+            str.maketrans(replacements)
+        )
+        return loc_string + state_string + "\n" + self.map_legend
+
+
+class NodeObservationSpec(ObservationSpec[str, NodeWorld]):
+    """A subclass of :py:class:`ObservationSpec` for Sorrel agents who are observing a
+    node world."""
+
+    def __init__(self, entity_list: list[str]):
+        # Full view and env_dims are not used, so dummy values are passed in
+        super().__init__(entity_list, full_view=True, env_dims=(1, 1))
+
+    def generate_map(self, entity_list: list[str]) -> dict[str, str]:
+        # Since entities are referred to by their string representation,
+        # just create a dict that pairs each entity with itself.
+        return {entity: entity for entity in entity_list}
+
+    def observe(self, world: NodeWorld, location=None) -> np.ndarray:
+        """Override that returns a dummy observation.
+
+        TODO: Handle the string or numpy array in a cleaner way?
+        """
+        return np.array([])
+
+    def observe_string(self, world: NodeWorld, location: str) -> str:
+        verb_conj = ["Nothing is", " is", " are"]
+        loc_string = "Location: " + location + "\n"
+        curr_node = world[location]
+        entity_string = (", ".join([entity.kind for entity in curr_node.entities])) + (
+            f"{verb_conj[len(curr_node.entities)]} located here.\n"
+        )
+        vis_string = ""
+        for visible_node in curr_node.visible:
+            for entity in visible_node.entities:
+                vis_string += f"{entity} can be seen at {visible_node.name}.\n"
+        adj_string = (", ".join([node.name for node in curr_node.adjacent])) + (
+            f"{verb_conj[len(curr_node.adjacent)]} adjacent to this location and can be moved to."
+        )
+        return loc_string + entity_string + vis_string + adj_string
