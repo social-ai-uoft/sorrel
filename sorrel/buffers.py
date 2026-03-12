@@ -75,6 +75,20 @@ class Buffer:
         self.dones[self.idx : self.idx + buffer_slice_point] = buffer.dones[
             :buffer_slice_point
         ]
+        # Copy positions if available in source buffer
+        if hasattr(buffer, "positions") and buffer.positions is not None:
+            if not hasattr(self, "positions") or self.positions is None:
+                self.positions = np.zeros((self.capacity, 2), dtype=np.int64)
+            self.positions[self.idx : self.idx + buffer_slice_point] = buffer.positions[
+                :buffer_slice_point
+            ]
+        # Copy agent_ids if available in source buffer
+        if hasattr(buffer, "agent_ids") and buffer.agent_ids is not None:
+            if not hasattr(self, "agent_ids") or self.agent_ids is None:
+                self.agent_ids = np.zeros(self.capacity, dtype=np.int64)
+            self.agent_ids[self.idx : self.idx + buffer_slice_point] = buffer.agent_ids[
+                :buffer_slice_point
+            ]
         self.idx = self.idx + buffer_slice_point
 
     def sample(self, batch_size: int):
@@ -201,6 +215,130 @@ class TransformerBuffer(Buffer):
     """Buffer class equivalent to the base class with the exception that actions also
     include a time dimension in the same way that states are."""
 
+    def __init__(self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1):
+        super().__init__(capacity, obs_shape, n_frames)
+        # Optional position storage for perspective-aware masking (y, x)
+        self.positions: np.ndarray | None = None
+        # Optional agent identity storage for multi-agent training
+        self.agent_ids: np.ndarray | None = None
+
+    def init_positions(self) -> None:
+        """Initialize position storage array."""
+        self.positions = np.zeros((self.capacity, 2), dtype=np.int64)
+
+    def init_agent_ids(self) -> None:
+        """Initialize agent identity storage array."""
+        self.agent_ids = np.zeros(self.capacity, dtype=np.int64)
+
+    def add(
+        self,
+        obs,
+        action,
+        reward,
+        done,
+        position: tuple[int, int] | None = None,
+        agent_id: int | None = None,
+    ):
+        if position is not None:
+            if self.positions is None:
+                self.init_positions()
+            self.positions[self.idx] = position
+        if agent_id is not None:
+            if self.agent_ids is None:
+                self.init_agent_ids()
+            self.agent_ids[self.idx] = agent_id
+        super().add(obs, action, reward, done)
+
+    def save(self, output_file: str | Path) -> None:
+        output_file = Path(output_file)
+        save_dict = dict(
+            states=self.states,
+            actions=self.actions,
+            rewards=self.rewards,
+            dones=self.dones,
+            n_frames=self.n_frames,
+            idx=self.idx,
+        )
+        if self.positions is not None:
+            save_dict["positions"] = self.positions
+        if self.agent_ids is not None:
+            save_dict["agent_ids"] = self.agent_ids
+        np.savez_compressed(output_file, **save_dict)
+
+    @classmethod
+    def load(cls, input_file: str | Path) -> TransformerBuffer:
+        input_file = Path(input_file)
+        with np.load(input_file) as data:
+            states = data["states"]
+            actions = data["actions"]
+            rewards = data["rewards"]
+            dones = data["dones"]
+            n_frames = data["n_frames"]
+            idx = data["idx"]
+            size = len(states)
+            positions = data["positions"] if "positions" in data else None
+            agent_ids = data["agent_ids"] if "agent_ids" in data else None
+        output = cls(
+            capacity=len(actions), obs_shape=states.shape[1:], n_frames=n_frames
+        )
+        output.states = states
+        output.actions = actions
+        output.rewards = rewards
+        output.dones = dones
+        output.idx = idx
+        output.size = size
+        if positions is not None:
+            output.positions = positions
+        if agent_ids is not None:
+            output.agent_ids = agent_ids
+        return output
+
+    @classmethod
+    def combine(cls, buffers: list[TransformerBuffer]) -> TransformerBuffer:
+        """Combine multiple TransformerBuffers into one, tagging each with an agent_id.
+
+        Each buffer's data is tagged with agent_id = its index in the list.
+        Requires all buffers to have matching obs_shape and n_frames.
+
+        Args:
+            buffers: List of TransformerBuffers to combine.
+
+        Returns:
+            A new TransformerBuffer containing all data with agent_ids set.
+        """
+        assert len(buffers) > 0, "Must provide at least one buffer."
+        obs_shape = buffers[0].obs_shape
+        n_frames = buffers[0].n_frames
+        for buf in buffers:
+            assert (
+                buf.obs_shape == obs_shape
+            ), "All buffers must have matching obs_shape."
+            assert buf.n_frames == n_frames, "All buffers must have matching n_frames."
+
+        total_size = sum(buf.size for buf in buffers)
+        combined = cls(capacity=total_size, obs_shape=obs_shape, n_frames=n_frames)
+        combined.init_agent_ids()
+
+        has_positions = any(buf.positions is not None for buf in buffers)
+        if has_positions:
+            combined.init_positions()
+
+        offset = 0
+        for agent_id, buf in enumerate(buffers):
+            n = buf.size
+            combined.states[offset : offset + n] = buf.states[:n]
+            combined.actions[offset : offset + n] = buf.actions[:n]
+            combined.rewards[offset : offset + n] = buf.rewards[:n]
+            combined.dones[offset : offset + n] = buf.dones[:n]
+            combined.agent_ids[offset : offset + n] = agent_id
+            if has_positions and buf.positions is not None:
+                combined.positions[offset : offset + n] = buf.positions[:n]
+            offset += n
+
+        combined.idx = total_size
+        combined.size = total_size
+        return combined
+
     def sample(self, batch_size: int):
         """Sample a batch of experiences from the replay buffer.
 
@@ -208,8 +346,8 @@ class TransformerBuffer(Buffer):
             batch_size (int): The number of experiences to sample.
 
         Returns:
-            Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-                A tuple containing the states, actions, next states, next actions, dones, and invalid (meaning stacked frames cross episode boundary).
+            Tuple of (states, actions, next_actions, next_states, dones, valid, batch_agent_ids).
+            batch_agent_ids is None if agent_ids are not stored.
         """
         indices = np.random.choice(
             max(1, self.size - self.n_frames - 1), batch_size, replace=False
@@ -230,10 +368,29 @@ class TransformerBuffer(Buffer):
             next_actions, dtype=np.float32
         )  # cast it to be compatible with reward shape for now
 
-        return states, actions, next_actions, next_states, dones, valid
+        # Extract per-sample agent_ids if available
+        batch_agent_ids = None
+        if self.agent_ids is not None:
+            batch_agent_ids = self.agent_ids[indices[:, 0]]
+
+        return states, actions, next_actions, next_states, dones, valid, batch_agent_ids
 
 
 class SavedGames(Buffer):
     """A buffer used for saving games to and loading from disk."""
 
-    ...
+    def save(self, output_file: str | Path) -> None:
+        output_file = Path(output_file)
+        save_dict = dict(
+            states=self.states,
+            actions=self.actions,
+            rewards=self.rewards,
+            dones=self.dones,
+            n_frames=self.n_frames,
+            idx=self.idx,
+        )
+        if hasattr(self, "positions") and self.positions is not None:
+            save_dict["positions"] = self.positions
+        if hasattr(self, "agent_ids") and self.agent_ids is not None:
+            save_dict["agent_ids"] = self.agent_ids
+        np.savez_compressed(output_file, **save_dict)
