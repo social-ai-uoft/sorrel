@@ -1,12 +1,10 @@
 import os
-import threading
 from abc import abstractmethod
 from typing import Sequence
 
 import numpy as np
 
 from sorrel.buffers import Buffer
-from sorrel.models.policy_snapshot import PolicySnapshot
 
 
 class BaseModel:
@@ -24,11 +22,6 @@ class BaseModel:
     action_space: int
     memory: Buffer
     epsilon: float
-    _lock: threading.RLock
-    _version: int
-    _snapshot_cache: PolicySnapshot | None
-    _snapshot_version: int
-    _snapshot_rebuild_count: int
 
     def __init__(
         self,
@@ -45,19 +38,6 @@ class BaseModel:
         )
         self.memory = Buffer(capacity=memory_size, obs_shape=_obs_for_input)
         self.epsilon = epsilon
-        self._ensure_threadsafe_state()
-
-    def _ensure_threadsafe_state(self) -> None:
-        if not hasattr(self, "_lock"):
-            self._lock = threading.RLock()
-        if not hasattr(self, "_version"):
-            self._version = 0
-        if not hasattr(self, "_snapshot_cache"):
-            self._snapshot_cache = None
-        if not hasattr(self, "_snapshot_version"):
-            self._snapshot_version = -1
-        if not hasattr(self, "_snapshot_rebuild_count"):
-            self._snapshot_rebuild_count = 0
 
     @abstractmethod
     def take_action(self, state) -> int:
@@ -79,86 +59,6 @@ class BaseModel:
             The loss value.
         """
         return np.array(0.0)
-
-    def threadsafe_take_action(self, *args, **kwargs):
-        self._ensure_threadsafe_state()
-        with self._lock:
-            return self.take_action(*args, **kwargs)
-
-    def threadsafe_train_step(self, *args, **kwargs):
-        self._ensure_threadsafe_state()
-        with self._lock:
-            result = self.train_step(*args, **kwargs)
-            self._version += 1
-            return result
-
-    def threadsafe_start_epoch_action(self, *args, **kwargs):
-        self._ensure_threadsafe_state()
-        with self._lock:
-            return self.start_epoch_action(*args, **kwargs)
-
-    def threadsafe_end_epoch_action(self, *args, **kwargs):
-        self._ensure_threadsafe_state()
-        with self._lock:
-            return self.end_epoch_action(*args, **kwargs)
-
-    def add_experience(self, *args, **kwargs) -> None:
-        self._ensure_threadsafe_state()
-        with self._lock:
-            if hasattr(self, "memory"):
-                self.memory.add(*args, **kwargs)
-
-    def sample_experiences(self, *args, **kwargs):
-        self._ensure_threadsafe_state()
-        with self._lock:
-            if not hasattr(self, "memory"):
-                return None
-            return self.memory.sample(*args, **kwargs)
-
-    def _build_snapshot_locked(self):
-        """Build a snapshot policy while holding ``self._lock``."""
-        return self
-
-    def get_policy_snapshot(self) -> PolicySnapshot:
-        self._ensure_threadsafe_state()
-
-        # Fast path: avoid waiting on the learner lock when a valid cached snapshot exists.
-        snapshot = self._snapshot_cache
-        if snapshot is not None and snapshot.version == self._version:
-            return snapshot
-
-        # If a stale snapshot exists and training currently owns the lock, continue using
-        # the stale snapshot to keep actor inference non-blocking.
-        if snapshot is not None and not self._lock.acquire(blocking=False):
-            return snapshot
-
-        if snapshot is None:
-            with self._lock:
-                return self._refresh_snapshot_locked()
-
-        try:
-            return self._refresh_snapshot_locked()
-        finally:
-            self._lock.release()
-
-    def _refresh_snapshot_locked(self) -> PolicySnapshot:
-        if self._snapshot_cache is not None and self._snapshot_version == self._version:
-            return self._snapshot_cache
-
-        snapshot = PolicySnapshot(
-            policy=self._build_snapshot_locked(),
-            version=self._version,
-        )
-        self._snapshot_cache = snapshot
-        self._snapshot_version = self._version
-        self._snapshot_rebuild_count += 1
-        return snapshot
-
-    def get_snapshot_rebuild_count(self) -> int:
-        """Return how many times a new snapshot object has been built."""
-        self._ensure_threadsafe_state()
-        with self._lock:
-            return self._snapshot_rebuild_count
 
     def reset(self):
         """Reset any relevant model parameters or properties that will be reset at the

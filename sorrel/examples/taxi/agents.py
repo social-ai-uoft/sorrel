@@ -31,7 +31,7 @@ class TaxiAgent(Agent[TaxiWorld]):
 
         model_input = stacked_states.reshape(1, -1)
 
-        action = self.model_take_action(model_input)
+        action = self.model.take_action(model_input)
 
         return action
 

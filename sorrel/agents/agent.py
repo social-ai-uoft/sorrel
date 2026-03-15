@@ -120,17 +120,20 @@ class Agent[W: Gridworld](Entity[W]):
             reward (float): the reward received by the agent.
             done (bool): whether the episode terminated after this experience.
         """
-        self.model.add_experience(state, action, reward, done)
+        if getattr(self.model, "use_threadsafe_model_api", False):
+            self.model.add_experience(state, action, reward, done)
+            return
+        self.model.memory.add(state, action, reward, done)
 
     def model_take_action(self, state: np.ndarray):
-        """Take an action using a thread-safe model entrypoint when available."""
+        """Take an action through optional threadsafe/snapshot model APIs."""
         take_action_from_policy = getattr(self.model, "take_action_from_policy", None)
-        if callable(take_action_from_policy) and hasattr(
-            self.model, "get_policy_snapshot"
+        if callable(take_action_from_policy) and getattr(
+            self.model, "use_policy_snapshot", False
         ):
             snapshot = self.model.get_policy_snapshot()
             return take_action_from_policy(state, snapshot.policy)
-        if hasattr(self.model, "threadsafe_take_action"):
+        if getattr(self.model, "use_threadsafe_model_api", False):
             return self.model.threadsafe_take_action(state)
         return self.model.take_action(state)
 

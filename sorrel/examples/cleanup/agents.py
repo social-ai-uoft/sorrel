@@ -86,7 +86,7 @@ class CleanupAgent(MovingAgent[CleanupWorld]):
         # Flatten the model input
         model_input = stacked_states.reshape(1, -1)
         # Get model output
-        model_output = self.model_take_action(model_input)
+        model_output = self.model.take_action(model_input)
 
         return model_output
 

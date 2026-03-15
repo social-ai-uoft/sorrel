@@ -4,7 +4,6 @@ import numpy as np
 import torch
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.environment import Environment
 
 # imports from our example
 from sorrel.examples.treasurehunt_threadsafe.agents import TreasurehuntAgent
@@ -12,21 +11,22 @@ from sorrel.examples.treasurehunt_threadsafe.entities import EmptyEntity, Sand, 
 from sorrel.examples.treasurehunt_threadsafe.world import TreasurehuntWorld
 
 # sorrel imports
-from sorrel.models.pytorch import PyTorchIQN
+from sorrel.models.pytorch.iqn_threadsafe import ThreadsafePyTorchIQN
 from sorrel.observation.observation_spec import OneHotObservationSpec
+from sorrel.threadsafe.environment import ThreadsafeEnvironment
 
 # end imports
 
 
 # begin treasurehunt environment
-class TreasurehuntEnv(Environment[TreasurehuntWorld]):
+class TreasurehuntEnv(ThreadsafeEnvironment[TreasurehuntWorld]):
     """The experiment for treasurehunt."""
 
     def __init__(
         self,
         world: TreasurehuntWorld,
         config: dict,
-        shared_model: PyTorchIQN | None = None,
+        shared_model: ThreadsafePyTorchIQN | None = None,
     ) -> None:
         self.shared_model = shared_model
         super().__init__(world, config)
@@ -67,7 +67,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
 
             # Create a single shared model for all agents.
             if shared_model is None:
-                shared_model = PyTorchIQN(
+                shared_model = ThreadsafePyTorchIQN(
                     input_size=observation_spec.input_size,
                     action_space=action_spec.n_actions,
                     layer_size=250,

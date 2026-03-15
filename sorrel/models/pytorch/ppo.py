@@ -40,9 +40,8 @@ class RolloutBuffer(Buffer):
         self.log_probs = np.zeros(capacity, dtype=np.float32)
 
     def clear(self):
-        with self._lock:
-            super().clear()
-            self.log_probs = np.zeros(self.capacity, dtype=np.float32)
+        super().clear()
+        self.log_probs = np.zeros(self.capacity, dtype=np.float32)
 
     def add(self, obs, action, reward, done):
         """Add an experience to the replay buffer.
@@ -56,14 +55,13 @@ class RolloutBuffer(Buffer):
         # Unpack action tuple
         action_, log_prob = action
 
-        with self._lock:
-            self.states[self.idx] = obs
-            self.actions[self.idx] = action_
-            self.log_probs[self.idx] = log_prob
-            self.rewards[self.idx] = reward
-            self.dones[self.idx] = done
-            self.idx = (self.idx + 1) % self.capacity
-            self.size = min(self.size + 1, self.capacity)
+        self.states[self.idx] = obs
+        self.actions[self.idx] = action_
+        self.log_probs[self.idx] = log_prob
+        self.rewards[self.idx] = reward
+        self.dones[self.idx] = done
+        self.idx = (self.idx + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
 
 
 class ActorCritic(nn.Module):
@@ -209,14 +207,12 @@ class PyTorchPPO(PyTorchModel):
 
         This should truncate the memory based on the length of the game.
         """
-        assert isinstance(self.memory, RolloutBuffer), "PPO supports only RolloutBuffer"
-        with self.memory._lock:
-            index_to_truncate = np.nonzero(self.memory.dones)[0][0]
-            self.memory.states = self.memory.states[0 : index_to_truncate + 1]
-            self.memory.actions = self.memory.actions[0 : index_to_truncate + 1]
-            self.memory.log_probs = self.memory.log_probs[0 : index_to_truncate + 1]
-            self.memory.rewards = self.memory.rewards[0 : index_to_truncate + 1]
-            self.memory.dones = self.memory.dones[0 : index_to_truncate + 1]
+        index_to_truncate = np.nonzero(self.memory.dones)[0][0]
+        self.memory.states = self.memory.states[0 : index_to_truncate + 1]
+        self.memory.actions = self.memory.actions[0 : index_to_truncate + 1]
+        self.memory.log_probs = self.memory.log_probs[0 : index_to_truncate + 1]  # type: ignore
+        self.memory.rewards = self.memory.rewards[0 : index_to_truncate + 1]
+        self.memory.dones = self.memory.dones[0 : index_to_truncate + 1]
 
     def take_action(self, state: np.ndarray) -> tuple:  # type: ignore
         with torch.no_grad():

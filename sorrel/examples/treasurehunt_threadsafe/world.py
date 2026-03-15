@@ -15,7 +15,7 @@ class TreasurehuntWorld(Gridworld):
 
     def __init__(self, config: dict | DictConfig, default_entity):
         layers = 2
-        if type(config) != DictConfig:
+        if not isinstance(config, DictConfig):
             config = OmegaConf.create(config)
         super().__init__(
             config.world.height, config.world.width, layers, default_entity
