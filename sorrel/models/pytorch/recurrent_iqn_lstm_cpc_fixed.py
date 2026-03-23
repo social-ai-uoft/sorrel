@@ -96,6 +96,16 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         cpc_sample_size: int = 64,
         cpc_start_epoch: int = 1,
         cpc_max_sequence_length: int = 500,
+        # Next-state prediction parameters
+        use_next_state_pred: bool = False,
+        next_state_pred_weight: float = 3.0,
+        next_state_pred_intermediate_size: Optional[int] = None,
+        next_state_pred_activation: str = "relu",
+        # Agent action prediction (Mode B)
+        use_agent_action_pred: bool = False,
+        agent_action_pred_weight: float = 1.0,
+        num_agent_slots: int = 16,
+        agent_action_pred_intermediate_size: Optional[int] = None,
     ) -> None:
         """
         Initialize Recurrent IQN with optional CPC.
@@ -190,6 +200,44 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         else:
             self.cpc_module = None
 
+        # Next-state prediction setup
+        self.use_next_state_pred = use_next_state_pred
+        self.next_state_pred_weight = next_state_pred_weight if use_next_state_pred else 0.0
+        if use_next_state_pred:
+            from sorrel.models.pytorch.auxiliary import create_next_state_predictor
+            self.next_state_predictor, self.next_state_adapter = create_next_state_predictor(
+                hidden_size=self.hidden_size,
+                action_space=action_space,
+                obs_shape=(self._obs_dim,),
+                device=device,
+                model_type="iqn",
+                intermediate_size=next_state_pred_intermediate_size,
+                activation=next_state_pred_activation,
+            )
+        else:
+            self.next_state_predictor = None
+            self.next_state_adapter = None
+
+        # Agent action prediction (Mode B)
+        self.use_agent_action_pred = use_agent_action_pred
+        self.agent_action_pred_weight = agent_action_pred_weight if use_agent_action_pred else 0.0
+        if use_agent_action_pred:
+            from sorrel.models.pytorch.auxiliary.agent_action_prediction import (
+                AgentActionPredictionModule,
+                IQNAgentActionAdapter,
+            )
+            self.agent_action_predictor = AgentActionPredictionModule(
+                hidden_size=self.hidden_size,
+                own_action_space=action_space,
+                num_agent_slots=num_agent_slots,
+                intermediate_size=agent_action_pred_intermediate_size,
+                device=device,
+            )
+            self.agent_action_adapter = IQNAgentActionAdapter(self.agent_action_predictor)
+        else:
+            self.agent_action_predictor = None
+            self.agent_action_adapter = None
+
         # CURL-style: Single optimizer for ALL parameters
         # This ensures consistent optimizer states and proper multi-task learning
         # Both IQN and CPC update encoder+LSTM together
@@ -201,7 +249,11 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         )
         if use_cpc:
             all_params += list(self.cpc_module.parameters())
-        
+        if use_next_state_pred:
+            all_params += list(self.next_state_predictor.parameters())
+        if use_agent_action_pred:
+            all_params += list(self.agent_action_predictor.parameters())
+
         self.optimizer = torch.optim.Adam(all_params, lr=LR)
         
         # Update base model's optimizer reference
@@ -607,12 +659,21 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
             logger.debug(f"Insufficient sequences for training (need {batch_size} sequences of length {seq_len})")
             return np.array(0.0, dtype=np.float32)
 
-        states_seq, actions_seq, rewards_seq, dones_seq = sample  # numpy arrays
+        if len(sample) == 6:
+            states_seq, actions_seq, rewards_seq, dones_seq, vis_masks_seq, other_acts_seq = sample
+        else:
+            states_seq, actions_seq, rewards_seq, dones_seq = sample
+            vis_masks_seq, other_acts_seq = None, None
 
         states_t = torch.from_numpy(states_seq).float().to(self.device)     # (B, L, obs_dim)
         actions_t = torch.from_numpy(actions_seq).long().to(self.device)    # (B, L)
         rewards_t = torch.from_numpy(rewards_seq).float().to(self.device)   # (B, L)
         dones_t = torch.from_numpy(dones_seq).float().to(self.device)       # (B, L)
+        if vis_masks_seq is not None:
+            vis_masks_t = torch.from_numpy(vis_masks_seq).float().to(self.device)
+            other_acts_t = torch.from_numpy(other_acts_seq).long().to(self.device)
+        else:
+            vis_masks_t = other_acts_t = None
 
         B, L, obs_dim = states_t.shape
         if L != seq_len:
@@ -678,12 +739,42 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
 
         # === Compute CPC Loss ===
         cpc_loss = torch.tensor(0.0, device=self.device)
-        
+
         if self.use_cpc and self.current_epoch >= self.cpc_start_epoch:
             cpc_loss = self._compute_cpc_loss()
-        
+
+        # === Compute Next-State Prediction Loss ===
+        next_state_pred_loss = torch.tensor(0.0, device=self.device)
+        if self.use_next_state_pred and self.next_state_adapter is not None:
+            next_state_pred_loss = self.next_state_adapter.compute_auxiliary_loss(
+                states_unroll=states_unroll,
+                lstm_out=lstm_out,
+                actions_unroll=actions_t[:, burn_in : burn_in + unroll],
+            )
+
+        # === Compute Agent Action Prediction Loss (Mode B) ===
+        agent_action_pred_loss = torch.tensor(0.0, device=self.device)
+        if (
+            self.use_agent_action_pred
+            and self.agent_action_adapter is not None
+            and vis_masks_t is not None
+        ):
+            vis_masks_unroll = vis_masks_t[:, burn_in : burn_in + unroll + 1, :]
+            other_acts_unroll = other_acts_t[:, burn_in : burn_in + unroll + 1, :]
+            agent_action_pred_loss = self.agent_action_adapter.compute_auxiliary_loss(
+                lstm_out=lstm_out,
+                actions_unroll=actions_t[:, burn_in : burn_in + unroll],
+                vis_masks_unroll=vis_masks_unroll,
+                other_acts_unroll=other_acts_unroll,
+            )
+
         # === Combined Loss (CURL-style) ===
-        total_loss = iqn_loss + self.cpc_weight * cpc_loss
+        total_loss = (
+            iqn_loss
+            + self.cpc_weight * cpc_loss
+            + self.next_state_pred_weight * next_state_pred_loss
+            + self.agent_action_pred_weight * agent_action_pred_loss
+        )
         
         # === Single Backward Pass ===
         # Both IQN and CPC gradients flow to encoder+LSTM
@@ -708,6 +799,12 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         del h_burn, c_burn, h0, c0
         del actions_flat, rewards_flat, dones_flat
         del iqn_loss, cpc_loss, total_loss
+        if self.use_next_state_pred:
+            del next_state_pred_loss
+        if self.use_agent_action_pred:
+            if vis_masks_t is not None:
+                del vis_masks_t, other_acts_t
+            del agent_action_pred_loss
         # Only delete burn-in tensors if they were created (burn_in > 0)
         if burn_in > 0:
             del z_burn_flat, z_burn

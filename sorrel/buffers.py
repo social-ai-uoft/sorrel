@@ -233,7 +233,9 @@ class EpisodeBuffer:
             'states': [],
             'actions': [],
             'rewards': [],
-            'dones': []
+            'dones': [],
+            'visible_agent_masks': [],
+            'other_agent_actions': [],
         })
 
     def add(self, obs: np.ndarray, action: int, reward: float, done: bool) -> None:
@@ -283,6 +285,14 @@ class EpisodeBuffer:
 
     def __len__(self) -> int:
         return self.num_transitions
+
+    def append_auxiliary(self, visible_mask: np.ndarray, other_actions: np.ndarray) -> None:
+        """Append auxiliary data aligned with the most recent add() call (for agent action prediction)."""
+        if not self.episodes:
+            return
+        ep = self.episodes[-1]
+        ep['visible_agent_masks'].append(visible_mask.astype(np.float32))
+        ep['other_agent_actions'].append(other_actions.astype(np.int64))
 
     def _get_episode_and_index(self, flat_index: int) -> tuple[int, int]:
         """Convert a flat transition index into episode index and within-episode index.
@@ -583,26 +593,55 @@ class EpisodeBuffer:
         if len(valid_starts) < batch_size:
             return None
         
-        # Sample batch_size sequence starts
-        selected = np.random.choice(len(valid_starts), batch_size, replace=False)
-        
+        # Only include episodes that have aligned auxiliary data when we might return 6-tuple
+        has_auxiliary = False
+        num_slots = 0
+        for ep in self.episodes:
+            masks = ep.get('visible_agent_masks', [])
+            if len(masks) == len(ep['states']) and len(ep['states']) >= seq_len:
+                has_auxiliary = True
+                num_slots = masks[0].shape[0]
+                break
+        if has_auxiliary:
+            valid_starts = [
+                (ep_idx, start)
+                for ep_idx, ep in enumerate(self.episodes)
+                for start in range(max(0, len(ep['states']) - seq_len + 1))
+                if len(ep.get('visible_agent_masks', [])) == len(ep['states'])
+            ]
+            if len(valid_starts) < batch_size:
+                return None
+            selected = np.random.choice(len(valid_starts), batch_size, replace=False)
+        else:
+            selected = np.random.choice(len(valid_starts), batch_size, replace=False)
+
         # Prepare output arrays
         obs_dim = int(np.prod(self.obs_shape))
         states_seq = np.zeros((batch_size, seq_len, obs_dim), dtype=np.float32)
         actions_seq = np.zeros((batch_size, seq_len), dtype=np.int64)
         rewards_seq = np.zeros((batch_size, seq_len), dtype=np.float32)
         dones_seq = np.zeros((batch_size, seq_len), dtype=np.float32)
-        
+
+        if has_auxiliary:
+            vis_masks_seq = np.zeros((batch_size, seq_len, num_slots), dtype=np.float32)
+            other_acts_seq = np.zeros((batch_size, seq_len, num_slots), dtype=np.int64)
+        else:
+            vis_masks_seq = None
+            other_acts_seq = None
+
         # Fill arrays with sampled sequences
         for i, idx in enumerate(selected):
             ep_idx, start = valid_starts[idx]
             ep = self.episodes[ep_idx]
-            
-            # Extract sequence from episode
             end = start + seq_len
             states_seq[i] = np.array(ep['states'][start:end]).reshape(seq_len, obs_dim)
             actions_seq[i] = np.array(ep['actions'][start:end])
             rewards_seq[i] = np.array(ep['rewards'][start:end])
             dones_seq[i] = np.array(ep['dones'][start:end], dtype=np.float32)
-        
+            if has_auxiliary:
+                vis_masks_seq[i] = np.array(ep['visible_agent_masks'][start:end])
+                other_acts_seq[i] = np.array(ep['other_agent_actions'][start:end])
+
+        if has_auxiliary:
+            return states_seq, actions_seq, rewards_seq, dones_seq, vis_masks_seq, other_acts_seq
         return states_seq, actions_seq, rewards_seq, dones_seq

@@ -73,6 +73,15 @@ def create_config(
     cpc_sample_size: int = 64,  # NEW: Number of sequences to sample from memory bank for CPC training (ignored by standalone model, but used by refactored model)
     cpc_start_epoch: int = 1,  # NEW: Epoch to start CPC training (0 = start immediately, 1 = wait for memory bank)
     min_trajectory_length: int = 5,  # NEW: Minimum trajectory length to save for training (for standalone PPO LSTM CPC)
+    # Next-state prediction parameters (for iqn and ppo_lstm_cpc)
+    use_next_state_pred: bool = False,
+    next_state_pred_weight: float = 3.0,
+    next_state_pred_intermediate_size: Optional[int] = None,
+    next_state_pred_activation: str = "relu",
+    # Agent action prediction (Mode B)
+    use_agent_action_pred: bool = False,
+    agent_action_pred_weight: float = 1.0,
+    agent_action_pred_intermediate_size: Optional[int] = None,
     norm_enforcer_decay_rate: float = 0.995,  # NEW: Norm strength decay rate
     norm_enforcer_internalization_threshold: float = 5.0,  # NEW: Threshold for guilt penalties
     norm_enforcer_max_norm_strength: float = 10.0,  # NEW: Maximum norm strength
@@ -388,6 +397,15 @@ def create_config(
             "cpc_sample_size": cpc_sample_size if model_type == "ppo_lstm_cpc" else None,
             "cpc_start_epoch": cpc_start_epoch if model_type == "ppo_lstm_cpc" else None,
             "min_trajectory_length": min_trajectory_length if model_type == "ppo_lstm_cpc" else None,
+            # Next-state prediction (for iqn and ppo_lstm_cpc)
+            "use_next_state_pred": use_next_state_pred if model_type in ["iqn", "ppo_lstm_cpc"] else False,
+            "next_state_pred_weight": next_state_pred_weight if model_type in ["iqn", "ppo_lstm_cpc"] else None,
+            "next_state_pred_intermediate_size": next_state_pred_intermediate_size if model_type in ["iqn", "ppo_lstm_cpc"] else None,
+            "next_state_pred_activation": next_state_pred_activation if model_type in ["iqn", "ppo_lstm_cpc"] else None,
+            "use_agent_action_pred": use_agent_action_pred if model_type in ["iqn", "ppo_lstm_cpc"] else False,
+            "agent_action_pred_weight": agent_action_pred_weight if model_type in ["iqn", "ppo_lstm_cpc"] else None,
+            "num_agent_slots": num_agents if model_type in ["iqn", "ppo_lstm_cpc"] else None,
+            "agent_action_pred_intermediate_size": agent_action_pred_intermediate_size if model_type in ["iqn", "ppo_lstm_cpc"] else None,
             # IQN factored action space parameters
             "iqn_use_factored_actions": iqn_use_factored_actions if model_type == "iqn" else False,
             "iqn_action_dims": iqn_action_dims if model_type == "iqn" else None,
