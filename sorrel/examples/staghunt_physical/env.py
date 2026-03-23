@@ -41,6 +41,7 @@ from sorrel.examples.staghunt_physical.entities import (
 )
 from sorrel.examples.staghunt_physical.world import StagHuntWorld
 from sorrel.models.pytorch import PyTorchIQN
+from sorrel.models.pytorch.recurrent_ppo_lstm_cpc import RecurrentPPOLSTMCPC
 
 
 class StagHuntEnv(Environment[StagHuntWorld]):
@@ -154,6 +155,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         agent_id_vector_dim = world_cfg.get("agent_id_vector_dim", 8)
         agent_id_encoding_mode = world_cfg.get("agent_id_encoding_mode", "random_vector")
         use_agent_id_in_standard_obs = world_cfg.get("use_agent_id_in_standard_obs", True)
+        agent_id_shuffle_seed = world_cfg.get("agent_id_shuffle_seed", 0)
         
         # Validate: use_agent_id_in_standard_obs only meaningful when standard_obs is enabled
         if not standard_obs and not use_agent_id_in_standard_obs:
@@ -207,23 +209,25 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 agent_id_vector_dim=agent_id_vector_dim,  # NEW: from config["world"]["agent_id_vector_dim"]
                 agent_id_encoding_mode=agent_id_encoding_mode,  # NEW: from config["world"]["agent_id_encoding_mode"]
                 use_agent_id_in_standard_obs=use_agent_id_in_standard_obs,  # NEW: from config["world"]["use_agent_id_in_standard_obs"]
+                agent_id_shuffle_seed=agent_id_shuffle_seed,  # optional: shuffle agent ID assignment (shared by all modes)
+                power_mode=world_cfg.get("power_mode", False),
+                observe_own_power_only=world_cfg.get("observe_own_power_only", False),
+                aggression_enabled=world_cfg.get("aggression_enabled", False),
             )
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size
 
-            # action spec: nine discrete actions (PUNISH removed)
-            action_spec = ActionSpec(
-                [
-                    # "NOOP",
-                    "FORWARD",
-                    "BACKWARD",
-                    "STEP_LEFT",
-                    "STEP_RIGHT",
-                    # "TURN_LEFT",
-                    # "TURN_RIGHT",
-                    # "PUNISH",
-                    "ATTACK"]
-            )
+            # action spec: movement + ATTACK, optionally PUNISH (controlled by include_punish_action)
+            base_actions = [
+                "FORWARD",
+                "BACKWARD",
+                "STEP_LEFT",
+                "STEP_RIGHT",
+                "ATTACK",
+            ]
+            if world_cfg.get("include_punish_action", False):
+                base_actions.append("PUNISH")
+            action_spec = ActionSpec(base_actions)
             # Get device from config, with auto-detection support
             device_config = model_cfg.get("device", "cpu")
             if device_config == "auto":
@@ -236,27 +240,70 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     device = "cpu"
             else:
                 device = device_config
-            
-            # create a simple IQN model; hyperparameters can be tuned via config
-            model = PyTorchIQN(
-                input_size=[full_input_dim],
-                action_space=action_spec.n_actions,
-                layer_size=int(model_cfg.get("layer_size", 250)),
-                epsilon=float(model_cfg.get("epsilon", 0.7)),
-                epsilon_min=float(model_cfg.get("epsilon_min", 0.1)),
-                device=device,
-                seed=torch.random.seed(),
-                n_frames=int(model_cfg.get("n_frames", 5)),
-                n_step=int(model_cfg.get("n_step", 3)),
-                sync_freq=int(model_cfg.get("sync_freq", 200)),
-                model_update_freq=int(model_cfg.get("model_update_freq", 4)),
-                batch_size=int(model_cfg.get("batch_size", 64)),
-                memory_size=int(model_cfg.get("memory_size", 1024)),
-                LR=float(model_cfg.get("LR", 0.00025)),
-                TAU=float(model_cfg.get("TAU", 0.001)),
-                GAMMA=float(model_cfg.get("GAMMA", 0.99)),
-                n_quantiles=int(model_cfg.get("n_quantiles", 12)),
-            )
+
+            model_type = model_cfg.get("model_type", "iqn")
+            ppo_cfg = model_cfg.get("ppo_cpc", {})
+
+            if model_type == "iqn":
+                # create a simple IQN model; hyperparameters can be tuned via config
+                model = PyTorchIQN(
+                    input_size=[full_input_dim],
+                    action_space=action_spec.n_actions,
+                    layer_size=int(model_cfg.get("layer_size", 250)),
+                    epsilon=float(model_cfg.get("epsilon", 0.7)),
+                    epsilon_min=float(model_cfg.get("epsilon_min", 0.1)),
+                    device=device,
+                    seed=torch.random.seed(),
+                    n_frames=int(model_cfg.get("n_frames", 5)),
+                    n_step=int(model_cfg.get("n_step", 3)),
+                    sync_freq=int(model_cfg.get("sync_freq", 200)),
+                    model_update_freq=int(model_cfg.get("model_update_freq", 4)),
+                    batch_size=int(model_cfg.get("batch_size", 64)),
+                    memory_size=int(model_cfg.get("memory_size", 1024)),
+                    LR=float(model_cfg.get("LR", 0.00025)),
+                    TAU=float(model_cfg.get("TAU", 0.001)),
+                    GAMMA=float(model_cfg.get("GAMMA", 0.99)),
+                    n_quantiles=int(model_cfg.get("n_quantiles", 12)),
+                )
+            elif model_type == "ppo_lstm_cpc":
+                # PPO LSTM with CPC (same module as state_punishment); defaults from ppo_cfg or model_cfg
+                def _get(key: str, default: Any) -> Any:
+                    return ppo_cfg.get(key, model_cfg.get(key, default))
+                model = RecurrentPPOLSTMCPC(
+                    input_size=(full_input_dim,),
+                    action_space=action_spec.n_actions,
+                    layer_size=int(_get("layer_size", 250)),
+                    epsilon=float(_get("epsilon", 0.0)),
+                    epsilon_min=float(_get("epsilon_min", 0.05)),
+                    device=device,
+                    seed=torch.random.seed(),
+                    obs_type="flattened",
+                    obs_dim=None,
+                    gamma=float(_get("GAMMA", 0.99)),
+                    lr=float(_get("LR", 3e-4)),
+                    clip_param=float(_get("ppo_clip_param", 0.2)),
+                    K_epochs=int(_get("ppo_k_epochs", 4)),
+                    batch_size=int(_get("batch_size", 64)),
+                    entropy_start=float(_get("ppo_entropy_start", 0.01)),
+                    entropy_end=float(_get("ppo_entropy_end", 0.01)),
+                    entropy_decay_steps=int(_get("ppo_entropy_decay_steps", 0)),
+                    max_grad_norm=float(_get("ppo_max_grad_norm", 0.5)),
+                    gae_lambda=float(_get("ppo_gae_lambda", 0.95)),
+                    rollout_length=int(_get("ppo_rollout_length", 100)),
+                    hidden_size=int(_get("hidden_size", 256)),
+                    use_cnn=False,
+                    use_factored_actions=False,
+                    action_dims=None,
+                    use_cpc=bool(_get("use_cpc", False)),
+                    cpc_horizon=int(_get("cpc_horizon", 30)),
+                    cpc_weight=float(_get("cpc_weight", 1.0)),
+                    cpc_projection_dim=model_cfg.get("cpc_projection_dim") or ppo_cfg.get("cpc_projection_dim"),
+                    cpc_temperature=float(_get("cpc_temperature", 0.07)),
+                    cpc_memory_bank_size=0,
+                    cpc_start_epoch=int(_get("cpc_start_epoch", 1)),
+                )
+            else:
+                raise ValueError(f"Unknown model_type: {model_type!r}. Use 'iqn' or 'ppo_lstm_cpc'.")
 
             # Get agent kind and attributes from config
             assigned_kind = agent_kind_mapping.get(agent_id, None)
@@ -376,44 +423,59 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 world.add(index, Empty())
 
         # randomly populate resources on the dynamic layer according to density
+        # Shuffle so that when caps apply, resources are spread across the grid rather than concentrated in first rows
+        random.shuffle(world.resource_spawn_points)
+        # When resource_cap_mode == "specified", initial placement is constrained by max_stags, max_hares, max_resources
+        placed_stags = 0
+        placed_hares = 0
+        use_cap = world.resource_cap_mode == "specified"
         for y, x, layer in world.resource_spawn_points:
             # dynamic layer coordinates
             dynamic = (y, x, world.dynamic_layer)
+            total_placed = placed_stags + placed_hares
             # choose resource type based on stag_probability parameter
             if np.random.random() < world.stag_probability:
                 resource_type = "stag"
-                # Step 3: Apply stag spawn success rate filter
-                if getattr(world, 'dynamic_resource_density_enabled', False):
-                    if np.random.random() < world.current_stag_rate:
-                        # Spawn success - actually place the stag
+                stag_cap_ok = not use_cap or (world.max_stags is None or placed_stags < world.max_stags)
+                total_cap_ok = not use_cap or (world.max_resources is None or total_placed < world.max_resources)
+                if not (stag_cap_ok and total_cap_ok):
+                    world.add(dynamic, Empty())
+                else:
+                    # Step 3: Apply stag spawn success rate filter
+                    if getattr(world, 'dynamic_resource_density_enabled', False):
+                        if np.random.random() < world.current_stag_rate:
+                            world.add(
+                                dynamic, StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown)
+                            )
+                            placed_stags += 1
+                        else:
+                            world.add(dynamic, Empty())
+                    else:
                         world.add(
                             dynamic, StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown)
                         )
-                    else:
-                        # Filtered out - place Empty instead
-                        world.add(dynamic, Empty())
-                else:
-                    # Feature disabled - always spawn (backward compatible)
-                    world.add(
-                        dynamic, StagResource(world.stag_reward, world.stag_health, regeneration_cooldown=world.stag_regeneration_cooldown)
-                    )
+                        placed_stags += 1
             else:
                 resource_type = "hare"
-                # Step 3: Apply hare spawn success rate filter
-                if getattr(world, 'dynamic_resource_density_enabled', False):
-                    if np.random.random() < world.current_hare_rate:
-                        # Spawn success - actually place the hare
+                hare_cap_ok = not use_cap or (world.max_hares is None or placed_hares < world.max_hares)
+                total_cap_ok = not use_cap or (world.max_resources is None or total_placed < world.max_resources)
+                if not (hare_cap_ok and total_cap_ok):
+                    world.add(dynamic, Empty())
+                else:
+                    # Step 3: Apply hare spawn success rate filter
+                    if getattr(world, 'dynamic_resource_density_enabled', False):
+                        if np.random.random() < world.current_hare_rate:
+                            world.add(
+                                dynamic, HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown)
+                            )
+                            placed_hares += 1
+                        else:
+                            world.add(dynamic, Empty())
+                    else:
                         world.add(
                             dynamic, HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown)
                         )
-                    else:
-                        # Filtered out - place Empty instead
-                        world.add(dynamic, Empty())
-                else:
-                    # Feature disabled - always spawn (backward compatible)
-                    world.add(
-                        dynamic, HareResource(world.hare_reward, world.hare_health, regeneration_cooldown=world.hare_regeneration_cooldown)
-                    )
+                        placed_hares += 1
 
             # Update the Sand entity below to remember this resource type
             # Skip this update in random_resource_respawn mode (resource_type should stay None for random respawns)
@@ -439,13 +501,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             world_cfg = self.config.get("world", {})
         
         num_agents_to_spawn = world_cfg.get("num_agents_to_spawn", len(self.agents))
-        # Ensure num_agents_to_spawn doesn't exceed total agents
-        num_agents_to_spawn = min(num_agents_to_spawn, len(self.agents))
-        
-        # Randomly select which agents to spawn this epoch
-        self.spawned_agent_ids = sorted(random.sample(range(len(self.agents)), num_agents_to_spawn))
-        
-        # choose initial agent positions
+
+        # choose initial agent positions (need valid_spawn_locations when random_agent_spawning to cap correctly)
         if world.random_agent_spawning:
             # Find all valid spawn locations (not walls, not resources, not fixed spawn points)
             valid_spawn_locations = []
@@ -460,7 +517,25 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                             terrain_entity = world.observe(terrain_loc)
                             if hasattr(terrain_entity, 'passable') and terrain_entity.passable:
                                 valid_spawn_locations.append(dynamic)
-            
+
+            # Cap by total agents and by number of valid random locations (fallback uses fixed spawn points)
+            max_locations = max(len(valid_spawn_locations), len(world.agent_spawn_points))
+            num_agents_to_spawn = min(num_agents_to_spawn, len(self.agents), max_locations)
+        else:
+            # Fixed spawn points only: cap by total agents and available spawn points
+            num_agents_to_spawn = min(num_agents_to_spawn, len(self.agents), len(world.agent_spawn_points))
+
+        if num_agents_to_spawn <= 0:
+            raise ValueError(
+                "Cannot spawn agents: num_agents_to_spawn would be 0. "
+                "Check that world has enough spawn locations (random_agent_spawning=True: need valid cells; else need agent_spawn_points)."
+            )
+
+        # Randomly select which agents to spawn this epoch
+        self.spawned_agent_ids = sorted(random.sample(range(len(self.agents)), num_agents_to_spawn))
+
+        # choose initial agent positions
+        if world.random_agent_spawning:
             # Randomly select spawn locations for the selected agents
             if len(valid_spawn_locations) < num_agents_to_spawn:
                 # Fallback: use agent_spawn_points if not enough valid locations
@@ -852,15 +927,15 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         for loc, entity in non_empty_entities:
             entity.transition(self.world)
         
-        # Handle agent transitions - SKIP removed agents AND non-spawned agents
-        # Collect spawned agents that can act, then shuffle for random execution order
+        # Handle agent transitions - include ALL spawned agents (frozen agents still get a turn;
+        # they observe, policy chooses action, act() no-ops so memory/buffer is updated)
         agents_to_execute = [
             agent for agent in self.agents
-            if agent.agent_id in self.spawned_agent_ids and agent.can_act()
+            if agent.agent_id in self.spawned_agent_ids
         ]
         random.shuffle(agents_to_execute)
         
-        # Execute agents in randomized order
+        # Execute agents in randomized order (frozen agents run act() which returns 0.0 and has no effect)
         for agent in agents_to_execute:
             agent.transition(self.world)
         
@@ -885,67 +960,16 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         self.agents = agents
 
     def update_agent_states(self) -> None:
-        """Update all agent removal and respawn states."""
+        """Update all agent freeze states (decrement freeze_timer, restore health on thaw)."""
         for agent in self.agents:
             # Skip agents that are not spawned this epoch
             if agent.agent_id not in self.spawned_agent_ids:
                 continue
-            if hasattr(agent, "update_removal_state"):
-                agent.update_removal_state()
+            if hasattr(agent, "update_freeze_state"):
+                agent.update_freeze_state()
+            if getattr(self.world, "aggression_enabled", False) and hasattr(agent, "update_aggression"):
+                agent.update_aggression(self.world)
 
-                # Handle removing agent from world when it becomes removed
-                if (
-                    hasattr(agent, "is_removed")
-                    and agent.is_removed
-                    and hasattr(agent, "respawn_timer")
-                    and agent.respawn_timer > 0
-                    and hasattr(agent, "_removed_from_world")
-                    and not agent._removed_from_world
-                    and agent.location is not None
-                ):
-                    # Remove agent from world (only once)
-                    self.world.remove(agent.location)
-                    agent._removed_from_world = True
-                    agent.location = None
-
-                # Handle respawning when timer expires
-                if (
-                    hasattr(agent, "is_removed")
-                    and agent.is_removed
-                    and hasattr(agent, "respawn_timer")
-                    and agent.respawn_timer == 0
-                ):
-                    self.respawn_agent(agent)
-
-    def respawn_agent(self, agent) -> None:
-        """Respawn an agent at a random spawn point."""
-        if not hasattr(agent, "is_removed") or not agent.is_removed:
-            return
-
-        # Find unoccupied spawn points
-        unoccupied_spawns = []
-        for spawn_point in self.world.agent_spawn_points:
-            y, x, z = spawn_point
-            # check if there's an agent at this spawn point (layer 1)
-            entity_at_spawn = self.world.observe((y, x, 1))
-            if entity_at_spawn.kind == "Empty":
-                unoccupied_spawns.append(spawn_point)
-
-        # if no unoccupied spawns, use all spawns (fallback)
-        if not unoccupied_spawns:
-            unoccupied_spawns = self.world.agent_spawn_points
-
-        # choose a random spawn point
-        new_loc = random.choice(unoccupied_spawns)
-
-        # Reset agent state
-        agent.reset()
-
-        # Reset removal flag
-        agent._removed_from_world = False
-
-        # Place agent at new location
-        self.world.add(new_loc, agent)
     
     def collect_metrics_for_step(self) -> None:
         """Collect metrics for the current step."""
@@ -957,7 +981,17 @@ class StagHuntEnv(Environment[StagHuntWorld]):
     def log_epoch_metrics(self, epoch: int, writer) -> None:
         """Log metrics for the current epoch."""
         if hasattr(self, 'metrics_collector') and self.metrics_collector:
-            self.metrics_collector.log_epoch_metrics(self.agents, epoch, writer)
+            area = float(self.world.height * self.world.width) if hasattr(self, 'world') and self.world is not None else None
+            if hasattr(self, 'world') and self.world is not None:
+                stag_count = self.world.count_stags()
+                hare_count = self.world.count_hares()
+                total_resources = self.world.count_resources()
+            else:
+                stag_count = hare_count = total_resources = 0
+            self.metrics_collector.log_epoch_metrics(
+                self.agents, epoch, writer, area=area,
+                stag_count=stag_count, hare_count=hare_count, total_resource_count=total_resources,
+            )
 
 
 def export_agent_identity_codes(
@@ -1118,7 +1152,7 @@ def export_agent_identity_codes(
                         embedding_size = getattr(obs_spec, 'embedding_size', 3)
                         
                         visual_field_size = features_per_cell * (2 * vision_radius + 1) * (2 * vision_radius + 1)
-                        extra_features_size = 4  # inv_stag, inv_hare, ready_flag, interaction_reward_flag
+                        extra_features_size = 4  # inv_stag, inv_hare, own_health, interaction_reward_flag
                         pos_code_size = embedding_size * embedding_size
                         
                         f.write(f"  Observation Breakdown:\n")
@@ -1129,7 +1163,7 @@ def export_agent_identity_codes(
                         f.write(f"        Structure: [all_cells_feature0, all_cells_feature1, ..., all_cells_feature{features_per_cell-1}]\n")
                         f.write(f"        Features for the same cell are NOT consecutive - they're spread across the vector\n")
                         f.write(f"        Consecutive values indicate: multiple cells have the same feature active\n")
-                        f.write(f"    - Extra features: features {visual_field_size}-{visual_field_size+extra_features_size-1} ({extra_features_size} values: inv_stag, inv_hare, ready_flag, interaction_reward_flag)\n")
+                        f.write(f"    - Extra features: features {visual_field_size}-{visual_field_size+extra_features_size-1} ({extra_features_size} values: inv_stag, inv_hare, own_health, interaction_reward_flag)\n")
                         f.write(f"    - Positional embedding: features {visual_field_size+extra_features_size}-{visual_field_size+extra_features_size+pos_code_size-1} ({pos_code_size} values)\n")
                         
                         # Add feature index mapping for clarity
@@ -1202,6 +1236,8 @@ def export_agent_identity_codes(
                 encoding_mode = getattr(obs_spec, 'agent_id_encoding_mode', 'random_vector')
                 if encoding_mode == "onehot":
                     f.write("Agent Identity Vectors (One-Hot Encoding)\n")
+                elif encoding_mode == "binary":
+                    f.write("Agent Identity Vectors (Binary Encoding)\n")
                 else:
                     f.write("Agent Identity Vectors (Fixed Random Vectors)\n")
             f.write("=" * 50 + "\n")

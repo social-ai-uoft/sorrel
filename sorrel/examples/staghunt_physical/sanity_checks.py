@@ -749,8 +749,8 @@ def test_game_loop_execution(results: SanityCheckResults, env: StagHuntEnv):
             env.take_turn()
             steps_executed += 1
 
-            # Check that agents are still valid
-            active_agents = sum(1 for agent in env.agents if not agent.is_removed)
+            # Check that agents are still valid (can act = not frozen)
+            active_agents = sum(1 for agent in env.agents if agent.can_act())
             if active_agents == 0:
                 break
 
@@ -885,40 +885,41 @@ def test_resource_respawn_mechanics(results: SanityCheckResults, env: StagHuntEn
 
 
 def test_agent_respawn_mechanics(results: SanityCheckResults, env: StagHuntEnv):
-    """Test 23: Agent Respawn Mechanics"""
+    """Test 23: Agent freeze mechanics (freeze when health=0, thaw after N steps)."""
     try:
         world = env.world
         agents = env.agents
 
-        # Count initial active agents
-        initial_active = sum(1 for agent in agents if not agent.is_removed)
+        # Count initial active agents (can act = not frozen)
+        initial_active = sum(1 for agent in agents if agent.can_act())
 
-        # Force some agents to be removed (simulate interaction)
-        for agent in agents[:2]:  # Remove first 2 agents
-            agent.is_removed = True
-            agent._removed_from_world = False
+        # Force first 2 agents to be frozen (simulate health reached 0 from punishment)
+        for agent in agents[: min(2, len(agents))]:
+            agent.health = 0
+            agent.freeze_timer = 5
+            agent.is_frozen = True
 
-        # Run game for several steps to allow respawning
+        # Run game for enough steps to allow thaw (freeze_timer decrements each step)
         for step in range(20):
             env.take_turn()
 
-        # Count active agents after respawning
-        final_active = sum(1 for agent in agents if not agent.is_removed)
+        # Count active agents after thaw (freeze_timer should be 0, health restored)
+        final_active = sum(1 for agent in agents if agent.can_act())
 
-        # Check if agents respawned
+        # Check that frozen agents thawed and can act again
         if final_active > 0:
             results.add_result(
-                "Agent Respawn Mechanics", True, f"Active agents: {final_active}"
+                "Agent Freeze Mechanics", True, f"Active agents after thaw: {final_active}"
             )
         else:
             results.add_result(
-                "Agent Respawn Mechanics",
+                "Agent Freeze Mechanics",
                 False,
-                "No active agents after respawn period",
+                "No active agents after freeze period",
             )
 
     except Exception as e:
-        results.add_result("Agent Respawn Mechanics", False, f"Exception: {str(e)}")
+        results.add_result("Agent Freeze Mechanics", False, f"Exception: {str(e)}")
 
 
 def test_learning_behavior_runtime(results: SanityCheckResults, env: StagHuntEnv):
@@ -962,16 +963,19 @@ def test_learning_behavior_runtime(results: SanityCheckResults, env: StagHuntEnv
                 f"Action execution returned invalid reward: {reward}",
             )
 
-        # Test that model memory works
-        memory_state = agent.model.memory.current_state()
-        if memory_state is not None:
-            results.add_result(
-                "Model Memory Runtime",
-                True,
-                f"Memory state shape: {memory_state.shape}",
-            )
+        # Test that model memory works (skip for PPO-style models with no replay memory)
+        if hasattr(agent.model, "memory") and hasattr(agent.model.memory, "current_state"):
+            memory_state = agent.model.memory.current_state()
+            if memory_state is not None:
+                results.add_result(
+                    "Model Memory Runtime",
+                    True,
+                    f"Memory state shape: {memory_state.shape}",
+                )
+            else:
+                results.add_result("Model Memory Runtime", False, "Memory state is None")
         else:
-            results.add_result("Model Memory Runtime", False, "Memory state is None")
+            results.add_result("Model Memory Runtime", True, "Model has no replay memory (e.g. PPO)")
 
     except Exception as e:
         results.add_result("Learning Behavior Runtime", False, f"Exception: {str(e)}")

@@ -137,6 +137,21 @@ class StagHuntWorld(Gridworld):
         self.attack_cost: float = float(get_world_param("attack_cost", 0.05))
         self.punish_cooldown: int = int(get_world_param("punish_cooldown", 5))
         self.punish_cost: float = float(get_world_param("punish_cost", 0.1))
+        self.punish_freeze_duration: int = int(get_world_param("punish_freeze_duration", 5))
+        # Aggression mechanism (punishment → victim aggression ↑ → intrinsic reward when punishing → satiation)
+        self.aggression_enabled: bool = bool(get_world_param("aggression_enabled", False))
+        self.aggression_increase_per_punishment: float = float(get_world_param("aggression_increase_per_punishment", 1.0))
+        self.aggression_decay_per_step: float = float(get_world_param("aggression_decay_per_step", 0.02))
+        self.aggression_reward_scale: float = float(get_world_param("aggression_reward_scale", 0.3))
+        self.aggression_satiation_reduction: float = float(get_world_param("aggression_satiation_reduction", 1.0))
+        aggression_cap_val = get_world_param("aggression_cap", 4)
+        if aggression_cap_val is None:
+            self.aggression_cap: float | None = None
+        else:
+            cap = float(aggression_cap_val)
+            if not (0 < cap <= 4):
+                raise ValueError(f"aggression_cap must be in range (0, 4], got {cap}")
+            self.aggression_cap = cap
         self.respawn_delay: int = int(get_world_param("respawn_delay", 10))
         self.payoff_matrix: list[list[int]] = [
             list(row) for row in get_world_param("payoff_matrix", [[4, 0], [2, 2]])
@@ -163,6 +178,8 @@ class StagHuntWorld(Gridworld):
         self.attack_range: int = int(get_world_param("attack_range", 2))
         self.area_attack: bool = bool(get_world_param("area_attack", False))
         self.skip_spawn_validation: bool = bool(get_world_param("skip_spawn_validation", False))
+        self.power_mode: bool = bool(get_world_param("power_mode", False))
+        self.observe_own_power_only: bool = bool(get_world_param("observe_own_power_only", False))
         self.current_turn: int = 0  # Track current turn for regeneration
 
         # Resource respawn cap parameters

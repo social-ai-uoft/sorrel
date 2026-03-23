@@ -13,7 +13,7 @@ from pathlib import Path
 from sorrel.examples.staghunt_physical.entities import Empty
 from sorrel.examples.staghunt_physical.env import StagHuntEnv
 from sorrel.examples.staghunt_physical.world import StagHuntWorld
-from sorrel.examples.staghunt_physical.metrics_collector import StagHuntMetricsCollector
+from sorrel.examples.staghunt_physical.metrics_collector import ProbeMetricsCollector
 from sorrel.utils.visualization import render_sprite, image_from_array
 
 
@@ -22,13 +22,17 @@ class ProbeTestAgent:
     
     def __init__(self, original_agent):
         """Create a frozen copy of the original agent.
-        
+
         Args:
             original_agent: The original agent to copy and freeze
         """
-        # Deep copy the agent
-        self.agent = copy.deepcopy(original_agent)
-        
+        # PPO/recurrent models hold non-leaf tensors (e.g. LSTM hidden state) that
+        # cannot be deepcopied. Use a shallow copy and share the model in that case.
+        if getattr(original_agent.model, "add_memory_ppo", None) is not None:
+            self.agent = copy.copy(original_agent)
+        else:
+            self.agent = copy.deepcopy(original_agent)
+
         # Freeze the model parameters (no gradients)
         if hasattr(self.agent.model, 'qnetwork_local'):
             for param in self.agent.model.qnetwork_local.parameters():
@@ -121,8 +125,8 @@ class ProbeTestEnvironment:
         self.test_world = StagHuntWorld(config=self.test_config_dict, default_entity=Empty())
         self.test_env = StagHuntEnv(self.test_world, self.test_config_dict)
         
-        # Initialize metrics collector for probe tests (reuse existing class)
-        self.metrics_collector = StagHuntMetricsCollector()
+        # Metrics collector for probe tests: only records attack counts (trust metric)
+        self.metrics_collector = ProbeMetricsCollector()
         self.test_env.metrics_collector = self.metrics_collector
         
         # NEW: Inherit identity_map and identity_enabled from training environment
@@ -170,8 +174,9 @@ class ProbeTestEnvironment:
         # Override agents with just the probe agent
         self.test_env.override_agents([probe_agent.agent])
         
-        # Reset environment
+        # Reset environment and probe metrics (trust metric only)
         self.test_env.reset()
+        self.metrics_collector.reset_epoch_metrics()
         
         # Run the test
         step_count = 0
@@ -198,8 +203,9 @@ class ProbeTestEnvironment:
         agent_list = [agent.agent for agent in probe_agents]
         self.test_env.override_agents(agent_list)
         
-        # Reset environment
+        # Reset environment and probe metrics (trust metric only)
         self.test_env.reset()
+        self.metrics_collector.reset_epoch_metrics()
         
         # Run the test
         step_count = 0
@@ -1296,11 +1302,8 @@ class MultiStepProbeTest:
             if hasattr(fake_agent, 'update_agent_kind'):
                 fake_agent.update_agent_kind()
         
-        # Initialize attack tracking - ensure metrics collector has entry for this agent_id
-        if agent_id not in self.probe_env.metrics_collector.agent_metrics:
-            # Initialize metrics for this agent if not present
-            from collections import defaultdict
-            self.probe_env.metrics_collector.agent_metrics[agent_id] = defaultdict(int)
+        # Reset probe metrics so this test starts from 0 (trust metric only)
+        self.probe_env.metrics_collector.reset_epoch_metrics()
         
         initial_stag_attacks = self.probe_env.metrics_collector.agent_metrics[agent_id]['attacks_to_stags']
         initial_hare_attacks = self.probe_env.metrics_collector.agent_metrics[agent_id]['attacks_to_hares']

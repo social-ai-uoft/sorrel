@@ -640,54 +640,26 @@ class StagHuntPhysicalASCIIPygame:
 
     def update_world_state(self):
         """Update the world state by processing transitions."""
-        # Update agent states (frozen/respawn logic) - CRITICAL for proper game behavior
+        # Update agent states (freeze timer, restore health on thaw) - CRITICAL for proper game behavior
         if hasattr(self.world, "env") and hasattr(
             self.world.env, "update_agent_states"
         ):
             self.world.env.update_agent_states()
 
-            # CRITICAL: Find and replace removed agents with Empty entities
-            # Scan the entire dynamic layer for agents that should be removed
-            for y, x, z in np.ndindex(self.world.map.shape):
-                if z == self.world.dynamic_layer:  # Only check dynamic layer
-                    location = (y, x, z)
-                    entity = self.world.observe(location)
-
-                    # Check if this is an agent that should be removed
-                    if isinstance(
-                        entity, type(self.agents[0]) if self.agents else False
-                    ):
-                        # Find which agent this is
-                        for agent in self.agents:
-                            if entity == agent:
-                                # Check if this agent should be removed
-                                if (
-                                    hasattr(agent, "is_removed")
-                                    and agent.is_removed
-                                    and hasattr(agent, "respawn_timer")
-                                    and agent.respawn_timer > 0
-                                ):
-                                    # Replace with Empty entity
-                                    self.world.add(location, Empty())
-                                    print(
-                                        f"Replaced removed agent at {location} with Empty entity"
-                                    )
-                                break
-
             # Debug: Check agent states (only print changes)
             for i, agent in enumerate(self.agents):
                 if (
-                    hasattr(agent, "is_removed")
-                    and agent.is_removed
-                    and not hasattr(agent, "_debug_removed_printed")
+                    hasattr(agent, "is_frozen")
+                    and agent.is_frozen
+                    and not hasattr(agent, "_debug_frozen_printed")
                 ):
                     print(
-                        f"Agent {i+1} is REMOVED (respawn timer: {getattr(agent, 'respawn_timer', 'N/A')})"
+                        f"Agent {i+1} is FROZEN (freeze timer: {getattr(agent, 'freeze_timer', 'N/A')})"
                     )
-                    agent._debug_removed_printed = True
-                elif not hasattr(agent, "is_removed") or not agent.is_removed:
-                    if hasattr(agent, "_debug_removed_printed"):
-                        delattr(agent, "_debug_removed_printed")
+                    agent._debug_frozen_printed = True
+                elif not getattr(agent, "is_frozen", False):
+                    if hasattr(agent, "_debug_frozen_printed"):
+                        delattr(agent, "_debug_frozen_printed")
 
         # Process transitions for all entities except agents (they're handled by environment)
         for y, x, z in np.ndindex(self.world.map.shape):
@@ -778,9 +750,7 @@ class StagHuntPhysicalASCIIPygame:
                 elif isinstance(entity, HareResource):
                     sprite_key = "hare"
                 elif isinstance(entity, StagHuntAgent):
-                    # Only draw agent if it's not removed
-                    if hasattr(entity, "is_removed") and entity.is_removed:
-                        continue  # Skip removed agents
+                    # Draw all agents (frozen agents stay on map; draw with optional FROZEN indicator below)
                     # Use orientation-specific sprite
                     orientation_names = {0: "north", 1: "east", 2: "south", 3: "west"}
                     sprite_key = f"agent_{orientation_names[entity.orientation]}"
@@ -813,9 +783,6 @@ class StagHuntPhysicalASCIIPygame:
                     elif isinstance(entity, HareResource):
                         pygame.draw.rect(self.screen, (0, 255, 0), rect)
                     elif isinstance(entity, StagHuntAgent):
-                        # Only draw agent if it's not removed
-                        if hasattr(entity, "is_removed") and entity.is_removed:
-                            continue  # Skip removed agents
                         # Draw agent as a larger, more visible circle
                         pygame.draw.circle(
                             self.screen, (0, 0, 255), rect.center, self.tile_size // 2
@@ -835,7 +802,7 @@ class StagHuntPhysicalASCIIPygame:
 
                 # Draw health bars for agents and resources if enabled
                 if self.config["display"].get("show_health", True):
-                    if isinstance(entity, StagHuntAgent) and not entity.is_removed:
+                    if isinstance(entity, StagHuntAgent):
                         self.draw_health_bar(x, y, entity.health, entity.max_health)
                     elif isinstance(entity, (StagResource, HareResource)):
                         self.draw_health_bar(x, y, entity.health, entity.max_health)
@@ -987,16 +954,11 @@ class StagHuntPhysicalASCIIPygame:
             if self.turn_based:
                 # Show action status
                 if (
-                    hasattr(self.human_player, "is_removed")
-                    and self.human_player.is_removed
-                ):
-                    action_status = "REMOVED - Respawn in progress"
-                    action_color = (255, 0, 0)
-                elif (
                     hasattr(self.human_player, "is_frozen")
                     and self.human_player.is_frozen
                 ):
-                    action_status = "FROZEN - Press any key to continue"
+                    freeze_n = getattr(self.human_player, "freeze_timer", 0)
+                    action_status = f"FROZEN ({freeze_n}) - Press any key to continue"
                     action_color = (255, 100, 100)
                 elif self.turn_action_taken:
                     action_status = "Action Taken - Turn will end"
