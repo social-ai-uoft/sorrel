@@ -5,6 +5,10 @@ from typing import Any, Dict
 
 from sorrel.utils.logging import ConsoleLogger, TensorboardLogger
 
+# Lowercased entity class names for A–E (see entities.py); always logged, including 0.
+_STATE_PUNISHMENT_RESOURCE_ENCOUNTER_TYPES = ("a", "b", "c", "d", "e")
+_STATE_PUNISHMENT_RESOURCE_ENCOUNTER_SET = frozenset(_STATE_PUNISHMENT_RESOURCE_ENCOUNTER_TYPES)
+
 
 class StatePunishmentLogger:
     """Enhanced logger that tracks encounters and punishment levels."""
@@ -33,6 +37,8 @@ class StatePunishmentLogger:
         encounter_data = {}
 
         if self.multi_agent_env is not None:
+            from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
+
             # Initialize total and mean counters
             total_encounters = {}
             mean_encounters = {}
@@ -44,26 +50,39 @@ class StatePunishmentLogger:
             sigma_weights_advantage = []
             sigma_weights_value = []
             
-            # Track action frequencies
-            total_action_frequencies = {}
-            mean_action_frequencies = {}
+            n_envs = len(self.multi_agent_env.individual_envs)
+            # Union of action keys so every epoch logs zeros for unused actions (and vote_* for separate-model agents)
+            global_action_keys: set[str] = set()
+            for env in self.multi_agent_env.individual_envs:
+                ag = env.agents[0]
+                global_action_keys.update(ag.action_names)
+                if isinstance(ag, SeparateModelStatePunishmentAgent):
+                    global_action_keys.update(
+                        ("vote_no", "vote_increase", "vote_decrease")
+                    )
+            sorted_action_keys = sorted(global_action_keys)
             
             for i, env in enumerate(self.multi_agent_env.individual_envs):
                 agent = env.agents[0]
-                agent_count = len(agent.encounters)
 
-                # Individual agent encounter data
+                # Resource encounters (A–E): always log every step, including zeros
+                for res in _STATE_PUNISHMENT_RESOURCE_ENCOUNTER_TYPES:
+                    count = agent.encounters.get(res, 0)
+                    encounter_data[f"Agent_{i}/{res}_encounters"] = count
+                    total_encounters[res] = total_encounters.get(res, 0) + count
+                    mean_encounters[res] = mean_encounters.get(res, 0) + count
+
+                # Other stepped-on entity types (e.g. sand, wall)
                 for entity_type, count in agent.encounters.items():
+                    if entity_type in _STATE_PUNISHMENT_RESOURCE_ENCOUNTER_SET:
+                        continue
                     encounter_data[f"Agent_{i}/{entity_type}_encounters"] = count
-                    
-                    # Initialize if first time seeing this entity type
                     if entity_type not in total_encounters:
                         total_encounters[entity_type] = 0
                         mean_encounters[entity_type] = 0
-                    
                     total_encounters[entity_type] += count
                     mean_encounters[entity_type] += count
-                
+
                 # Individual agent score
                 encounter_data[f"Agent_{i}/individual_score"] = agent.individual_score
                 total_individual_scores += agent.individual_score
@@ -72,21 +91,13 @@ class StatePunishmentLogger:
                 encounter_data[f"Agent_{i}/social_harm_received"] = agent.social_harm_received_epoch
                 total_social_harm_received += agent.social_harm_received_epoch
                 
-                # Track action frequencies for this agent
-                for action_name, frequency in agent.action_frequencies.items():
+                # Action frequencies: always emit every key in global union (zeros when unused)
+                for action_name in sorted_action_keys:
+                    frequency = agent.action_frequencies.get(action_name, 0)
                     encounter_data[f"Agent_{i}/action_freq_{action_name}"] = frequency
-                    
-                    # Initialize if first time seeing this action
-                    if action_name not in total_action_frequencies:
-                        total_action_frequencies[action_name] = 0
-                        mean_action_frequencies[action_name] = 0
-                    
-                    total_action_frequencies[action_name] += frequency
-                    mean_action_frequencies[action_name] += frequency
                 
                 # Access sigma_weight and epsilon from PyTorchIQN model
                 # Check if agent uses separate models
-                from sorrel.examples.state_punishment.agents import SeparateModelStatePunishmentAgent
                 if isinstance(agent, SeparateModelStatePunishmentAgent):
                     # Separate model agent: log sigma weights and epsilon from both move and vote models
                     # Move model sigma weights
@@ -147,26 +158,32 @@ class StatePunishmentLogger:
             # Add totals and means to encounter_data
             for entity_type in total_encounters:
                 encounter_data[f"Total/total_{entity_type}_encounters"] = total_encounters[entity_type]
-                encounter_data[f"Mean/mean_{entity_type}_encounters"] = mean_encounters[entity_type] / len(self.multi_agent_env.individual_envs)
+                encounter_data[f"Mean/mean_{entity_type}_encounters"] = mean_encounters[entity_type] / n_envs
             
             # Add total and mean individual scores
             encounter_data["Total/total_individual_score"] = total_individual_scores
-            encounter_data["Mean/mean_individual_score"] = total_individual_scores / len(self.multi_agent_env.individual_envs)
+            encounter_data["Mean/mean_individual_score"] = total_individual_scores / n_envs
             
             # Add total and mean social harm received
             encounter_data["Total/total_social_harm_received"] = total_social_harm_received
-            encounter_data["Mean/mean_social_harm_received"] = total_social_harm_received / len(self.multi_agent_env.individual_envs)
+            encounter_data["Mean/mean_social_harm_received"] = total_social_harm_received / n_envs
             
-            # Add total and mean action frequencies
+            # Add total and mean action frequencies (zeros included via .get above)
             # Note: For standard agents, each agent takes one action per turn, so the sum of mean
             # action frequencies should equal max_turns (typically 100) if the epoch completes.
             # For separate model agents, the total includes both movement actions (one per turn)
             # and vote actions (one per vote epoch), so the sum will be higher than max_turns.
             # For example: if max_turns=100 and vote_window_size=10, expect ~110 actions per agent
             # (100 movement + 10 vote actions). Epochs can end early if world.is_done is True.
-            for action_name in total_action_frequencies:
-                encounter_data[f"Total/total_action_freq_{action_name}"] = total_action_frequencies[action_name]
-                encounter_data[f"Mean/mean_action_freq_{action_name}"] = mean_action_frequencies[action_name] / len(self.multi_agent_env.individual_envs)
+            for action_name in sorted_action_keys:
+                total_af = sum(
+                    self.multi_agent_env.individual_envs[j].agents[0].action_frequencies.get(
+                        action_name, 0
+                    )
+                    for j in range(n_envs)
+                )
+                encounter_data[f"Total/total_action_freq_{action_name}"] = total_af
+                encounter_data[f"Mean/mean_action_freq_{action_name}"] = total_af / n_envs
             
             
             # Add mean sigma weights across all agents

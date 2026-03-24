@@ -157,7 +157,7 @@ def create_config(
             }
     else:
         social_harm_config = {
-            "A": 5, # 3
+            "A": 10, # 3
             "B": 0, 
             "C": 0, 
             "D": 0.0, 
