@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
-# One Study 1 CPC job; invoked by run_cpc_tmux_study1.sh to avoid tmux send-keys length limits.
+# Study 1 CPC job runner. Invoked by run_cpc_tmux_study1.sh with one argument: ppo_00|ppo_01|iqn_00|iqn_01
+# Activates the conda env by prepending its bin/ to PATH (avoids libmamba/libarchive plugin issues).
+# Override defaults: STATE_PUNISHMENT_CONDA_ENV (default: sorrel)
+#                    STATE_PUNISHMENT_CONDA_BASE (default: auto-detected via CONDA_EXE or known paths)
 set -e
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$ROOT"
-# shellcheck source=/dev/null
-source "$(conda info --base 2>/dev/null)/etc/profile.d/conda.sh" 2>/dev/null
-conda deactivate 2>/dev/null || true
-conda deactivate 2>/dev/null || true
-conda activate sorrel
 export PYTHONPATH="$ROOT"
+
+# --- conda activation (PATH-only, no conda.sh needed) ---
+CONDA_ENV="${STATE_PUNISHMENT_CONDA_ENV:-sorrel}"
+if [ -n "${CONDA_EXE:-}" ]; then
+  CONDA_BASE="$(dirname "$(dirname "$CONDA_EXE")")"
+else
+  CONDA_BASE="${STATE_PUNISHMENT_CONDA_BASE:-/opt/homebrew/Caskroom/miniconda/base}"
+fi
+export PATH="$CONDA_BASE/envs/$CONDA_ENV/bin:$PATH"
+# ---------------------------------------------------------
 
 case "$1" in
   ppo_00)
