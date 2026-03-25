@@ -157,7 +157,7 @@ def create_config(
             }
     else:
         social_harm_config = {
-            "A": 10, # 3
+            "A": 5, # 3
             "B": 0, 
             "C": 0, 
             "D": 0.0, 
@@ -343,7 +343,7 @@ def create_config(
             "num_resources": num_resources,
             "spawn_prob": respawn_prob,
             "max_resources": max_resources,
-            "a_value": 25,  # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
+            "a_value": 20,  # 2.9, 3.316, 4.59728, 8.5436224, 20.69835699
             "b_value": 10, # 25, 17, 11, 8, 8
             "c_value": 10,
             "d_value": 10,
