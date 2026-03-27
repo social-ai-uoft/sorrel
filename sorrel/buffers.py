@@ -23,7 +23,9 @@ class Buffer:
         n_frames (int): The number of frames to stack when sampling or creating empty frames between games.
     """
 
-    def __init__(self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1):
+    def __init__(
+        self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1, **kwargs
+    ):
         self.capacity = capacity
         self.obs_shape = obs_shape
         self.states = np.zeros((capacity, *obs_shape), dtype=np.float32)
@@ -33,8 +35,15 @@ class Buffer:
         self.idx = 0
         self.size = 0
         self.n_frames = n_frames
+        self.extra_data = {}
+        for key, value in kwargs.items():
+            if isinstance(value, tuple):
+                shape = (capacity, *value)
+            else:
+                shape = capacity
+            self.extra_data[key] = np.zeros(shape, dtype=np.int64)
 
-    def add(self, obs, action, reward, done):
+    def add(self, obs, action, reward, done, **kwargs):
         """Add an experience to the replay buffer.
 
         Args:
@@ -42,6 +51,7 @@ class Buffer:
             action (int): The action taken.
             reward (float): The reward received.
             done (bool): Whether the episode terminated after this step.
+            **kwargs: Additional data to store in the buffer.
         """
         self.states[self.idx] = obs
         self.actions[self.idx] = action
@@ -49,6 +59,8 @@ class Buffer:
         self.dones[self.idx] = done
         self.idx = (self.idx + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
+        for key, value in kwargs.items():
+            self.extra_data[key][self.idx] = value
 
     def add_empty(self):
         """Advancing the id by `self.n_frames`, adding empty frames to the replay
@@ -75,18 +87,10 @@ class Buffer:
         self.dones[self.idx : self.idx + buffer_slice_point] = buffer.dones[
             :buffer_slice_point
         ]
-        # Copy positions if available in source buffer
-        if hasattr(buffer, "positions") and buffer.positions is not None:
-            if not hasattr(self, "positions") or self.positions is None:
-                self.positions = np.zeros((self.capacity, 2), dtype=np.int64)
-            self.positions[self.idx : self.idx + buffer_slice_point] = buffer.positions[
-                :buffer_slice_point
-            ]
-        # Copy agent_ids if available in source buffer
-        if hasattr(buffer, "agent_ids") and buffer.agent_ids is not None:
-            if not hasattr(self, "agent_ids") or self.agent_ids is None:
-                self.agent_ids = np.zeros(self.capacity, dtype=np.int64)
-            self.agent_ids[self.idx : self.idx + buffer_slice_point] = buffer.agent_ids[
+        for key, value in buffer.extra_data.items():
+            if not key in self.extra_data:
+                self.extra_data[key] = np.zeros(self.capacity, dtype=value.dtype)
+            self.extra_data[key][self.idx : self.idx + buffer_slice_point] = value[
                 :buffer_slice_point
             ]
         self.idx = self.idx + buffer_slice_point
@@ -215,39 +219,10 @@ class TransformerBuffer(Buffer):
     """Buffer class equivalent to the base class with the exception that actions also
     include a time dimension in the same way that states are."""
 
-    def __init__(self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1):
-        super().__init__(capacity, obs_shape, n_frames)
-        # Optional position storage for perspective-aware masking (y, x)
-        self.positions: np.ndarray | None = None
-        # Optional agent identity storage for multi-agent training
-        self.agent_ids: np.ndarray | None = None
-
-    def init_positions(self) -> None:
-        """Initialize position storage array."""
-        self.positions = np.zeros((self.capacity, 2), dtype=np.int64)
-
-    def init_agent_ids(self) -> None:
-        """Initialize agent identity storage array."""
-        self.agent_ids = np.zeros(self.capacity, dtype=np.int64)
-
-    def add(
-        self,
-        obs,
-        action,
-        reward,
-        done,
-        position: tuple[int, int] | None = None,
-        agent_id: int | None = None,
+    def __init__(
+        self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1, **kwargs
     ):
-        if position is not None:
-            if self.positions is None:
-                self.init_positions()
-            self.positions[self.idx] = position
-        if agent_id is not None:
-            if self.agent_ids is None:
-                self.init_agent_ids()
-            self.agent_ids[self.idx] = agent_id
-        super().add(obs, action, reward, done)
+        super().__init__(capacity, obs_shape, n_frames, **kwargs)
 
     def save(self, output_file: str | Path) -> None:
         output_file = Path(output_file)
@@ -258,11 +233,8 @@ class TransformerBuffer(Buffer):
             dones=self.dones,
             n_frames=self.n_frames,
             idx=self.idx,
+            **self.extra_data,
         )
-        if self.positions is not None:
-            save_dict["positions"] = self.positions
-        if self.agent_ids is not None:
-            save_dict["agent_ids"] = self.agent_ids
         np.savez_compressed(output_file, **save_dict)
 
     @classmethod
@@ -287,10 +259,9 @@ class TransformerBuffer(Buffer):
         output.dones = dones
         output.idx = idx
         output.size = size
-        if positions is not None:
-            output.positions = positions
-        if agent_ids is not None:
-            output.agent_ids = agent_ids
+        for key, array in zip(["positions, agent_ids"], [positions, agent_ids]):
+            if array is not None:
+                output.extra_data[key] = array
         return output
 
     @classmethod
@@ -316,12 +287,14 @@ class TransformerBuffer(Buffer):
             assert buf.n_frames == n_frames, "All buffers must have matching n_frames."
 
         total_size = sum(buf.size for buf in buffers)
-        combined = cls(capacity=total_size, obs_shape=obs_shape, n_frames=n_frames)
-        combined.init_agent_ids()
 
-        has_positions = any(buf.positions is not None for buf in buffers)
-        if has_positions:
-            combined.init_positions()
+        combined = cls(
+            capacity=total_size,
+            obs_shape=obs_shape,
+            n_frames=n_frames,
+            positions=(2,),
+            agent_ids=0,
+        )
 
         offset = 0
         for agent_id, buf in enumerate(buffers):
@@ -330,16 +303,15 @@ class TransformerBuffer(Buffer):
             combined.actions[offset : offset + n] = buf.actions[:n]
             combined.rewards[offset : offset + n] = buf.rewards[:n]
             combined.dones[offset : offset + n] = buf.dones[:n]
-            combined.agent_ids[offset : offset + n] = agent_id
-            if has_positions and buf.positions is not None:
-                combined.positions[offset : offset + n] = buf.positions[:n]
+            for key, value in buf.extra_data.items():
+                combined.extra_data[key][offset : offset + n] = value[:n]
             offset += n
 
         combined.idx = total_size
         combined.size = total_size
         return combined
 
-    def sample(self, batch_size: int):
+    def sample_transformer(self, batch_size: int):
         """Sample a batch of experiences from the replay buffer.
 
         Args:
@@ -370,8 +342,9 @@ class TransformerBuffer(Buffer):
 
         # Extract per-sample agent_ids if available
         batch_agent_ids = None
-        if self.agent_ids is not None:
-            batch_agent_ids = self.agent_ids[indices[:, 0]]
+        if "agent_ids" in self.extra_data:
+            if self.extra_data["agent_ids"] is not None:
+                batch_agent_ids = self.extra_data["agent_ids"][indices[:, 0]]
 
         return states, actions, next_actions, next_states, dones, valid, batch_agent_ids
 
@@ -388,9 +361,6 @@ class SavedGames(Buffer):
             dones=self.dones,
             n_frames=self.n_frames,
             idx=self.idx,
+            **self.extra_data,
         )
-        if hasattr(self, "positions") and self.positions is not None:
-            save_dict["positions"] = self.positions
-        if hasattr(self, "agent_ids") and self.agent_ids is not None:
-            save_dict["agent_ids"] = self.agent_ids
         np.savez_compressed(output_file, **save_dict)

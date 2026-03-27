@@ -47,7 +47,11 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 "Food",
                 "TreasurehuntAgent",
             ]
-            if self.config.model.observation_spec != "rgb":
+            if hasattr(self.config.model, "observation_spec"):
+                obs_spec_type = self.config.model.observation_spec
+            else:
+                obs_spec_type = "onehot"
+            if obs_spec_type == "onehot":
                 observation_spec = OneHotObservationSpec(
                     entity_list,
                     full_view=False,
@@ -55,7 +59,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                     # don't forget to pass it in as part of config when creating this experiment!
                     vision_radius=self.config.model.agent_vision_radius,
                 )
-            else:
+            elif obs_spec_type == "rgb":
                 observation_spec = RGBObservationSpec(
                     entity_list,
                     full_view=False,
@@ -63,6 +67,8 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                     # don't forget to pass it in as part of config when creating this experiment!
                     vision_radius=self.config.model.agent_vision_radius,
                 )
+            else:
+                raise ValueError(f"Unknown observation spec type: {obs_spec_type}")
 
             observation_spec.override_input_size(
                 (int(np.prod(observation_spec.input_size)),)

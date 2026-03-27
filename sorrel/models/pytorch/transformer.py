@@ -34,6 +34,7 @@ from einops.layers.torch import Rearrange
 
 # Gem-specific packages
 from sorrel.buffers import Buffer as ReplayBuffer
+from sorrel.buffers import TransformerBuffer
 
 # --------------- #
 # endregion       #
@@ -405,7 +406,7 @@ class VisionTransformer(nn.Module):
         batch_size: int,
         num_layers: int,
         num_heads: int,
-        memory: ReplayBuffer,
+        memory: TransformerBuffer,
         LR: float,
         device: str | torch.device,
         seed: int,
@@ -624,7 +625,7 @@ class VisionTransformer(nn.Module):
         # State size: (B, T, C, H, W)
         # Action size: (B, T, 1)
         states, actions, next_actions, next_states, _, _, batch_agent_ids = (
-            self.memory.sample(self.batch_size)
+            self.memory.sample_transformer(self.batch_size)
         )
 
         next_actions = np.array(next_actions, dtype=np.int64)  # cast them back
@@ -873,11 +874,11 @@ class VisionTransformer(nn.Module):
 
         assert (
             isinstance(self.memory, TransformerBuffer)
-            and self.memory.positions is not None
+            and self.memory.extra_data["positions"] is not None
         ), "self.memory must be a TransformerBuffer with positions stored."
         assert (
             isinstance(other_buffer, TransformerBuffer)
-            and other_buffer.positions is not None
+            and other_buffer.extra_data["positions"] is not None
         ), "other_buffer must be a TransformerBuffer with positions stored."
 
         state_inputs, action_inputs, state_targets, action_targets, _ = self.get_batch()
@@ -893,8 +894,10 @@ class VisionTransformer(nn.Module):
         )
         indices = indices[:, np.newaxis] + np.arange(self.num_frames)
 
-        a1_positions = self.memory.positions[indices]  # (B, T, 2)
-        a2_positions = other_buffer.positions[indices % other_buffer.size]  # (B, T, 2)
+        a1_positions = self.memory.extra_data["positions"][indices]  # (B, T, 2)
+        a2_positions = other_buffer.extra_data["positions"][
+            indices % other_buffer.size
+        ]  # (B, T, 2)
 
         state_mask = self.perspective_mask(
             state_targets, a1_positions, a2_positions, vision_radius
@@ -985,7 +988,7 @@ class ViTOneHot(VisionTransformer):
         batch_size: int,
         num_layers: int,
         num_heads: int,
-        memory: ReplayBuffer,
+        memory: TransformerBuffer,
         LR: float,
         device: Union[str, torch.device],
         seed: int,
