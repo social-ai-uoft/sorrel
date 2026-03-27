@@ -13,7 +13,10 @@ from sorrel.examples.treasurehunt.world import TreasurehuntWorld
 
 # sorrel imports
 from sorrel.models.pytorch import PyTorchIQN
-from sorrel.observation.observation_spec import OneHotObservationSpec
+from sorrel.observation.observation_spec import (
+    OneHotObservationSpec,
+    RGBObservationSpec,
+)
 
 # end imports
 
@@ -44,13 +47,23 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 "Food",
                 "TreasurehuntAgent",
             ]
-            observation_spec = OneHotObservationSpec(
-                entity_list,
-                full_view=False,
-                # note that here we require self.config to have the entry model.agent_vision_radius
-                # don't forget to pass it in as part of config when creating this experiment!
-                vision_radius=self.config.model.agent_vision_radius,
-            )
+            if self.config.model.observation_spec != "rgb":
+                observation_spec = OneHotObservationSpec(
+                    entity_list,
+                    full_view=False,
+                    # note that here we require self.config to have the entry model.agent_vision_radius
+                    # don't forget to pass it in as part of config when creating this experiment!
+                    vision_radius=self.config.model.agent_vision_radius,
+                )
+            else:
+                observation_spec = RGBObservationSpec(
+                    entity_list,
+                    full_view=False,
+                    # note that here we require self.config to have the entry model.agent_vision_radius
+                    # don't forget to pass it in as part of config when creating this experiment!
+                    vision_radius=self.config.model.agent_vision_radius,
+                )
+
             observation_spec.override_input_size(
                 (int(np.prod(observation_spec.input_size)),)
             )

@@ -207,12 +207,16 @@ class Attention(nn.Module):
         self.k = nn.Linear(in_features=layer_size, out_features=layer_size)
         self.v = nn.Linear(in_features=layer_size, out_features=layer_size)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, mask: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
 
         # Get Q, K, V
         q, k, v = self.q(x), self.k(x), self.v(x)
         # Pass them into the attention module
-        output, weights = self.attention(q, k, v, average_attn_weights=False)
+        output, weights = self.attention(
+            q, k, v, attn_mask=mask, average_attn_weights=False
+        )
 
         return output, weights
 
@@ -229,7 +233,9 @@ class StarformerAttention(Attention):
         self.softmax = nn.Softmax(dim=-1)
         self.projection = nn.Linear(layer_size, layer_size)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, mask: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
 
         B, N, D = x.size()
 
@@ -251,6 +257,12 @@ class StarformerAttention(Attention):
         )
 
         A = q @ k.transpose(-2, -1) * (1 / math.sqrt(k.size(-1)))
+
+        if mask is not None:
+            # Mask should be boolean or additive, usually PyTorch multihead uses -inf.
+            # Convert mask of shape (N, N) into shape suitable for (B, num_heads, N, N) broadcast.
+            A = A + mask
+
         A = self.softmax(A)
         A_drop = self.attention_dropout(A)
         y = (A_drop @ v).transpose(1, 2).contiguous().view(B, N, D)
@@ -284,10 +296,12 @@ class _TransformerBlock(nn.Module):
             nn.Dropout(dropout),
         )
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, mask: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
 
         # Attention layer: layernormalize + skip connection
-        y, att = self.attention(self.norm1(x))
+        y, att = self.attention(self.norm1(x), mask=mask)
         x = x + y
         # Feedforward layer: Layernormalize + skip_connection
         x = x + self.ff(self.norm2(x))
@@ -359,7 +373,17 @@ class TransformerBlock(nn.Module):
         to_global += temporal_embedding
 
         global_tokens = torch.cat((to_global, global_tokens), dim=2).view(B, -1, D)
-        global_tokens, global_att = self.global_block(global_tokens)
+
+        # global_tokens length is 2*T. Elements are alternating to_global[i], global_tokens[i].
+        # Create causal mask for global_block to prevent leakage from future time steps.
+        # Length of sequence is 2*T.
+        seq_len = 2 * T
+        mask = torch.triu(
+            torch.ones(seq_len, seq_len, device=global_tokens.device) * float("-inf"),
+            diagonal=1,
+        )
+
+        global_tokens, global_att = self.global_block(global_tokens, mask=mask)
 
         return local_tokens, local_att, global_tokens[:, 1::2], global_att
 
@@ -542,8 +566,8 @@ class VisionTransformer(nn.Module):
                 0.0, device=state_predictions.device, dtype=state_predictions.dtype
             )
 
-        loss = nn.MSELoss()
-        return loss(predictions_masked, targets_masked)
+        loss = nn.BCEWithLogitsLoss()
+        return loss(predictions_masked, targets_masked.float())
 
     def action_loss(
         self, action_predictions: torch.Tensor, action_targets: torch.Tensor
@@ -765,6 +789,8 @@ class VisionTransformer(nn.Module):
             state_mask = self.random_mask(state_targets)
         elif mask_type in ("gem", "bone", "food", "wall"):
             state_mask = self.channel_mask(state_targets, mask_type)
+        elif mask_type == "full":
+            state_mask = torch.ones_like(state_targets, dtype=torch.bool)
         else:
             raise ValueError(
                 f"Unknown mask_type: {mask_type!r}. Expected 'full', 'random', 'gem', 'bone', 'food', or 'wall'."
@@ -1085,7 +1111,7 @@ class ViTOneHot(VisionTransformer):
                 0.0, device=predictions_flat.device, dtype=predictions_flat.dtype
             )
 
-        return loss(predictions_masked, targets_masked)
+        return loss(predictions_masked, targets_masked.long())
 
     def state_loss_per_channel(
         self,

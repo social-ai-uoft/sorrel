@@ -1,3 +1,4 @@
+import colorsys
 from abc import abstractmethod
 from typing import Sequence
 
@@ -378,3 +379,103 @@ class NodeObservationSpec(ObservationSpec[str, NodeWorld]):
             f"{verb_conj[len(curr_node.adjacent)]} adjacent to this location and can be moved to."
         )
         return loc_string + entity_string + vis_string + adj_string
+
+
+class RGBObservationSpec(ObservationSpec[np.ndarray, Gridworld]):
+    """A subclass of :py:class:`ObservationSpec` for Sorrel agents whose observations
+    take the form of RGB images.
+
+    Attributes:
+        entity_map: A mapping of the kinds of entities in the world to their RGB appearances.
+        vision_radius: The radius of the agent's vision if full_view is False, 0 if full_view is True.
+        full_view: A boolean that determines whether the agent can see the entire environment.
+        input_size: An int or sequence of ints that indicates the size of the observation.
+        fill_entity_kind: if the agent's vision is out of bounds, fill the space with appearances of this entity. Defaults to "Wall".
+    """
+
+    def __init__(
+        self,
+        entity_list: list[str],
+        full_view: bool,
+        vision_radius: int | None = None,
+        env_dims: Sequence[int] | None = None,
+        fill_entity_kind: str = "Wall",
+    ):
+        super().__init__(
+            entity_list, full_view, vision_radius, env_dims, fill_entity_kind
+        )
+        # By default, input_size is (channels, x, y)
+        if self.full_view:
+            assert isinstance(env_dims, Sequence)  # safeguarded in super().__init__()
+            self.input_size = (3, *env_dims)
+        else:
+            self.input_size = (
+                3,
+                (2 * self.vision_radius + 1),
+                (2 * self.vision_radius + 1),
+            )
+
+    def generate_map(self, entity_list: list[str]) -> dict[str, np.ndarray]:
+        """Generate a default entity map by automatically creating RGB encodings for the
+        entitity kinds in :code:`entity_list`.
+
+        The :py:class:`.EmptyEntity` kind will receive an all-zero appearance [0, 0, 0].
+        Subsequent entities receive maximally orthogonal RGB colors.
+
+        This method is used when initializing the :py:class:`RGBObservationSpec` object.
+        Overrides :py:meth:`ObservationSpec.generate_map`.
+
+        Args:
+            entity_list: A list of entities that appears in the environment.
+
+        Returns:
+            A dictionary object matching each entity to an RGB appearance.
+        """
+        entity_map: dict[str, np.ndarray] = {}
+        non_empty_entities = [e for e in entity_list if e != "EmptyEntity"]
+        num_colors = len(non_empty_entities)
+
+        color_idx = 0
+        for x in entity_list:
+            if x == "EmptyEntity":
+                entity_map[x] = np.zeros(3, dtype=np.uint8)
+            else:
+                hue = color_idx / max(1, num_colors)
+                rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+                entity_map[x] = np.array([int(c * 255) for c in rgb], dtype=np.uint8)
+                color_idx += 1
+
+        return entity_map
+
+    def observe(
+        self,
+        world: Gridworld,
+        location: tuple | None = None,
+    ) -> np.ndarray:
+        """Observes the environment using :py:func:`.visual_field()` with RGB channels.
+
+        Overrides :py:meth:`ObservationSpec.observe()`.
+
+        Args:
+            world: The world to observe.
+            location: The location of the observer. Must be provided if full_view is False.
+            If full_view is True, this parameter is ignored.
+
+        Returns:
+            The RGB image observation, shaped (3, width, height) or similar.
+        """
+        if not self.full_view and not location:
+            raise TypeError(
+                "location not provided when full_view is false. Please provide the location of the observer."
+            )
+        if self.full_view:
+            location = None
+
+        obs = visual_field(
+            world=world,
+            entity_map=self.entity_map,
+            vision=self.vision_radius if not self.full_view else None,
+            location=location,
+            fill_entity_kind=self.fill_entity_kind,
+        )
+        return np.clip(obs, 0, 255) / 255
