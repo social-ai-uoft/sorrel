@@ -1,7 +1,10 @@
+import base64
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import streamlit as st
-from streamlit.column_config import SelectboxColumn
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Layout - Sorrel Builder", page_icon="🗺️")
 
@@ -32,12 +35,28 @@ st.session_state["grid_size"]["rows"] = rows
 st.session_state["grid_size"]["cols"] = cols
 
 # Initialize grid if size changed or not exists
+if "map_update_counter" not in st.session_state:
+    st.session_state["map_update_counter"] = 0
+
 current_grid_state = st.session_state.get("grid_state", None)
-if current_grid_state is None or current_grid_state.shape != (rows, cols):
+if current_grid_state is None:
     st.session_state["grid_state"] = pd.DataFrame(
         [["Empty" for _ in range(cols)] for _ in range(rows)],
         columns=pd.Index([f"{i}" for i in range(cols)]),
     )
+    st.session_state["map_update_counter"] += 1
+elif current_grid_state.shape != (rows, cols):
+    # Gracefully resize by keeping existing data
+    old_rows, old_cols = current_grid_state.shape
+    new_df = pd.DataFrame(
+        [["Empty" for _ in range(cols)] for _ in range(rows)],
+        columns=pd.Index([f"{i}" for i in range(cols)]),
+    )
+    for r in range(min(old_rows, rows)):
+        for c in range(min(old_cols, cols)):
+            new_df.iloc[r, c] = current_grid_state.iloc[r, c]
+    st.session_state["grid_state"] = new_df
+    st.session_state["map_update_counter"] += 1
 
 st.divider()
 
@@ -47,32 +66,103 @@ if not entities:
     st.warning("No entities defined! Go to the 'Entities' tab first.")
     st.stop()
 
+# Prepare assets dictionary (Entity Name -> Base64 Image URL)
+assets_dict = {}
+for ename, ent_data in st.session_state["entities"].items():
+    b64_str = base64.b64encode(ent_data["asset_bytes"]).decode()
+    assets_dict[ename] = f"data:image/png;base64,{b64_str}"
+
+from pathlib import Path
+
+sorrel_dir = Path(__file__).resolve().parents[3]
+try:
+    with open(sorrel_dir / "entities" / "assets" / "empty.png", "rb") as f:
+        empty_b64 = base64.b64encode(f.read()).decode()
+        assets_dict["Empty"] = f"data:image/png;base64,{empty_b64}"
+    with open(sorrel_dir / "entities" / "assets" / "wall.png", "rb") as f:
+        wall_b64 = base64.b64encode(f.read()).decode()
+        assets_dict["Wall"] = f"data:image/png;base64,{wall_b64}"
+    with open(sorrel_dir / "entities" / "assets" / "gem.png", "rb") as f:
+        gem_b64 = base64.b64encode(f.read()).decode()
+        assets_dict["Gem"] = f"data:image/png;base64,{gem_b64}"
+    with open(sorrel_dir / "agents" / "assets" / "hero.png", "rb") as f:
+        agent_b64 = base64.b64encode(f.read()).decode()
+        assets_dict["Agent"] = f"data:image/png;base64,{agent_b64}"
+except Exception as e:
+    st.error(f"Failed to load standard assets: {e}")
+
 palette_options = ["Empty", "Agent"] + entities
-selected_entity = st.radio("Select Tool:", palette_options, horizontal=True)
+
+st.write("**Select Tool:**")
+if "selected_tool" not in st.session_state:
+    st.session_state["selected_tool"] = "Empty"
+
+cols_per_row = 6
+for i in range(0, len(palette_options), cols_per_row):
+    row_opts = palette_options[i : i + cols_per_row]
+    grid_cols = st.columns(cols_per_row)
+    for col, opt in zip(grid_cols, row_opts):
+        with col:
+            # Render image preview
+            if opt in assets_dict:
+                st.markdown(
+                    f'<div style="text-align:center"><img src="{assets_dict[opt]}" width="32px" style="image-rendering:pixelated; margin-bottom:5px;"></div>',
+                    unsafe_allow_html=True,
+                )
+            elif opt == "Empty":
+                st.markdown(
+                    f'<div style="text-align:center"><div style="width:32px; height:32px; border:1px solid #ccc; background-color:#eee; display:inline-block; margin-bottom:5px;"></div></div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                # Absolute fallback just in case
+                st.markdown(
+                    f'<div style="text-align:center"><div style="width:32px; height:32px; border:1px solid #ccc; background-color:#eee; display:inline-block; margin-bottom:5px;"></div></div>',
+                    unsafe_allow_html=True,
+                )
+
+            # Selection button
+            is_selected = st.session_state["selected_tool"] == opt
+            if st.button(
+                opt,
+                key=f"sel_{opt}",
+                type="primary" if is_selected else "secondary",
+                use_container_width=True,
+            ):
+                st.session_state["selected_tool"] = opt
+                st.rerun()
+
+selected_entity = st.session_state["selected_tool"]
 
 # ── Map Editor ────────────────────────────────────────────────────────────────
 st.subheader("Map Editor")
 st.info(f"Currently painting with: **{selected_entity}**")
-st.caption(
-    "Double click a cell to edit it manually if needed, or select a range and press delete to clear."
+st.caption("Click and drag across the grid to paint tiles quickly.")
+
+# Convert grid_state DataFrame to 2D list of strings for JS
+grid_list = st.session_state["grid_state"].values.tolist()
+
+from sorrel.utils.builder.components.tilemap import tilemap_editor
+
+# Render the custom web component and get the result
+new_grid = tilemap_editor(
+    grid_state=grid_list,
+    assets=assets_dict,
+    rows=rows,
+    cols=cols,
+    selected_tool=selected_entity,
+    key=f"tilemap_{st.session_state['map_update_counter']}",
 )
 
-column_config = {
-    col: SelectboxColumn(
-        label=col,
-        options=palette_options,
-        required=True,
-    )
-    for col in st.session_state["grid_state"].columns
-}
-
-edited_df = st.data_editor(
-    st.session_state["grid_state"],
-    column_config=column_config,
-    use_container_width=True,
-    hide_index=True,
-    height=400,
-)
+if (
+    new_grid is not None
+    and len(new_grid) == rows
+    and (rows == 0 or len(new_grid[0]) == cols)
+):
+    # Convert list of lists back to DataFrame
+    edited_df = pd.DataFrame(new_grid, columns=pd.Index([f"{i}" for i in range(cols)]))
+else:
+    edited_df = st.session_state["grid_state"]
 
 # ── Bulk Paint Tools ──────────────────────────────────────────────────────────
 with st.expander("Bulk Paint Tools", expanded=False):
@@ -96,10 +186,14 @@ with st.expander("Bulk Paint Tools", expanded=False):
                 for c in range(c1, c2 + 1):
                     new_df.iloc[r, c] = selected_entity
             st.session_state["grid_state"] = new_df
+            st.session_state["map_update_counter"] += 1
             st.rerun()
 
     if st.button(f"Fill Entire Grid with '{selected_entity}'", type="secondary"):
-        st.session_state["grid_state"][:] = selected_entity
+        new_df = st.session_state["grid_state"].copy()
+        new_df[:] = selected_entity
+        st.session_state["grid_state"] = new_df
+        st.session_state["map_update_counter"] += 1
         st.rerun()
 
     # Paint Outer Walls Tool
@@ -111,6 +205,7 @@ with st.expander("Bulk Paint Tools", expanded=False):
             new_df.iloc[:, 0] = "Wall"
             new_df.iloc[:, cols - 1] = "Wall"
             st.session_state["grid_state"] = new_df
+            st.session_state["map_update_counter"] += 1
             st.rerun()
     else:
         st.caption("Define a 'Wall' entity to use the perimeter tool.")
@@ -234,4 +329,4 @@ if not edited_df.equals(st.session_state["grid_state"]):
             if val and val != "Empty":
                 layout_data.append(((r, c), val))
     st.session_state["layout"] = layout_data
-    st.success("Layout updated!")
+    st.rerun()

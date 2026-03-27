@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    #wrapper {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      padding-top: 5px;
+    }
+    #grid-container {
+      display: grid;
+      gap: 1px;
+      background-color: #aaa;
+      border: 2px solid #666;
+    }
+    .grid-cell {
+      background-color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+    .grid-cell:hover {
+      background-color: #e3e3e3;
+    }
+    .grid-cell img {
+      width: 90%;
+      height: 90%;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+    }
+    #error-log {
+      color: red;
+      font-weight: bold;
+      padding: 10px;
+    }
+  </style>
+  <script>
+    /** LIGHTWEIGHT STREAMLIT SHIM (Zero Dependencies) */
+    function sendMessageToStreamlitClient(type, data) {
+        window.parent.postMessage(Object.assign({
+            isStreamlitMessage: true,
+            type: type,
+        }, data), "*");
+    }
+
+    const Streamlit = {
+        setComponentReady: function() {
+            sendMessageToStreamlitClient("streamlit:componentReady", {apiVersion: 1});
+        },
+        setFrameHeight: function(height) {
+            sendMessageToStreamlitClient("streamlit:setFrameHeight", {
+                height: height === undefined ? Math.max(document.body.scrollHeight, 100) : height
+            });
+        },
+        setComponentValue: function(value) {
+            sendMessageToStreamlitClient("streamlit:setComponentValue", {
+                value: value,
+                dataType: "json",
+            });
+        },
+        RENDER_EVENT: "streamlit:render",
+        events: {
+            addEventListener: function(type, callback) {
+                window.addEventListener("message", function(event) {
+                    if (event.data && event.data.type === type) {
+                        event.detail = event.data;
+                        callback(event);
+                    }
+                });
+            }
+        }
+    };
+    
+    window.onerror = function(msg, url, line, col, error) {
+      const errLog = document.getElementById("error-log");
+      if (errLog) errLog.innerText += "\n[window.onerror] " + msg + " at " + line + ":" + col;
+      try { Streamlit.setFrameHeight(); } catch(e){}
+    };
+    
+    window.onload = function() {
+        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+        Streamlit.setComponentReady();
+        Streamlit.setFrameHeight();
+    };
+
+    let gridData = [];
+    let numRows = 0;
+    let numCols = 0;
+    let assets = {};
+    let selectedTool = "Empty";
+    let isPainting = false;
+    let cellSize = 32;
+
+    function onRender(event) {
+      try {
+          const data = event.detail.args;
+          if (!data || !data.rows || !data.cols || !data.grid_state) {
+            document.getElementById("error-log").innerText = "Error: Invalid args received from Python.";
+            Streamlit.setFrameHeight();
+            return;
+          }
+          
+          numRows = data.rows;
+          numCols = data.cols;
+          gridData = data.grid_state;
+          assets = data.assets || {};
+          selectedTool = data.selected_tool || "Empty";
+
+          updateGridDOM();
+      } catch (err) {
+          document.getElementById("error-log").innerText += "\nException in onRender: " + err.message;
+      }
+    }
+
+    function updateGridDOM() {
+      const container = document.getElementById("grid-container");
+      container.innerHTML = "";
+      
+      cellSize = 32;
+      container.style.gridTemplateColumns = `repeat(${numCols}, ${cellSize}px)`;
+      container.style.gridTemplateRows = `repeat(${numRows}, ${cellSize}px)`;
+      container.style.width = `${numCols * cellSize + numCols}px`;
+      container.style.height = `${numRows * cellSize + numRows}px`;
+
+      for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
+          const cell = document.createElement("div");
+          cell.className = "grid-cell";
+          
+          if (!gridData[r]) continue;
+          
+          const ent = gridData[r][c];
+          if (ent && ent !== "Empty" && assets[ent]) {
+            const img = document.createElement("img");
+            img.src = assets[ent];
+            cell.appendChild(img);
+          } else if (ent && ent !== "Empty") {
+             cell.innerText = String(ent).charAt(0);
+          }
+
+          cell.addEventListener("mousedown", (e) => {
+            if (e.button !== 0) return;
+            isPainting = true;
+            paintCell(r, c, cell, assets[selectedTool]);
+          });
+          cell.addEventListener("mouseenter", (e) => {
+            if (isPainting) paintCell(r, c, cell, assets[selectedTool]);
+          });
+          cell.addEventListener("contextmenu", (e) => e.preventDefault());
+
+          container.appendChild(cell);
+        }
+      }
+      
+      if (selectedTool !== "Empty" && assets[selectedTool]) {
+          container.style.cursor = `url(${assets[selectedTool]}) 16 16, crosshair`;
+      } else {
+          container.style.cursor = "crosshair";
+      }
+
+      const totalHeight = (numRows * cellSize) + numRows + 50; 
+      Streamlit.setFrameHeight(Math.max(totalHeight, 150));
+    }
+
+    document.addEventListener("mouseup", () => {
+      if (isPainting) {
+        isPainting = false;
+        Streamlit.setComponentValue(gridData);
+      }
+    });
+
+    document.addEventListener("mouseleave", () => {
+        if (isPainting) {
+            isPainting = false;
+            Streamlit.setComponentValue(gridData);
+        }
+    });
+
+    function paintCell(r, c, cellElement, toolAsset) {
+      if (gridData[r][c] === selectedTool) return;
+      gridData[r][c] = selectedTool;
+      
+      cellElement.innerHTML = "";
+      if (selectedTool !== "Empty" && toolAsset) {
+        const img = document.createElement("img");
+        img.src = toolAsset;
+        cellElement.appendChild(img);
+      } else if (selectedTool !== "Empty") {
+        cellElement.innerText = String(selectedTool).charAt(0);
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="wrapper">
+    <div id="grid-container"></div>
+  </div>
+  <div id="error-log"></div>
+</body>
+</html>

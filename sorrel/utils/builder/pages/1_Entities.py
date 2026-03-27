@@ -102,8 +102,14 @@ with st.form("import_default"):
     import_submitted = st.form_submit_button("Import")
 
 if import_submitted:
+    from pathlib import Path
+
+    assets_dir = Path(__file__).resolve().parents[3] / "entities" / "assets"
+
     if def_entity == "Wall":
-        wall_bytes = make_placeholder_png("#000000")
+        wall_path = assets_dir / "wall.png"
+        with open(wall_path, "rb") as f:
+            wall_bytes = f.read()
         st.session_state["entities"]["Wall"] = {
             "name": "Wall",
             "symbol": "W",
@@ -120,7 +126,9 @@ if import_submitted:
         }
         st.success("Imported Wall (reward = -1)")
     elif def_entity == "Gem":
-        gem_bytes = make_placeholder_png("#00FF00")
+        gem_path = assets_dir / "gem.png"
+        with open(gem_path, "rb") as f:
+            gem_bytes = f.read()
         st.session_state["entities"]["Gem"] = {
             "name": "Gem",
             "symbol": "G",
@@ -172,7 +180,7 @@ if st.session_state["entities"]:
     display_cols = ["symbol", "color", "reward", "passable", "pickupable", "type"]
     df = pd.DataFrame.from_dict(st.session_state["entities"], orient="index")
     available_cols = [c for c in display_cols if c in df.columns]
-    st.dataframe(df[available_cols], use_container_width=True)
+    st.dataframe(df[available_cols], width="stretch")
 
     # Option to delete
     to_delete = st.selectbox(

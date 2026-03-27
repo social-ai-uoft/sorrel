@@ -35,50 +35,69 @@ if not actions:
 # ── Rule Builder Form ─────────────────────────────────────────────────────────
 st.subheader("Add a Rule")
 
-with st.form("new_rule_form", clear_on_submit=False):
-    trig_col, target_col = st.columns(2)
-    with trig_col:
-        trigger_action = st.selectbox(
-            "Agent performs action",
-            actions,
-            help="Which agent action triggers this rule.",
-        )
-    with target_col:
-        target_entity = st.selectbox(
-            "On entity",
-            entities,
-            help="Which entity type the action is performed on.",
-        )
+trig_col, target_col = st.columns(2)
+with trig_col:
+    trigger_action = st.selectbox(
+        "Agent performs action",
+        actions,
+        help="Which agent action triggers this rule.",
+    )
+with target_col:
+    target_entity = st.selectbox(
+        "On entity / agent",
+        entities + ["Agent"],
+        help="Which entity/agent type the action is performed on.",
+    )
 
-    st.markdown("**Outcomes** (select all that apply)")
+st.markdown("**Outcomes** (select all that apply)")
 
-    out_col1, out_col2, out_col3 = st.columns(3)
-    with out_col1:
+is_target_agent = target_entity == "Agent"
+
+out_col1, out_col2, out_col3 = st.columns(3)
+
+change_type = False
+new_entity_type = None
+give_reward = False
+reward_value = 0.0
+entity_disappears = False
+give_target_reward = False
+target_reward_value = 0.0
+
+with out_col1:
+    give_reward = st.checkbox("Acting agent receives reward / penalty")
+    if give_reward:
+        reward_value = st.number_input(
+            "Reward value",
+            value=1.0,
+            step=0.5,
+            key="outcome_reward",
+        )
+with out_col2:
+    if is_target_agent:
+        give_target_reward = st.checkbox("Target agent receives reward / penalty")
+        if give_target_reward:
+            target_reward_value = st.number_input(
+                "Target reward value",
+                value=-1.0,
+                step=0.5,
+                key="target_outcome_reward",
+            )
+    else:
         change_type = st.checkbox("Entity changes type")
-        new_entity_type = None
         if change_type:
             new_entity_type = st.selectbox(
                 "New entity type",
                 ["EmptyEntity"] + entities,
                 key="new_type_sel",
             )
-    with out_col2:
-        give_reward = st.checkbox("Agent receives reward / penalty")
-        reward_value = 0.0
-        if give_reward:
-            reward_value = st.number_input(
-                "Reward value",
-                value=1.0,
-                step=0.5,
-                key="outcome_reward",
-            )
-    with out_col3:
+with out_col3:
+    if not is_target_agent:
         entity_disappears = st.checkbox(
             "Entity disappears (becomes EmptyEntity)",
             help="Overrides 'change type' to always become EmptyEntity.",
         )
 
-    rule_submitted = st.form_submit_button("Add Rule")
+rule_submitted = st.button("Add Rule")
 
 if rule_submitted:
     outcomes = []
@@ -88,6 +107,8 @@ if rule_submitted:
         outcomes.append({"type": "change_type", "new_type": new_entity_type})
     if give_reward:
         outcomes.append({"type": "reward", "value": reward_value})
+    if give_target_reward:
+        outcomes.append({"type": "target_reward", "value": target_reward_value})
 
     if not outcomes:
         st.warning("Please select at least one outcome for the rule.")
@@ -135,7 +156,15 @@ if st.session_state["rules"]:
                 elif outcome["type"] == "reward":
                     val = outcome["value"]
                     label = "reward" if val >= 0 else "penalty"
-                    outcome_strs.append(f"agent receives **{label}** of `{val:+.1f}`")
+                    outcome_strs.append(
+                        f"acting agent receives **{label}** of `{val:+.1f}`"
+                    )
+                elif outcome["type"] == "target_reward":
+                    val = outcome["value"]
+                    label = "reward" if val >= 0 else "penalty"
+                    outcome_strs.append(
+                        f"target agent receives **{label}** of `{val:+.1f}`"
+                    )
 
             outcome_text = (
                 " & ".join(outcome_strs) if outcome_strs else "*(no outcomes)*"
