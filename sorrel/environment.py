@@ -4,6 +4,7 @@ from datetime import datetime
 from multiprocessing import Pool
 from pathlib import Path
 
+import torch
 from numpy import ndenumerate
 from omegaconf import DictConfig, OmegaConf
 
@@ -14,6 +15,9 @@ from sorrel.utils.logging import ConsoleLogger, Logger
 from sorrel.utils.visualization import ImageRenderer
 from sorrel.worlds import Gridworld
 
+# Device type alias for type hinting
+Device = str | torch.device
+
 
 class Environment[W: Gridworld]:
     """An abstract wrapper class for running experiments with agents and environments.
@@ -22,6 +26,7 @@ class Environment[W: Gridworld]:
         world: The world that the experiment includes.
         config: The configurations for the experiment.
         stop_if_done: Whether to end the epoch if the world is done. Defaults to False.
+        device: The device to perform computations on. Defaults to "cpu".
 
             .. note::
                 Some default methods provided by this class, such as `run_experiment`, require certain config parameters to be defined.
@@ -32,9 +37,14 @@ class Environment[W: Gridworld]:
     config: DictConfig
     agents: list[Agent]
     stop_if_done: bool
+    device: Device
 
     def __init__(
-        self, world: W, config: DictConfig | dict | list, stop_if_done: bool = False
+        self,
+        world: W,
+        config: DictConfig | dict | list,
+        stop_if_done: bool = False,
+        device: Device = "cpu",
     ) -> None:
 
         if isinstance(config, DictConfig):
@@ -49,6 +59,7 @@ class Environment[W: Gridworld]:
         self.turn = 0
         self.world.create_world()
         self.stop_if_done = stop_if_done
+        self.device = device
 
         self.setup_agents()
         self.populate_environment()

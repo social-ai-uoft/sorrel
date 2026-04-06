@@ -26,8 +26,9 @@ from sorrel.worlds import Gridworld
 class TagEnv(Environment[Gridworld]):
     """The experiment for tag."""
 
-    def __init__(self, world: Gridworld, config: dict) -> None:
+    def __init__(self, world: Gridworld, config: dict, device: torch.device) -> None:
         super().__init__(world, config)
+        self.device = device
 
     # end constructor
 
@@ -59,7 +60,7 @@ class TagEnv(Environment[Gridworld]):
                 action_space=action_spec.n_actions,
                 layer_size=250,
                 epsilon=0.7,
-                device="cpu",
+                device=self.device,
                 seed=torch.random.seed(),
                 n_frames=5,
                 n_step=3,
