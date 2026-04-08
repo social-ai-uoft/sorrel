@@ -21,6 +21,7 @@ if __name__ == "__main__":
         "model": {
             "agent_vision_radius": 2,
             "epsilon_decay": 0.0005,
+            "observation_spec": "rgb",  # options: ["rgb", "onehot"]
         },
         "world": {
             "height": 21,

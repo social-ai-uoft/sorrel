@@ -78,29 +78,30 @@ def show_logs(args, extra_args):
     return 0
 
 
+parser = argparse.ArgumentParser(
+    description="Sorrel CLI tool. Use 'sorrel --help' for more information."
+)
+subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+# 'run' subcommand
+run_parser = subparsers.add_parser("run", help="Run a Sorrel example.")
+run_parser.add_argument(
+    "example", help="Name of the example to run (e.g., cleanup, chess)."
+)
+run_parser.add_argument(
+    "--config",
+    help="Name of the configuration file to use (without extension). Defaults to 'config'.",
+)
+
+# 'show-logs' subcommand
+logs_parser = subparsers.add_parser(
+    "show-logs",
+    help="Start a TensorBoard session for a specific example's data logs",
+)
+logs_parser.add_argument("example", help="Name of the example (e.g., cleanup, chess).")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Sorrel CLI tool")
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    # 'run' subcommand
-    run_parser = subparsers.add_parser("run", help="Run a Sorrel example")
-    run_parser.add_argument(
-        "example", help="Name of the example to run (e.g., cleanup, chess)"
-    )
-    run_parser.add_argument(
-        "--config",
-        help="Name of the configuration file to use (without extension). Defaults to 'config'.",
-    )
-
-    # 'show-logs' subcommand
-    logs_parser = subparsers.add_parser(
-        "show-logs",
-        help="Start a TensorBoard session for a specific example's data logs",
-    )
-    logs_parser.add_argument(
-        "example", help="Name of the example (e.g., cleanup, chess)"
-    )
-
     # Parse known args to separate the command/example from the rest
     args, extra_args = parser.parse_known_args()
 
