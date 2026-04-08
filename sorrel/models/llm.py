@@ -94,7 +94,10 @@ class Client:
         else:
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=[{"role": "system", "content": system_message}, *self.msg_history],
+                messages=[
+                    {"role": "system", "content": system_message},
+                    *self.msg_history,
+                ],
                 temperature=temperature,
                 max_tokens=self.max_tokens,
                 n=1,
@@ -127,7 +130,9 @@ class LLM(BaseModel):
         self.call_params = call_params
         self.model = model_name
         self.instructions = instructions
-        self.client = Client(model_name, max_tokens=max_tokens, provider=provider, api_key=api_key)
+        self.client = Client(
+            model_name, max_tokens=max_tokens, provider=provider, api_key=api_key
+        )
         self.stm = ""
         self.memory = StrBuffer(capacity=memory_size, obs_shape=[11, 11])
         self.temperature = temperature
