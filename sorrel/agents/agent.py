@@ -120,7 +120,9 @@ class Agent[W: Gridworld](Entity[W]):
             reward (float): the reward received by the agent.
             done (bool): whether the episode terminated after this experience.
         """
-        if getattr(self.model, "use_threadsafe_model_api", False) and hasattr(self.model.memory, "positions"):
+        if getattr(self.model, "use_threadsafe_model_api", False) and hasattr(
+            self.model.memory, "positions"
+        ):
             self.model.add_experience(
                 state, action, reward, done, position=tuple(self.location)
             )

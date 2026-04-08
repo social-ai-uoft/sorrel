@@ -6,8 +6,8 @@ from sorrel.threadsafe.buffers import ThreadsafeBuffer
 class ThreadsafePyTorchIQN(iRainbowModel, ThreadsafeBaseModel):
     """Threadsafe opt-in IQN model.
 
-    This class keeps default IQN untouched and provides an alternative for
-    concurrent actor/learner workflows.
+    This class keeps default IQN untouched and provides an alternative for concurrent
+    actor/learner workflows.
     """
 
     def __init__(self, *args, **kwargs):
