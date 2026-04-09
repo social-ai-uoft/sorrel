@@ -213,6 +213,21 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 power_mode=world_cfg.get("power_mode", False),
                 observe_own_power_only=world_cfg.get("observe_own_power_only", False),
                 aggression_enabled=world_cfg.get("aggression_enabled", False),
+                private_coordination_rep_enabled=getattr(
+                    self.world, "private_coordination_rep_enabled", False
+                ),
+                private_coordination_rep_obs_enabled=getattr(
+                    self.world, "private_coordination_rep_obs_enabled", False
+                ),
+                private_coordination_rep_obs_randomize=getattr(
+                    self.world, "private_coordination_rep_obs_randomize", False
+                ),
+                private_coordination_rep_obs_random_max=getattr(
+                    self.world, "private_coordination_rep_obs_random_max", 10.0
+                ),
+                private_coordination_rep_obs_random_seed=getattr(
+                    self.world, "private_coordination_rep_obs_random_seed", 0
+                ),
             )
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size
@@ -301,6 +316,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     cpc_temperature=float(_get("cpc_temperature", 0.07)),
                     cpc_memory_bank_size=0,
                     cpc_start_epoch=int(_get("cpc_start_epoch", 1)),
+                    use_last_action=bool(_get("use_last_action", False)),
+                    last_action_embed_dim=int(_get("last_action_embed_dim", 32)),
                 )
             else:
                 raise ValueError(f"Unknown model_type: {model_type!r}. Use 'iqn' or 'ppo_lstm_cpc'.")
@@ -311,6 +328,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
             can_hunt = agent_attrs.get("can_hunt", True)  # Default to True
             can_receive_shared_reward = agent_attrs.get("can_receive_shared_reward", True)  # Default to True
             exclusive_reward = agent_attrs.get("exclusive_reward", False)  # Default to False
+            punish_freeze_ability = agent_attrs.get("punish_freeze_ability")  # From CSV punishment_ability when heterogeneity enabled
             
             # Store agent information (only ID and kind - orientation set by probe test logic)
             agent_info[agent_id] = {
@@ -338,6 +356,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 can_hunt=can_hunt,  # NEW: pass can_hunt attribute
                 can_receive_shared_reward=can_receive_shared_reward,  # NEW: pass can_receive_shared_reward attribute
                 exclusive_reward=exclusive_reward,  # NEW: pass exclusive_reward attribute
+                punish_freeze_ability=punish_freeze_ability,
+                num_agents=n_agents,
             )
             agents.append(agent)
         
@@ -859,10 +879,14 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         
         Returns:
             True if all set caps (max_stags, max_hares, max_resources) are reached,
-            False otherwise. If no caps are set, returns False.
+            False otherwise. If no caps are set, or caps are disabled, returns False.
         """
         world = self.world
-        
+
+        # When cap mode is disabled, caps are never considered reached
+        if getattr(world, 'resource_cap_mode', 'specified') == 'disabled':
+            return False
+
         # Track if any caps are set
         caps_set = False
         
@@ -892,7 +916,9 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         """Performs a full step in the environment with agent state updates."""
         # Update world turn counter
         self.world.current_turn += 1
-        
+        self.world.update_cpr_spawn_budgets()
+        self.world.apply_cpr_culling()
+
         # Update agent removal and respawn states first
         self.update_agent_states()
 
@@ -916,9 +942,8 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         # Process Empty entities first - check caps before each entity to prevent exceeding limits
         processed_count = 0
         for loc, entity in empty_entities:
-            # Check if all caps are reached before processing this entity
-            if self._are_all_resource_caps_reached():
-                break  # Stop processing Empty entities when all caps reached
+            if not self.world.cpr_enabled and self._are_all_resource_caps_reached():
+                break
             entity.transition(self.world)
             processed_count += 1
 

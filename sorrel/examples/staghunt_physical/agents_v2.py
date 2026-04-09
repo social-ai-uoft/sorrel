@@ -142,6 +142,35 @@ def shuffle_agent_id_vectors(vectors: np.ndarray, seed: int) -> np.ndarray:
     return vectors[perm].copy()
 
 
+def apply_joint_stag_coordination_rep_updates(
+    world: StagHuntWorld,
+    defeated_stag: StagResource,
+) -> None:
+    """Increment pairwise private coordination counts for agents in ``attack_history`` (joint stag kill)."""
+    if not getattr(world, "private_coordination_rep_enabled", False):
+        return
+    if not hasattr(world, "environment") or world.environment is None:
+        return
+    hist = getattr(defeated_stag, "attack_history", [])
+    U = list(dict.fromkeys(hist))
+    if len(U) < 2:
+        return
+    agents_by_id = {a.agent_id: a for a in world.environment.agents}
+    for focal_id in U:
+        focal_agent = agents_by_id.get(focal_id)
+        if focal_agent is None:
+            continue
+        rep = focal_agent.private_coordination_rep
+        if len(rep) == 0:
+            continue
+        for partner_id in U:
+            if partner_id == focal_id:
+                continue
+            if partner_id < 0 or partner_id >= len(rep):
+                continue
+            rep[partner_id] = int(rep[partner_id]) + 1
+
+
 class AgentIdentityEncoder:
     """Encodes agent identity into observation vectors."""
     
@@ -344,6 +373,11 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         power_mode: bool = False,
         observe_own_power_only: bool = False,
         aggression_enabled: bool = False,
+        private_coordination_rep_enabled: bool = False,
+        private_coordination_rep_obs_enabled: bool = False,
+        private_coordination_rep_obs_randomize: bool = False,
+        private_coordination_rep_obs_random_max: float = 10.0,
+        private_coordination_rep_obs_random_seed: int = 0,
     ):
         super().__init__(entity_list, full_view, vision_radius, env_dims)
         self.embedding_size = embedding_size
@@ -351,6 +385,13 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         self.power_mode = power_mode
         self.observe_own_power_only = observe_own_power_only
         self.aggression_enabled = aggression_enabled
+        self.private_coordination_rep_enabled = bool(private_coordination_rep_enabled) and standard_obs
+        self.private_coordination_rep_obs_enabled = bool(
+            private_coordination_rep_obs_enabled
+        ) and standard_obs
+        self.private_coordination_rep_obs_randomize = bool(private_coordination_rep_obs_randomize)
+        self.private_coordination_rep_obs_random_max = float(private_coordination_rep_obs_random_max)
+        self.private_coordination_rep_obs_random_seed = int(private_coordination_rep_obs_random_seed)
         self.agent_id_vector_dim = agent_id_vector_dim
         self.agent_id_encoding_mode = agent_id_encoding_mode
         self.use_agent_id_in_standard_obs = use_agent_id_in_standard_obs
@@ -360,7 +401,8 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         if standard_obs:
             if num_agents is None:
                 raise ValueError("num_agents must be provided when standard_obs=True")
-            
+            self.num_agents = num_agents
+
             # Generate agent ID vectors based on encoding mode and enable flag
             if use_agent_id_in_standard_obs:
                 # Normal mode: generate unique vectors
@@ -436,8 +478,10 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 + 2  # Frozen: ME_FROZEN, OTHER_FROZEN
                 + (1 if power_mode else 0)  # Power (when power_mode)
                 + (1 if aggression_enabled else 0)  # Target aggression (when aggression_enabled)
+                + (1 if (self.private_coordination_rep_enabled or self.private_coordination_rep_obs_enabled) else 0)
             )
         else:
+            self.num_agents = int(num_agents or 0)
             self.agent_id_vectors = None
             self.features_per_cell = None
             self.agent_kinds_list = []
@@ -878,7 +922,16 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         FEAT_OTHER_AGGRESSION = (
             (FEAT_POWER + 1) if self.power_mode else (FEAT_OTHER_FROZEN + 1)
         ) if self.aggression_enabled else None
-        
+        if self.private_coordination_rep_enabled or self.private_coordination_rep_obs_enabled:
+            if self.aggression_enabled:
+                FEAT_OTHER_PRIVATE_REP = FEAT_OTHER_AGGRESSION + 1
+            elif self.power_mode:
+                FEAT_OTHER_PRIVATE_REP = FEAT_POWER + 1
+            else:
+                FEAT_OTHER_PRIVATE_REP = FEAT_OTHER_FROZEN + 1
+        else:
+            FEAT_OTHER_PRIVATE_REP = None
+
         # Orientation mapping
         orientation_map = {0: 'north', 1: 'east', 2: 'south', 3: 'west'}
         orientation_to_feat = {
@@ -988,6 +1041,20 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                                 if cap is not None and cap > 0:
                                     val = min(1.0, val / cap)
                                 feature_tensor[FEAT_OTHER_AGGRESSION, y, x] = val
+                            if FEAT_OTHER_PRIVATE_REP is not None:
+                                if self.private_coordination_rep_obs_randomize:
+                                    # Deterministic pseudo-random control signal in [0, max]
+                                    t = int(getattr(world, "current_turn", 0))
+                                    s = self.private_coordination_rep_obs_random_seed
+                                    # 32-bit mix; avoid Python hash randomization.
+                                    h = (s ^ (observer_id * 0x9E3779B1) ^ (entity_id * 0x85EBCA6B) ^ (t * 0xC2B2AE35) ^ (y * 0x27D4EB2D) ^ (x * 0x165667B1)) & 0xFFFFFFFF
+                                    # Map to [0, 1)
+                                    u = (h / 2**32)
+                                    feature_tensor[FEAT_OTHER_PRIVATE_REP, y, x] = float(u * self.private_coordination_rep_obs_random_max)
+                                elif self.private_coordination_rep_enabled:
+                                    rep = getattr(observer_agent, "private_coordination_rep", None)
+                                    if rep is not None and len(rep) > 0 and 0 <= entity_id < len(rep):
+                                        feature_tensor[FEAT_OTHER_PRIVATE_REP, y, x] = float(rep[entity_id])
                 # Encode beam features
                 if world.valid_location(beam_loc):
                     beam_entity = world.observe(beam_loc)
@@ -1117,6 +1184,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         can_hunt: bool = True,  # NEW: whether agent can harm resources
         can_receive_shared_reward: bool = True,  # NEW: whether agent can receive shared rewards
         exclusive_reward: bool = False,  # NEW: whether only this agent gets reward when defeating resources
+        punish_freeze_ability: int | None = None,  # Freeze duration in turns when heterogeneity enabled (from CSV punishment_ability)
+        num_agents: int | None = None,
     ):
         super().__init__(observation_spec, action_spec, model)
         # assign a default sprite; can be overridden externally
@@ -1128,6 +1197,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.can_hunt: bool = can_hunt  # NEW: whether attacks harm resources
         self.can_receive_shared_reward = can_receive_shared_reward  # NEW: whether agent can receive shared rewards
         self.exclusive_reward = exclusive_reward  # NEW: whether only this agent gets reward when defeating resources
+        self.punish_freeze_ability: int | None = punish_freeze_ability
 
         # orientation encoded as 0: north, 1: east, 2: south, 3: west
         self.orientation: int = 0
@@ -1151,6 +1221,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.received_interaction_reward: bool = False
         # Aggression (rises when punished, decays each step, drops when punishing; drives intrinsic reward)
         self.aggression: float = 0.0
+        # Last action taken (for models with use_last_action, e.g. RecurrentIQNModelCPC)
+        self._last_action: int | None = None
 
         # Health system
         self.max_health = max_health
@@ -1158,6 +1230,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
 
         # Power (when power_mode): range [POWER_MIN, POWER_MAX]; increases when punishing, decreases when punished
         self.power: int = POWER_MIN
+
+        na = num_agents if num_agents is not None else int(getattr(observation_spec, "num_agents", 1))
+        if getattr(observation_spec, "private_coordination_rep_enabled", False):
+            self.private_coordination_rep = np.zeros(na, dtype=np.int32)
+        else:
+            self.private_coordination_rep = np.zeros(0, dtype=np.int32)
 
         # Initialize agent kind based on orientation
         self.update_agent_kind()
@@ -1286,10 +1364,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.health -= 1
         if self.health <= 0:
             self.health = 0
-            freeze_duration = 5
-            if world is not None:
-                freeze_duration = getattr(world, "punish_freeze_duration", 5)
-            self.freeze_timer = freeze_duration
+            if world is not None and getattr(world, "punish_freeze_heterogeneity_enabled", False) and self.punish_freeze_ability is not None:
+                freeze_duration = int(self.punish_freeze_ability)
+            else:
+                freeze_duration = 5 if world is None else getattr(world, "punish_freeze_duration", 5)
+            self.freeze_timer = max(self.freeze_timer, freeze_duration)
             self.is_frozen = True
         # Aggression: victim's aggression increases when punished
         if getattr(world, "aggression_enabled", False) and world is not None:
@@ -1324,11 +1403,15 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.is_frozen = False
         self.freeze_timer = 0
         self.aggression = 0.0
+        if self.private_coordination_rep.size > 0:
+            self.private_coordination_rep.fill(0)
 
         # Reset health system
         self.health = self.max_health
         self.power = POWER_MIN
         self.update_agent_kind()  # Initialize agent kind based on orientation
+        # Reset last-action tracking for models that use it (e.g. RecurrentIQNModelCPC)
+        self._last_action = None
         # reset the underlying model (e.g., clear memory of past states or LSTM hidden state)
         if hasattr(self.model, "reset") and callable(self.model.reset):
             self.model.reset()
@@ -1365,7 +1448,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         else:
             stacked_states = np.vstack((prev_states, state))
             model_input = stacked_states.reshape(1, -1)
-        action = self.model.take_action(model_input)
+        if getattr(self.model, "use_last_action", False):
+            action = self.model.take_action(model_input, last_action=self._last_action)
+            self._last_action = action
+        else:
+            action = self.model.take_action(model_input)
         return action
     
     def get_action_with_qvalues(self, state: np.ndarray) -> tuple[int, np.ndarray]:
@@ -1400,7 +1487,11 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             q_values = self.model.get_all_qvalues(model_input)
         else:
             q_values = np.zeros(self.action_spec.n_actions, dtype=np.float32)
-        action = self.model.take_action(model_input)
+        if getattr(self.model, "use_last_action", False):
+            action = self.model.take_action(model_input, last_action=self._last_action)
+            self._last_action = action
+        else:
+            action = self.model.take_action(model_input)
         return action, q_values
 
     def add_memory(
@@ -1417,6 +1508,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         if hasattr(self.model, "add_memory_ppo"):
             self.model.add_memory_ppo(reward, done)
             return
+        if getattr(self.model, "use_last_action", False) and done:
+            self._last_action = None
         if state.ndim == 2 and state.shape[0] == 1:
             state = state.flatten()
         self.model.memory.add(state, action, reward, done)
@@ -1606,6 +1699,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                                 # Attack the resource - pass agent_id since attack will harm
                                 defeated = entity.on_attack(world, world.current_turn, self.agent_id)
                                 if defeated:
+                                    if isinstance(entity, StagResource):
+                                        apply_joint_stag_coordination_rep_updates(world, entity)
                                     # Handle reward sharing for defeated resource
                                     shared_reward = self.handle_resource_defeat(entity, world)
                                     reward += shared_reward
@@ -1657,6 +1752,14 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                             
                             # Punish the agent (pass world for punish_freeze_duration)
                             entity.on_punishment_hit(world)
+                            if getattr(world, "private_coordination_rep_enabled", False) and getattr(
+                                world, "private_rep_punish_decay_enabled", False
+                            ):
+                                delta = int(getattr(world, "private_rep_punish_decay_delta", 1))
+                                punisher_id = self.agent_id
+                                vrep = entity.private_coordination_rep
+                                if 0 <= punisher_id < len(vrep):
+                                    vrep[punisher_id] = max(0, int(vrep[punisher_id]) - delta)
                             # Power mode: punisher gains power (cap POWER_MAX), target loses (floor POWER_MIN)
                             if getattr(world, 'power_mode', False):
                                 self.power = min(POWER_MAX, self.power + 1)
@@ -1785,14 +1888,31 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                     if world.valid_location(target):
                         beam_locs.append(target)
         elif single_tile_attack:
-            # Attack tiles directly in front of the agent (configurable range, default: 2)
+            # Rectangular beam: attack_range deep, width 2 * beam_radius + 1 (same as punish beam)
             attack_range = getattr(world, "attack_range", 2)
+            right_dy, right_dx = -dx, dy  # 90 degrees clockwise
+            left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
             for i in range(1, attack_range + 1):
                 target = (y + dy * i, x + dx * i, world.beam_layer)
                 if world.valid_location(target):
                     beam_locs.append(target)
+                for w in range(1, beam_radius + 1):
+                    right_target = (
+                        y + dy * i + right_dy * w,
+                        x + dx * i + right_dx * w,
+                        world.beam_layer,
+                    )
+                    if world.valid_location(right_target):
+                        beam_locs.append(right_target)
+                    left_target = (
+                        y + dy * i + left_dy * w,
+                        x + dx * i + left_dx * w,
+                        world.beam_layer,
+                    )
+                    if world.valid_location(left_target):
+                        beam_locs.append(left_target)
         else:
-                # Original multi-tile beam behavior
+            # Original multi-tile fan beam (when neither area_attack nor single_tile_attack)
             # Calculate right and left vectors by rotating 90 degrees
             right_dy, right_dx = -dx, dy  # 90 degrees clockwise
             left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
@@ -1845,39 +1965,45 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         right_dy, right_dx = -dx, dy  # 90 degrees clockwise
         left_dy, left_dx = dx, -dy  # 90 degrees counter-clockwise
 
-        # Check if area attack mode is enabled
-        area_attack = getattr(world, "area_attack", False)
-
-        # Get beam radius from world config (default to 3 if not set)
-        beam_radius = getattr(world, "beam_radius", 3)
+        # Check punish-beam-specific mode flags (independent from attack beam)
+        area_attack = getattr(world, "punish_area_attack", getattr(world, "area_attack", False))
+        single_tile_attack = getattr(world, "punish_single_tile_attack", getattr(world, "single_tile_attack", False))
+        beam_radius = getattr(world, "punish_beam_radius", getattr(world, "beam_radius", 3))
 
         # Calculate beam locations
         beam_locs = []
         y, x, z = self.location
 
         if area_attack:
-            # 3x3 area attack: covers a 3x3 region in front of the agent
-            # The 3x3 area is centered 1 tile forward from the agent
-            # Generate all 9 tiles in the 3x3 grid
-            for i in range(-1, 2):  # -1, 0, 1 (back, center, forward relative to center tile)
-                for j in range(-1, 2):  # -1, 0, 1 (left, center, right relative to center tile)
-                    # Center tile is 1 tile forward: (y + dy, x + dx)
-                    # Offset by i tiles forward and j tiles to the side
+            for i in range(-1, 2):
+                for j in range(-1, 2):
                     target_y = y + dy + (i * dy) + (j * left_dy)
                     target_x = x + dx + (i * dx) + (j * left_dx)
                     target = (target_y, target_x, world.beam_layer)
                     if world.valid_location(target):
                         beam_locs.append(target)
+        elif single_tile_attack:
+            punish_range = getattr(world, "punish_range", getattr(world, "attack_range", 2))
+            for i in range(1, punish_range + 1):
+                # Center tile at this depth
+                target = (y + dy * i, x + dx * i, world.beam_layer)
+                if world.valid_location(target):
+                    beam_locs.append(target)
+                # Lateral wings controlled by punish_beam_radius
+                for w in range(1, beam_radius + 1):
+                    right_target = (y + dy * i + right_dy * w, x + dx * i + right_dx * w, world.beam_layer)
+                    if world.valid_location(right_target):
+                        beam_locs.append(right_target)
+                    left_target = (y + dy * i + left_dy * w, x + dx * i + left_dx * w, world.beam_layer)
+                    if world.valid_location(left_target):
+                        beam_locs.append(left_target)
         else:
-                # Forward beam locations
             for i in range(1, beam_radius + 1):
                 target = (y + dy * i, x + dx * i, world.beam_layer)
                 if world.valid_location(target):
                     beam_locs.append(target)
 
-            # Side beam locations
             for i in range(beam_radius):
-                # Right side
                 right_target = (
                     y + right_dy + dy * i,
                     x + right_dx + dx * i,
@@ -1886,7 +2012,6 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                 if world.valid_location(right_target):
                     beam_locs.append(right_target)
 
-                # Left side
                 left_target = (y + left_dy + dy * i, x + left_dx + dx * i, world.beam_layer)
                 if world.valid_location(left_target):
                     beam_locs.append(left_target)

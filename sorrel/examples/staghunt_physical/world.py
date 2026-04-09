@@ -138,6 +138,7 @@ class StagHuntWorld(Gridworld):
         self.punish_cooldown: int = int(get_world_param("punish_cooldown", 5))
         self.punish_cost: float = float(get_world_param("punish_cost", 0.1))
         self.punish_freeze_duration: int = int(get_world_param("punish_freeze_duration", 5))
+        self.punish_freeze_heterogeneity_enabled: bool = bool(get_world_param("punish_freeze_heterogeneity_enabled", False))
         # Aggression mechanism (punishment → victim aggression ↑ → intrinsic reward when punishing → satiation)
         self.aggression_enabled: bool = bool(get_world_param("aggression_enabled", False))
         self.aggression_increase_per_punishment: float = float(get_world_param("aggression_increase_per_punishment", 1.0))
@@ -152,6 +153,27 @@ class StagHuntWorld(Gridworld):
             if not (0 < cap <= 4):
                 raise ValueError(f"aggression_cap must be in range (0, 4], got {cap}")
             self.aggression_cap = cap
+        self.private_coordination_rep_enabled: bool = bool(
+            get_world_param("private_coordination_rep_enabled", False)
+        )
+        self.private_coordination_rep_obs_enabled: bool = bool(
+            get_world_param("private_coordination_rep_obs_enabled", False)
+        )
+        self.private_coordination_rep_obs_randomize: bool = bool(
+            get_world_param("private_coordination_rep_obs_randomize", False)
+        )
+        self.private_coordination_rep_obs_random_max: float = float(
+            get_world_param("private_coordination_rep_obs_random_max", 10.0)
+        )
+        self.private_coordination_rep_obs_random_seed: int = int(
+            get_world_param("private_coordination_rep_obs_random_seed", 0)
+        )
+        self.private_rep_punish_decay_enabled: bool = bool(
+            get_world_param("private_rep_punish_decay_enabled", False)
+        )
+        self.private_rep_punish_decay_delta: int = int(
+            get_world_param("private_rep_punish_decay_delta", 1)
+        )
         self.respawn_delay: int = int(get_world_param("respawn_delay", 10))
         self.payoff_matrix: list[list[int]] = [
             list(row) for row in get_world_param("payoff_matrix", [[4, 0], [2, 2]])
@@ -177,10 +199,22 @@ class StagHuntWorld(Gridworld):
         # Number of tiles to attack in front when single_tile_attack is True (default: 2)
         self.attack_range: int = int(get_world_param("attack_range", 2))
         self.area_attack: bool = bool(get_world_param("area_attack", False))
+        # Punish beam shape parameters (independent from attack beam shape)
+        self.punish_single_tile_attack: bool = bool(get_world_param("punish_single_tile_attack", self.single_tile_attack))
+        self.punish_range: int = int(get_world_param("punish_range", self.attack_range))
+        self.punish_area_attack: bool = bool(get_world_param("punish_area_attack", self.area_attack))
+        self.punish_beam_radius: int = int(get_world_param("punish_beam_radius", self.beam_radius))
         self.skip_spawn_validation: bool = bool(get_world_param("skip_spawn_validation", False))
         self.power_mode: bool = bool(get_world_param("power_mode", False))
         self.observe_own_power_only: bool = bool(get_world_param("observe_own_power_only", False))
         self.current_turn: int = 0  # Track current turn for regeneration
+
+        # Proximity-based respawn: resources tend to respawn near where they were consumed
+        self.respawn_proximity_enabled: bool = bool(get_world_param("respawn_proximity_enabled", False))
+        self.respawn_proximity_sigma: float = float(get_world_param("respawn_proximity_sigma", 2.0))
+        self.respawn_proximity_decay: float = float(get_world_param("respawn_proximity_decay", 0.9))
+        self.respawn_proximity_strength: float = float(get_world_param("respawn_proximity_strength", 5.0))
+        self.consumption_heatmap: np.ndarray = np.zeros((height, width))
 
         # Resource respawn cap parameters
         max_resources_val = get_world_param("max_resources", None)
@@ -200,11 +234,12 @@ class StagHuntWorld(Gridworld):
         # Resource respawn cap mode
         # "specified": Use max_resources, max_stags, max_hares parameters (default)
         # "initial_count": Automatically set caps based on initial spawn counts
+        # "disabled": No cap — resources can accumulate without bound
         self.resource_cap_mode: str = str(get_world_param("resource_cap_mode", "specified"))
-        if self.resource_cap_mode not in ["specified", "initial_count"]:
+        if self.resource_cap_mode not in ["specified", "initial_count", "disabled"]:
             raise ValueError(
                 f"Invalid resource_cap_mode: {self.resource_cap_mode}. "
-                f"Must be 'specified' or 'initial_count'"
+                f"Must be 'specified', 'initial_count', or 'disabled'"
             )
 
         # Dynamic resource density parameters (3-step process with resource-specific rates)
@@ -244,6 +279,53 @@ class StagHuntWorld(Gridworld):
             self.current_stag_rate: float = 1.0
             self.current_hare_rate: float = 1.0
 
+        # CPR logistic-growth resource dynamics
+        cpr_cfg = world_cfg.get("cpr_resource_dynamics", {})
+        self.cpr_enabled: bool = bool(cpr_cfg.get("enabled", False))
+        if self.cpr_enabled:
+            self.stag_growth_rate: float = float(cpr_cfg.get("stag_growth_rate", 0.05))
+            self.hare_growth_rate: float = float(cpr_cfg.get("hare_growth_rate", 0.10))
+            self.cpr_min_spawn_budget: int = int(cpr_cfg.get("cpr_min_spawn_budget", 0))
+            if not self.max_stags or self.max_stags <= 0:
+                raise ValueError(
+                    "cpr_resource_dynamics requires max_stags > 0 (used as carrying capacity K)"
+                )
+            if not self.max_hares or self.max_hares <= 0:
+                raise ValueError(
+                    "cpr_resource_dynamics requires max_hares > 0 (used as carrying capacity K)"
+                )
+            self.stag_spawn_budget: int = 0
+            self.hare_spawn_budget: int = 0
+            self.stag_spawn_budget_initial: int = 0
+            self.hare_spawn_budget_initial: int = 0
+            self.stag_cull_count: int = 0
+            self.hare_cull_count: int = 0
+            if self.dynamic_resource_density_enabled:
+                logger.warning(
+                    "cpr_resource_dynamics: dynamic_resource_density is automatically "
+                    "disabled when CPR is enabled."
+                )
+            logger.warning(
+                "cpr_resource_dynamics: resource_cap_mode hard cap is automatically "
+                "disabled; max_stags/max_hares serve only as carrying capacity K."
+            )
+
+        # Neighbor-density-dependent resource spawning
+        nbr_cfg = world_cfg.get("neighbor_density_respawn", {})
+        self.neighbor_density_respawn_enabled: bool = bool(nbr_cfg.get("enabled", False))
+        if self.neighbor_density_respawn_enabled:
+            if self.cpr_enabled:
+                logger.warning(
+                    "neighbor_density_respawn: incompatible with cpr_resource_dynamics — "
+                    "disabling neighbor_density_respawn."
+                )
+                self.neighbor_density_respawn_enabled = False
+            else:
+                self.neighbor_density_base_rate: float = float(nbr_cfg.get("base_rate", 0.01))
+                self.neighbor_density_radius: int = int(nbr_cfg.get("neighborhood_radius", 1))
+                side = 2 * self.neighbor_density_radius + 1
+                self.neighbor_density_N: int = side * side - 1  # exclude center cell
+
         # Appearance switching configuration
         appearance_cfg = world_cfg.get("appearance_switching", {})
         self.appearance_switching_enabled: bool = bool(appearance_cfg.get("enabled", False))
@@ -262,14 +344,16 @@ class StagHuntWorld(Gridworld):
             self.agent_kind_mapping: dict[int, str] = {}
             self.agent_attributes: dict[int, dict] = {}
         else:
+            # Normalize agent_config keys to int (YAML/OmegaConf may give string keys "0", "1", ...)
+            _agent_config = {int(k): v for k, v in agent_config.items()}
             # Extract kinds and attributes from config
-            self.agent_kinds: list[str] = list(set([cfg.get("kind") for cfg in agent_config.values() if cfg.get("kind")]))
+            self.agent_kinds: list[str] = list(set([cfg.get("kind") for cfg in _agent_config.values() if cfg.get("kind")]))
             self.agent_kind_mapping: dict[int, str] = {
-                agent_id: cfg.get("kind") for agent_id, cfg in agent_config.items() if cfg.get("kind")
+                agent_id: cfg.get("kind") for agent_id, cfg in _agent_config.items() if cfg.get("kind")
             }
             self.agent_attributes: dict[int, dict] = {
                 agent_id: {k: v for k, v in cfg.items() if k != "kind"}
-                for agent_id, cfg in agent_config.items()
+                for agent_id, cfg in _agent_config.items()
             }
 
         # record spawn points; to be populated by the environment
@@ -378,6 +462,32 @@ class StagHuntWorld(Gridworld):
             int: Number of hare resources currently in the world.
         """
         return self._cached_hare_count
+
+    def count_resource_neighbors(self, location: tuple) -> int:
+        """Count resource-bearing cells in the Moore neighborhood of location on the dynamic layer.
+
+        Only counts cells on the dynamic layer that hold a StagResource or HareResource entity.
+        Uses the radius configured in ``neighbor_density_radius`` (default 1, giving N=8 neighbors).
+
+        Args:
+            location: (y, x, layer) of the cell requesting a spawn check.
+
+        Returns:
+            Number of neighboring dynamic-layer cells containing a resource.
+        """
+        y, x, _ = location
+        count = 0
+        r = self.neighbor_density_radius
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if dy == 0 and dx == 0:
+                    continue
+                neighbor_loc = (y + dy, x + dx, self.dynamic_layer)
+                if self.valid_location(neighbor_loc):
+                    entity = self.observe(neighbor_loc)
+                    if hasattr(entity, "name") and entity.name in ("stag", "hare"):
+                        count += 1
+        return count
 
     def _count_stags_actual(self) -> int:
         """Actual count implementation (used for initialization)."""
@@ -505,6 +615,81 @@ class StagHuntWorld(Gridworld):
         # Apply bounds: ensure rates stay within [minimum_rate, 1.0]
         self.current_stag_rate = max(self.minimum_rate, min(1.0, self.current_stag_rate))
         self.current_hare_rate = max(self.minimum_rate, min(1.0, self.current_hare_rate))
+
+    @staticmethod
+    def _stochastic_floor(x: float) -> int:
+        """Convert a float to a non-negative int using stochastic rounding on its magnitude.
+
+        The integer part is always included; the fractional part is added as +1
+        with probability equal to its value.  E.g. 0.8 -> 1 with p=0.8, else 0;
+        1.8 -> 2 with p=0.8, else 1.  Negative values are treated via abs().
+        This preserves E[result] = |x| exactly.
+        """
+        x = abs(x)
+        base = int(x)
+        frac = x - base
+        return base + (1 if np.random.random() < frac else 0)
+
+    def update_cpr_spawn_budgets(self) -> None:
+        """Compute per-turn spawn budgets and cull counts using logistic growth.
+
+        dB/dt = r * B * (1 - B/K)
+
+        Positive dB/dt  -> spawn budget (max new resources this turn).
+        Negative dB/dt  -> cull count   (resources to remove this turn, B > K).
+        Fractional values are resolved via stochastic rounding (preserves expected value).
+        No-op when cpr_enabled is False.
+        """
+        if not self.cpr_enabled:
+            return
+        b_stag = float(self.count_stags())
+        b_hare = float(self.count_hares())
+        k_stag = float(self.max_stags) if self.max_stags and self.max_stags > 0 else float("inf")
+        k_hare = float(self.max_hares) if self.max_hares and self.max_hares > 0 else float("inf")
+        db_stag = self.stag_growth_rate * b_stag * (1.0 - b_stag / k_stag)
+        db_hare = self.hare_growth_rate * b_hare * (1.0 - b_hare / k_hare)
+        self.stag_spawn_budget = max(self.cpr_min_spawn_budget, self._stochastic_floor(max(0.0, db_stag)))
+        self.hare_spawn_budget = max(self.cpr_min_spawn_budget, self._stochastic_floor(max(0.0, db_hare)))
+        self.stag_spawn_budget_initial = self.stag_spawn_budget
+        self.hare_spawn_budget_initial = self.hare_spawn_budget
+        self.stag_cull_count = self._stochastic_floor(-db_stag) if db_stag < 0 else 0
+        self.hare_cull_count = self._stochastic_floor(-db_hare) if db_hare < 0 else 0
+
+    def apply_cpr_culling(self) -> None:
+        """Remove excess resources when population exceeds carrying capacity (B > K).
+
+        Uses the cull counts computed by update_cpr_spawn_budgets().  Culled cells
+        have their underlying Sand marked as not ready so they observe the normal
+        respawn_lag before becoming eligible again.
+        No-op when cpr_enabled is False or both cull counts are zero.
+        """
+        if not self.cpr_enabled:
+            return
+        if self.stag_cull_count > 0:
+            self._cull_resource_type('stag', self.stag_cull_count)
+        if self.hare_cull_count > 0:
+            self._cull_resource_type('hare', self.hare_cull_count)
+
+    def _cull_resource_type(self, resource_name: str, count: int) -> None:
+        """Randomly remove up to `count` live resources of the given type."""
+        from sorrel.examples.staghunt_physical.entities import Empty  # lazy to avoid circular import
+        locations = []
+        for y, x, layer in np.ndindex(self.map.shape):
+            if layer != self.dynamic_layer:
+                continue
+            entity = self.observe((y, x, layer))
+            if hasattr(entity, 'name') and entity.name == resource_name:
+                locations.append((y, x, layer))
+        if not locations:
+            return
+        indices = np.random.choice(len(locations), size=min(count, len(locations)), replace=False)
+        for i in indices:
+            loc = locations[i]
+            terrain_entity = self.observe((loc[0], loc[1], self.terrain_layer))
+            if hasattr(terrain_entity, 'respawn_ready'):
+                terrain_entity.respawn_ready = False
+                terrain_entity.respawn_timer = 0
+            self.add(loc, Empty())
 
     def switch_appearances(self) -> None:
         """Switch the functional properties (rewards, health, cooldowns) of stag and hare resources.

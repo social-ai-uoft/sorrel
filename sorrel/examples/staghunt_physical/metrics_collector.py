@@ -7,7 +7,7 @@ and agents during gameplay, integrating directly with TensorBoard.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 import numpy as np
 from scipy.spatial import KDTree
@@ -38,6 +38,126 @@ def gini_index(values: List[float]) -> float:
     # B = sum_i (2*(i+1) - n - 1) * x_i  (0-indexed i)
     B = np.sum((2 * np.arange(1, n + 1) - n - 1) * x)
     return float(B) / (n * s)
+
+
+def _build_agent_id_to_kind(agents: list) -> Dict[int, Optional[str]]:
+    """Build mapping agent_id -> agent_kind from agents list.
+
+    Used for grouping metrics when at least two distinct kinds exist.
+    """
+    return {a.agent_id: getattr(a, "agent_kind", None) for a in agents}
+
+
+def _position_snapshot(positions: List[tuple]) -> List[tuple]:
+    """Return one (agent_id, x, y) per agent; last occurrence wins (end-of-epoch snapshot)."""
+    coords: Dict[int, tuple] = {}
+    for aid, x, y in positions:
+        coords[aid] = (x, y)
+    return [(aid, x, y) for aid, (x, y) in coords.items()]
+
+
+def compute_spatial_grouping_metrics(
+    positions: List[tuple],
+    agent_id_to_kind: Dict[int, Optional[str]],
+) -> Optional[Dict[str, float]]:
+    """Compute spatial grouping metrics (within/between-group distances, segregation ratio).
+
+    Expects a snapshot: at most one position per agent. Use _position_snapshot() if needed.
+    Returns None if fewer than two distinct kinds or if metrics are undefined.
+    """
+    if not positions:
+        return None
+    # Build coords: agent_id -> (x, y); last occurrence wins if duplicates
+    coords: Dict[int, tuple] = {}
+    for item in positions:
+        if len(item) >= 3:
+            aid, x, y = item[0], item[1], item[2]
+            coords[aid] = (float(x), float(y))
+
+    def kind(aid: int) -> str:
+        return agent_id_to_kind.get(aid) or "Unknown"
+
+    kinds = {kind(aid) for aid in coords}
+    if len(kinds) < 2:
+        return None
+
+    within_list: List[float] = []
+    between_list: List[float] = []
+    aids = list(coords.keys())
+    for i in aids:
+        xi, yi = coords[i]
+        ki = kind(i)
+        same_kind_others = [j for j in aids if j != i and kind(j) == ki]
+        other_kind = [j for j in aids if j != i and kind(j) != ki]
+
+        if same_kind_others:
+            d_within = float(
+                np.mean([np.sqrt((xi - coords[j][0]) ** 2 + (yi - coords[j][1]) ** 2) for j in same_kind_others])
+            )
+            within_list.append(d_within)
+        if other_kind:
+            d_between = float(
+                np.mean([np.sqrt((xi - coords[j][0]) ** 2 + (yi - coords[j][1]) ** 2) for j in other_kind])
+            )
+            between_list.append(d_between)
+
+    if not within_list or not between_list:
+        return None
+
+    mean_within = float(np.mean(within_list))
+    mean_between = float(np.mean(between_list))
+    if mean_within <= 0:
+        segregation_ratio = None
+    else:
+        segregation_ratio = mean_between / mean_within
+    if mean_between <= 0:
+        grouping_score = None
+    else:
+        grouping_score = float(np.clip(1.0 - mean_within / mean_between, 0.0, 1.0))
+
+    result: Dict[str, float] = {
+        "mean_within": mean_within,
+        "mean_between": mean_between,
+    }
+    if segregation_ratio is not None:
+        result["segregation_ratio"] = segregation_ratio
+    if grouping_score is not None:
+        result["grouping_score"] = grouping_score
+    return result
+
+
+def compute_punishment_grouping_metrics(
+    agent_metrics: dict,
+    agent_id_to_kind: Dict[int, Optional[str]],
+) -> Optional[Dict[str, float]]:
+    """Compute in-group vs cross-group punishment ratios.
+
+    Returns None if fewer than two distinct kinds or no punishments given.
+    """
+    def kind(aid: int) -> str:
+        return agent_id_to_kind.get(aid) or "Unknown"
+
+    kinds = {kind(aid) for aid in agent_id_to_kind}
+    if len(kinds) < 2:
+        return None
+
+    in_group_count = 0
+    cross_group_count = 0
+    for punisher_id, data in agent_metrics.items():
+        kp = kind(punisher_id)
+        for target_id, count in data.get("punishments_to_agent", {}).items():
+            kt = kind(target_id)
+            if kp == kt:
+                in_group_count += count
+            else:
+                cross_group_count += count
+    total = in_group_count + cross_group_count
+    if total == 0:
+        return None
+    return {
+        "cross_group_ratio": cross_group_count / total,
+        "in_group_ratio": in_group_count / total,
+    }
 
 
 def _default_agent_metrics():
@@ -377,6 +497,38 @@ class StagHuntMetricsCollector:
         
         # Log step count
         writer.add_scalar('Global/Steps', self.epoch_metrics['step_count'], epoch)
+
+        # Grouping metrics
+        agent_id_to_kind = _build_agent_id_to_kind(agents)
+
+        # Use positioned-agents snapshot for spatial grouping.
+        snapshot = _position_snapshot(self.epoch_metrics["agent_positions"])
+
+        spatial = compute_spatial_grouping_metrics(snapshot, agent_id_to_kind)
+        if spatial is not None:
+            writer.add_scalar(
+                "Grouping/mean_within_group_distance", spatial["mean_within"], epoch
+            )
+            writer.add_scalar(
+                "Grouping/mean_between_group_distance", spatial["mean_between"], epoch
+            )
+            if "segregation_ratio" in spatial:
+                writer.add_scalar(
+                    "Grouping/spatial_segregation_ratio", spatial["segregation_ratio"], epoch
+                )
+            if "grouping_score" in spatial:
+                writer.add_scalar(
+                    "Grouping/grouping_score", spatial["grouping_score"], epoch
+                )
+
+        punishment = compute_punishment_grouping_metrics(self.agent_metrics, agent_id_to_kind)
+        if punishment is not None:
+            writer.add_scalar(
+                "Grouping/cross_group_punishment_ratio", punishment["cross_group_ratio"], epoch
+            )
+            writer.add_scalar(
+                "Grouping/in_group_punishment_ratio", punishment["in_group_ratio"], epoch
+            )
         
         # Log resource counts (end-of-epoch); skip during probe test epochs
         if log_resource_counts:

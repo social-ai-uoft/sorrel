@@ -162,6 +162,17 @@ def load_agent_config_from_csv(csv_path: str | Path) -> dict[int, dict[str, Any]
             else:
                 agent_cfg["exclusive_reward"] = DEFAULT_AGENT_ATTRIBUTES["exclusive_reward"]
             
+            # Optional: punishment_ability (freeze duration in turns when heterogeneity enabled)
+            punishment_ability_val = row.get("punishment_ability") or row.get(" punishment_ability", "")
+            if punishment_ability_val and str(punishment_ability_val).strip():
+                try:
+                    agent_cfg["punish_freeze_ability"] = _convert_int(punishment_ability_val)
+                except ValueError as e:
+                    raise ValueError(
+                        f"Invalid punishment_ability in CSV file {csv_path} at row {row_num}: "
+                        f"{punishment_ability_val}. Must be an integer."
+                    ) from e
+            
             agent_config[agent_id] = agent_cfg
     
     if not agent_config:

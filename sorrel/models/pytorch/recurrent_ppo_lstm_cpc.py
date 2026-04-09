@@ -131,6 +131,9 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         cpc_temperature: float = 0.07,
         cpc_memory_bank_size: int = 0,  # (unused) no memory bank; CPC uses only current episode
         cpc_start_epoch: int = 1,
+        # Last-action conditioning (minimal: embedding only)
+        use_last_action: bool = False,
+        last_action_embed_dim: int = 32,
     ) -> None:
         """
         Initialize the RecurrentPPOLSTMCPC agent.
@@ -240,8 +243,20 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
             flattened_size = int(np.array(input_size).prod())
             self.fc_shared = nn.Linear(flattened_size, hidden_size)
 
+        # Last-action conditioning: embed previous action and concat with encoder output before LSTM
+        self.use_last_action = use_last_action
+        self.last_action_embed_dim = last_action_embed_dim
+        self._last_acted_action: Optional[int] = None  # None = sentinel (first step of episode)
+        if use_last_action:
+            # Sentinel index = action_space (no previous action)
+            self.last_action_embed = nn.Embedding(action_space + 1, last_action_embed_dim)
+            lstm_input_size = hidden_size + last_action_embed_dim
+        else:
+            self.last_action_embed = None
+            lstm_input_size = hidden_size
+
         # LSTM for temporal memory
-        self.lstm = nn.LSTM(hidden_size, hidden_size, batch_first=True)
+        self.lstm = nn.LSTM(lstm_input_size, hidden_size, batch_first=True)
 
         # Factored action space parameters
         self.use_factored_actions = use_factored_actions
@@ -320,6 +335,8 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
             "rewards": [],
             "dones": [],
         }
+        if use_last_action:
+            self.rollout_memory["prev_actions"] = []
 
         # Hidden state management (for acting)
         # LSTM uses (h, c) tuple
@@ -450,8 +467,13 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         # Get hidden state (stored internally) - returns (h, c) tuple
         hidden = self._get_hidden_state()
 
+        # Previous action for this step (sentinel if first step of episode)
+        last_action_for_forward = None
+        if self.use_last_action and self._last_acted_action is not None:
+            last_action_for_forward = self._last_acted_action
+
         # Forward through network
-        features, new_hidden = self._forward_base(state_tensor, hidden)
+        features, new_hidden = self._forward_base(state_tensor, hidden, last_action=last_action_for_forward)
 
         # Store state for later (remove batch dimension when storing, keep on device)
         self._pending_state = state_tensor.squeeze(0).detach()
@@ -537,7 +559,11 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         self.rollout_memory["vals"].append(float(val))
         self.rollout_memory["rewards"].append(float(reward))
         self.rollout_memory["dones"].append(float(done))
-        
+        if self.use_last_action and "prev_actions" in self.rollout_memory:
+            prev_action = self.action_space if self._last_acted_action is None else self._last_acted_action
+            self.rollout_memory["prev_actions"].append(prev_action)
+            self._last_acted_action = action
+
         # Track rollout length
         self._rollout_step_count += 1
 
@@ -575,9 +601,11 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         self._pending_log_prob = None
         self._pending_value = None
         
-        # Reset hidden state on episode boundaries
+        # Reset hidden state and last-action tracking on episode boundaries
         if done:
             self._current_hidden = None
+            if self.use_last_action:
+                self._last_acted_action = None
 
     @override
     def train_step(self) -> np.ndarray:
@@ -603,6 +631,8 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         """Reset hidden state at start of epoch and track epoch number."""
         self.current_epoch = epoch
         self._current_hidden = None  # Reset LSTM hidden state (both h and c)
+        if self.use_last_action:
+            self._last_acted_action = None
 
     def end_epoch_action(self, **kwargs) -> None:
         """Optional: trigger training at end of epoch."""
@@ -635,6 +665,7 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         self,
         state: torch.Tensor,
         hidden: Tuple[torch.Tensor, torch.Tensor],
+        last_action: Optional[int] = None,
     ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Shared forward pass through encoder + LSTM.
@@ -642,6 +673,7 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         Args:
             state: Tensor of shape (B, C, H, W) for CNN or (B, features) for FC.
             hidden: LSTM hidden state tuple (h, c) each of shape (1, B, hidden_size).
+            last_action: Previous step action index, or None for sentinel (first step / no prev).
 
         Returns:
             features: Tensor of shape (B, hidden_size) for heads (uses h only).
@@ -656,6 +688,17 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         else:
             # FC path
             x = F.relu(self.fc_shared(state))
+
+        if self.use_last_action and self.last_action_embed is not None:
+            # Sentinel index = action_space (no previous action)
+            B = x.size(0)
+            idx = last_action if last_action is not None and 0 <= last_action < self.action_space else self.action_space
+            if isinstance(idx, int):
+                idx_t = torch.full((B,), idx, dtype=torch.long, device=x.device)
+            else:
+                idx_t = idx
+            action_embed = self.last_action_embed(idx_t)  # (B, last_action_embed_dim)
+            x = torch.cat([x, action_embed], dim=-1)
 
         # LSTM expects (batch, seq_len, feat); here seq_len = 1
         x = x.unsqueeze(1)
@@ -712,7 +755,13 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
             # Reshape back to (B, T, hidden_size)
             x = x.view(B, T, self.hidden_size)
 
-        # LSTM forward: expects (B, T, hidden_size)
+        if self.use_last_action and self.last_action_embed is not None:
+            sentinel_idx = self.action_space
+            prev_idx = torch.full((B, T), sentinel_idx, dtype=torch.long, device=x.device)
+            action_embed = self.last_action_embed(prev_idx)  # (B, T, last_action_embed_dim)
+            x = torch.cat([x, action_embed], dim=-1)
+
+        # LSTM forward: expects (B, T, hidden_size) or (B, T, hidden_size+embed_dim)
         lstm_out, final_hidden = self.lstm(x, initial_hidden)
         
         return lstm_out, final_hidden
@@ -751,7 +800,8 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
             c = torch.zeros(1, 1, self.hidden_size, device=self.device)
             hidden_state = (h, c)
 
-        features, new_hidden = self._forward_base(state, hidden_state)
+        last_action_arg = self._last_acted_action if (self.use_last_action and self._last_acted_action is not None) else None
+        features, new_hidden = self._forward_base(state, hidden_state, last_action=last_action_arg)
 
         # Sample action
         if self.use_factored_actions:
@@ -1108,10 +1158,16 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
             else:
                 # FC path: states is (T, features)
                 encoded = F.relu(self.fc_shared(states))  # (T, hidden_size)
+
+            if self.use_last_action and "prev_actions" in self.rollout_memory and self.last_action_embed is not None:
+                prev_actions_list = self.rollout_memory["prev_actions"]
+                prev_actions_t = torch.tensor(prev_actions_list, dtype=torch.long, device=self.device)  # (T,)
+                action_embed = self.last_action_embed(prev_actions_t)  # (T, last_action_embed_dim)
+                encoded = torch.cat([encoded, action_embed], dim=-1)  # (T, hidden_size + last_action_embed_dim)
             
             # Reshape for LSTM: (batch, seq_len, features)
             # LSTM expects (batch, seq_len, features) when batch_first=True
-            encoded_lstm = encoded.unsqueeze(0)  # (1, T, hidden_size)
+            encoded_lstm = encoded.unsqueeze(0)  # (1, T, hidden_size) or (1, T, hidden_size+embed_dim)
             
             # Batch process entire sequence at once (most efficient - no mid-episode boundaries)
             # Initialize hidden state: (num_layers, batch, hidden_size)

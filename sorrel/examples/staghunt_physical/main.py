@@ -84,6 +84,7 @@ def run_stag_hunt(
     cpc_temperature: float | None = None,
     cpc_projection_dim: int | None = None,
     cpc_start_epoch: int | None = None,
+    use_last_action: bool | None = None,
 ) -> None:
     """Run a single stag hunt experiment with default hyperparameters.
 
@@ -93,7 +94,7 @@ def run_stag_hunt(
         max_resources: Optional max resources cap override (None = unlimited).
         max_stags: Optional max stags cap override (None = unlimited).
         max_hares: Optional max hares cap override (None = unlimited).
-        resource_cap_mode: Optional resource cap mode override ("specified" or "initial_count").
+        resource_cap_mode: Optional resource cap mode override ("specified", "initial_count", or "disabled").
         seed: Optional random seed for reproducibility. If provided, sets seed for random, numpy, and torch.
         no_punishment: If True, disable the PUNISH action (include_punish_action=False).
         preserve_continuity: If True, do not reset environment after epoch 0 (continuity mode).
@@ -117,7 +118,7 @@ def run_stag_hunt(
             # number of episodes/epochs to run
             "epochs": 3000000,
             # maximum number of turns per episode
-            "max_turns": 50,
+            "max_turns": 1000,
             # If True, randomly sample number of turns per epoch from [1, max_turns] instead of using fixed max_turns
             "random_max_turns": False,
             # If True, do not call reset() after epoch 0; world and agents continue across epochs (continuity mode)
@@ -185,7 +186,7 @@ def run_stag_hunt(
             # "iqn" (default) or "ppo_lstm_cpc" (RecurrentPPOLSTMCPC; same as state_punishment)
             "model_type": "iqn",
             # vision radius such that the agent sees (2*radius+1)x(2*radius+1)
-            "agent_vision_radius": 3,
+            "agent_vision_radius": 5,
             # epsilon decay hyperparameter for the IQN model
             "epsilon_decay": 0.001, # 0.0001
             "epsilon_min": 0.05,
@@ -210,13 +211,13 @@ def run_stag_hunt(
             "generation_mode": "random",  # "random" or "ascii_map"
             "ascii_map_file": "test_intention_onlystag.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 12, # 13
-            "width": 12,
+            "height": 16, # 13
+            "width": 20,
             # number of players in the game
-            "num_agents": 20,
+            "num_agents": 10,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
             # Only the spawned agents will act and learn in each epoch
-            "num_agents_to_spawn": 20,  # Number of agents to spawn per epoch (must be <= num_agents)
+            "num_agents_to_spawn": 10,  # Number of agents to spawn per epoch (must be <= num_agents)
             # probability an empty cell spawns a resource each step (for initial spawning)
             "resource_density": 0.04,
             # probability a resource respawns each step after respawn_lag (for respawning)
@@ -228,19 +229,13 @@ def run_stag_hunt(
             "random_resource_respawn": True,  # Default: False (original behavior)
             # If True, movement actions automatically change orientation to face movement direction
             "simplified_movement": True,
-            # If True, attack only hits tiles directly in front of agent (number controlled by attack_range)
-            "single_tile_attack": True,
-            # Number of tiles to attack in front when single_tile_attack is True (default: 2)
-            "attack_range": 3,
-            # If True, attack covers a 3x3 region in front of agent (overrides single_tile_attack)
-            "area_attack": True,
             # If True, skip spawn validation for test_intention mode
             "skip_spawn_validation": True,
             # probability that a spawned resource is a stag (vs hare)
             # stag_probability + hare_probability = 1.0
-            "stag_probability": 0.5,  # 50% stag, 50% hare
+            "stag_probability": 0,  # 50% stag, 50% hare
             # separate reward values for stag and hare
-            "stag_reward": 100,  # Higher reward for stag (requires coordination)
+            "stag_reward": 20,  # Higher reward for stag (requires coordination)
             "hare_reward": 3,  # Lower reward for hare (solo achievable)
             # regeneration cooldown parameters
             "stag_regeneration_cooldown": 1,  # Turns to wait before stag regenerates
@@ -255,11 +250,22 @@ def run_stag_hunt(
                 "initial_stag_rate": None,  # Optional: starting stag rate (defaults to 1.0)
                 "initial_hare_rate": None,  # Optional: starting hare rate (defaults to 1.0)
             },
+            "neighbor_density_respawn": {
+                "enabled": True,          # Set to True to enable spatial neighbor-density spawning
+                "base_rate": 0.01,         # p in p_t = p * n_t / N; max rate when all N neighbors occupied
+                "neighborhood_radius": 1,  # Moore neighborhood radius; N = (2r+1)^2 - 1 = 8 for r=1
+            },
+            "cpr_resource_dynamics": {
+                "enabled": False,           # Enable CPR logistic-growth spawn budgets
+                "stag_growth_rate": 1,    # r for stag: intrinsic growth rate per turn
+                "hare_growth_rate": 1,    # r for hare: intrinsic growth rate per turn
+                "cpr_min_spawn_budget": 0,  # Floor budget when B=0 (0 = no recovery)
+            },
             # Resource respawn cap configuration
-            "resource_cap_mode": "initial_count",  # Options: "specified" (use max_resources/max_stags/max_hares) or "initial_count" (auto-set from initial spawns)
-            "max_resources": 10,  # Maximum total resources (None = unlimited, ignored if resource_cap_mode == "initial_count")
-            "max_stags": 5,  # Maximum stag resources (None = unlimited, overrides max_resources for stags, ignored if resource_cap_mode == "initial_count")
-            "max_hares": 5,  # Maximum hare resources (None = unlimited, overrides max_resources for hares, ignored if resource_cap_mode == "initial_count")
+            "resource_cap_mode": "initial_count",  # Options: "specified" (use max_resources/max_stags/max_hares), "initial_count" (auto-set from initial spawns), or "disabled" (no cap)
+            "max_resources": 16,  # Maximum total resources (None = unlimited, ignored if resource_cap_mode == "initial_count")
+            "max_stags": 8,  # Maximum stag resources (None = unlimited, overrides max_resources for stags, ignored if resource_cap_mode == "initial_count")
+            "max_hares": 8,  # Maximum hare resources (None = unlimited, overrides max_resources for hares, ignored if resource_cap_mode == "initial_count")
             # Appearance switching configuration
             "appearance_switching": {
                 "enabled": False,  # Set to True to enable appearance switching
@@ -269,16 +275,24 @@ def run_stag_hunt(
             # "taste_reward": 10,
             # zap hits required to destroy a resource (legacy parameter)
             # "destroyable_health": 3,
-            # beam characteristics
-            "beam_length": 3,
-            "beam_radius": 2,
             "beam_cooldown": 3,  # Legacy parameter, kept for compatibility
             "attack_cooldown": 1,  # Separate cooldown for ATTACK action
             "attack_cost": 0.00,  # Cost to use attack action
+            # Attack beam shape
+            "single_tile_attack": True,         # If True, rectangular beam: attack_range forward, width 2*beam_radius+1
+            "attack_range": 2,                   # Tiles forward when single_tile_attack is True
+            "area_attack": False,                 # If True, 3x3 region in front (overrides single_tile_attack)
+            "beam_radius": 0,                    # With single_tile_attack: lateral half-width; else fan-beam radius
+            # Punish beam shape
+            "punish_single_tile_attack": True,   # If True, hits tiles directly in front (count = punish_range)
+            "punish_range": 8,                   # Tiles forward when punish_single_tile_attack is True
+            "punish_area_attack": False,         # If True, 3x3 region in front (overrides punish_single_tile_attack)
+            "punish_beam_radius": 1,             # Fallback fan-beam radius when neither flag is True
             "include_punish_action": True,  # If True, PUNISH is included in action_spec for RL agents
             "punish_cooldown": 0,  # Separate cooldown for PUNISH action
             "punish_cost": 0.0,  # Cost to use punish action
-            "punish_freeze_duration": 20,  # Turns agent is frozen when health reaches 0 from punishment
+            "punish_freeze_duration":25,  # Turns agent is frozen when health reaches 0 from punishment
+            "punish_freeze_heterogeneity_enabled": False,  # If True, each agent's freeze duration from CSV punishment_ability
             # Power mode (punish-beget-power): when True, punishment changes power and stag sharing is power-weighted
             "power_mode": False,
             "observe_own_power_only": False,  # When True (and power_mode), agents observe only their own power in obs
@@ -289,6 +303,17 @@ def run_stag_hunt(
             "aggression_reward_scale": 0.3,
             "aggression_satiation_reduction": 1.0,
             "aggression_cap": 4,  # Upper bound for aggression; must be in range (0, 4]. None = no cap (use 4 for default)
+            # Private pairwise coordination reputation (per-agent counts toward others; optional punish decay)
+            "private_coordination_rep_enabled": False,
+            "private_rep_punish_decay_enabled": False,
+            "private_rep_punish_decay_delta": 1,
+            # Observation-size control: include the rep plane but fill with deterministic pseudo-random values.
+            # Useful as a placebo ablation to control for larger input dim without adding true reputation signal.
+            # When enabled, the rep plane is present even if private_coordination_rep_enabled is False.
+            "private_coordination_rep_obs_enabled": False,
+            "private_coordination_rep_obs_randomize": False,
+            "private_coordination_rep_obs_random_max": 5.0,
+            "private_coordination_rep_obs_random_seed": 0,
             # respawn timing
             "respawn_lag": 1,  # number of turns before a resource can respawn
             # payoff matrix for the row player (stag=0, hare=1)
@@ -360,9 +385,9 @@ def run_stag_hunt(
             # Standard observation mode configuration
             "standard_obs": True,  # Set to True to enable standard observation mode
             "agent_id_vector_dim": 8,  # For random_vector: dimension; for binary: bit length X (must have 2^X >= num_agents)
-            "agent_id_encoding_mode": "random_vector",  # Options: "random_vector" (default), "onehot", or "binary"
+            "agent_id_encoding_mode": "binary",  # Options: "random_vector" (default), "onehot", or "binary"
             "use_agent_id_in_standard_obs": True,  # Enable/disable agent ID encoding in standard obs mode
-            # "agent_id_shuffle_seed": 42,  # Optional: if set, shuffle agent ID vector assignment (shared by all modes)
+            "agent_id_shuffle_seed": 42,  # Shuffle agent ID vector assignment to decorrelate from agent index
             # When False: all agents get zero ID vectors (indistinguishable by unique ID)
             # When True: agents have unique ID vectors based on agent_id_encoding_mode (default)
             # Only applies when standard_obs=True
@@ -437,10 +462,10 @@ def run_stag_hunt(
     if max_hares is not None:
         config["world"]["max_hares"] = max_hares
     if resource_cap_mode is not None:
-        if resource_cap_mode not in ["specified", "initial_count"]:
+        if resource_cap_mode not in ["specified", "initial_count", "disabled"]:
             raise ValueError(
                 f"Invalid resource_cap_mode: {resource_cap_mode}. "
-                f"Must be 'specified' or 'initial_count'"
+                f"Must be 'specified', 'initial_count', or 'disabled'"
             )
         config["world"]["resource_cap_mode"] = resource_cap_mode
     if no_punishment:
@@ -486,6 +511,8 @@ def run_stag_hunt(
         config["model"]["cpc_projection_dim"] = cpc_projection_dim
     if cpc_start_epoch is not None:
         config["model"]["cpc_start_epoch"] = cpc_start_epoch
+    if use_last_action is not None:
+        config["model"]["use_last_action"] = use_last_action
 
     # Automatically construct run_name from base name and key parameters
     run_name_base = config["experiment"].get("run_name_base", "staghunt_experiment")
@@ -562,7 +589,7 @@ def run_stag_hunt(
         logger=CombinedLogger(
             max_epochs=config["experiment"]["epochs"],
             log_dir=Path(__file__).parent
-            / f'runs_punishment_v2/{config["experiment"]["run_name"]}_{timestamp}',
+            / f'runs_punishment_v8/{config["experiment"]["run_name"]}_{timestamp}',
             experiment_env=experiment,
         ),
         output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}',
@@ -619,9 +646,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--resource-cap-mode",
         type=str,
-        choices=["specified", "initial_count"],
+        choices=["specified", "initial_count", "disabled"],
         default=None,
-        help="Resource cap mode: 'specified' (use max_resources/max_stags/max_hares) or 'initial_count' (auto-set from initial spawns)"
+        help="Resource cap mode: 'specified' (use max_resources/max_stags/max_hares), 'initial_count' (auto-set from initial spawns), or 'disabled' (no cap)"
     )
     parser.add_argument(
         "--seed",
@@ -704,6 +731,11 @@ if __name__ == "__main__":
     parser.add_argument("--cpc-temperature", type=float, default=0.07, help="CPC InfoNCE temperature (default: 0.07)")
     parser.add_argument("--cpc-projection-dim", type=int, default=None, help="CPC projection dim (default: None, uses hidden_size)")
     parser.add_argument("--cpc-start-epoch", type=int, default=1, help="Epoch to start CPC training (default: 1)")
+    parser.add_argument(
+        "--use-last-action",
+        action="store_true",
+        help="Enable feeding last action into model (ppo_lstm_cpc). If not set, config value is used.",
+    )
     args = parser.parse_args()
     aggression_enabled = None
     if args.enable_aggression:
@@ -715,6 +747,7 @@ if __name__ == "__main__":
         use_cpc = True
     elif args.no_cpc:
         use_cpc = False
+    use_last_action = True if args.use_last_action else None
     accurate_reward_allocation = None
     if args.accurate_reward_allocation:
         accurate_reward_allocation = True
@@ -751,4 +784,5 @@ if __name__ == "__main__":
         cpc_temperature=args.cpc_temperature,
         cpc_projection_dim=args.cpc_projection_dim,
         cpc_start_epoch=args.cpc_start_epoch,
+        use_last_action=use_last_action,
     )

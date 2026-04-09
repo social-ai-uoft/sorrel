@@ -118,6 +118,11 @@ class Empty(Entity["StagHuntWorld"]):
         the resource type remembered by the Sand entity below.  If a resource
         is spawned, the empty entity is replaced.
         """
+        # Resource spawning only applies to the dynamic layer.
+        # Beam-layer Empty entities must not spawn resources (they would appear on the wrong layer).
+        if self.location[2] != world.dynamic_layer:
+            return
+
         # Check the terrain layer below for resource spawn capability and readiness
         terrain_location = (self.location[0], self.location[1], world.terrain_layer)
         if world.valid_location(terrain_location):
@@ -135,13 +140,23 @@ class Empty(Entity["StagHuntWorld"]):
                         has_agent = True
                         break
             
+            # Compute effective spawn probability for this cell
+            if getattr(world, "neighbor_density_respawn_enabled", False):
+                n_t = world.count_resource_neighbors(self.location)
+                if n_t == 0:
+                    return  # No neighboring resources; no regeneration possible
+                effective_rate = world.neighbor_density_base_rate * n_t / world.neighbor_density_N
+                spawn_roll_passed = np.random.random() < effective_rate
+            else:
+                spawn_roll_passed = np.random.random() < world.respawn_rate
+
             if (
                 hasattr(terrain_entity, "can_convert_to_resource")
                 and hasattr(terrain_entity, "respawn_ready")
                 and terrain_entity.can_convert_to_resource
                 and terrain_entity.respawn_ready
                 and not has_agent  # Don't spawn if there's an agent above
-                and np.random.random() < world.respawn_rate
+                and spawn_roll_passed
             ):
 
                 # Choose resource type based on what's remembered in the Sand entity
@@ -164,45 +179,51 @@ class Empty(Entity["StagHuntWorld"]):
                     stag_prob = getattr(world, 'stag_probability', 0.2)
                     res_cls = StagResource if np.random.random() < stag_prob else HareResource
 
-                # Step 3: Apply resource-specific spawn success rate filter
+                # Step 3: dynamic_resource_density filter (skipped when CPR is active)
                 should_spawn = True
-                if getattr(world, 'dynamic_resource_density_enabled', False):
+                if not getattr(world, 'cpr_enabled', False):
+                    if getattr(world, 'dynamic_resource_density_enabled', False):
+                        if res_cls == StagResource:
+                            should_spawn = np.random.random() < world.current_stag_rate
+                        else:
+                            should_spawn = np.random.random() < world.current_hare_rate
+
+                # Step 4: CPR budget gate replaces resource_cap_mode when CPR is active
+                if getattr(world, 'cpr_enabled', False):
                     if res_cls == StagResource:
-                        should_spawn = np.random.random() < world.current_stag_rate
-                    else:  # HareResource
-                        should_spawn = np.random.random() < world.current_hare_rate
-                
-                # Only spawn if Step 3 filter passes (or feature disabled)
-                if should_spawn:
-                    # Step 4: Check resource respawn cap (if enabled)
-                    # Check separate caps first (more specific), then total cap
+                        should_spawn = world.stag_spawn_budget > 0
+                    else:
+                        should_spawn = world.hare_spawn_budget > 0
+                elif getattr(world, 'resource_cap_mode', 'specified') == 'disabled':
+                    pass  # No cap — should_spawn stays True
+                elif should_spawn:
                     if world.max_stags is not None and res_cls.name == "stag":
                         if world.count_stags() >= world.max_stags:
-                            should_spawn = False  # Cap reached for stags
+                            should_spawn = False
                     elif world.max_hares is not None and res_cls.name == "hare":
                         if world.count_hares() >= world.max_hares:
-                            should_spawn = False  # Cap reached for hares
+                            should_spawn = False
                     elif world.max_resources is not None:
-                        # Check total resource cap (only if separate caps not set)
                         if world.count_resources() >= world.max_resources:
-                            should_spawn = False  # Total cap reached
-                    
-                    # Only create resource if cap check passed (nested check)
-                    if should_spawn:
-                            # Use separate reward values for stag and hare
-                            if res_cls == StagResource:
-                                reward_value = world.stag_reward
-                                health_value = world.stag_health
-                                cooldown_value = world.stag_regeneration_cooldown
-                            else:  # HareResource
-                                reward_value = world.hare_reward
-                                health_value = world.hare_health
-                                cooldown_value = world.hare_regeneration_cooldown
-                            
-                            world.add(
-                                self.location, res_cls(reward_value, health_value, regeneration_cooldown=cooldown_value)
-                            )
-                # else: filtered out by Step 3, don't spawn (Empty entity remains)
+                            should_spawn = False
+
+                if should_spawn:
+                    if res_cls == StagResource:
+                        reward_value = world.stag_reward
+                        health_value = world.stag_health
+                        cooldown_value = world.stag_regeneration_cooldown
+                    else:
+                        reward_value = world.hare_reward
+                        health_value = world.hare_health
+                        cooldown_value = world.hare_regeneration_cooldown
+                    world.add(
+                        self.location, res_cls(reward_value, health_value, regeneration_cooldown=cooldown_value)
+                    )
+                    if getattr(world, 'cpr_enabled', False):
+                        if res_cls == StagResource:
+                            world.stag_spawn_budget -= 1
+                        else:
+                            world.hare_spawn_budget -= 1
 
 
 class Spawn(Entity["StagHuntWorld"]):

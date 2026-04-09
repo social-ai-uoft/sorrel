@@ -96,6 +96,9 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         cpc_sample_size: int = 64,
         cpc_start_epoch: int = 1,
         cpc_max_sequence_length: int = 500,
+        # Last-action conditioning (minimal: embedding only)
+        use_last_action: bool = False,
+        last_action_embed_dim: int = 32,
     ) -> None:
         """
         Initialize Recurrent IQN with optional CPC.
@@ -137,8 +140,17 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         nn.init.zeros_(self.encoder.bias)
         self.encoder = self.encoder.to(device)
 
-        # LSTM over latent features
-        self.lstm = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=False)
+        self.use_last_action = use_last_action
+        self.last_action_embed_dim = last_action_embed_dim
+        if use_last_action:
+            self.last_action_embed = nn.Embedding(action_space + 1, last_action_embed_dim).to(device)
+            lstm_input_size = self.hidden_size + last_action_embed_dim
+        else:
+            self.last_action_embed = None
+            lstm_input_size = self.hidden_size
+
+        # LSTM over latent features (optionally concat with last-action embed)
+        self.lstm = nn.LSTM(lstm_input_size, self.hidden_size, batch_first=False)
         self.lstm = self.lstm.to(device)
 
         # Base IQN head consumes the recurrent hidden state (n_frames=1)
@@ -224,7 +236,7 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         out[: s.size] = s.astype(np.float32, copy=False)
         return out
 
-    def take_action(self, state: np.ndarray) -> int:
+    def take_action(self, state: np.ndarray, last_action: Optional[int] = None) -> int:
         """
         Epsilon-greedy action selection using the recurrent hidden state.
         
@@ -245,7 +257,12 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         frame_t = torch.from_numpy(frame.reshape(1, -1)).float().to(self.device)
         with torch.no_grad():
             z_t = self.encoder(frame_t)              # (1, H)
-            z_seq = z_t.unsqueeze(0)                 # (1, 1, H) -> (L=1, B=1, H)
+            if self.use_last_action and self.last_action_embed is not None:
+                idx = last_action if last_action is not None and 0 <= last_action < self.action_space else self.action_space
+                idx_t = torch.full((1,), idx, dtype=torch.long, device=self.device)
+                action_embed = self.last_action_embed(idx_t)  # (1, last_action_embed_dim)
+                z_t = torch.cat([z_t, action_embed], dim=-1)  # (1, H + embed_dim)
+            z_seq = z_t.unsqueeze(0)                 # (1, 1, H) or (1, 1, H+embed)
             lstm_out, self.lstm_hidden = self.lstm(z_seq, self.lstm_hidden)
             h_t = lstm_out.squeeze(0).squeeze(0)     # (H,)
 
@@ -325,10 +342,16 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         
         # Encode all frames (WITH gradients for CPC)
         z_seq = self.encoder(frames_tensor)  # (T, hidden_size)
+        if self.use_last_action and self.last_action_embed is not None:
+            T = z_seq.size(0)
+            sentinel_idx = self.action_space
+            prev_idx = torch.full((T,), sentinel_idx, dtype=torch.long, device=self.device)
+            action_embed = self.last_action_embed(prev_idx)  # (T, last_action_embed_dim)
+            z_seq = torch.cat([z_seq, action_embed], dim=-1)  # (T, hidden_size + embed_dim)
         
         # Process through LSTM with batched forward pass (much faster than sequential loop)
         # LSTM uses batch_first=False, so input should be (seq_len, batch, features) = (T, 1, hidden_size)
-        z_seq_lstm = z_seq.unsqueeze(1)  # (T, 1, hidden_size)
+        z_seq_lstm = z_seq.unsqueeze(1)  # (T, 1, hidden_size) or (T, 1, H+embed)
         
         # Initialize hidden state: (num_layers, batch, hidden_size)
         h = torch.zeros(1, 1, self.hidden_size, device=self.device)
@@ -635,10 +658,14 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
                 states_burn = states_t[:, :burn_in, :]  # (B, burn_in, obs_dim)
                 states_burn_flat = states_burn.reshape(B * burn_in, obs_dim)
                 z_burn_flat = self.encoder(states_burn_flat)  # (B*burn_in, H)
-                
-                # Reshape for LSTM: (burn_in, B, H)
-                z_burn = z_burn_flat.view(B, burn_in, self.hidden_size).permute(1, 0, 2)
-                
+                z_burn = z_burn_flat.view(B, burn_in, self.hidden_size).permute(1, 0, 2)  # (burn_in, B, H)
+                if self.use_last_action and self.last_action_embed is not None:
+                    sentinel = self.action_space
+                    prev_burn = torch.full((B, burn_in), sentinel, dtype=torch.long, device=self.device)
+                    if burn_in > 1:
+                        prev_burn[:, 1:] = actions_t[:, : burn_in - 1]
+                    action_embed_burn = self.last_action_embed(prev_burn)  # (B, burn_in, embed_dim)
+                    z_burn = torch.cat([z_burn.permute(1, 0, 2), action_embed_burn], dim=-1).permute(1, 0, 2)  # (burn_in, B, H+embed)
                 # LSTM burn-in
                 _, (h_burn, c_burn) = self.lstm(z_burn, (h0, c0))
             else:
@@ -648,9 +675,16 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         states_unroll = states_t[:, burn_in : burn_in + unroll + 1, :]  # (B, unroll+1, obs_dim)
         states_unroll_flat = states_unroll.reshape(B * (unroll + 1), obs_dim)
         z_unroll_flat = self.encoder(states_unroll_flat)  # (B*(unroll+1), H) - WITH gradients
-        
-        # Reshape for LSTM: (unroll+1, B, H)
-        z_unroll = z_unroll_flat.view(B, unroll + 1, self.hidden_size).permute(1, 0, 2)
+        z_unroll = z_unroll_flat.view(B, unroll + 1, self.hidden_size).permute(1, 0, 2)  # (unroll+1, B, H)
+        if self.use_last_action and self.last_action_embed is not None:
+            sentinel = self.action_space
+            if burn_in > 0:
+                prev_unroll = actions_t[:, burn_in - 1 : burn_in + unroll]  # (B, unroll+1)
+            else:
+                prev_unroll = torch.full((B, unroll + 1), sentinel, dtype=torch.long, device=self.device)
+                prev_unroll[:, 1:] = actions_t[:, :unroll]
+            action_embed_unroll = self.last_action_embed(prev_unroll)  # (B, unroll+1, embed_dim)
+            z_unroll = torch.cat([z_unroll.permute(1, 0, 2), action_embed_unroll], dim=-1).permute(1, 0, 2)  # (unroll+1, B, H+embed)
         
         # LSTM forward - detach burn-in states (but keep gradients through unroll)
         lstm_out, _ = self.lstm(z_unroll, (h_burn.detach(), c_burn.detach()))  # (unroll+1, B, H)

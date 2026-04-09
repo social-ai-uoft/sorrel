@@ -41,23 +41,25 @@ class Gridworld:
 
     def create_world(self) -> None:
         """Assigns self.world a new gridworld of size self.height x self.width x
-        self.layers filled with deep copies of self.default_entity.
+        self.layers filled with one default-entity per cell (pre-allocated).
 
-        Also sets self.turn and self.total_reward to 0.
+        Each cell gets a single pre-allocated entity with the correct .location;
+        move() and remove() reuse these instead of allocating, avoiding deepcopy
+        during simulation. Also sets self.total_reward to 0.
 
         This function is used in :func:`self.__init__()`, and may be useful for
         resetting environments.
         """
-
         # Explicitly use dtype=object to ensure proper Python object storage
-        # This prevents numpy from creating views or copies that could lose attributes
         self.map = np.full((self.height, self.width, self.layers), Entity(), dtype=object)
-
-        # Define the location of each entity
-        for index, x in np.ndenumerate(self.map):
-            # we have to make deep copies of default_entity since it's an instance
-            self.map[index] = copy.deepcopy(self.default_entity)
-            self.map[index].location = index
+        # Pre-allocate one default entity per cell — reused by move()/remove()
+        # Use deepcopy at init so custom default_entity with mutable state is safe.
+        self._empty_cells = {}
+        for index in np.ndindex(self.map.shape):
+            fill_entity = copy.deepcopy(self.default_entity)
+            fill_entity.location = index
+            self._empty_cells[index] = fill_entity
+            self.map[index] = fill_entity
 
         self.total_reward = 0.0
 
@@ -75,7 +77,8 @@ class Gridworld:
     def remove(self, target_location: tuple[int, ...]) -> Entity:
         """Remove the entity at a location.
 
-        The target location will then be filled with a deep copy of self.default_entity.
+        The target location is then filled with the pre-allocated default entity
+        for that cell (no allocation).
 
         Args:
             target_location (tuple[int, ...]): the location of the entity.
@@ -84,16 +87,14 @@ class Gridworld:
             Entity: the entity previously at the given location.
         """
         entity = self.map[target_location]
-        fill_entity = copy.deepcopy(self.default_entity)
-        fill_entity.location = target_location
-        self.map[target_location] = fill_entity
+        self.map[target_location] = self._empty_cells[target_location]
         return entity
 
     def move(self, entity: Entity, new_location: tuple[int, ...]) -> bool:
         """Move an entity to a new location.
 
-        The entity at the new location will be removed.
-        The old location of the entity will be filled with a deep copy of self.default_entity.
+        The entity at the new location will be removed. The old location is
+        filled with the pre-allocated default entity for that cell (no allocation).
 
         Args:
             entity (Entity): entity to be moved.
@@ -105,18 +106,13 @@ class Gridworld:
         if self.map[new_location].passable:
             self.remove(new_location)
 
-            # Move the entity from the old location to the new location
             previous_location = entity.location
             entity.location = new_location
             self.map[new_location] = entity
 
-            # Fill the old location with a deep copy of the default_entity
-            fill_entity = copy.deepcopy(self.default_entity)
-            fill_entity.location = previous_location
-            self.map[previous_location] = fill_entity
+            self.map[previous_location] = self._empty_cells[previous_location]
             return True
-        else:
-            return False
+        return False
 
     def observe(self, target_location: tuple[int, ...]) -> Entity:
         """Observes the entity at a location.
