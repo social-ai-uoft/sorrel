@@ -146,7 +146,6 @@ class Buffer:
         Returns:
             np.ndarray: An array with the last `self.n_frames` observations stacked together as the current state.
         """
-
         if self.idx < (self.n_frames - 1):
             diff = self.idx - (self.n_frames - 1)
             return np.concatenate(

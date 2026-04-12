@@ -1,0 +1,45 @@
+"""The agent for treasurehunt, a simple example for the purpose of a tutorial."""
+
+# begin imports
+from pathlib import Path
+
+import numpy as np
+
+from sorrel.agents import Agent, MovingAgent
+from sorrel.examples.treasurehunt_threadsafe.world import TreasurehuntWorld
+
+# end imports
+
+
+# begin treasurehunt agent
+class TreasurehuntAgent(MovingAgent[TreasurehuntWorld]):
+    """A treasurehunt agent that uses the iqn model."""
+
+    def __init__(self, observation_spec, action_spec, model):
+        super().__init__(observation_spec, action_spec, model)
+        self.sprite = Path(__file__).parent / "./assets/hero.png"
+
+    # end constructor
+
+    def reset(self) -> None:
+        """Resets the agent by fill in blank images for the memory buffer."""
+        self.model.reset()
+
+    def pov(self, world: TreasurehuntWorld) -> np.ndarray:
+        """Returns the state observed by the agent, from the flattened visual field."""
+        image = self.observation_spec.observe(world, self.location)
+        # flatten the image to get the state
+        return image.reshape(1, -1)
+
+    def get_action(self, state: np.ndarray) -> int:
+        """Gets the action from the model, using the stacked states."""
+        prev_states = self.model.memory.current_state()
+        stacked_states = np.vstack((prev_states, state))
+
+        model_input = stacked_states.reshape(1, -1)
+        action = self.model_take_action(model_input)
+        return action
+
+    def is_done(self, world: TreasurehuntWorld) -> bool:
+        """Returns whether this Agent is done."""
+        return world.is_done
