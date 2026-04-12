@@ -69,6 +69,7 @@ optional = true
 
 [tool.poetry.group.llm.dependencies]
 openai = "^1.102.0"
+anthropic = ">=0.40.0"
 
 [tool.pytest.ini_options]
 pythonpath = [
