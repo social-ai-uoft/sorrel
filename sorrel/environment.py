@@ -4,6 +4,7 @@ from datetime import datetime
 from multiprocessing import Pool
 from pathlib import Path
 
+import numpy as np
 from numpy import ndenumerate
 from omegaconf import DictConfig, OmegaConf
 
@@ -11,6 +12,7 @@ from sorrel.agents import Agent
 from sorrel.buffers import SavedGames
 from sorrel.entities import Entity
 from sorrel.utils.logging import ConsoleLogger, Logger
+from sorrel.utils.turn_stats import AgentTurnStats, TurnStats
 from sorrel.utils.visualization import ImageRenderer
 from sorrel.worlds import Gridworld
 
@@ -49,6 +51,8 @@ class Environment[W: Gridworld]:
         self.turn = 0
         self.world.create_world()
         self.stop_if_done = stop_if_done
+        self._epoch_turn_stats: list[TurnStats] = []
+        self._active_logger: Logger | None = None
 
         self.setup_agents()
         self.populate_environment()
@@ -77,12 +81,20 @@ class Environment[W: Gridworld]:
         self.populate_environment()
         for agent in self.agents:
             agent.reset()
+        self._epoch_turn_stats = []
 
-    def take_turn(self) -> None:
+    def take_turn(self, epoch: int = 0) -> None:
         """Performs a full step in the environment.
 
         This function iterates through the environment and performs transition() for
-        each entity, then transitions each agent.
+        each entity, then transitions each agent. After all transitions, calls
+        :meth:`_collect_turn_stats` and :meth:`_on_turn_end` to collect and dispatch
+        per-turn statistics.
+
+        Args:
+            epoch: Current epoch index, passed to :meth:`_collect_turn_stats` for
+                attribution. Defaults to 0 for backward-compatible callers such as
+                :meth:`generate_memories`.
         """
         self.turn += 1
         for _, x in ndenumerate(self.world.map):
@@ -91,6 +103,8 @@ class Environment[W: Gridworld]:
                 x.transition(self.world)
         for agent in self.agents:
             agent.transition(self.world)
+        stats = self._collect_turn_stats(epoch)
+        self._on_turn_end(stats)
 
     def _model_start_epoch_action(self, agent: Agent, epoch: int) -> None:
         """Run per-epoch model start hook."""
@@ -103,6 +117,89 @@ class Environment[W: Gridworld]:
     def _model_train_step(self, agent: Agent):
         """Run model train step."""
         return agent.model.train_step()
+
+    def _collect_turn_stats(self, epoch: int) -> TurnStats:
+        """Collect per-turn statistics after all transitions have run.
+
+        Called automatically by :meth:`take_turn`. Override in subclasses to
+        populate :attr:`~sorrel.utils.turn_stats.TurnStats.extra` with
+        domain-specific metrics. Always call ``super()`` first to obtain the
+        base snapshot, then augment the returned object.
+
+        Args:
+            epoch: Current epoch index.
+
+        Returns:
+            A :class:`~sorrel.utils.turn_stats.TurnStats` snapshot for this turn.
+        """
+        agent_stats: list[AgentTurnStats] = []
+        for i, agent in enumerate(self.agents):
+            mem = agent.model.memory
+            if mem.size == 0:
+                continue
+            tail = (mem.idx - 1) % mem.capacity
+            agent_stats.append(
+                AgentTurnStats(
+                    agent_id=i,
+                    location=tuple(agent.location),
+                    last_action=int(mem.actions[tail]),
+                    last_reward=float(mem.rewards[tail]),
+                    last_done=bool(mem.dones[tail]),
+                )
+            )
+        return TurnStats(
+            epoch=epoch,
+            turn=self.turn,
+            total_world_reward=float(self.world.total_reward),
+            agent_stats=agent_stats,
+        )
+
+    def _on_turn_end(self, stats: TurnStats) -> None:
+        """Called after every turn with the collected :class:`~sorrel.utils.turn_stats.TurnStats`.
+
+        Default implementation buffers ``stats`` into
+        :attr:`_epoch_turn_stats` and delegates to the active logger's
+        :meth:`~sorrel.utils.logging.Logger.record_turn` if one is set.
+        Override to add side-effects; call ``super()`` to preserve buffering
+        and logger dispatch.
+
+        Args:
+            stats: The :class:`~sorrel.utils.turn_stats.TurnStats` snapshot
+                for the completed turn.
+        """
+        self._epoch_turn_stats.append(stats)
+        if self._active_logger is not None:
+            self._active_logger.record_turn(stats)
+
+    def _aggregate_epoch_stats(self) -> dict[str, float]:
+        """Aggregate buffered per-turn stats into epoch-level scalars.
+
+        Called once per epoch in :meth:`run_experiment`, before
+        :meth:`~sorrel.utils.logging.Logger.record_epoch`. The returned dict
+        is forwarded as ``**kwargs`` to ``record_epoch``. Override to produce
+        different aggregations; call ``super()`` and update the result dict.
+
+        Returns:
+            Dict of scalar values keyed by metric name. Default implementation
+            returns mean and max per-agent reward across the epoch's turns.
+            Returns ``{}`` if no turns were recorded.
+        """
+        if not self._epoch_turn_stats:
+            return {}
+        all_rewards = np.array(
+            [
+                a.last_reward
+                for ts in self._epoch_turn_stats
+                for a in ts.agent_stats
+            ],
+            dtype=np.float32,
+        )
+        if all_rewards.size == 0:
+            return {}
+        return {
+            "turn_reward_mean": float(all_rewards.mean()),
+            "turn_reward_max": float(all_rewards.max()),
+        }
 
     # TODO: ability to save/load?
     def run_experiment(
@@ -145,6 +242,10 @@ class Environment[W: Gridworld]:
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
             )
+        if logging:
+            if not logger:
+                logger = ConsoleLogger(self.config.experiment.epochs)
+            self._active_logger = logger
         for epoch in range(self.config.experiment.epochs + 1):
             # Reset the environment at the start of each epoch
             self.reset()
@@ -163,7 +264,7 @@ class Environment[W: Gridworld]:
                 # renderer should never be None if animate is true; this is just written for pyright to not complain
                 if animate_this_turn and renderer is not None:
                     renderer.add_image(self.world)
-                self.take_turn()
+                self.take_turn(epoch)
 
                 if self.world.is_done and self.stop_if_done:
                     break
@@ -188,14 +289,14 @@ class Environment[W: Gridworld]:
                 total_loss = self._model_train_step(agent)
 
             # Log the information
-            if logging:
-                if not logger:
-                    logger = ConsoleLogger(self.config.experiment.epochs)
-                logger.record_epoch(
+            if logging and self._active_logger is not None:
+                epoch_kwargs = self._aggregate_epoch_stats()
+                self._active_logger.record_epoch(
                     epoch,
                     total_loss,
                     self.world.total_reward,
                     self.agents[0].model.epsilon,
+                    **epoch_kwargs,
                 )
 
             # update epsilon
@@ -209,6 +310,8 @@ class Environment[W: Gridworld]:
                                 output_dir
                                 / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
                             )
+
+        self._active_logger = None
 
     def generate_memories(
         self,
