@@ -45,7 +45,7 @@ class Logger:
         for additional_value in args:
             self.additional_values[additional_value] = []
 
-    def record_turn(
+    def record_epoch(
         self,
         epoch: int,
         loss: float | np.ndarray,
@@ -117,7 +117,7 @@ class ConsoleLogger(Logger):
         additional_values: A dictionary of optional values to be stored.
     """
 
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+    def record_epoch(self, epoch, loss, reward, epsilon=0, **kwargs):
         loss = np.round(loss, 2)
         # Print beginning of the frame
         if epoch == 0:
@@ -131,7 +131,7 @@ class ConsoleLogger(Logger):
         print(f"╚══════════════╩══════════════╩══════════════╝", end="\r")
         if epoch == self.max_epochs:
             print(f"╚══════════════╩══════════════╩══════════════╝")
-        super().record_turn(epoch, loss, reward, epsilon, **kwargs)
+        super().record_epoch(epoch, loss, reward, epsilon, **kwargs)
 
 
 class JupyterLogger(Logger):
@@ -145,7 +145,7 @@ class JupyterLogger(Logger):
         additional_values: A dictionary of optional values to be stored.
     """
 
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+    def record_epoch(self, epoch, loss, reward, epsilon=0, **kwargs):
         loss = np.round(loss, 2)
         clear_output(wait=True)
         print(f"╔══════════════╦══════════════╦══════════════╗")
@@ -153,7 +153,7 @@ class JupyterLogger(Logger):
             f"║ Epoch:{str(epoch).rjust(6)} ║ Loss:{str(loss).rjust(7)} ║ Reward:{str(reward).rjust(5)} ║"
         )
         print(f"╚══════════════╩══════════════╩══════════════╝")
-        super().record_turn(epoch, loss, reward, epsilon, **kwargs)
+        super().record_epoch(epoch, loss, reward, epsilon, **kwargs)
 
 
 class TensorboardLogger(Logger):
@@ -180,7 +180,7 @@ class TensorboardLogger(Logger):
             os.makedirs(log_dir)
         self.writer = SummaryWriter(log_dir=log_dir)
 
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+    def record_epoch(self, epoch, loss, reward, epsilon=0, **kwargs):
         self.writer.add_scalar("loss", loss, epoch)
         self.writer.add_scalar("score", reward, epoch)
         self.writer.add_scalar("epsilon", epsilon, epoch)
