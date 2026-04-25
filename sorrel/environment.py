@@ -228,6 +228,7 @@ class Environment[W: Gridworld]:
                 capacity=num_games * self.config.experiment.max_turns,
                 obs_shape=agent.observation_spec.input_size,
                 n_frames=n_frames,
+                positions=(2,),
             )
             if hasattr(agent.model, "eval"):
                 agent.model.eval()  # type: ignore

@@ -34,8 +34,9 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
         """Create the agents for this experiment and assign them to self.agents.
 
         Requires self.config.model.agent_vision_radius to be defined.
+        Reads agent count from config.model.num_agents (default 2).
         """
-        agent_num = 2
+        agent_num = int(self.config.model.get("num_agents", 2))
         agents = []
         for _ in range(agent_num):
             # create the observation spec
@@ -95,6 +96,9 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 TAU=0.001,
                 GAMMA=0.99,
                 n_quantiles=12,
+            )
+            model.memory.extra_data["positions"] = np.zeros(
+                (model.memory.capacity, 2), dtype=np.int64
             )
 
             agents.append(

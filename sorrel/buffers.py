@@ -57,10 +57,10 @@ class Buffer:
         self.actions[self.idx] = action
         self.rewards[self.idx] = reward
         self.dones[self.idx] = done
-        self.idx = (self.idx + 1) % self.capacity
-        self.size = min(self.size + 1, self.capacity)
         for key, value in kwargs.items():
             self.extra_data[key][self.idx] = value
+        self.idx = (self.idx + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
 
     def add_empty(self):
         """Advancing the id by `self.n_frames`, adding empty frames to the replay
@@ -259,7 +259,7 @@ class TransformerBuffer(Buffer):
         output.dones = dones
         output.idx = idx
         output.size = size
-        for key, array in zip(["positions, agent_ids"], [positions, agent_ids]):
+        for key, array in zip(["positions", "agent_ids"], [positions, agent_ids]):
             if array is not None:
                 output.extra_data[key] = array
         return output
