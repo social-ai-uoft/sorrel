@@ -4,11 +4,10 @@ from sorrel.action.action_spec import ActionSpec
 class ChessActionSpec(ActionSpec):
     """Action specification covering every possible move on an 8x8 chess board.
 
-    Each action is represented in long algebraic notation without separators,
-    e.g., ``"e2e4"`` for a pawn moving from e2 to e4.  All 64x64 possible
-    from-to square combinations (excluding no-move) are included, providing a
-    complete action space that can be filtered by the environment's legality
-    checks.
+    Each action is represented in long algebraic notation without separators, e.g.,
+    ``"e2e4"`` for a pawn moving from e2 to e4.  All 64x64 possible from-to square
+    combinations (excluding no-move) are included, providing a complete action space
+    that can be filtered by the environment's legality checks.
     """
 
     def __init__(self) -> None:

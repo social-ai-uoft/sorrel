@@ -53,7 +53,6 @@ class Gridworld(World):
         This function is used in :func:`self.__init__()`, and may be useful for
         resetting environments.
         """
-
         self.map = np.full((self.height, self.width, self.layers), Entity())
 
         # Define the location of each entity

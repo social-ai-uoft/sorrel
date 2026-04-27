@@ -15,11 +15,11 @@ from sorrel.observation.observation_spec import OneHotObservationSpec
 class ChessObservationSpec(OneHotObservationSpec):
     """One-hot observation spec with an extra colour layer.
 
-    The base class encodes each entity kind as a separate one-hot channel.
-    This subclass appends a single additional channel that is ``1`` where the
-    observed entity has ``colour == "white"``, ``-1`` where the
-    observed entity has ``colour == "black"``, and ``0`` otherwise.  Empty
-    squares (which have no ``colour`` attribute) are encoded as ``0``.
+    The base class encodes each entity kind as a separate one-hot channel. This subclass
+    appends a single additional channel that is ``1`` where the observed entity has
+    ``colour == "white"``, ``-1`` where the observed entity has ``colour == "black"``,
+    and ``0`` otherwise.  Empty squares (which have no ``colour`` attribute) are encoded
+    as ``0``.
     """
 
     def observe(self, world, location: tuple | None = None) -> np.ndarray:  # type: ignore[override]

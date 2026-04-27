@@ -15,8 +15,8 @@ from sorrel.examples.chess.world import Chessboard
 class ChessEnvironment(Environment[Chessboard]):
     """The experiment for the Chess example.
 
-    Sets up a full chessboard for play between white and black, which are
-    controlled by two ``RandomChessAgent`` agents.
+    Sets up a full chessboard for play between white and black, which are controlled by
+    two ``RandomChessAgent`` agents.
     """
 
     def __init__(self, world: Chessboard, config: dict) -> None:
@@ -27,7 +27,6 @@ class ChessEnvironment(Environment[Chessboard]):
     # ---------------------------------------------------------------------
     def setup_agents(self) -> None:
         """Create two agents (white and black) and assigns them to `self.agents`."""
-
         # White is random, Black is API
         agents = []
         agents.append(make_random_chess_agent(colour="white", world=self.world))
@@ -39,7 +38,6 @@ class ChessEnvironment(Environment[Chessboard]):
     # ---------------------------------------------------------------------
     def populate_environment(self) -> None:
         """Place pieces on the chessboard."""
-
         # Place the pieces
         for row, colour in zip((0, 7), ("black", "white")):
             self.world.add((row, 0, 0), Rook(colour=colour))  # a file

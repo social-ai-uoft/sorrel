@@ -34,8 +34,9 @@ class ObservationSpec[T: (np.ndarray, str), W]():
         env_dims: Sequence[int] | None = None,
         fill_entity_kind: str = "Wall",
     ):
-        r"""Initialize the :py:class:`ObservationSpec` object. This function uses
-        generate_map() to create an entity map for the ObservationSpec based on
+        r"""Initialize the :py:class:`ObservationSpec` object.
+
+        This function uses generate_map() to create an entity map for the ObservationSpec based on
         entity_list.
 
         Args:
@@ -100,8 +101,9 @@ class ObservationSpec[T: (np.ndarray, str), W]():
         self.entity_map = entity_map
 
     def override_input_size(self, input_size: Sequence[int]) -> None:
-        r"""Override the input size with a provided custom one. Can be useful if the
-        output of the observe() function is changed from the default (i.e., by
+        r"""Override the input size with a provided custom one.
+
+        Can be useful if the output of the observe() function is changed from the default (i.e., by
         flattening the output).
 
         Args:

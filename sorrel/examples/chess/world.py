@@ -60,7 +60,6 @@ class Chessboard(Gridworld):
 
         Return the reward if a piece is taken.
         """
-
         # Save previous move for en passant detection
         prev_last_move = getattr(self, "last_move", None)
 
@@ -249,9 +248,9 @@ class Chessboard(Gridworld):
     def is_check(self, colour: str) -> bool:
         """Return ``True`` if the king of *colour* is under attack.
 
-        The method locates the king piece for the given colour and uses the
-        internal ``_is_square_attacked`` helper to determine whether any opponent
-        piece attacks that square.
+        The method locates the king piece for the given colour and uses the internal
+        ``_is_square_attacked`` helper to determine whether any opponent piece attacks
+        that square.
         """
         # Find the king of the given colour
         king_pos = None
@@ -296,13 +295,12 @@ class Chessboard(Gridworld):
     def legal_moves(self, colour: str) -> list[tuple[Location, Location]]:
         """Return a list of legal moves for the given colour.
 
-        This implementation provides basic move generation for all standard
-        chess pieces (pawn, rook, knight, bishop, queen, king) and now includes
-        castling moves (king-side and queen-side). It does **not** handle en
-        passant or pawn promotion. Moves that would land on a square occupied by
-        a friendly piece are excluded. The board is an 8x8 grid with coordinates ``(row, col, 0)``
-        where ``row`` 0 is the top of the board (black side) and ``row`` 7 is
-        the bottom (white side).
+        This implementation provides basic move generation for all standard chess pieces
+        (pawn, rook, knight, bishop, queen, king) and now includes castling moves (king-
+        side and queen-side). It does **not** handle en passant or pawn promotion. Moves
+        that would land on a square occupied by a friendly piece are excluded. The board
+        is an 8x8 grid with coordinates ``(row, col, 0)`` where ``row`` 0 is the top of
+        the board (black side) and ``row`` 7 is the bottom (white side).
         """
         moves: list[tuple[Location, Location]] = []
 
@@ -492,5 +490,4 @@ class Chessboard(Gridworld):
 
     def reset(self) -> None:
         """Reset the board to the initial empty state."""
-
         self.create_world()

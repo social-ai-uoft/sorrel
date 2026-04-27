@@ -44,7 +44,6 @@ class GamblingAgent(MovingAgent[GamblingWorld]):
 
     def act(self, world: GamblingWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
-
         # Attempt move
         new_location = self.movement(action)
 

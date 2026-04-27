@@ -1,8 +1,8 @@
 """Entry point for the Chess example.
 
-The script mirrors the structure of the other example ``main.py`` files. It
-creates a ``ChessWorld`` (8x8 board) and a ``ChessEnvironment`` with a minimal
-configuration, then runs a short experiment using the random agents.
+The script mirrors the structure of the other example ``main.py`` files. It creates a
+``ChessWorld`` (8x8 board) and a ``ChessEnvironment`` with a minimal configuration, then
+runs a short experiment using the random agents.
 """
 
 from pathlib import Path

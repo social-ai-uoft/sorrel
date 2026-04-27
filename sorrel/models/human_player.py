@@ -63,7 +63,6 @@ class HumanPlayer(BaseModel):
 
     def take_action(self, state: np.ndarray):
         """Observe a visual field sprite output."""
-
         if isinstance(self.input_size, int):
             raise ValueError(
                 "Input size must be a sequence of integers for the human player."
