@@ -168,6 +168,19 @@ class StagHuntWorld(Gridworld):
         self.private_coordination_rep_obs_random_seed: int = int(
             get_world_param("private_coordination_rep_obs_random_seed", 0)
         )
+        # Per-tile previous executed action observation slot
+        self.observe_prev_actions_tile_enabled: bool = bool(
+            get_world_param("observe_prev_actions_tile_enabled", False)
+        )
+        self.observe_prev_actions_tile_obs_enabled: bool = bool(
+            get_world_param("observe_prev_actions_tile_obs_enabled", False)
+        )
+        self.observe_prev_actions_tile_obs_randomize: bool = bool(
+            get_world_param("observe_prev_actions_tile_obs_randomize", False)
+        )
+        self.observe_prev_actions_tile_obs_random_seed: int = int(
+            get_world_param("observe_prev_actions_tile_obs_random_seed", 0)
+        )
         self.private_rep_punish_decay_enabled: bool = bool(
             get_world_param("private_rep_punish_decay_enabled", False)
         )
@@ -333,6 +346,8 @@ class StagHuntWorld(Gridworld):
         if switch_period <= 0:
             switch_period = 1000  # Use safe default
         self.appearance_switch_period: int = int(switch_period)
+        # Toggled by switch_appearances(); RL obs swaps stag vs hare one-hot channels (MDP unchanged).
+        self.appearance_obs_channels_inverted: bool = False
 
         # Agent configuration system
         use_agent_config = bool(get_world_param("use_agent_config", False))  # Default to False for backward compatibility
@@ -692,22 +707,13 @@ class StagHuntWorld(Gridworld):
             self.add(loc, Empty())
 
     def switch_appearances(self) -> None:
-        """Switch the functional properties (rewards, health, cooldowns) of stag and hare resources.
-        
-        This method swaps the world attributes that control resource properties, creating a mismatch
-        between visual appearance (which stays the same) and functional properties (which are swapped).
-        The swap occurs before any resources are spawned, ensuring all resources use the swapped values.
-        
-        Note: This does NOT swap sprites - visual appearances remain the same (stag looks like stag,
-        hare looks like hare), but their functional properties are swapped.
+        """Invert sensory mapping for stag vs hare in the RL observation (standard view).
+
+        Toggles :attr:`appearance_obs_channels_inverted`: stag and hare grid one-hot channels
+        are exchanged in the policy input while the underlying world (entities, payoffs, sharing
+        rules) is unchanged. Called on ``appearance_switch_period`` from the training loop before
+        ``reset()`` so each episode uses a consistent mapping.
         """
         if not self.appearance_switching_enabled:
             return
-        
-        # Swap rewards
-        self.stag_reward, self.hare_reward = self.hare_reward, self.stag_reward
-        # Swap health
-        self.stag_health, self.hare_health = self.hare_health, self.stag_health
-        # Swap regeneration cooldowns
-        self.stag_regeneration_cooldown, self.hare_regeneration_cooldown = \
-            self.hare_regeneration_cooldown, self.stag_regeneration_cooldown
+        self.appearance_obs_channels_inverted = not self.appearance_obs_channels_inverted

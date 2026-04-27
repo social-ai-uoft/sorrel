@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import itertools
 import random
+from collections import deque
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -370,6 +371,10 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         agent_id_encoding_mode: str = "random_vector",
         use_agent_id_in_standard_obs: bool = True,
         agent_id_shuffle_seed: int | None = None,
+        observe_global_resource_counts: bool = False,
+        global_resource_counts_sham: bool = False,
+        global_resource_counts_include_total: bool = False,
+        global_resource_count_norm: float | None = None,
         power_mode: bool = False,
         observe_own_power_only: bool = False,
         aggression_enabled: bool = False,
@@ -378,6 +383,11 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         private_coordination_rep_obs_randomize: bool = False,
         private_coordination_rep_obs_random_max: float = 10.0,
         private_coordination_rep_obs_random_seed: int = 0,
+        n_actions: int | None = None,
+        observe_prev_actions_tile_enabled: bool = False,
+        observe_prev_actions_tile_obs_enabled: bool = False,
+        observe_prev_actions_tile_obs_randomize: bool = False,
+        observe_prev_actions_tile_obs_random_seed: int = 0,
     ):
         super().__init__(entity_list, full_view, vision_radius, env_dims)
         self.embedding_size = embedding_size
@@ -392,10 +402,39 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         self.private_coordination_rep_obs_randomize = bool(private_coordination_rep_obs_randomize)
         self.private_coordination_rep_obs_random_max = float(private_coordination_rep_obs_random_max)
         self.private_coordination_rep_obs_random_seed = int(private_coordination_rep_obs_random_seed)
+        self.n_actions = max(1, int(n_actions or 1))
+        self.observe_prev_actions_tile_enabled = bool(observe_prev_actions_tile_enabled) and standard_obs
+        self.observe_prev_actions_tile_obs_enabled = bool(observe_prev_actions_tile_obs_enabled) and standard_obs
+        self.observe_prev_actions_tile_obs_randomize = bool(observe_prev_actions_tile_obs_randomize)
+        self.observe_prev_actions_tile_obs_random_seed = int(observe_prev_actions_tile_obs_random_seed)
+        self.prev_actions_tile_exposed = (
+            self.observe_prev_actions_tile_enabled or self.observe_prev_actions_tile_obs_enabled
+        )
+        self.prev_actions_slot_dim = self.n_actions + 1  # +1 for NA class
         self.agent_id_vector_dim = agent_id_vector_dim
         self.agent_id_encoding_mode = agent_id_encoding_mode
         self.use_agent_id_in_standard_obs = use_agent_id_in_standard_obs
         self.agent_id_shuffle_seed = agent_id_shuffle_seed
+
+        # Global resource count observation tail.
+        #
+        # - When observe_global_resource_counts is False, the observation layout is unchanged.
+        # - When True, we append D scalars after the 4 local scalars (inventory, health, reward flag).
+        # - The sham condition keeps the same layout but forces the appended scalars to 0.
+        self.observe_global_resource_counts = bool(observe_global_resource_counts)
+        self.global_resource_counts_sham = bool(global_resource_counts_sham)
+        self.global_resource_counts_include_total = bool(global_resource_counts_include_total)
+        self.global_resource_count_norm = global_resource_count_norm
+
+        if self.global_resource_counts_sham and not self.observe_global_resource_counts:
+            # Sham only makes sense when the global-count tail is present.
+            # Keep backwards-compatible behavior: ignore sham.
+            self.global_resource_counts_sham = False
+
+        if self.observe_global_resource_counts:
+            self._global_resource_obs_dim = 2 + (1 if self.global_resource_counts_include_total else 0)
+        else:
+            self._global_resource_obs_dim = 0
 
         # Standard observation mode setup
         if standard_obs:
@@ -479,6 +518,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 + (1 if power_mode else 0)  # Power (when power_mode)
                 + (1 if aggression_enabled else 0)  # Target aggression (when aggression_enabled)
                 + (1 if (self.private_coordination_rep_enabled or self.private_coordination_rep_obs_enabled) else 0)
+                + (self.prev_actions_slot_dim if self.prev_actions_tile_exposed else 0)
             )
         else:
             self.num_agents = int(num_agents or 0)
@@ -550,6 +590,8 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             self.identity_map = {}
             identity_size = 0
 
+        extra_scalar_tail_dim = 4 + self._global_resource_obs_dim
+
         # Calculate input size including extra features and position embedding
         if standard_obs:
             visual_field_size = (
@@ -562,14 +604,14 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 self.input_size = (
                     1,
                     visual_field_size
-                    + 4
+                    + extra_scalar_tail_dim
                     + (4 * self.embedding_size)
                 )
             else:
                 self.input_size = (
                     1,
                     visual_field_size
-                    + 4  # Extra features
+                    + extra_scalar_tail_dim  # Extra scalar tail (local + optional global counts)
                     + (4 * self.embedding_size)  # Positional embedding
                 )
         else:
@@ -588,16 +630,73 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
             self.input_size = (
                 1,
                 visual_field_size
-                + 4
+                + extra_scalar_tail_dim
                 + (4 * self.embedding_size)
             )  # Placeholder, will be updated
         else:
                 self.input_size = (
                 1,
                 visual_field_size
-                + 4  # Extra features: inv_stag, inv_hare, own_health, interaction_reward_flag
+                + extra_scalar_tail_dim  # Extra scalar tail: local + optional global counts
                 + (4 * self.embedding_size)  # Positional embedding
             )
+
+    def _global_resource_count_features(self, world: Gridworld) -> np.ndarray:
+        """Return optional global resource count scalars.
+
+        Order:
+          1) stag_count_norm
+          2) hare_count_norm
+          3) total_count_norm (optional, if global_resource_counts_include_total)
+
+        Normalization:
+          - Prefer dividing by world.max_stags / world.max_hares / world.max_resources when present.
+          - If a cap is None or non-positive, fall back to global_resource_count_norm when provided.
+          - If no cap and no fallback norm, return raw counts (divide by 1.0).
+        """
+        if not self.observe_global_resource_counts:
+            return np.zeros(0, dtype=np.float32)
+
+        d = int(self._global_resource_obs_dim)
+        if d <= 0:
+            return np.zeros(0, dtype=np.float32)
+
+        if self.global_resource_counts_sham:
+            return np.zeros(d, dtype=np.float32)
+
+        # If the world doesn't expose the counters, return zeros to avoid crashing in other Gridworlds.
+        count_stags_fn = getattr(world, "count_stags", None)
+        count_hares_fn = getattr(world, "count_hares", None)
+        count_resources_fn = getattr(world, "count_resources", None)
+        if not callable(count_stags_fn) or not callable(count_hares_fn):
+            return np.zeros(d, dtype=np.float32)
+        if self.global_resource_counts_include_total and not callable(count_resources_fn):
+            return np.zeros(d, dtype=np.float32)
+
+        stag_count = float(count_stags_fn())
+        hare_count = float(count_hares_fn())
+        total_count = float(count_resources_fn()) if self.global_resource_counts_include_total else 0.0
+
+        def _denom(cap_value: object) -> float:
+            cap: float | None
+            try:
+                cap = None if cap_value is None else float(cap_value)
+            except (TypeError, ValueError):
+                cap = None
+            if cap is not None and cap > 0:
+                return cap
+            if self.global_resource_count_norm is not None:
+                return max(1.0, float(self.global_resource_count_norm))
+            return 1.0
+
+        stag_den = _denom(getattr(world, "max_stags", None))
+        hare_den = _denom(getattr(world, "max_hares", None))
+        total_den = _denom(getattr(world, "max_resources", None))
+
+        feats: list[float] = [stag_count / stag_den, hare_count / hare_den]
+        if self.global_resource_counts_include_total:
+            feats.append(total_count / total_den)
+        return np.asarray(feats, dtype=np.float32)
 
     def _create_kind_to_group_map(self, agent_kinds: list[str] | None) -> dict[str, str]:
         """Map agent kinds to group names.
@@ -691,7 +790,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
 
             if agent is None:
                 # If no agent found, use default values
-                extra_features = np.array([0, 0, 0, 0], dtype=np.float32)
+                local_extra = np.array([0, 0, 0, 0], dtype=np.float32)
             else:
                 # Extract inventory, own_health (normalized), and interaction reward flag from the agent
                 inv_stag = agent.inventory.get("stag", 0)
@@ -699,10 +798,14 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 max_h = max(getattr(agent, "max_health", 1), 1)
                 own_health = min(1.0, agent.health / max_h)
                 interaction_reward_flag = 1 if agent.received_interaction_reward else 0
-                extra_features = np.array(
+                local_extra = np.array(
                     [inv_stag, inv_hare, own_health, interaction_reward_flag],
                     dtype=np.float32,
                 )
+
+            extra_features = np.concatenate(
+                (local_extra, self._global_resource_count_features(world)), dtype=np.float32
+            )
 
             # Generate positional embedding
             pos_code = embedding.positional_embedding(
@@ -817,17 +920,21 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         
         # Step 3.10: Extract extra features (existing code)
         if agent is None:
-            extra_features = np.array([0, 0, 0, 0], dtype=np.float32)
+            local_extra = np.array([0, 0, 0, 0], dtype=np.float32)
         else:
                 inv_stag = agent.inventory.get("stag", 0)
                 inv_hare = agent.inventory.get("hare", 0)
                 max_h = max(getattr(agent, "max_health", 1), 1)
                 own_health = min(1.0, agent.health / max_h)
                 interaction_reward_flag = 1 if agent.received_interaction_reward else 0
-                extra_features = np.array(
+                local_extra = np.array(
                 [inv_stag, inv_hare, own_health, interaction_reward_flag],
                 dtype=np.float32,
             )
+
+        extra_features = np.concatenate(
+            (local_extra, self._global_resource_count_features(world)), dtype=np.float32
+        )
         
         # Step 3.11: Generate positional embedding (existing code)
         pos_code = embedding.positional_embedding(
@@ -835,7 +942,15 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         )
         
         # Step 3.12: Concatenate final observation
-        return np.concatenate((visual_field_flat, extra_features, pos_code))
+        observation = np.concatenate((visual_field_flat, extra_features, pos_code))
+        expected_size = self.input_size[1]
+        if observation.shape[0] != expected_size:
+            raise ValueError(
+                f"Observation size mismatch: expected {expected_size}, got {observation.shape[0]}. "
+                f"visual_field: {visual_field_flat.shape[0]}, extra_features: {extra_features.shape[0]}, "
+                f"pos_code: {pos_code.shape[0]}"
+            )
+        return observation
 
     def _observe_standard_mode(
         self, world: Gridworld, location: tuple | Location
@@ -931,6 +1046,21 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 FEAT_OTHER_PRIVATE_REP = FEAT_OTHER_FROZEN + 1
         else:
             FEAT_OTHER_PRIVATE_REP = None
+        if self.prev_actions_tile_exposed:
+            if FEAT_OTHER_PRIVATE_REP is not None:
+                FEAT_PREV_ACTION_START = FEAT_OTHER_PRIVATE_REP + 1
+            elif FEAT_OTHER_AGGRESSION is not None:
+                FEAT_PREV_ACTION_START = FEAT_OTHER_AGGRESSION + 1
+            elif FEAT_POWER is not None:
+                FEAT_PREV_ACTION_START = FEAT_POWER + 1
+            else:
+                FEAT_PREV_ACTION_START = FEAT_OTHER_FROZEN + 1
+            FEAT_PREV_ACTION_END = FEAT_PREV_ACTION_START + self.prev_actions_slot_dim
+            PREV_ACTION_NA_CLASS = self.n_actions
+        else:
+            FEAT_PREV_ACTION_START = None
+            FEAT_PREV_ACTION_END = None
+            PREV_ACTION_NA_CLASS = None
 
         # Orientation mapping
         orientation_map = {0: 'north', 1: 'east', 2: 'south', 3: 'west'}
@@ -957,6 +1087,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                 if world.valid_location(dynamic_loc):
                     entity = world.observe(dynamic_loc)
                     entity_type = type(entity).__name__
+                    prev_action_class = PREV_ACTION_NA_CLASS
                     
                     # Encode entity type (mutually exclusive)
                     if entity_type == "Empty":
@@ -969,9 +1100,16 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                         feature_tensor[FEAT_SAND, y, x] = 1.0
                     elif entity_type == "StagResource" or entity_type == "WoundedStagResource":
                         # Both StagResource and WoundedStagResource are encoded as "stag"
-                        feature_tensor[FEAT_STAG, y, x] = 1.0
+                        # Optional sensory inversion: swap which channel fires (world truth unchanged).
+                        if getattr(world, "appearance_obs_channels_inverted", False):
+                            feature_tensor[FEAT_HARE, y, x] = 1.0
+                        else:
+                            feature_tensor[FEAT_STAG, y, x] = 1.0
                     elif entity_type == "HareResource":
-                        feature_tensor[FEAT_HARE, y, x] = 1.0
+                        if getattr(world, "appearance_obs_channels_inverted", False):
+                            feature_tensor[FEAT_STAG, y, x] = 1.0
+                        else:
+                            feature_tensor[FEAT_HARE, y, x] = 1.0
                     elif hasattr(entity, 'agent_id'):  # It's an agent
                         entity_id = entity.agent_id
                         entity_kind = getattr(entity, 'kind', None)
@@ -1055,6 +1193,34 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                                     rep = getattr(observer_agent, "private_coordination_rep", None)
                                     if rep is not None and len(rep) > 0 and 0 <= entity_id < len(rep):
                                         feature_tensor[FEAT_OTHER_PRIVATE_REP, y, x] = float(rep[entity_id])
+                        if self.prev_actions_tile_exposed:
+                            if self.observe_prev_actions_tile_obs_randomize:
+                                t = int(getattr(world, "current_turn", 0))
+                                s = self.observe_prev_actions_tile_obs_random_seed
+                                h = (
+                                    s
+                                    ^ (observer_id * 0x9E3779B1)
+                                    ^ (entity_id * 0x85EBCA6B)
+                                    ^ (t * 0xC2B2AE35)
+                                    ^ (y * 0x27D4EB2D)
+                                    ^ (x * 0x165667B1)
+                                ) & 0xFFFFFFFF
+                                prev_action_class = int(h % self.n_actions)
+                            elif self.observe_prev_actions_tile_enabled:
+                                code = int(getattr(entity, "last_executed_action_code", 0))
+                                if code < 0 or code >= self.n_actions:
+                                    code = 0
+                                prev_action_class = code
+                            else:
+                                prev_action_class = PREV_ACTION_NA_CLASS
+                    if self.prev_actions_tile_exposed and prev_action_class is not None:
+                        feature_tensor[
+                            FEAT_PREV_ACTION_START + prev_action_class, y, x
+                        ] = 1.0
+                elif self.prev_actions_tile_exposed and PREV_ACTION_NA_CLASS is not None:
+                    feature_tensor[
+                        FEAT_PREV_ACTION_START + PREV_ACTION_NA_CLASS, y, x
+                    ] = 1.0
                 # Encode beam features
                 if world.valid_location(beam_loc):
                     beam_entity = world.observe(beam_loc)
@@ -1104,9 +1270,13 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         max_h = max(getattr(observer_agent, "max_health", 1), 1)
         own_health = min(1.0, observer_agent.health / max_h)
         interaction_reward_flag = 1 if observer_agent.received_interaction_reward else 0
-        extra_features = np.array(
+        local_extra = np.array(
             [inv_stag, inv_hare, own_health, interaction_reward_flag],
             dtype=np.float32,
+        )
+
+        extra_features = np.concatenate(
+            (local_extra, self._global_resource_count_features(world)), dtype=np.float32
         )
         
         pos_code = embedding.positional_embedding(
@@ -1186,6 +1356,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         exclusive_reward: bool = False,  # NEW: whether only this agent gets reward when defeating resources
         punish_freeze_ability: int | None = None,  # Freeze duration in turns when heterogeneity enabled (from CSV punishment_ability)
         num_agents: int | None = None,
+        ppo_n_frames: int = 1,
+        ppo_obs_dim: int | None = None,
     ):
         super().__init__(observation_spec, action_spec, model)
         # assign a default sprite; can be overridden externally
@@ -1223,6 +1395,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.aggression: float = 0.0
         # Last action taken (for models with use_last_action, e.g. RecurrentIQNModelCPC)
         self._last_action: int | None = None
+        # Live executed-action state for same-turn per-tile observation slot.
+        self.last_executed_action_default_code: int = 0
+        self.last_executed_action_code: int = self.last_executed_action_default_code
 
         # Health system
         self.max_health = max_health
@@ -1236,6 +1411,16 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             self.private_coordination_rep = np.zeros(na, dtype=np.int32)
         else:
             self.private_coordination_rep = np.zeros(0, dtype=np.int32)
+
+        # PPO frame stacking (optional): concat last N single-step obs before policy forward.
+        _n_frames = 1 if ppo_n_frames is None else int(ppo_n_frames)
+        self._ppo_n_frames = max(1, _n_frames)
+        self._ppo_obs_dim = int(ppo_obs_dim) if ppo_obs_dim is not None else None
+        self._ppo_obs_deque: deque[np.ndarray] | None = None
+        if hasattr(self.model, "add_memory_ppo") and self._ppo_n_frames > 1:
+            if self._ppo_obs_dim is None:
+                raise ValueError("ppo_obs_dim is required when ppo_n_frames > 1 for PPO agents")
+            self._ppo_obs_deque = deque(maxlen=self._ppo_n_frames)
 
         # Initialize agent kind based on orientation
         self.update_agent_kind()
@@ -1399,6 +1584,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.punish_cooldown_timer = 0  # Reset punish cooldown
         self.pending_reward = 0.0  # Reset pending reward
         self.received_interaction_reward = False  # Reset interaction reward flag
+        if self._ppo_obs_deque is not None:
+            self._ppo_obs_deque.clear()
         # Reset freeze state
         self.is_frozen = False
         self.freeze_timer = 0
@@ -1412,11 +1599,58 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         self.update_agent_kind()  # Initialize agent kind based on orientation
         # Reset last-action tracking for models that use it (e.g. RecurrentIQNModelCPC)
         self._last_action = None
+        self.last_executed_action_code = self.last_executed_action_default_code
         # reset the underlying model (e.g., clear memory of past states or LSTM hidden state)
         if hasattr(self.model, "reset") and callable(self.model.reset):
             self.model.reset()
         elif hasattr(self.model, "start_epoch_action"):
             self.model.start_epoch_action(0)
+
+    def _action_name_to_executed_code(self, action_name: str) -> int:
+        """Map readable action names to a stable in-range executed-action code."""
+        actions = getattr(self.action_spec, "actions", {})
+        if isinstance(actions, dict):
+            for idx, name in actions.items():
+                if name == action_name:
+                    return int(idx)
+        return int(self.last_executed_action_default_code)
+
+    def _build_ppo_model_input(
+        self, state: np.ndarray, *, update_buffer: bool = True
+    ) -> np.ndarray:
+        """Flatten observation; optionally concat last ``ppo_n_frames`` frames for PPO."""
+        if state.ndim == 2 and state.shape[0] == 1:
+            flat = np.asarray(state, dtype=np.float32).reshape(-1)
+        else:
+            flat = np.asarray(state, dtype=np.float32).ravel()
+
+        if not hasattr(self.model, "add_memory_ppo") or self._ppo_n_frames <= 1:
+            return flat.reshape(1, -1)
+
+        assert self._ppo_obs_dim is not None and self._ppo_obs_deque is not None
+        if flat.size != self._ppo_obs_dim:
+            raise ValueError(
+                f"PPO obs size mismatch: got {flat.size}, expected single-frame dim {self._ppo_obs_dim}"
+            )
+
+        if update_buffer:
+            self._ppo_obs_deque.append(flat.copy())
+            frames = list(self._ppo_obs_deque)
+        else:
+            frames = list(self._ppo_obs_deque)
+            if len(frames) == 0 or not (
+                frames[-1].shape == flat.shape
+                and np.allclose(frames[-1], flat, rtol=0.0, atol=1e-5)
+            ):
+                frames = frames + [flat]
+
+        n = self._ppo_n_frames
+        tail = frames[-n:] if len(frames) >= n else frames
+        pad_count = n - len(tail)
+        zero = np.zeros(self._ppo_obs_dim, dtype=np.float32)
+        padded = [zero] * pad_count + tail
+        stacked = np.concatenate(padded, axis=0)
+        return stacked.reshape(1, -1)
 
     def pov(self, world: StagHuntWorld) -> np.ndarray:
         """Return the agent's observation vector.
@@ -1430,14 +1664,12 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         """Select an action using the underlying model.
 
         For IQN, a stack of previous states is concatenated by the model's memory.
-        For PPO LSTM, a single current observation is passed (LSTM handles history).
+        For PPO LSTM, a single-step observation is passed by default; if ``ppo_n_frames > 1``,
+        the last ``ppo_n_frames`` observations are concatenated (zero-padded at episode start).
         Returns an integer index into the action specification.
         """
         if hasattr(self.model, "add_memory_ppo"):
-            # PPO / RecurrentPPOLSTMCPC: single-step input
-            if state.ndim == 2 and state.shape[0] == 1:
-                state = state.flatten()
-            model_input = state.reshape(1, -1)
+            model_input = self._build_ppo_model_input(state, update_buffer=True)
             return int(self.model.take_action(model_input))
         # IQN: frame stacking via memory.current_state()
         prev_states = self.model.memory.current_state()
@@ -1465,10 +1697,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             Tuple of (action_index, q_values_array)
         """
         if hasattr(self.model, "add_memory_ppo"):
-            # PPO: single-step input; no Q-values from policy
-            if state.ndim == 2 and state.shape[0] == 1:
-                state = state.flatten()
-            model_input = state.reshape(1, -1)
+            # PPO: do not advance frame buffer (get_action already did for this timestep).
+            model_input = self._build_ppo_model_input(state, update_buffer=False)
             action = int(self.model.take_action(model_input))
             q_values = np.zeros(self.action_spec.n_actions, dtype=np.float32)
             if hasattr(self.model, "get_all_qvalues"):
@@ -1531,6 +1761,7 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         if self.is_frozen:
             # Frozen: execute as NOOP in env; policy action still used for memory in transition()
             action_name = "NOOP"
+        self.last_executed_action_code = self._action_name_to_executed_code(action_name)
 
         reward = 0.0
 
@@ -1701,9 +1932,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
                                 if defeated:
                                     if isinstance(entity, StagResource):
                                         apply_joint_stag_coordination_rep_updates(world, entity)
-                                    # Handle reward sharing for defeated resource
+                                    # Handle reward sharing for defeated resource.
+                                    # Resource rewards are deferred via pending_reward for all recipients.
+                                    # shared_reward is kept as the allocated share for metrics only.
                                     shared_reward = self.handle_resource_defeat(entity, world)
-                                    reward += shared_reward
 
                                     # Record resource defeat metrics with resource type
                                     if hasattr(world, 'environment') and hasattr(world.environment, 'metrics_collector'):
@@ -2029,7 +2261,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
     def handle_resource_defeat(self, resource, world: StagHuntWorld) -> float:
         """Handle reward sharing when a resource is defeated.
         
-        Returns the reward this agent receives from the defeated resource.
+        Returns the allocated share for the defeating agent from the defeated resource.
+        The actual payout is deferred via pending_reward (next action).
         Also delivers shared rewards to other agents based on the reward allocation mode:
             - If accurate_reward_allocation is True: only agents in attack_history get rewards
         - If accurate_reward_allocation is False: agents within reward_sharing_radius get rewards
@@ -2039,7 +2272,9 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         whether the agent receives shared rewards from OTHER agents' defeats.
         """
         if self.exclusive_reward:
-            # Only this agent gets the full reward, no sharing
+            # Only this agent gets the full reward, no sharing.
+            # Defer payout to next action.
+            self.pending_reward += resource.value
             return resource.value
         
         # Check if accurate reward allocation mode is enabled
@@ -2107,6 +2342,8 @@ class StagHuntAgent(Agent[StagHuntWorld]):
             # Radius-based reward sharing: only stag is shared; hare goes to defeating agent only
             resource_name = getattr(resource, "name", None)
             if resource_name == "hare":
+                # Defer hare payout to next action.
+                self.pending_reward += resource.value
                 return resource.value
             # Stag: find all agents within reward sharing radius
             sharing_radius = getattr(world, "reward_sharing_radius", 3)
@@ -2160,7 +2397,10 @@ class StagHuntAgent(Agent[StagHuntWorld]):
         # - Other agents' pending_reward is added when they act on their next turn
         # Adding resource.value here would cause double-counting.
         
-        # Return the attacking agent's immediate reward (always gets its share)
+        # Defer the attacking agent's own share to next action.
+        self.pending_reward += shared_reward
+
+        # Return allocated share for bookkeeping/metrics (not immediate payout).
         return shared_reward
 
     def is_done(self, world: StagHuntWorld) -> bool:

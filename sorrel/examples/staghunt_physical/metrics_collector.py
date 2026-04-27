@@ -6,6 +6,7 @@ and agents during gameplay, integrating directly with TensorBoard.
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from typing import Dict, List, Optional, TYPE_CHECKING
 
@@ -15,6 +16,9 @@ from scipy.spatial import KDTree
 if TYPE_CHECKING:
     from .agents_v2 import StagHuntAgent
     from .world import StagHuntWorld
+
+# TensorBoard: log every epoch; use NaN when a derived metric is undefined.
+_METRIC_NAN = float("nan")
 
 
 def gini_index(values: List[float]) -> float:
@@ -54,6 +58,76 @@ def _position_snapshot(positions: List[tuple]) -> List[tuple]:
     for aid, x, y in positions:
         coords[aid] = (x, y)
     return [(aid, x, y) for aid, (x, y) in coords.items()]
+
+
+def _punisher_target_share_entropy(
+    punishments_to_agent: Dict[int, int], self_id: int
+) -> Optional[Dict[str, float]]:
+    """Entropy over positive punishment targets for one punisher (selectivity).
+
+    Returns None if no punishments toward other agents. Uses natural log.
+    norm_entropy is H / ln(K) for K >= 2; for K == 1 returns ``norm_entropy`` NaN
+    (spread across multiple targets is undefined).
+    Volume is available elsewhere as ``punishments_given``.
+    """
+    counts = [int(c) for tid, c in punishments_to_agent.items() if tid != self_id and c > 0]
+    if not counts:
+        return None
+    total = float(sum(counts))
+    if total <= 0.0:
+        return None
+    k = len(counts)
+    probs = [c / total for c in counts]
+    h = 0.0
+    for p in probs:
+        h -= p * math.log(p)
+    if k >= 2:
+        norm_h = h / math.log(k)
+    else:
+        norm_h = _METRIC_NAN
+    return {
+        "norm_entropy": norm_h,
+        "num_targets_hit": float(k),
+    }
+
+
+def _mean_individual_victim_kind_mix_entropy(
+    agent_metrics: dict,
+    agent_id_to_kind: Dict[int, Optional[str]],
+    roster_kinds_sorted: List[str],
+) -> Optional[float]:
+    """Mean per-punisher entropy of victim-kind mix (group-bias metric).
+
+    For each punisher with at least one valid punishment hit, compute normalized entropy
+    over victim agent_kind shares across all roster kinds, then return mean across punishers.
+    Returns None if fewer than two kinds on roster or no valid punisher-level values.
+    """
+    g = len(roster_kinds_sorted)
+    if g < 2:
+        return None
+    denom = math.log(g)
+    per_punisher_norm: List[float] = []
+    for _punisher_id, data in agent_metrics.items():
+        received: Dict[str, int] = defaultdict(int)
+        for target_id, cnt in data.get("punishments_to_agent", {}).items():
+            if cnt <= 0:
+                continue
+            kt = agent_id_to_kind.get(target_id)
+            if kt is None:
+                continue
+            received[kt] += int(cnt)
+        total_hits = float(sum(received.values()))
+        if total_hits <= 0.0:
+            continue
+        probs = [received.get(kind, 0) / total_hits for kind in roster_kinds_sorted]
+        h = 0.0
+        for p in probs:
+            if p > 0.0:
+                h -= p * math.log(p)
+        per_punisher_norm.append(h / denom)
+    if not per_punisher_norm:
+        return None
+    return float(np.mean(per_punisher_norm))
 
 
 def compute_spatial_grouping_metrics(
@@ -383,6 +457,7 @@ class StagHuntMetricsCollector:
         
         # Per-agent rewards for Gini (equity) and accumulate totals
         per_agent_rewards: List[float] = []
+        punish_selectivity_norm_row: List[float] = []
 
         # Log individual agent metrics and accumulate totals
         for agent in agents:
@@ -423,6 +498,27 @@ class StagHuntMetricsCollector:
                 count = agent_data['punishments_to_agent'].get(target_agent_id, 0)
                 writer.add_scalar(f'Agent_{agent_id}/punishments_to_agent_{target_agent_id}', 
                                   count, epoch)
+
+            pstats = _punisher_target_share_entropy(
+                agent_data["punishments_to_agent"], agent_id
+            )
+            if pstats is not None:
+                norm_e = pstats["norm_entropy"]
+                n_hit = pstats["num_targets_hit"]
+            else:
+                norm_e = _METRIC_NAN
+                n_hit = _METRIC_NAN
+            writer.add_scalar(
+                f"PunishSelectivity/Agent_{agent_id}/norm_entropy_targets",
+                norm_e,
+                epoch,
+            )
+            writer.add_scalar(
+                f"PunishSelectivity/Agent_{agent_id}/targets_hit",
+                n_hit,
+                epoch,
+            )
+            punish_selectivity_norm_row.append(norm_e)
             
             # Accumulate for totals and means
             total_attacks_to_hares += agent_data['attacks_to_hares']
@@ -464,6 +560,16 @@ class StagHuntMetricsCollector:
             writer.add_scalar('Mean/mean_stags_defeated', total_stags_defeated / num_agents, epoch)
             writer.add_scalar('Mean/mean_hares_defeated', total_hares_defeated / num_agents, epoch)
             writer.add_scalar('Mean/mean_shared_rewards', total_shared_rewards / num_agents, epoch)
+        mean_sel = (
+            float(np.nanmean(punish_selectivity_norm_row))
+            if punish_selectivity_norm_row
+            else _METRIC_NAN
+        )
+        writer.add_scalar(
+            "PunishSelectivity/mean_norm_entropy_across_agents",
+            mean_sel,
+            epoch,
+        )
         
         # Gini index of per-agent returns (equity: 0 = equal, 1 = maximal inequality)
         gini = gini_index(per_agent_rewards)
@@ -500,6 +606,20 @@ class StagHuntMetricsCollector:
 
         # Grouping metrics
         agent_id_to_kind = _build_agent_id_to_kind(agents)
+
+        roster_kinds = sorted(
+            {k for k in agent_id_to_kind.values() if k is not None}
+        )
+        victim_norm = _mean_individual_victim_kind_mix_entropy(
+            self.agent_metrics, agent_id_to_kind, roster_kinds
+        )
+        if victim_norm is None:
+            victim_norm = _METRIC_NAN
+        writer.add_scalar(
+            "PunishGroupBias/norm_entropy_victim_kind_mix",
+            victim_norm,
+            epoch,
+        )
 
         # Use positioned-agents snapshot for spatial grouping.
         snapshot = _position_snapshot(self.epoch_metrics["agent_positions"])

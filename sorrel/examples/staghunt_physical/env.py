@@ -194,6 +194,18 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         agent_kind_to_ids: dict[str, list[int]] = {}
         
         for agent_id in range(n_agents):
+            # action spec: movement + ATTACK, optionally PUNISH (controlled by include_punish_action)
+            base_actions = [
+                "FORWARD",
+                "BACKWARD",
+                "STEP_LEFT",
+                "STEP_RIGHT",
+                "ATTACK",
+            ]
+            if world_cfg.get("include_punish_action", False):
+                base_actions.append("PUNISH")
+            n_actions = len(base_actions)
+
             # observation spec: uses partial view with specified vision radius
             vision_radius = int(model_cfg.get("agent_vision_radius", 5))
             embedding_size = int(model_cfg.get("embedding_size", 3))
@@ -210,6 +222,12 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 agent_id_encoding_mode=agent_id_encoding_mode,  # NEW: from config["world"]["agent_id_encoding_mode"]
                 use_agent_id_in_standard_obs=use_agent_id_in_standard_obs,  # NEW: from config["world"]["use_agent_id_in_standard_obs"]
                 agent_id_shuffle_seed=agent_id_shuffle_seed,  # optional: shuffle agent ID assignment (shared by all modes)
+                observe_global_resource_counts=world_cfg.get("observe_global_resource_counts", False),
+                global_resource_counts_sham=world_cfg.get("global_resource_counts_sham", False),
+                global_resource_counts_include_total=world_cfg.get(
+                    "global_resource_counts_include_total", False
+                ),
+                global_resource_count_norm=world_cfg.get("global_resource_count_norm", None),
                 power_mode=world_cfg.get("power_mode", False),
                 observe_own_power_only=world_cfg.get("observe_own_power_only", False),
                 aggression_enabled=world_cfg.get("aggression_enabled", False),
@@ -228,20 +246,23 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 private_coordination_rep_obs_random_seed=getattr(
                     self.world, "private_coordination_rep_obs_random_seed", 0
                 ),
+                n_actions=n_actions,
+                observe_prev_actions_tile_enabled=getattr(
+                    self.world, "observe_prev_actions_tile_enabled", False
+                ),
+                observe_prev_actions_tile_obs_enabled=getattr(
+                    self.world, "observe_prev_actions_tile_obs_enabled", False
+                ),
+                observe_prev_actions_tile_obs_randomize=getattr(
+                    self.world, "observe_prev_actions_tile_obs_randomize", False
+                ),
+                observe_prev_actions_tile_obs_random_seed=getattr(
+                    self.world, "observe_prev_actions_tile_obs_random_seed", 0
+                ),
             )
             # The StagHuntObservation handles extra features internally
             full_input_dim = observation_spec.input_size[1]  # Get the actual input size
 
-            # action spec: movement + ATTACK, optionally PUNISH (controlled by include_punish_action)
-            base_actions = [
-                "FORWARD",
-                "BACKWARD",
-                "STEP_LEFT",
-                "STEP_RIGHT",
-                "ATTACK",
-            ]
-            if world_cfg.get("include_punish_action", False):
-                base_actions.append("PUNISH")
             action_spec = ActionSpec(base_actions)
             # Get device from config, with auto-detection support
             device_config = model_cfg.get("device", "cpu")
@@ -284,8 +305,18 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 # PPO LSTM with CPC (same module as state_punishment); defaults from ppo_cfg or model_cfg
                 def _get(key: str, default: Any) -> Any:
                     return ppo_cfg.get(key, model_cfg.get(key, default))
+
+                _ppo_n_frames_raw = _get("ppo_n_frames", 1)
+                if _ppo_n_frames_raw is None or _ppo_n_frames_raw == "":
+                    ppo_n_frames = 1
+                else:
+                    ppo_n_frames = int(_ppo_n_frames_raw)
+                if ppo_n_frames < 1:
+                    raise ValueError(f"ppo_n_frames must be >= 1, got {ppo_n_frames}")
+                ppo_input_dim = int(full_input_dim) * ppo_n_frames
+
                 model = RecurrentPPOLSTMCPC(
-                    input_size=(full_input_dim,),
+                    input_size=(ppo_input_dim,),
                     action_space=action_spec.n_actions,
                     layer_size=int(_get("layer_size", 250)),
                     epsilon=float(_get("epsilon", 0.0)),
@@ -345,6 +376,13 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                     agent_kind_to_ids[None] = []
                 agent_kind_to_ids[None].append(agent_id)
             
+            ppo_stack_kw: dict[str, Any] = {}
+            if model_type == "ppo_lstm_cpc":
+                ppo_stack_kw = {
+                    "ppo_n_frames": ppo_n_frames,
+                    "ppo_obs_dim": int(full_input_dim),
+                }
+
             agent = StagHuntAgent(
                 observation_spec=observation_spec,
                 action_spec=action_spec,
@@ -358,6 +396,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                 exclusive_reward=exclusive_reward,  # NEW: pass exclusive_reward attribute
                 punish_freeze_ability=punish_freeze_ability,
                 num_agents=n_agents,
+                **ppo_stack_kw,
             )
             agents.append(agent)
         
@@ -1177,7 +1216,9 @@ def export_agent_identity_codes(
                         embedding_size = getattr(obs_spec, 'embedding_size', 3)
                         
                         visual_field_size = features_per_cell * (2 * vision_radius + 1) * (2 * vision_radius + 1)
-                        extra_features_size = 4  # inv_stag, inv_hare, own_health, interaction_reward_flag
+                        # Local extra tail is always 4; optional global resource counts may extend it.
+                        global_tail = int(getattr(obs_spec, "_global_resource_obs_dim", 0))
+                        extra_features_size = 4 + global_tail
                         pos_code_size = embedding_size * embedding_size
                         
                         f.write(f"  Observation Breakdown:\n")
@@ -1188,7 +1229,17 @@ def export_agent_identity_codes(
                         f.write(f"        Structure: [all_cells_feature0, all_cells_feature1, ..., all_cells_feature{features_per_cell-1}]\n")
                         f.write(f"        Features for the same cell are NOT consecutive - they're spread across the vector\n")
                         f.write(f"        Consecutive values indicate: multiple cells have the same feature active\n")
-                        f.write(f"    - Extra features: features {visual_field_size}-{visual_field_size+extra_features_size-1} ({extra_features_size} values: inv_stag, inv_hare, own_health, interaction_reward_flag)\n")
+                        if global_tail > 0:
+                            f.write(
+                                f"    - Extra features: features {visual_field_size}-{visual_field_size+extra_features_size-1} "
+                                f"({extra_features_size} values: inv_stag, inv_hare, own_health, interaction_reward_flag, "
+                                f"+ {global_tail} global resource count scalars)\n"
+                            )
+                        else:
+                            f.write(
+                                f"    - Extra features: features {visual_field_size}-{visual_field_size+extra_features_size-1} "
+                                f"({extra_features_size} values: inv_stag, inv_hare, own_health, interaction_reward_flag)\n"
+                            )
                         f.write(f"    - Positional embedding: features {visual_field_size+extra_features_size}-{visual_field_size+extra_features_size+pos_code_size-1} ({pos_code_size} values)\n")
                         
                         # Add feature index mapping for clarity

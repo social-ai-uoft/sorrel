@@ -347,23 +347,37 @@ def test_observation_space_consistency(results: SanityCheckResults, env: StagHun
         obs = agent.pov(world)
         obs_size = obs.shape[1]
 
+        # Spec-declared observation size (independent of model wiring)
+        spec_size = None
+        if hasattr(agent, "observation_spec") and hasattr(agent.observation_spec, "input_size"):
+            try:
+                spec_size = int(agent.observation_spec.input_size[1])
+            except Exception:
+                spec_size = None
+
         # Get model input size - the model expects the raw observation size
         # The frame stacking is handled internally by the model
         model_input_size = agent.model.input_size[0]
 
-        print(f"  Observation size: {obs_size}, Model input size: {model_input_size}")
+        if spec_size is not None:
+            print(
+                f"  Observation size: {obs_size}, Spec size: {spec_size}, Model input size: {model_input_size}"
+            )
+        else:
+            print(f"  Observation size: {obs_size}, Model input size: {model_input_size}")
 
-        if obs_size == model_input_size:
+        ok = (obs_size == model_input_size) and (spec_size is None or obs_size == spec_size)
+        if ok:
             results.add_result(
                 "Observation Space Consistency",
                 True,
-                f"Obs size: {obs_size}, Model size: {model_input_size}",
+                f"Obs size: {obs_size}, Spec size: {spec_size}, Model size: {model_input_size}",
             )
         else:
             results.add_result(
                 "Observation Space Consistency",
                 False,
-                f"Obs size: {obs_size}, Model size: {model_input_size}",
+                f"Obs size: {obs_size}, Spec size: {spec_size}, Model size: {model_input_size}",
             )
 
     except Exception as e:
@@ -710,24 +724,38 @@ def test_observation_space_consistency_runtime(
         obs = agent.pov(world)
         obs_size = obs.shape[1]
 
+        # Spec-declared observation size (independent of model wiring)
+        spec_size = None
+        if hasattr(agent, "observation_spec") and hasattr(agent.observation_spec, "input_size"):
+            try:
+                spec_size = int(agent.observation_spec.input_size[1])
+            except Exception:
+                spec_size = None
+
         # Get model input size
         model_input_size = agent.model.input_size[0]
 
-        print(
-            f"  Runtime observation size: {obs_size}, Model input size: {model_input_size}"
-        )
+        if spec_size is not None:
+            print(
+                f"  Runtime observation size: {obs_size}, Spec size: {spec_size}, Model input size: {model_input_size}"
+            )
+        else:
+            print(
+                f"  Runtime observation size: {obs_size}, Model input size: {model_input_size}"
+            )
 
-        if obs_size == model_input_size:
+        ok = (obs_size == model_input_size) and (spec_size is None or obs_size == spec_size)
+        if ok:
             results.add_result(
                 "Observation Space Consistency Runtime",
                 True,
-                f"Obs size: {obs_size}, Model size: {model_input_size}",
+                f"Obs size: {obs_size}, Spec size: {spec_size}, Model size: {model_input_size}",
             )
         else:
             results.add_result(
                 "Observation Space Consistency Runtime",
                 False,
-                f"Obs size: {obs_size}, Model size: {model_input_size}",
+                f"Obs size: {obs_size}, Spec size: {spec_size}, Model size: {model_input_size}",
             )
 
     except Exception as e:

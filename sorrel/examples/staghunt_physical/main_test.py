@@ -28,7 +28,6 @@ from sorrel.examples.staghunt_physical.config_loader import (
     load_agent_config_from_csv,
     merge_agent_configs,
 )
-from sorrel.examples.staghunt_physical.utils import apply_num_groups_to_agent_kinds
 from sorrel.utils.logging import ConsoleLogger, Logger, TensorboardLogger
 from sorrel.utils.helpers import set_seed
 
@@ -62,7 +61,6 @@ def run_stag_hunt(
     max_hares: int | None = None,
     resource_cap_mode: str | None = None,
     seed: int | None = None,
-    num_groups: int | None = None,
     no_punishment: bool = False,
     preserve_continuity: bool = False,
     power_mode: bool = False,
@@ -91,9 +89,6 @@ def run_stag_hunt(
     cpc_projection_dim: int | None = None,
     cpc_start_epoch: int | None = None,
     use_last_action: bool | None = None,
-    observe_prev_actions_tile_enabled: bool | None = None,
-    observe_prev_actions_tile_obs_enabled: bool | None = None,
-    appearance_switching_enabled: bool | None = None,
 ) -> None:
     """Run a single stag hunt experiment with default hyperparameters.
 
@@ -105,8 +100,6 @@ def run_stag_hunt(
         max_hares: Optional max hares cap override (None = unlimited).
         resource_cap_mode: Optional resource cap mode override ("specified", "initial_count", or "disabled").
         seed: Optional random seed for reproducibility. If provided, sets seed for random, numpy, and torch.
-        num_groups: If set, overwrite each agent's CSV/dict ``kind`` with ``num_groups`` equal-sized
-            contiguous groups (``AgentKindA``, ``AgentKindB``, ...). Must divide ``num_agents`` evenly.
         no_punishment: If True, disable the PUNISH action (include_punish_action=False).
         preserve_continuity: If True, do not reset environment after epoch 0 (continuity mode).
         power_mode: If True, enable power (punish begets power, power-weighted stag sharing).
@@ -120,9 +113,6 @@ def run_stag_hunt(
         model_type: Override config model type: "iqn" or "ppo_lstm_cpc".
         ppo_*: PPO hyperparameters (only used when model_type is ppo_lstm_cpc).
         use_cpc, cpc_*: CPC options for ppo_lstm_cpc.
-        observe_prev_actions_tile_enabled: If True/False, override world.observe_prev_actions_tile_enabled; if None, use config.
-        observe_prev_actions_tile_obs_enabled: If True/False, override world.observe_prev_actions_tile_obs_enabled (sham channels); if None, use config.
-        appearance_switching_enabled: If True/False, override world.appearance_switching['enabled']; if None, use config.
     """
     # Set random seed for reproducibility if provided
     # This sets seeds for: Python random, NumPy, PyTorch, CUDA, and cuDNN
@@ -136,7 +126,7 @@ def run_stag_hunt(
             # number of episodes/epochs to run
             "epochs": 3000000,
             # maximum number of turns per episode
-            "max_turns": 200,
+            "max_turns": 1000,
             # If True, randomly sample number of turns per epoch from [1, max_turns] instead of using fixed max_turns
             "random_max_turns": False,
             # If True, do not call reset() after epoch 0; world and agents continue across epochs (continuity mode)
@@ -211,7 +201,7 @@ def run_stag_hunt(
             # model architecture parameters
             "layer_size": 250,
             "epsilon": 0,
-            "n_frames": 3,
+            "n_frames": 1,
             "n_step": 3,
             "sync_freq": 200,
             "model_update_freq": 4,
@@ -231,13 +221,13 @@ def run_stag_hunt(
             "generation_mode": "random",  # "random" or "ascii_map"
             "ascii_map_file": "test_intention_onlystag.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 12, # 13
-            "width": 12,
+            "height": 16, # 13
+            "width": 20,
             # number of players in the game
-            "num_agents": 6,
+            "num_agents": 10,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
             # Only the spawned agents will act and learn in each epoch
-            "num_agents_to_spawn": 6,  # Number of agents to spawn per epoch (must be <= num_agents)
+            "num_agents_to_spawn": 10,  # Number of agents to spawn per epoch (must be <= num_agents)
             # probability an empty cell spawns a resource each step (for initial spawning)
             "resource_density": 0.04,
             # probability a resource respawns each step after respawn_lag (for respawning)
@@ -253,10 +243,10 @@ def run_stag_hunt(
             "skip_spawn_validation": True,
             # probability that a spawned resource is a stag (vs hare)
             # stag_probability + hare_probability = 1.0
-            "stag_probability": 1,  # 50% stag, 50% hare
+            "stag_probability": 0,  # 50% stag, 50% hare
             # separate reward values for stag and hare
-            "stag_reward": 30,  # Higher reward for stag (requires coordination)
-            "hare_reward": 1,  # Lower reward for hare (solo achievable)
+            "stag_reward": 20,  # Higher reward for stag (requires coordination)
+            "hare_reward": 3,  # Lower reward for hare (solo achievable)
             # regeneration cooldown parameters
             "stag_regeneration_cooldown": 1,  # Turns to wait before stag regenerates
             "hare_regeneration_cooldown": 1,  # Turns to wait before hare regenerates
@@ -271,7 +261,7 @@ def run_stag_hunt(
                 "initial_hare_rate": None,  # Optional: starting hare rate (defaults to 1.0)
             },
             "neighbor_density_respawn": {
-                "enabled": False,          # Set to True to enable spatial neighbor-density spawning
+                "enabled": True,          # Set to True to enable spatial neighbor-density spawning
                 "base_rate": 0.01,         # p in p_t = p * n_t / N; max rate when all N neighbors occupied
                 "neighborhood_radius": 1,  # Moore neighborhood radius; N = (2r+1)^2 - 1 = 8 for r=1
             },
@@ -288,9 +278,8 @@ def run_stag_hunt(
             "max_hares": 8,  # Maximum hare resources (None = unlimited, overrides max_resources for hares, ignored if resource_cap_mode == "initial_count")
             # Appearance switching configuration
             "appearance_switching": {
-                # When True, switch_appearances() toggles stag vs hare one-hot channels in RL obs each period (MDP unchanged).
-                "enabled": False,
-                "switch_period": 20000,
+                "enabled": False,  # Set to True to enable appearance switching
+                "switch_period": 30000,  # Switch appearances every X epochs
             },
             # legacy parameter for backward compatibility
             # "taste_reward": 10,
@@ -298,15 +287,15 @@ def run_stag_hunt(
             # "destroyable_health": 3,
             "beam_cooldown": 3,  # Legacy parameter, kept for compatibility
             "attack_cooldown": 1,  # Separate cooldown for ATTACK action
-            "attack_cost": 0.0,  # Cost to use attack action
+            "attack_cost": 0.00,  # Cost to use attack action
             # Attack beam shape
             "single_tile_attack": True,         # If True, rectangular beam: attack_range forward, width 2*beam_radius+1
-            "attack_range": 3,                   # Tiles forward when single_tile_attack is True
+            "attack_range": 2,                   # Tiles forward when single_tile_attack is True
             "area_attack": False,                 # If True, 3x3 region in front (overrides single_tile_attack)
-            "beam_radius": 1,                    # With single_tile_attack: lateral half-width; else fan-beam radius
+            "beam_radius": 0,                    # With single_tile_attack: lateral half-width; else fan-beam radius
             # Punish beam shape
             "punish_single_tile_attack": True,   # If True, hits tiles directly in front (count = punish_range)
-            "punish_range": 2,                   # Tiles forward when punish_single_tile_attack is True
+            "punish_range": 8,                   # Tiles forward when punish_single_tile_attack is True
             "punish_area_attack": False,         # If True, 3x3 region in front (overrides punish_single_tile_attack)
             "punish_beam_radius": 1,             # Fallback fan-beam radius when neither flag is True
             "include_punish_action": True,  # If True, PUNISH is included in action_spec for RL agents
@@ -479,20 +468,7 @@ def run_stag_hunt(
         config["world"].pop("agent_config_csv", None)
         
         print(f"  Using CSV-only agent config (dict config ignored when CSV is provided)")
-
-    if num_groups is not None:
-        ac = config["world"].get("agent_config")
-        if not ac:
-            raise ValueError(
-                "num_groups was set but world has no agent_config. "
-                "Enable use_agent_config and provide agent_config_csv or agent_config dict."
-            )
-        apply_num_groups_to_agent_kinds(ac, num_groups)
-        print(
-            f"Applied num_groups={num_groups}: agent kinds set to equal-sized "
-            "contiguous AgentKindA, AgentKindB, ..."
-        )
-
+    
     # Override parameters if provided via CLI
     if resource_density is not None:
         if not (0.0 <= resource_density <= 1.0):
@@ -533,18 +509,6 @@ def run_stag_hunt(
     if global_resource_count_norm is not None:
         config["world"]["global_resource_count_norm"] = global_resource_count_norm
 
-    if observe_prev_actions_tile_enabled is not None:
-        config["world"]["observe_prev_actions_tile_enabled"] = observe_prev_actions_tile_enabled
-    if observe_prev_actions_tile_obs_enabled is not None:
-        config["world"]["observe_prev_actions_tile_obs_enabled"] = observe_prev_actions_tile_obs_enabled
-    if appearance_switching_enabled is not None:
-        appearance_cfg = config["world"].setdefault("appearance_switching", {})
-        if not isinstance(appearance_cfg, dict):
-            config["world"]["appearance_switching"] = {
-                "enabled": appearance_switching_enabled,
-            }
-        else:
-            appearance_cfg["enabled"] = appearance_switching_enabled
     # Model type and PPO LSTM CPC overrides (from CLI or run_stag_hunt kwargs)
     if model_type is not None:
         config["model"]["model_type"] = model_type
@@ -619,18 +583,9 @@ def run_stag_hunt(
     # Add metrics collector to environment for agent access
     experiment.metrics_collector = metrics_collector
 
-    example_root = Path(__file__).parent
-    run_folder = f'{config["experiment"]["run_name"]}_{timestamp}'
-    # TensorBoard only: lives next to this package, not under data/
-    log_dir = example_root / "runs_tageffect_v2" / run_folder
-    # Artifacts (gifs, models, exports): under data/ with a generic grouping folder
-    data_artifacts_parent = Path("runs_tageffect_v2")
-    output_dir = example_root / "data" / data_artifacts_parent / run_folder
-    log_dir.mkdir(parents=True, exist_ok=True)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     # Export agent identity codes at simulation start
     # Use the same output_dir path that will be passed to run_experiment()
+    output_dir = Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}'
     if hasattr(experiment, 'agents') and experiment.agents and len(experiment.agents) > 0:
         try:
             from sorrel.examples.staghunt_physical.env import export_agent_identity_codes
@@ -664,14 +619,16 @@ def run_stag_hunt(
     experiment.run_experiment(
         logger=CombinedLogger(
             max_epochs=config["experiment"]["epochs"],
-            log_dir=log_dir,
+            log_dir=Path(__file__).parent
+            / f'runs_punishment_v8/{config["experiment"]["run_name"]}_{timestamp}',
             experiment_env=experiment,
         ),
-        output_dir=output_dir,
+        output_dir=Path(__file__).parent / f'data/{config["experiment"]["run_name"]}_{timestamp}',
     )
     
     print(f"Metrics tracking completed - all metrics integrated into main TensorBoard logs")
-    print(f"To view metrics, run: tensorboard --logdir {log_dir}")
+    log_dir_name = f"runs_punishment/{config['experiment']['run_name']}_{timestamp}"
+    print(f"To view metrics, run: tensorboard --logdir {Path(__file__).parent / log_dir_name}")
 
 
 def parse_none_or_int(value: str) -> int | None:
@@ -729,15 +686,6 @@ if __name__ == "__main__":
         type=int,
         default=None,
         help="Random seed for reproducibility. Sets seed for random, numpy, and torch."
-    )
-    parser.add_argument(
-        "--num-groups",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Overwrite every agent's kind with N equal-sized contiguous groups "
-        "(AgentKindA, AgentKindB, ...). N must divide num_agents evenly. "
-        "Other CSV/dict fields are kept.",
     )
     parser.add_argument(
         "--no-punishment",
@@ -824,42 +772,6 @@ if __name__ == "__main__":
         default=None,
         help="Fallback denominator when caps are None (e.g. 100.0). If omitted, uses config default (None => raw counts when no caps).",
     )
-    parser.add_argument(
-        "--observe-prev-actions-tile-enabled",
-        action="store_true",
-        default=False,
-        help="Set world.observe_prev_actions_tile_enabled=True (real last-action codes on agent tiles).",
-    )
-    parser.add_argument(
-        "--no-observe-prev-actions-tile-enabled",
-        action="store_true",
-        default=False,
-        help="Set world.observe_prev_actions_tile_enabled=False.",
-    )
-    parser.add_argument(
-        "--observe-prev-actions-tile-obs-enabled",
-        action="store_true",
-        default=False,
-        help="Set world.observe_prev_actions_tile_obs_enabled=True (keep prev-action channels; sham/random per flags).",
-    )
-    parser.add_argument(
-        "--no-observe-prev-actions-tile-obs-enabled",
-        action="store_true",
-        default=False,
-        help="Set world.observe_prev_actions_tile_obs_enabled=False.",
-    )
-    parser.add_argument(
-        "--appearance-switching",
-        action="store_true",
-        default=False,
-        help="Set appearance_switching enabled: periodically toggle stag vs hare channels in RL obs (MDP unchanged).",
-    )
-    parser.add_argument(
-        "--no-appearance-switching",
-        action="store_true",
-        default=False,
-        help="Set world.appearance_switching['enabled']=False.",
-    )
     # Model type and PPO LSTM CPC
     parser.add_argument(
         "--model-type",
@@ -925,24 +837,6 @@ if __name__ == "__main__":
 
     global_resource_counts_include_total = True if args.global_resource_counts_include_total else None
 
-    observe_prev_actions_tile_enabled = None
-    if args.observe_prev_actions_tile_enabled:
-        observe_prev_actions_tile_enabled = True
-    elif args.no_observe_prev_actions_tile_enabled:
-        observe_prev_actions_tile_enabled = False
-
-    observe_prev_actions_tile_obs_enabled = None
-    if args.observe_prev_actions_tile_obs_enabled:
-        observe_prev_actions_tile_obs_enabled = True
-    elif args.no_observe_prev_actions_tile_obs_enabled:
-        observe_prev_actions_tile_obs_enabled = False
-
-    appearance_switching_enabled = None
-    if args.appearance_switching:
-        appearance_switching_enabled = True
-    elif args.no_appearance_switching:
-        appearance_switching_enabled = False
-
     run_stag_hunt(
         run_name_base=args.run_name_base,
         resource_density=args.resource_density,
@@ -951,7 +845,6 @@ if __name__ == "__main__":
         max_hares=args.max_hares,
         resource_cap_mode=args.resource_cap_mode,
         seed=args.seed,
-        num_groups=args.num_groups,
         no_punishment=args.no_punishment,
         preserve_continuity=args.preserve_continuity,
         power_mode=args.power_mode,
@@ -979,7 +872,4 @@ if __name__ == "__main__":
         cpc_projection_dim=args.cpc_projection_dim,
         cpc_start_epoch=args.cpc_start_epoch,
         use_last_action=use_last_action,
-        observe_prev_actions_tile_enabled=observe_prev_actions_tile_enabled,
-        observe_prev_actions_tile_obs_enabled=observe_prev_actions_tile_obs_enabled,
-        appearance_switching_enabled=appearance_switching_enabled,
     )
