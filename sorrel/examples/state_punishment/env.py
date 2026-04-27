@@ -1267,6 +1267,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             disable_punishment_info=disable_punishment_info,
             use_norm_enforcer=env.config.get("norm_enforcer", {}).get("enabled", False),
             norm_enforcer_config=norm_enforcer_config,
+            move_policy_lag_updates=env.config.experiment.get("move_policy_lag_updates", 0),
         )
         
         # Explicitly reset norm enforcer for replaced agent (redundant but explicit)
@@ -1704,6 +1705,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                         sampleable_size = max(1, len(agent.move_model.memory) - agent.move_model.n_frames - 1)
                         if sampleable_size >= agent.move_model.batch_size:
                             loss = agent.move_model.train_step()  # Uses self.GAMMA (standard discount)
+                            agent.record_move_policy_update(agent.move_model)
                             if loss is not None and loss != 0.0:
                                 total_loss += float(loss)
                                 loss_count += 1
@@ -1735,6 +1737,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                             
                             if has_data:
                                 loss = agent.model.train_step()
+                                agent.record_move_policy_update()
                                 if loss is not None and loss != 0.0:
                                     total_loss += float(loss)
                                     loss_count += 1
@@ -1742,6 +1745,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                             # IQN: check memory length against batch_size
                             if len(agent.model.memory) >= agent.model.batch_size:
                                 loss = agent.model.train_step()
+                                agent.record_move_policy_update()
                                 if loss is not None:
                                     total_loss += float(loss)
                                     loss_count += 1
@@ -1846,6 +1850,24 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 print(
                     f"  Total reward: {sum(env.world.total_reward for env in self.individual_envs):.2f}"
                 )
+                lagged_agents = []
+                warmup_fallbacks = []
+                for env in self.individual_envs:
+                    for agent in env.agents:
+                        lag_updates = getattr(agent, "move_policy_lag_updates", 0)
+                        if lag_updates > 0:
+                            lagged_agents.append(getattr(agent, "_last_effective_move_lag", 0))
+                            lag_buffer = getattr(agent, "_move_policy_lag_buffer", None)
+                            warmup_fallbacks.append(
+                                getattr(lag_buffer, "warmup_fallback_count", 0) if lag_buffer is not None else 0
+                            )
+                if lagged_agents:
+                    print(
+                        "  Move lag diagnostics: "
+                        f"avg_effective_lag={np.mean(lagged_agents):.2f}, "
+                        f"max_effective_lag={max(lagged_agents)}, "
+                        f"warmup_fallbacks={sum(warmup_fallbacks)}"
+                    )
 
         # Save final models at the end of training
         final_epoch = self.config.experiment.epochs
@@ -2450,6 +2472,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
             
             # Check if separate models are enabled
             use_separate_models = self.config.experiment.get("use_separate_models", False)
+            move_policy_lag_updates = int(self.config.experiment.get("move_policy_lag_updates", 0))
             
             # Validate that separate models are only used with IQN
             if use_separate_models and model_type != "iqn":
@@ -2458,6 +2481,20 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     f"but got model_type='{model_type}'. "
                     f"Please set model_type='iqn' or set use_separate_models=False."
                 )
+            if move_policy_lag_updates < 0:
+                raise ValueError(
+                    f"move_policy_lag_updates must be >= 0, got {move_policy_lag_updates}"
+                )
+            if move_policy_lag_updates > 0 and not use_separate_models:
+                is_supported_shared_mode = (
+                    (model_type == "ppo" and self.config.model.get("ppo_use_dual_head", True))
+                    or (model_type == "iqn" and self.config.model.get("iqn_use_factored_actions", False))
+                )
+                if not is_supported_shared_mode:
+                    raise ValueError(
+                        "move_policy_lag_updates>0 with use_separate_models=False requires "
+                        "a separable shared policy (PPO dual-head or IQN factored actions)."
+                    )
             
             if use_separate_models and model_type == "iqn":
                 # Create separate move and vote models
@@ -2576,6 +2613,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                         track_history=self.config.experiment.get("enable_history_observation", False),
                         history_window_size=self.config.experiment.get("history_window_size", 10),
                         max_turns_per_epoch=self.config.experiment.get("max_turns", 100),
+                        move_policy_lag_updates=move_policy_lag_updates,
                     )
                 )
             else:
@@ -2601,6 +2639,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                         track_history=self.config.experiment.get("enable_history_observation", False),
                         history_window_size=self.config.experiment.get("history_window_size", 10),
                         max_turns_per_epoch=self.config.experiment.get("max_turns", 100),
+                        move_policy_lag_updates=move_policy_lag_updates,
                     )
                 )
 

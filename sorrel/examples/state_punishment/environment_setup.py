@@ -11,6 +11,23 @@ from sorrel.examples.state_punishment.state_system import StateSystem
 from sorrel.examples.state_punishment.world import StatePunishmentWorld
 
 
+def build_state_system_from_config(config) -> StateSystem:
+    """Construct StateSystem from config (same parameters as StatePunishmentWorld)."""
+    reset_punishment_per_epoch = config.world.get("reset_punishment_level_per_epoch", True)
+    return StateSystem(
+        init_prob=config.world.init_punishment_prob,
+        magnitude=config.world.punishment_magnitude,
+        change_per_vote=config.world.change_per_vote,
+        taboo_resources=config.world.taboo_resources,
+        num_resources=5,
+        use_probabilistic_punishment=config.experiment.get("use_probabilistic_punishment", True),
+        use_predefined_punishment_schedule=config.experiment.get(
+            "use_predefined_punishment_schedule", False
+        ),
+        reset_punishment_level_per_epoch=reset_punishment_per_epoch,
+    )
+
+
 def create_shared_state_system(
     config, simple_foraging: bool, fixed_punishment_level: float
 ) -> StateSystem:
@@ -24,8 +41,7 @@ def create_shared_state_system(
     Returns:
         Shared state system instance
     """
-    temp_world = StatePunishmentWorld(config=config, default_entity=EmptyEntity())
-    shared_state_system = temp_world.state_system
+    shared_state_system = build_state_system_from_config(config)
 
     if simple_foraging:
         # Set both current prob and init_prob to fixed_punishment_level
@@ -135,7 +151,7 @@ def setup_environments(
     fixed_punishment_level: float,
     use_random_policy: bool,
     run_folder: str = None,
-) -> Tuple[MultiAgentStatePunishmentEnv, StateSystem, Dict[int, float]]:
+) -> Tuple[Any, StateSystem, Dict[int, float]]:
     """Set up all environments for the experiment.
 
     Args:
@@ -153,6 +169,19 @@ def setup_environments(
     # Convert config to OmegaConf format
     config = OmegaConf.create(config)
     num_agents = config.experiment.num_agents
+
+    if config.experiment.get("env_mode") == "bandit":
+        from sorrel.examples.state_punishment.bandit_mode.setup import (
+            setup_bandit_environments,
+        )
+
+        return setup_bandit_environments(
+            config=config,
+            simple_foraging=simple_foraging,
+            fixed_punishment_level=fixed_punishment_level,
+            use_random_policy=use_random_policy,
+            run_folder=run_folder,
+        )
 
     # Create shared state system and social harm dictionary
     shared_state_system = create_shared_state_system(

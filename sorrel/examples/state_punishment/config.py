@@ -332,6 +332,10 @@ def create_config(
             "use_window_stats": use_window_stats,
             "enable_history_observation": enable_history_observation,
             "history_window_size": history_window_size,
+            "env_mode": "grid",
+            "bandit_arms_per_trial": 3,
+            "bandit_pool": ["A", "B", "C", "D", "E"],
+            "seed": None,
         },
         "observation": {
             "use_slot_based_encoding": use_slot_based_encoding,
