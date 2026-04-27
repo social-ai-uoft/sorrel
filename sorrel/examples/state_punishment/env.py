@@ -419,6 +419,17 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         for i, env in enumerate(self.individual_envs):
             self._agent_creation_epochs[i] = 0
 
+        # Agent action prediction (Mode B): global slot mapping
+        if self.config.model.get("use_agent_action_pred", False):
+            all_names = sorted([
+                a.agent_name for env in self.individual_envs for a in env.agents
+            ])
+            self._agent_name_to_slot = {name: i for i, name in enumerate(all_names)}
+            self._num_agent_slots = len(all_names)
+        else:
+            self._agent_name_to_slot = {}
+            self._num_agent_slots = 0
+
     def _initialize_agent_names(self) -> None:
         """Initialize agent names for all existing agents.
         
@@ -565,6 +576,18 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         if self.punishment_tracker is not None:
             self.punishment_tracker.end_turn()
 
+    @staticmethod
+    def _get_visible_agents(observer, all_agents, vision_radius: int):
+        """Agents within observer's vision radius (Chebyshev distance)."""
+        oy, ox = observer.location[0], observer.location[1]
+        visible = set()
+        for other in all_agents:
+            if other.agent_name == observer.agent_name:
+                continue
+            if abs(other.location[0] - oy) <= vision_radius and abs(other.location[1] - ox) <= vision_radius:
+                visible.add(other.agent_name)
+        return visible
+
     def _handle_agent_transitions(self) -> None:
         """Handle agent transitions with simplified composite view logic."""
         # Collect all agents and their environments
@@ -594,6 +617,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
             composite_observations = self._generate_composite_observations(
                 all_agents, all_envs
             )
+
+        use_action_pred = self.config.model.get("use_agent_action_pred", False)
+        step_data = []
 
         # Process each agent
         for i, (agent, env) in enumerate(zip(all_agents, all_envs)):
@@ -640,6 +666,42 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
 
             # Execute agent transition
             self._execute_agent_transition(agent, env, state)
+
+            if use_action_pred:
+                vision_radius = getattr(
+                    agent.observation_spec, "vision_radius", 5
+                )
+                visible = self._get_visible_agents(agent, all_agents, vision_radius)
+                use_composite = getattr(agent, "use_composite_actions", False)
+                from sorrel.models.pytorch.auxiliary.agent_action_prediction import (
+                    get_movement_class,
+                )
+                step_data.append({
+                    "agent": agent,
+                    "visible": visible,
+                    "movement": get_movement_class(
+                        getattr(agent, "_last_action", 4),
+                        use_composite,
+                        getattr(agent, "_last_agent_moved", False),
+                    ),
+                })
+
+        if use_action_pred and step_data and getattr(self, "_num_agent_slots", 0) > 0:
+            from sorrel.models.pytorch.auxiliary.agent_action_prediction import (
+                build_per_step_auxiliary,
+            )
+            all_movements = {d["agent"].agent_name: d["movement"] for d in step_data}
+            for d in step_data:
+                if getattr(d["agent"], "_last_action_blocked", True):
+                    continue
+                vis_mask, other_acts = build_per_step_auxiliary(
+                    observer_name=d["agent"].agent_name,
+                    visible_names=d["visible"],
+                    all_movements=all_movements,
+                    agent_name_to_slot=self._agent_name_to_slot,
+                    num_slots=self._num_agent_slots,
+                )
+                d["agent"].append_auxiliary_to_last_transition(vis_mask, other_acts)
 
     def _generate_composite_observations(self, all_agents, all_envs):
         """Generate composite observations for all agents."""
@@ -796,6 +858,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
 
     def _execute_agent_transition(self, agent, env, state):
         """Execute agent transition with the given state."""
+        old_loc = (agent.location[0], agent.location[1])
         # Get action from model
         action = agent.get_action(state)
 
@@ -854,6 +917,9 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
         env.world.total_reward += reward
         # Check if action was blocked - don't store blocked transitions in memory
         action_blocked = info is not None and info.get('action_blocked') is not None
+        agent._last_action = action
+        agent._last_agent_moved = (agent.location[0], agent.location[1]) != old_loc
+        agent._last_action_blocked = action_blocked
         if not action_blocked:
             agent.add_memory(state.flatten(), action, reward, done)
 
@@ -1067,6 +1133,14 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 cpc_memory_bank_size=0,  # Standalone model ignores this (uses temporal negatives)
                 # NOTE: cpc_sample_size is NOT in standalone model signature - removed
                 cpc_start_epoch=env.config.model.get("cpc_start_epoch", 1),
+                use_next_state_pred=env.config.model.get("use_next_state_pred", False),
+                next_state_pred_weight=env.config.model.get("next_state_pred_weight", 3.0),
+                next_state_pred_intermediate_size=env.config.model.get("next_state_pred_intermediate_size", None),
+                next_state_pred_activation=env.config.model.get("next_state_pred_activation", "relu"),
+                use_agent_action_pred=env.config.model.get("use_agent_action_pred", False),
+                agent_action_pred_weight=env.config.model.get("agent_action_pred_weight", 1.0),
+                num_agent_slots=env.config.model.get("num_agent_slots", 16),
+                agent_action_pred_intermediate_size=env.config.model.get("agent_action_pred_intermediate_size", None),
             )
         else:
             # Check if CPC is enabled for IQN replacement models
@@ -1109,6 +1183,14 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     cpc_sample_size=env.config.model.get("iqn_cpc_sample_size", 64),  # Ignored by model but kept for compatibility
                     cpc_start_epoch=env.config.model.get("iqn_cpc_start_epoch", 1),
                     cpc_max_sequence_length=env.config.model.get("iqn_cpc_max_sequence_length", 500),
+                    use_next_state_pred=env.config.model.get("use_next_state_pred", False),
+                    next_state_pred_weight=env.config.model.get("next_state_pred_weight", 3.0),
+                    next_state_pred_intermediate_size=env.config.model.get("next_state_pred_intermediate_size", None),
+                    next_state_pred_activation=env.config.model.get("next_state_pred_activation", "relu"),
+                    use_agent_action_pred=env.config.model.get("use_agent_action_pred", False),
+                    agent_action_pred_weight=env.config.model.get("agent_action_pred_weight", 1.0),
+                    num_agent_slots=env.config.model.get("num_agent_slots", 16),
+                    agent_action_pred_intermediate_size=env.config.model.get("agent_action_pred_intermediate_size", None),
                 )
             else:
                 # Use standard IQN (no CPC) for replacement
@@ -2211,6 +2293,14 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                     cpc_memory_bank_size=0,  # Standalone model ignores this (uses temporal negatives)
                     # NOTE: cpc_sample_size is NOT in standalone model signature - removed
                     cpc_start_epoch=self.config.model.get("cpc_start_epoch", 1),
+                    use_next_state_pred=self.config.model.get("use_next_state_pred", False),
+                    next_state_pred_weight=self.config.model.get("next_state_pred_weight", 3.0),
+                    next_state_pred_intermediate_size=self.config.model.get("next_state_pred_intermediate_size", None),
+                    next_state_pred_activation=self.config.model.get("next_state_pred_activation", "relu"),
+                    use_agent_action_pred=self.config.model.get("use_agent_action_pred", False),
+                    agent_action_pred_weight=self.config.model.get("agent_action_pred_weight", 1.0),
+                    num_agent_slots=self.config.model.get("num_agent_slots", 16),
+                    agent_action_pred_intermediate_size=self.config.model.get("agent_action_pred_intermediate_size", None),
                 )
                 
                 # Load initial model if specified (reuse pattern from replace_agent_model)
@@ -2275,6 +2365,14 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                         cpc_sample_size=self.config.model.get("iqn_cpc_sample_size", 64),  # Ignored by model but kept for compatibility
                         cpc_start_epoch=self.config.model.get("iqn_cpc_start_epoch", 1),
                         cpc_max_sequence_length=self.config.model.get("iqn_cpc_max_sequence_length", 500),
+                        use_next_state_pred=self.config.model.get("use_next_state_pred", False),
+                        next_state_pred_weight=self.config.model.get("next_state_pred_weight", 3.0),
+                        next_state_pred_intermediate_size=self.config.model.get("next_state_pred_intermediate_size", None),
+                        next_state_pred_activation=self.config.model.get("next_state_pred_activation", "relu"),
+                        use_agent_action_pred=self.config.model.get("use_agent_action_pred", False),
+                        agent_action_pred_weight=self.config.model.get("agent_action_pred_weight", 1.0),
+                        num_agent_slots=self.config.model.get("num_agent_slots", 16),
+                        agent_action_pred_intermediate_size=self.config.model.get("agent_action_pred_intermediate_size", None),
                     )
                     
                     # Load initial model if specified (reuse pattern from replace_agent_model)

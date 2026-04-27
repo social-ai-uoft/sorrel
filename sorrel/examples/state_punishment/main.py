@@ -518,6 +518,48 @@ def parse_arguments():
         default=1,
         help="Epoch to start CPC training. 0 = start immediately (B=1, loss=0), 1+ = wait for memory bank (default: 1)"
     )
+    # Next-state prediction (for iqn and ppo_lstm_cpc)
+    parser.add_argument(
+        "--use_next_state_pred",
+        action="store_true",
+        help="Enable next-state prediction auxiliary task (for iqn and ppo_lstm_cpc models)"
+    )
+    parser.add_argument(
+        "--next_state_pred_weight",
+        type=float,
+        default=3.0,
+        help="Weight for next-state prediction loss (default: 3.0, from paper)"
+    )
+    parser.add_argument(
+        "--next_state_pred_intermediate_size",
+        type=int,
+        default=None,
+        help="Intermediate layer size for next-state predictor (default: None, uses hidden_size)"
+    )
+    parser.add_argument(
+        "--next_state_pred_activation",
+        type=str,
+        default="relu",
+        choices=["relu", "tanh", "leaky_relu"],
+        help="Activation for next-state predictor (default: relu)"
+    )
+    parser.add_argument(
+        "--use_agent_action_pred",
+        action="store_true",
+        help="Enable agent action prediction auxiliary task (for iqn and ppo_lstm_cpc)"
+    )
+    parser.add_argument(
+        "--agent_action_pred_weight",
+        type=float,
+        default=1.0,
+        help="Weight for agent action prediction loss (default: 1.0)"
+    )
+    parser.add_argument(
+        "--agent_action_pred_intermediate_size",
+        type=int,
+        default=None,
+        help="Intermediate size for agent action predictor (default: hidden_size)"
+    )
     parser.add_argument(
         "--min_trajectory_length",
         type=int,
@@ -822,6 +864,18 @@ def run_experiment(args):
                 f"--iqn_use_cpc is only supported with --model_type=iqn, "
                 f"but got --model_type={args.model_type}"
             )
+    if args.use_next_state_pred:
+        if args.model_type not in ["iqn", "ppo_lstm_cpc"]:
+            raise ValueError(
+                f"--use_next_state_pred is only supported with --model_type in ['iqn', 'ppo_lstm_cpc'], "
+                f"but got --model_type={args.model_type}"
+            )
+    if args.use_agent_action_pred:
+        if args.model_type not in ["iqn", "ppo_lstm_cpc"]:
+            raise ValueError(
+                f"--use_agent_action_pred is only supported with --model_type in ['iqn', 'ppo_lstm_cpc'], "
+                f"but got --model_type={args.model_type}"
+            )
 
     # Create configuration
     config = create_config(
@@ -894,6 +948,13 @@ def run_experiment(args):
         cpc_sample_size=args.cpc_sample_size,
         cpc_start_epoch=args.cpc_start_epoch,
         min_trajectory_length=args.min_trajectory_length,
+        use_next_state_pred=args.use_next_state_pred if args.model_type in ["iqn", "ppo_lstm_cpc"] else False,
+        next_state_pred_weight=args.next_state_pred_weight,
+        next_state_pred_intermediate_size=args.next_state_pred_intermediate_size,
+        next_state_pred_activation=args.next_state_pred_activation,
+        use_agent_action_pred=args.use_agent_action_pred if args.model_type in ["iqn", "ppo_lstm_cpc"] else False,
+        agent_action_pred_weight=args.agent_action_pred_weight,
+        agent_action_pred_intermediate_size=args.agent_action_pred_intermediate_size,
         # Phased voting parameters
         enable_phased_voting=args.enable_phased_voting,
         phased_voting_interval=args.phased_voting_interval,
@@ -945,7 +1006,7 @@ def run_experiment(args):
 
     # Tensorboard logs go to the runs folder, other files go to separate folders
     # Create directories relative to the state_punishment folder
-    log_dir = Path(__file__).parent / "runs_debug9" / run_folder
+    log_dir = Path(__file__).parent / "runs_debug14" / run_folder
     anim_dir = Path(__file__).parent / "data" / "anims" / run_folder
     config_dir = Path(__file__).parent / "configs"
     argv_dir = Path(__file__).parent / "argv" / run_folder

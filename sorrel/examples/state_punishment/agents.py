@@ -267,6 +267,20 @@ class StatePunishmentAgent(Agent):
                 state = state.flatten()
             self.model.memory.add(state, action, reward, done)
 
+    def append_auxiliary_to_last_transition(
+        self, visible_mask: np.ndarray, other_actions: np.ndarray
+    ) -> None:
+        """Append auxiliary data (agent action prediction) to the last stored transition."""
+        if isinstance(self.model, RecurrentIQNModelCPC):
+            self.model.seq_memory.append_auxiliary(visible_mask, other_actions)
+        elif isinstance(self.model, RecurrentPPOLSTMCPC):
+            self.model.rollout_memory["visible_agent_masks"].append(
+                torch.from_numpy(visible_mask).float().to(self.model.device)
+            )
+            self.model.rollout_memory["other_agent_actions"].append(
+                torch.from_numpy(other_actions).long().to(self.model.device)
+            )
+
     # Note: pov method removed - use generate_single_view directly
 
     def generate_single_view(

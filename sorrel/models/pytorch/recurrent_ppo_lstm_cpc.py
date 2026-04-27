@@ -131,6 +131,16 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         cpc_temperature: float = 0.07,
         cpc_memory_bank_size: int = 0,  # (unused) no memory bank; CPC uses only current episode
         cpc_start_epoch: int = 1,
+        # Next-state prediction parameters
+        use_next_state_pred: bool = False,
+        next_state_pred_weight: float = 3.0,
+        next_state_pred_intermediate_size: Optional[int] = None,
+        next_state_pred_activation: str = "relu",
+        # Agent action prediction (Mode B)
+        use_agent_action_pred: bool = False,
+        agent_action_pred_weight: float = 1.0,
+        num_agent_slots: int = 16,
+        agent_action_pred_intermediate_size: Optional[int] = None,
         # Last-action conditioning (minimal: embedding only)
         use_last_action: bool = False,
         last_action_embed_dim: int = 32,
@@ -315,6 +325,54 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         else:
             self.cpc_module = None
 
+        # Next-state prediction setup
+        self.use_next_state_pred = use_next_state_pred
+        self.next_state_pred_weight = next_state_pred_weight if use_next_state_pred else 0.0
+        if use_next_state_pred:
+            from sorrel.models.pytorch.auxiliary import create_next_state_predictor
+            if self.obs_type == "image":
+                obs_shape = self.obs_dim
+            else:
+                obs_shape = (int(np.array(input_size).prod()),)
+            act_space = (
+                int(np.prod(action_dims)) if use_factored_actions and action_dims else action_space
+            )
+            self.next_state_predictor, self.next_state_adapter = create_next_state_predictor(
+                hidden_size=self.hidden_size,
+                action_space=act_space,
+                obs_shape=obs_shape,
+                device=device,
+                model_type="ppo",
+                intermediate_size=next_state_pred_intermediate_size,
+                activation=next_state_pred_activation,
+            )
+        else:
+            self.next_state_predictor = None
+            self.next_state_adapter = None
+
+        # Agent action prediction (Mode B)
+        self.use_agent_action_pred = use_agent_action_pred
+        self.agent_action_pred_weight = agent_action_pred_weight if use_agent_action_pred else 0.0
+        if use_agent_action_pred:
+            from sorrel.models.pytorch.auxiliary.agent_action_prediction import (
+                AgentActionPredictionModule,
+                PPOAgentActionAdapter,
+            )
+            aap_act_space = (
+                int(np.prod(action_dims)) if use_factored_actions and action_dims else action_space
+            )
+            self.agent_action_predictor = AgentActionPredictionModule(
+                hidden_size=self.hidden_size,
+                own_action_space=aap_act_space,
+                num_agent_slots=num_agent_slots,
+                intermediate_size=agent_action_pred_intermediate_size,
+                device=device,
+            )
+            self.agent_action_adapter = PPOAgentActionAdapter(self.agent_action_predictor)
+        else:
+            self.agent_action_predictor = None
+            self.agent_action_adapter = None
+
         # --------- Optimizer (CURL-style: single optimizer for all parameters) ---------
         # Following CURL best practices, we use a SINGLE optimizer for all parameters.
         # This ensures:
@@ -334,6 +392,8 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
             "vals": [],
             "rewards": [],
             "dones": [],
+            "visible_agent_masks": [],
+            "other_agent_actions": [],
         }
         if use_last_action:
             self.rollout_memory["prev_actions"] = []
@@ -1130,7 +1190,20 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         vals = torch.tensor(values_list, dtype=torch.float32, device=self.device)
         rewards = torch.tensor(rewards_list, dtype=torch.float32, device=self.device)
         dones = torch.tensor(dones_list, dtype=torch.float32, device=self.device)
-        
+
+        vis_masks_list = self.rollout_memory.get("visible_agent_masks", [])
+        other_acts_list = self.rollout_memory.get("other_agent_actions", [])
+        has_auxiliary = (
+            len(vis_masks_list) > 0
+            and len(vis_masks_list) == len(states_list)
+            and len(other_acts_list) == len(states_list)
+        )
+        if has_auxiliary:
+            vis_masks = torch.stack(vis_masks_list, dim=0)
+            other_acts = torch.stack(other_acts_list, dim=0)
+        else:
+            vis_masks = other_acts = None
+
         # Compute GAE on entire sequence
         advantages, returns = self._compute_gae(rewards, vals, dones)
         
@@ -1244,9 +1317,38 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
                     "dones": dones,
                 }
                 cpc_loss = self._compute_cpc_loss(cpc_trajectory)
-            
+
+            # Compute Next-State Prediction loss (first epoch only, same as CPC)
+            next_state_pred_loss = torch.tensor(0.0, device=self.device)
+            if self.use_next_state_pred and self.next_state_adapter is not None and epoch == 0:
+                next_state_pred_loss = self.next_state_adapter.compute_auxiliary_loss(
+                    states=states,
+                    features_all=features_all,
+                    actions=actions,
+                )
+
+            # Compute Agent Action Prediction loss (Mode B, first epoch only)
+            agent_action_pred_loss = torch.tensor(0.0, device=self.device)
+            if (
+                self.use_agent_action_pred
+                and self.agent_action_adapter is not None
+                and vis_masks is not None
+                and epoch == 0
+            ):
+                agent_action_pred_loss = self.agent_action_adapter.compute_auxiliary_loss(
+                    features_all=features_all,
+                    actions=actions,
+                    vis_masks=vis_masks,
+                    other_acts=other_acts,
+                )
+
             # Combined loss (CURL-style: joint training)
-            total_loss = ppo_loss + self.cpc_weight * cpc_loss
+            total_loss = (
+                ppo_loss
+                + self.cpc_weight * cpc_loss
+                + self.next_state_pred_weight * next_state_pred_loss
+                + self.agent_action_pred_weight * agent_action_pred_loss
+            )
             
             # Single backward pass (both PPO and CPC gradients)
             self.optimizer.zero_grad()
