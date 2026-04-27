@@ -20,8 +20,9 @@ import torch
 
 
 def set_seed(seed: int) -> None:
-    r"""Sets a seed for replication. Sets the seed for :meth:`random.seed()`,
-    :meth:`numpy.random.seed()`, and :meth:`torch.manual_seed()`.
+    r"""Sets a seed for replication.
+
+    Sets the seed for :meth:`random.seed()`, :meth:`numpy.random.seed()`, and :meth:`torch.manual_seed()`.
 
     Args:
         seed: An int setting the seed.
@@ -88,7 +89,6 @@ def nearest_2_power(n: int) -> int:
     Returns:
         int: The nearest power of two equal to or larger than n.
     """
-
     # Bit shift counter
     bit_shifts = 0
 

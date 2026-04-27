@@ -521,7 +521,6 @@ class VisionTransformer(nn.Module):
         Returns:
             A tensor of cross-entropy loss between the predictions and ground truths.
         """
-
         # Criterion: cross-entropy loss
         loss = nn.CrossEntropyLoss()
 
@@ -555,7 +554,6 @@ class VisionTransformer(nn.Module):
         Return:
             A sequence of trajectories of the appropriate transition form.
         """
-
         # Get from the buffer in the typical format
         # State size: (B, T, C, H, W)
         # Action size: (B, T, 1)
@@ -641,7 +639,6 @@ class VisionTransformer(nn.Module):
 
         Get batched (S', A) inputs and (S", A') targets from the stored memories.
         """
-
         # Get batched inputs
         state_inputs, action_inputs, state_targets, action_targets = self.get_batch()
 
@@ -686,7 +683,6 @@ class VisionTransformer(nn.Module):
         Returns:
             A tuple of state predictions and state targets.
         """
-
         state_inputs, action_inputs, state_targets, action_targets = self.get_batch()
 
         # Get just the first item in the batch
@@ -773,10 +769,8 @@ class ViTOneHot(VisionTransformer):
     def forward(
         self, states: torch.Tensor, actions: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Overriden forward pass: Replace the state head with C state heads and a softmaxed output for each channel.
-        """
-
+        """Overriden forward pass: Replace the state head with C state heads and a
+        softmaxed output for each channel."""
         B, T, C, H, W = states.size()
 
         local_tokens, global_tokens, temporal_embedding = self.token_embedding(
@@ -818,7 +812,6 @@ class ViTOneHot(VisionTransformer):
 
         Cross entropy loss computed on the yes/no probability of each channel.
         """
-
         loss = nn.CrossEntropyLoss()
 
         # State targets are in the form: B T C H W
@@ -861,7 +854,6 @@ class ViTOneHot(VisionTransformer):
         Returns:
             A tuple of state predictions and state targets.
         """
-
         state_inputs, action_inputs, state_targets, action_targets = self.get_batch()
 
         # Get just the first item in the batch
