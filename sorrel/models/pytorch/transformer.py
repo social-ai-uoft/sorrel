@@ -475,7 +475,9 @@ class VisionTransformer(nn.Module):
         # Num_layers = number of transformer blocks
         self.blocks = nn.ModuleList(
             [
-                TransformerBlock(layer_size, num_heads, self.num_patches, dropout=dropout)
+                TransformerBlock(
+                    layer_size, num_heads, self.num_patches, dropout=dropout
+                )
                 for _ in range(num_layers)
             ]
         ).to(self.device)
@@ -699,9 +701,9 @@ class VisionTransformer(nn.Module):
     def random_mask(self, state_targets) -> torch.Tensor:
         """Position-level random mask.
 
-        Picks random (b, t, y, x) cells and hides all C channels together at each
-        chosen cell, so a masked cell is genuinely "unknown" rather than an
-        ambiguously corrupted one-hot.
+        Picks random (b, t, y, x) cells and hides all C channels together at each chosen
+        cell, so a masked cell is genuinely "unknown" rather than an ambiguously
+        corrupted one-hot.
         """
         B, T, C, H, W = state_targets.shape
         device = state_targets.device
@@ -822,7 +824,9 @@ class VisionTransformer(nn.Module):
             state_inputs = state_inputs * state_mask.float()
 
         with torch.no_grad():
-            x = self._run_transformer(state_inputs, action_inputs, agent_id=effective_agent_id)
+            x = self._run_transformer(
+                state_inputs, action_inputs, agent_id=effective_agent_id
+            )
             B, T = x.size(0), x.size(1)
             state_predictions, action_predictions = self._apply_heads(x, B, T)
             state_loss = self.state_loss(state_predictions, state_targets, mask=None)
@@ -1018,7 +1022,9 @@ class ViTOneHot(VisionTransformer):
             action_loss.detach().cpu().item(),
         )
 
-    def evaluate_model(self, mask_type: str = "full", agent_id: int | None = None) -> tuple:
+    def evaluate_model(
+        self, mask_type: str = "full", agent_id: int | None = None
+    ) -> tuple:
         """Evaluate without updating weights.
 
         ToM objective: mask is applied to the input observations; state loss is

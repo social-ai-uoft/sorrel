@@ -33,8 +33,8 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
     def setup_agents(self):
         """Create the agents for this experiment and assign them to self.agents.
 
-        Requires self.config.model.agent_vision_radius to be defined.
-        Reads agent count from config.model.num_agents (default 2).
+        Requires self.config.model.agent_vision_radius to be defined. Reads agent count
+        from config.model.num_agents (default 2).
         """
         agent_num = int(self.config.model.get("num_agents", 2))
         agents = []

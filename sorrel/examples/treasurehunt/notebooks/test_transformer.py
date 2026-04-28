@@ -130,9 +130,7 @@ else:
                 candidates
             ), "SKIP_IQN=True but no treasurehunt_model_*.pkl in checkpoints/. Set IQN_CHECKPOINT_PATH or run with SKIP_IQN=False."
             model_path = candidates[-1]
-        assert (
-            model_path.exists()
-        ), f"IQN checkpoint not found: {model_path}"
+        assert model_path.exists(), f"IQN checkpoint not found: {model_path}"
         print(f"Using existing IQN checkpoint: {model_path}")
 
 # ==========================================
@@ -338,7 +336,9 @@ for mask_type in EVAL_MASK_TYPES:
     logger.writer.add_scalar(f"eval_summary/{mask_type}_avg_total_loss", avg_total, 0)
     logger.writer.add_scalar(f"eval_summary/{mask_type}_std_total_loss", std_total, 0)
 
-    print(f"  state_loss={avg_state:.4f}  action_loss={avg_action:.4f}  total={avg_total:.4f} ± {std_total:.4f}")
+    print(
+        f"  state_loss={avg_state:.4f}  action_loss={avg_action:.4f}  total={avg_total:.4f} ± {std_total:.4f}"
+    )
 
     # Per-channel state loss under this mask condition
     per_channel: dict[int, float] = {}
@@ -400,17 +400,11 @@ if TRAIN_MASK_TYPE in ("gem", "bone", "food", "wall"):
     channel_idx = {"wall": 1, "gem": 2, "bone": 3, "food": 4}[TRAIN_MASK_TYPE]
     full_ch_loss = results["full"]["per_channel"][channel_idx]
     masked_ch_loss = results[TRAIN_MASK_TYPE]["per_channel"][channel_idx]
-    print(
-        f"\nToM probe — {CHANNEL_NAMES[channel_idx]} channel reconstruction:"
-    )
+    print(f"\nToM probe — {CHANNEL_NAMES[channel_idx]} channel reconstruction:")
     print(f"  full (visible):  {full_ch_loss:.4f}")
     print(f"  {TRAIN_MASK_TYPE} masked:    {masked_ch_loss:.4f}")
     print(
         f"  degradation:     {(masked_ch_loss - full_ch_loss) / max(full_ch_loss, 1e-8) * 100:+.1f}%"
     )
-    logger.writer.add_scalar(
-        "tom_probe/full_channel_loss", full_ch_loss, 0
-    )
-    logger.writer.add_scalar(
-        "tom_probe/masked_channel_loss", masked_ch_loss, 0
-    )
+    logger.writer.add_scalar("tom_probe/full_channel_loss", full_ch_loss, 0)
+    logger.writer.add_scalar("tom_probe/masked_channel_loss", masked_ch_loss, 0)
