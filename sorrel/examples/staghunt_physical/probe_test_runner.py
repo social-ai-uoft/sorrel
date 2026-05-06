@@ -7,7 +7,77 @@ results to CSV files for analysis.
 import csv
 from pathlib import Path
 
+import torch
+
 from sorrel.examples.staghunt_physical.probe_test import ProbeTestAgent, ProbeTestEnvironment
+
+
+def _world_include_punish_action(config) -> bool:
+    """True iff training config enables the PUNISH action (same flag as StagHuntEnv)."""
+    if config is None:
+        return False
+    world = config.get("world") if hasattr(config, "get") else getattr(config, "world", None)
+    if world is None:
+        return False
+    if hasattr(world, "get"):
+        return bool(world.get("include_punish_action", False))
+    return bool(getattr(world, "include_punish_action", False))
+
+
+def _collect_unique_models(experiment_env) -> list:
+    """Return unique model objects used by training agents."""
+    models = []
+    seen = set()
+    for agent in getattr(experiment_env, "agents", []):
+        model = getattr(agent, "model", None)
+        if model is None:
+            continue
+        mid = id(model)
+        if mid in seen:
+            continue
+        seen.add(mid)
+        models.append(model)
+    return models
+
+
+def _snapshot_model_state_dicts(models: list) -> dict[int, dict]:
+    """Take an in-memory clone of each model state_dict for safety checks/restoration."""
+    snapshots = {}
+    for model in models:
+        state = model.state_dict()
+        snapshots[id(model)] = {k: v.detach().clone() for k, v in state.items()}
+    return snapshots
+
+
+def _restore_if_probe_mutated_weights(models: list, snapshots: dict[int, dict]) -> None:
+    """Restore model weights if probe test accidentally mutated any model parameters."""
+    mutated = []
+    for model in models:
+        before = snapshots.get(id(model))
+        if before is None:
+            continue
+        after = model.state_dict()
+        changed = False
+        for key, old_tensor in before.items():
+            new_tensor = after.get(key)
+            if new_tensor is None:
+                changed = True
+                break
+            if old_tensor.shape != new_tensor.shape or old_tensor.dtype != new_tensor.dtype:
+                changed = True
+                break
+            # Exact check is intentional: probe tests should not change any weights/buffers at all.
+            if not torch.equal(old_tensor, new_tensor.detach()):
+                changed = True
+                break
+        if changed:
+            model.load_state_dict(before)
+            mutated.append(type(model).__name__)
+    if mutated:
+        print(
+            "WARNING: Probe test mutated model state_dict; restored original weights for: "
+            + ", ".join(mutated)
+        )
 
 
 def run_probe_test(experiment_env, epoch, output_dir):
@@ -20,43 +90,63 @@ def run_probe_test(experiment_env, epoch, output_dir):
     """
     config = experiment_env.config
     probe_config = config.get("probe_test", {})
-    
+
     if not probe_config.get("enabled", False):
         return
-    
-    # Check test mode
-    test_mode = probe_config.get("test_mode", "default")
-    
-    if test_mode == "test_intention":
-        from sorrel.examples.staghunt_physical.probe_test import TestIntentionProbeTest
-        test_intention = TestIntentionProbeTest(experiment_env, probe_config, output_dir)
-        test_intention.run_test_intention(experiment_env.agents, epoch)
-        print(f"Test intention probe test completed for epoch {epoch}")
-        return
-    
-    if test_mode == "multi_step":
-        from sorrel.examples.staghunt_physical.probe_test import MultiStepProbeTest
-        multi_step_test = MultiStepProbeTest(experiment_env, probe_config, output_dir)
-        multi_step_test.run_multi_step_test(experiment_env.agents, epoch)
-        print(f"Multi-step probe test completed for epoch {epoch}")
-        return
-    
-    test_epochs = probe_config.get("test_epochs", 1)
-    print(f"Running probe test at epoch {epoch} with {test_epochs} test epochs")
-    
-    # Create probe test environment (reuse existing classes)
-    probe_env = ProbeTestEnvironment(experiment_env, probe_config)
-    
-    # Create unit test directory
-    unit_test_dir = output_dir / "unit_test"
-    unit_test_dir.mkdir(parents=True, exist_ok=True)
-    
-    if probe_config.get("individual_testing", True):
-        _run_individual_tests(experiment_env, probe_env, epoch, unit_test_dir, test_epochs)
-    else:
-        _run_group_test(experiment_env, probe_env, epoch, unit_test_dir, test_epochs)
-    
-    print(f"Probe test completed for epoch {epoch}")
+
+    models = _collect_unique_models(experiment_env)
+    snapshots = _snapshot_model_state_dicts(models)
+    try:
+        # Check test mode
+        test_mode = probe_config.get("test_mode", "default")
+
+        if test_mode == "test_intention":
+            from sorrel.examples.staghunt_physical.probe_test import TestIntentionProbeTest
+            test_intention = TestIntentionProbeTest(experiment_env, probe_config, output_dir)
+            test_intention.run_test_intention(experiment_env.agents, epoch)
+            print(f"Test intention probe test completed for epoch {epoch}")
+            return
+
+        if test_mode == "multi_step":
+            from sorrel.examples.staghunt_physical.probe_test import MultiStepProbeTest
+            multi_step_test = MultiStepProbeTest(experiment_env, probe_config, output_dir)
+            multi_step_test.run_multi_step_test(experiment_env.agents, epoch)
+            print(f"Multi-step probe test completed for epoch {epoch}")
+            return
+
+        if test_mode == "punish_first":
+            if not _world_include_punish_action(config):
+                print(
+                    f"Punish-first probe test skipped at epoch {epoch}: "
+                    "world.include_punish_action is False (punishment action disabled)."
+                )
+                return
+
+            from sorrel.examples.staghunt_physical.probe_test import PunishFirstProbeTest
+
+            punish_first = PunishFirstProbeTest(experiment_env, probe_config, output_dir)
+            punish_first.run_punish_first_test(experiment_env.agents, epoch)
+            print(f"Punish-first probe test completed for epoch {epoch}")
+            return
+
+        test_epochs = probe_config.get("test_epochs", 1)
+        print(f"Running probe test at epoch {epoch} with {test_epochs} test epochs")
+
+        # Create probe test environment (reuse existing classes)
+        probe_env = ProbeTestEnvironment(experiment_env, probe_config)
+
+        # Create unit test directory
+        unit_test_dir = output_dir / "unit_test"
+        unit_test_dir.mkdir(parents=True, exist_ok=True)
+
+        if probe_config.get("individual_testing", True):
+            _run_individual_tests(experiment_env, probe_env, epoch, unit_test_dir, test_epochs)
+        else:
+            _run_group_test(experiment_env, probe_env, epoch, unit_test_dir, test_epochs)
+
+        print(f"Probe test completed for epoch {epoch}")
+    finally:
+        _restore_if_probe_mutated_weights(models, snapshots)
 
 
 def _run_individual_tests(experiment_env, probe_env, epoch, unit_test_dir, test_epochs):

@@ -166,3 +166,4 @@ sorrel/examples/*/argv/
 /sorrel/examples/treasurehunt_jax
 /sorrel/models/jax
 *effect_of_tag*
+**/plots/

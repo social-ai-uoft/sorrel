@@ -57,6 +57,7 @@ class CombinedLogger(Logger):
 def run_stag_hunt(
     run_name_base: str | None = None,
     resource_density: float | None = None,
+    respawn_rate: float | None = None,
     max_resources: int | None = None,
     max_stags: int | None = None,
     max_hares: int | None = None,
@@ -100,6 +101,7 @@ def run_stag_hunt(
     Args:
         run_name_base: Optional base name for the run. If not provided, uses default from config.
         resource_density: Optional resource density override (0.0-1.0).
+        respawn_rate: Optional per-step resource respawn probability after respawn_lag (0.0-1.0).
         max_resources: Optional max resources cap override (None = unlimited).
         max_stags: Optional max stags cap override (None = unlimited).
         max_hares: Optional max hares cap override (None = unlimited).
@@ -155,7 +157,7 @@ def run_stag_hunt(
             # Enable probe testing
             "enabled": True,
             # Test mode: "default" or "test_intention"
-            "test_mode": "multi_step",
+            "test_mode": "punish_first",
             # Run probe test every X epochs
             "test_interval": 100,
             # Only save PNG visualizations for the first N probe tests (None = save all)
@@ -190,13 +192,14 @@ def run_stag_hunt(
                 "resource_density": 0.2,  # Only used when generation_mode is "random"
                 "stag_probability": 0.5,  # Probability that spawned resources are stags (vs hares)
             },
-            # Multi-map probe test configuration (for test_intention mode)
+            # Probe map configuration.
+            # For test_mode == "punish_first", map must have >=3 spawn points (upper/center/lower).
             "test_maps": [
                 # "test_intention_probe_test_1.txt",
                 # "test_intention_probe_test_2.txt",
                 # "test_intention_probe_test_3.txt",
                 # "test_intention_probe_test_4.txt"
-                "test_multi_step.txt"
+                "test_punish_probe.txt"
             ],
             "orientation_reference_file": "agent_init_orientation_reference_probe_test.txt",  # Path to orientation reference file
         },
@@ -234,10 +237,10 @@ def run_stag_hunt(
             "height": 12, # 13
             "width": 12,
             # number of players in the game
-            "num_agents": 6,
+            "num_agents": 4,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
             # Only the spawned agents will act and learn in each epoch
-            "num_agents_to_spawn": 6,  # Number of agents to spawn per epoch (must be <= num_agents)
+            "num_agents_to_spawn": 4,  # Number of agents to spawn per epoch (must be <= num_agents)
             # probability an empty cell spawns a resource each step (for initial spawning)
             "resource_density": 0.04,
             # probability a resource respawns each step after respawn_lag (for respawning)
@@ -500,6 +503,12 @@ def run_stag_hunt(
                 f"resource_density must be in [0.0, 1.0], got {resource_density}"
             )
         config["world"]["resource_density"] = resource_density
+    if respawn_rate is not None:
+        if not (0.0 <= respawn_rate <= 1.0):
+            raise ValueError(
+                f"respawn_rate must be in [0.0, 1.0], got {respawn_rate}"
+            )
+        config["world"]["respawn_rate"] = respawn_rate
     if max_resources is not None:
         config["world"]["max_resources"] = max_resources
     if max_stags is not None:
@@ -622,9 +631,9 @@ def run_stag_hunt(
     example_root = Path(__file__).parent
     run_folder = f'{config["experiment"]["run_name"]}_{timestamp}'
     # TensorBoard only: lives next to this package, not under data/
-    log_dir = example_root / "runs_tageffect_v2" / run_folder
+    log_dir = example_root / "runs_tageffect_v6" / run_folder
     # Artifacts (gifs, models, exports): under data/ with a generic grouping folder
-    data_artifacts_parent = Path("runs_tageffect_v2")
+    data_artifacts_parent = Path("runs_tageffect_v6")
     output_dir = example_root / "data" / data_artifacts_parent / run_folder
     log_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -698,6 +707,12 @@ if __name__ == "__main__":
         type=float,
         default=None,
         help="Override resource_density parameter (0.0-1.0)"
+    )
+    parser.add_argument(
+        "--respawn-rate",
+        type=float,
+        default=None,
+        help="Override respawn_rate: per-step probability a harvested cell respawns after respawn_lag (0.0-1.0)",
     )
     parser.add_argument(
         "--max-resources",
@@ -946,6 +961,7 @@ if __name__ == "__main__":
     run_stag_hunt(
         run_name_base=args.run_name_base,
         resource_density=args.resource_density,
+        respawn_rate=args.respawn_rate,
         max_resources=args.max_resources,
         max_stags=args.max_stags,
         max_hares=args.max_hares,

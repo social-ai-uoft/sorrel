@@ -1000,7 +1000,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
         
         observer_id = observer_agent.agent_id
         observer_orientation = getattr(observer_agent, 'orientation', None)
-        
+
         # Step 2: Initialize feature tensor
         vision_radius = self.vision_radius
         height = width = 2 * vision_radius + 1
@@ -1111,12 +1111,12 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                         else:
                             feature_tensor[FEAT_HARE, y, x] = 1.0
                     elif hasattr(entity, 'agent_id'):  # It's an agent
-                        entity_id = entity.agent_id
+                        raw_entity_id = int(entity.agent_id)
                         entity_kind = getattr(entity, 'kind', None)
                         entity_orientation = getattr(entity, 'orientation', None)
                         entity_orientation_str = orientation_map.get(entity_orientation, None)
                         
-                        if entity_id == observer_id:
+                        if raw_entity_id == observer_id:
                             # Self features
                             feature_tensor[FEAT_ME, y, x] = 1.0
                             
@@ -1165,9 +1165,12 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                                     feature_tensor[FEAT_GROUP_C, y, x] = 1.0
                                 # If kind maps to a group not in CSV (e.g., AgentGroupD), all flags remain 0
                             
-                            # Agent ID vector (only when other=1)
-                            if 0 <= entity_id < len(self.agent_id_vectors):
-                                id_vector = self.agent_id_vectors[entity_id]
+                            # Agent ID vector (only when other=1). Probes may force literal zeros
+                            # (not agent_id_vectors[0]) via probe_zero_agent_id_obs_channels.
+                            if getattr(entity, "probe_zero_agent_id_obs_channels", False):
+                                pass  # slice already zero from feature_tensor init
+                            elif 0 <= raw_entity_id < len(self.agent_id_vectors):
+                                id_vector = self.agent_id_vectors[raw_entity_id]
                                 feature_tensor[FEAT_AGENT_ID_START:FEAT_AGENT_ID_START+self.agent_id_dim, y, x] = id_vector
                             if getattr(entity, 'is_frozen', False):
                                 feature_tensor[FEAT_OTHER_FROZEN, y, x] = 1.0
@@ -1185,14 +1188,14 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                                     t = int(getattr(world, "current_turn", 0))
                                     s = self.private_coordination_rep_obs_random_seed
                                     # 32-bit mix; avoid Python hash randomization.
-                                    h = (s ^ (observer_id * 0x9E3779B1) ^ (entity_id * 0x85EBCA6B) ^ (t * 0xC2B2AE35) ^ (y * 0x27D4EB2D) ^ (x * 0x165667B1)) & 0xFFFFFFFF
+                                    h = (s ^ (observer_id * 0x9E3779B1) ^ (raw_entity_id * 0x85EBCA6B) ^ (t * 0xC2B2AE35) ^ (y * 0x27D4EB2D) ^ (x * 0x165667B1)) & 0xFFFFFFFF
                                     # Map to [0, 1)
                                     u = (h / 2**32)
                                     feature_tensor[FEAT_OTHER_PRIVATE_REP, y, x] = float(u * self.private_coordination_rep_obs_random_max)
                                 elif self.private_coordination_rep_enabled:
                                     rep = getattr(observer_agent, "private_coordination_rep", None)
-                                    if rep is not None and len(rep) > 0 and 0 <= entity_id < len(rep):
-                                        feature_tensor[FEAT_OTHER_PRIVATE_REP, y, x] = float(rep[entity_id])
+                                    if rep is not None and len(rep) > 0 and 0 <= raw_entity_id < len(rep):
+                                        feature_tensor[FEAT_OTHER_PRIVATE_REP, y, x] = float(rep[raw_entity_id])
                         if self.prev_actions_tile_exposed:
                             if self.observe_prev_actions_tile_obs_randomize:
                                 t = int(getattr(world, "current_turn", 0))
@@ -1200,7 +1203,7 @@ class StagHuntObservation(observation_spec.OneHotObservationSpec):
                                 h = (
                                     s
                                     ^ (observer_id * 0x9E3779B1)
-                                    ^ (entity_id * 0x85EBCA6B)
+                                    ^ (raw_entity_id * 0x85EBCA6B)
                                     ^ (t * 0xC2B2AE35)
                                     ^ (y * 0x27D4EB2D)
                                     ^ (x * 0x165667B1)

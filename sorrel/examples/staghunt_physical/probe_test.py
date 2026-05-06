@@ -1551,3 +1551,512 @@ class MultiStepProbeTest:
                     
                     print(f"  Multi-step probe test - Agent {agent_id}, Partner {partner_kind_name}: "
                           f"First attack = {first_attack_target}, Result = {result}, Turn = {turn_of_first_attack}")
+
+
+# Sentinel for optional punish_first kind overrides in probe_test config.
+_PUNISH_FIRST_KIND_CFG_MISSING = object()
+
+
+class PunishFirstProbeMetricsCollector(ProbeMetricsCollector):
+    """Probe metrics collector that records punishments (used only by punish_first probe).
+
+    Extends ``ProbeMetricsCollector`` so default / multi_step / test_intention probes keep
+    the base class unchanged.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.punish_events: list[tuple[object, object]] = []
+
+    def reset_epoch_metrics(self) -> None:
+        super().reset_epoch_metrics()
+        self.punish_events = []
+
+    def collect_punishment_metrics(self, punisher, target) -> None:
+        punisher_id = punisher.agent_id
+        target_id = target.agent_id
+        self.epoch_metrics["total_punishments"] += 1
+        self.epoch_metrics["punishments_by_target"][target_id] += 1
+        self.agent_metrics[punisher_id]["punishments_given"] += 1
+        self.agent_metrics[punisher_id]["punishments_to_agent"][target_id] += 1
+        self.agent_metrics[target_id]["punishments_received"] += 1
+        self.punish_events.append((punisher, target))
+
+
+class PunishFirstProbeTest:
+    """Probe test: which fake peer (upper vs lower) the focal punishes first."""
+
+    def __init__(self, original_env, test_config, output_dir):
+        self.original_env = original_env
+        self.test_config = test_config
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        self.partner_agent_kinds = test_config.get(
+            "partner_agent_kinds", ["no_partner", "AgentKindA", "AgentKindB"]
+        )
+        self.test_maps = test_config.get("test_maps", ["test_punish_probe.txt"])
+        self.max_test_steps = test_config.get("max_test_steps", 20)
+
+        if original_env.agents:
+            first_agent = original_env.agents[0]
+            if hasattr(first_agent.observation_spec, "identity_map"):
+                self.identity_map = first_agent.observation_spec.identity_map
+            else:
+                self.identity_map = {}
+            if hasattr(first_agent.observation_spec, "identity_enabled"):
+                self.identity_enabled = first_agent.observation_spec.identity_enabled
+            else:
+                self.identity_enabled = False
+            if hasattr(first_agent.observation_spec, "standard_obs"):
+                self.standard_obs = first_agent.observation_spec.standard_obs
+            else:
+                self.standard_obs = False
+        else:
+            self.identity_map = {}
+            self.identity_enabled = False
+            self.standard_obs = False
+
+        if hasattr(original_env, "agent_info"):
+            self.agent_info = original_env.agent_info
+        elif hasattr(original_env.world, "agent_info"):
+            self.agent_info = original_env.world.agent_info
+        else:
+            self.agent_info = {}
+
+        if hasattr(original_env, "agent_kind_to_ids"):
+            self.agent_kind_to_ids = original_env.agent_kind_to_ids
+        elif hasattr(original_env.world, "agent_kind_to_ids"):
+            self.agent_kind_to_ids = original_env.world.agent_kind_to_ids
+        else:
+            self.agent_kind_to_ids = {}
+
+        if self._is_identity_aware():
+            self.csv_headers = [
+                "epoch",
+                "agent_id",
+                "map_name",
+                "focal_agent_kind",
+                "upper_fake_agent_id",
+                "upper_fake_agent_kind",
+                "lower_fake_agent_id",
+                "lower_fake_agent_kind",
+                "first_punished_fake_slot",
+                "first_punished_fake_kind",
+                "first_punished_is_outgroup",
+                "turn_of_first_punishment",
+                "mean_manhattan_dist_ingroup_fake",
+                "mean_manhattan_dist_outgroup_fake",
+                "mean_dist_outgroup_minus_ingroup",
+                "result",
+            ]
+        else:
+            self.csv_headers = [
+                "epoch",
+                "agent_id",
+                "map_name",
+                "partner_kind",
+                "focal_agent_kind",
+                "first_punished_fake_slot",
+                "first_punished_fake_kind",
+                "first_punished_is_outgroup",
+                "turn_of_first_punishment",
+                "mean_manhattan_dist_ingroup_fake",
+                "mean_manhattan_dist_outgroup_fake",
+                "mean_dist_outgroup_minus_ingroup",
+                "result",
+            ]
+
+    def _is_identity_aware(self) -> bool:
+        return self.identity_enabled or self.standard_obs
+
+    def _setup_test_env(self, map_file_name: str) -> None:
+        minimal_test_config = {
+            "layout": {
+                "generation_mode": "ascii_map",
+                "ascii_map_file": map_file_name,
+            },
+            "max_test_steps": self.max_test_steps,
+            "num_agents": 3,
+            "skip_spawn_validation": True,
+        }
+        self.probe_env = ProbeTestEnvironment(self.original_env, minimal_test_config)
+        wcfg = self.probe_env.test_config_dict["world"]
+        wcfg["num_agents"] = 3
+        wcfg["num_agents_to_spawn"] = 3
+        self.probe_env.test_world.num_agents = 3
+
+        punish_collector = PunishFirstProbeMetricsCollector()
+        self.probe_env.metrics_collector = punish_collector
+        self.probe_env.test_env.metrics_collector = punish_collector
+
+        wcfg["simplified_movement"] = True
+        wcfg["single_tile_attack"] = True
+        self.probe_env.test_world.simplified_movement = True
+        self.probe_env.test_world.single_tile_attack = True
+
+    def _create_fake_agent(self, partner_kind: str | None, original_agent, fake_agent_id: int):
+        from sorrel.examples.staghunt_physical.agents_v2 import StagHuntAgent
+
+        if partner_kind is None:
+            partner_kind = getattr(original_agent, "agent_kind", None)
+        partner_attrs = self.test_config.get("partner_agent_attributes", {})
+        can_hunt = partner_attrs.get("can_hunt", True)
+        return StagHuntAgent(
+            observation_spec=original_agent.observation_spec,
+            action_spec=original_agent.action_spec,
+            model=original_agent.model,
+            interaction_reward=original_agent.interaction_reward,
+            max_health=original_agent.max_health,
+            agent_id=fake_agent_id,
+            agent_kind=partner_kind,
+            can_hunt=can_hunt,
+        )
+
+    @staticmethod
+    def _synthetic_fake_ids(agent_id: int) -> tuple[int, int]:
+        return 10_000 + 2 * agent_id, 10_000 + 2 * agent_id + 1
+
+    @staticmethod
+    def _kind_pair_label(upper_kind, lower_kind) -> str:
+        def lab(k):
+            return "focal_default" if k is None else str(k)
+
+        return f"{lab(upper_kind)}__{lab(lower_kind)}"
+
+    def _assert_distinct_fake_agent_kinds(self, upper_fake, lower_fake) -> None:
+        uk = getattr(upper_fake, "agent_kind", None)
+        lk = getattr(lower_fake, "agent_kind", None)
+        if uk == lk:
+            raise ValueError(
+                "punish_first probe requires the upper and lower fake agents to have "
+                "two different group memberships (distinct agent_kind). "
+                f"Both fakes have agent_kind={uk!r}."
+            )
+
+    @staticmethod
+    def _manhattan_agent_pair(a, b) -> int:
+        if getattr(a, "location", None) is None or getattr(b, "location", None) is None:
+            raise ValueError("punish_first distance: agent missing location after reset")
+        ay, ax, _ = a.location
+        by, bx, _ = b.location
+        return abs(ay - by) + abs(ax - bx)
+
+    def _ingroup_outgroup_fakes(self, upper_fake, lower_fake, focal_kind: str):
+        """Return (ingroup_fake, outgroup_fake) by focal ``agent_kind``, or ``None`` if unknown."""
+        if upper_fake is None or lower_fake is None:
+            return None
+        fk = (focal_kind or "").strip()
+        uk = (getattr(upper_fake, "agent_kind", None) or "").strip()
+        lk = (getattr(lower_fake, "agent_kind", None) or "").strip()
+        if fk == uk and fk != lk:
+            return upper_fake, lower_fake
+        if fk == lk and fk != uk:
+            return lower_fake, upper_fake
+        return None
+
+    def _run_single_test(
+        self,
+        probe_agent,
+        agent_id: int,
+        epoch: int,
+        map_name: str,
+        should_save_png: bool,
+        scenario: dict,
+    ) -> tuple:
+        """Returns slot, kind, turn, result, focal_kind, identity_row_extras (dict or None)."""
+        map_data = self.probe_env.test_world.map_generator.parse_map()
+        all_spawn_points = [
+            (y, x, self.probe_env.test_world.dynamic_layer) for y, x in map_data.spawn_points
+        ]
+        spawn_points = sorted(all_spawn_points, key=lambda pos: (pos[0], pos[1]))
+        if len(spawn_points) < 3:
+            raise ValueError(
+                f"punish_first probe map {map_name} needs 3 spawn points (upper, center, lower), "
+                f"found {len(spawn_points)}"
+            )
+        upper_spawn, center_spawn, lower_spawn = spawn_points[0], spawn_points[1], spawn_points[2]
+
+        focal_agent_kind = getattr(probe_agent.agent, "agent_kind", None) or ""
+
+        upper_fake = None
+        lower_fake = None
+        upper_id_str = ""
+        upper_kind_str = ""
+        lower_id_str = ""
+        lower_kind_str = ""
+        partner_label = ""
+
+        if scenario["kind"] == "no_partner":
+            partner_label = "no_partner"
+            reordered = [center_spawn]
+            self.probe_env.test_world.agent_spawn_points = reordered
+            self.probe_env.test_world._probe_test_spawn_points = reordered
+            self.probe_env.test_env.override_agents([probe_agent.agent])
+        elif scenario["kind"] == "identity":
+            if scenario.get("upper_kind") == scenario.get("lower_kind"):
+                raise ValueError(
+                    "punish_first probe (identity mode): the two training partners chosen "
+                    "for upper/lower fakes must have different agent_info['kind'] values; "
+                    f"got upper_kind={scenario.get('upper_kind')!r}, "
+                    f"lower_kind={scenario.get('lower_kind')!r}."
+                )
+            partner_label = f"id{scenario['upper_id']}_id{scenario['lower_id']}"
+            upper_fake = self._create_fake_agent(
+                scenario["upper_kind"], probe_agent.agent, int(scenario["upper_id"])
+            )
+            lower_fake = self._create_fake_agent(
+                scenario["lower_kind"], probe_agent.agent, int(scenario["lower_id"])
+            )
+            reordered = [center_spawn, upper_spawn, lower_spawn]
+            self.probe_env.test_world.agent_spawn_points = reordered
+            self.probe_env.test_world._probe_test_spawn_points = reordered
+            self.probe_env.test_env.override_agents([probe_agent.agent, upper_fake, lower_fake])
+            upper_id_str = str(scenario["upper_id"])
+            upper_kind_str = scenario["upper_kind"] or ""
+            lower_id_str = str(scenario["lower_id"])
+            lower_kind_str = scenario["lower_kind"] or ""
+        elif scenario["kind"] == "two_distinct":
+            ku, kl = scenario["upper_kind"], scenario["lower_kind"]
+            partner_label = self._kind_pair_label(ku, kl)
+            upper_fake = self._create_fake_agent(ku, probe_agent.agent, 0)
+            lower_fake = self._create_fake_agent(kl, probe_agent.agent, 0)
+            reordered = [center_spawn, upper_spawn, lower_spawn]
+            self.probe_env.test_world.agent_spawn_points = reordered
+            self.probe_env.test_world._probe_test_spawn_points = reordered
+            self.probe_env.test_env.override_agents(
+                [probe_agent.agent, upper_fake, lower_fake]
+            )
+            # CSV requirement: fake agent IDs are generic placeholders (0, 0).
+            upper_id_str = "0"
+            lower_id_str = "0"
+            upper_kind_str = ku or ""
+            lower_kind_str = kl or ""
+        else:
+            raise ValueError(f"punish_first: unknown scenario kind {scenario.get('kind')!r}")
+
+        self.probe_env.test_env.reset()
+        focal_agent = self.probe_env.test_env.agents[0]
+        focal_agent.agent_id = agent_id
+
+        if upper_fake is not None and lower_fake is not None:
+            upper_fake = self.probe_env.test_env.agents[1]
+            lower_fake = self.probe_env.test_env.agents[2]
+            upper_fake.agent_id = 0
+            lower_fake.agent_id = 0
+            upper_fake.orientation = 2
+            lower_fake.orientation = 0
+            if hasattr(upper_fake, "update_agent_kind"):
+                upper_fake.update_agent_kind()
+            if hasattr(lower_fake, "update_agent_kind"):
+                lower_fake.update_agent_kind()
+            # Standard_obs: zero out the per-tile agent-id feature slice for fakes (not id slot 0).
+            upper_fake.probe_zero_agent_id_obs_channels = True
+            lower_fake.probe_zero_agent_id_obs_channels = True
+            self._assert_distinct_fake_agent_kinds(upper_fake, lower_fake)
+
+        focal_agent.orientation = 0
+        if hasattr(focal_agent, "update_agent_kind"):
+            focal_agent.update_agent_kind()
+
+        self.probe_env.metrics_collector.reset_epoch_metrics()
+        baseline_event_count = len(self.probe_env.metrics_collector.punish_events)
+
+        first_slot = "none"
+        first_kind = ""
+        turn_hit = self.max_test_steps
+        result = 0.5
+
+        _n_dist = 0
+        _sum_in = 0.0
+        _sum_out = 0.0
+        _sum_delta = 0.0
+        _fk = str(focal_agent_kind or "")
+
+        if should_save_png:
+            unit_test_dir = self.output_dir / "unit_test"
+            unit_test_dir.mkdir(parents=True, exist_ok=True)
+            map_name_clean = map_name.replace(".txt", "")
+            viz_base = f"punish_first_epoch_{epoch}_agent_{agent_id}_map_{map_name_clean}_{partner_label}"
+            viz_path = unit_test_dir / f"{viz_base}_initial_state.png"
+            try:
+                layers = render_sprite(self.probe_env.test_world, tile_size=[32, 32])
+                composited = image_from_array(layers)
+                composited.save(viz_path)
+                print(f"  punish_first: saved initial PNG {viz_path}")
+            except Exception as e:
+                print(f"  punish_first: PNG save failed: {e}")
+
+        for turn in range(self.max_test_steps):
+            self.probe_env.test_world.current_turn += 1
+            self.probe_env.test_env.update_agent_states()
+
+            for _, x in np.ndenumerate(self.probe_env.test_world.map):
+                if x.has_transitions and not isinstance(x, type(focal_agent)):
+                    x.transition(self.probe_env.test_world)
+
+            if focal_agent.can_act():
+                state = focal_agent.pov(self.probe_env.test_world)
+                action = focal_agent.get_action(state)
+                focal_agent.act(self.probe_env.test_world, action)
+            if focal_agent.can_act():
+                focal_agent.transition(self.probe_env.test_world)
+
+            pair = self._ingroup_outgroup_fakes(upper_fake, lower_fake, _fk)
+            if pair is not None:
+                ing_f, out_f = pair
+                di = float(self._manhattan_agent_pair(focal_agent, ing_f))
+                dout = float(self._manhattan_agent_pair(focal_agent, out_f))
+                _sum_in += di
+                _sum_out += dout
+                _sum_delta += dout - di
+                _n_dist += 1
+
+            self.probe_env.test_env.collect_metrics_for_step()
+
+            new_events = self.probe_env.metrics_collector.punish_events[baseline_event_count:]
+            if new_events:
+                turn_hit = turn + 1
+                _, punished_target = new_events[0]
+                if upper_fake is not None and punished_target is upper_fake:
+                    first_slot = "upper"
+                    first_kind = getattr(upper_fake, "agent_kind", "") or ""
+                    result = 1.0
+                elif lower_fake is not None and punished_target is lower_fake:
+                    first_slot = "lower"
+                    first_kind = getattr(lower_fake, "agent_kind", "") or ""
+                    result = 0.0
+                else:
+                    first_slot = "unknown"
+                    first_kind = "unknown"
+                    result = 0.5
+                break
+            baseline_event_count = len(self.probe_env.metrics_collector.punish_events)
+
+        if _n_dist > 0:
+            mean_in_s = f"{_sum_in / _n_dist:.6g}"
+            mean_out_s = f"{_sum_out / _n_dist:.6g}"
+            mean_delta_s = f"{_sum_delta / _n_dist:.6g}"
+        else:
+            mean_in_s = mean_out_s = mean_delta_s = ""
+
+        extras = {
+            "upper_id": upper_id_str,
+            "upper_kind": upper_kind_str,
+            "lower_id": lower_id_str,
+            "lower_kind": lower_kind_str,
+            "partner_label": partner_label,
+            "mean_dist_ingroup": mean_in_s,
+            "mean_dist_outgroup": mean_out_s,
+            "mean_dist_out_minus_in": mean_delta_s,
+        }
+        return first_slot, first_kind, turn_hit, result, focal_agent_kind, extras
+
+    def _iter_scenarios(self, focal_agent_id: int):
+        _ = focal_agent_id
+        # Fixed punish_first scenarios for comparability:
+        # - upper A, lower B
+        # - upper B, lower A
+        # Do not run no_partner for this probe mode.
+        yield {"kind": "two_distinct", "upper_kind": "AgentKindA", "lower_kind": "AgentKindB"}
+        yield {"kind": "two_distinct", "upper_kind": "AgentKindB", "lower_kind": "AgentKindA"}
+
+    def run_punish_first_test(self, agents, epoch: int) -> None:
+        test_interval = self.test_config.get("test_interval", 100)
+        probe_test_number = epoch // test_interval if epoch > 0 else 0
+        save_png_limit = self.test_config.get("save_png_for_first_n_tests", None)
+        should_save_png = True if save_png_limit is None else probe_test_number <= save_png_limit
+
+        selected = self.test_config.get("selected_agent_ids", None)
+        agent_ids = list(range(len(agents))) if selected is None else selected
+
+        unit_test_dir = self.output_dir / "unit_test"
+        unit_test_dir.mkdir(parents=True, exist_ok=True)
+
+        for map_file_name in self.test_maps:
+            self._setup_test_env(map_file_name)
+            map_name_clean = map_file_name.replace(".txt", "")
+
+            for agent_id in agent_ids:
+                if agent_id >= len(agents):
+                    continue
+                probe_agent = ProbeTestAgent(agents[agent_id])
+
+                for scenario in self._iter_scenarios(agent_id):
+                    slot, fkind, turn_hit, result, focal_kind, ex = self._run_single_test(
+                        probe_agent,
+                        agent_id,
+                        epoch,
+                        map_file_name,
+                        should_save_png,
+                        scenario,
+                    )
+                    pl = ex["partner_label"]
+                    d_in, d_out, d_delta = (
+                        ex["mean_dist_ingroup"],
+                        ex["mean_dist_outgroup"],
+                        ex["mean_dist_out_minus_in"],
+                    )
+                    # 1 when the first punished fake is outgroup, 0 when ingroup, blank if no/unknown first punishment.
+                    # turn_hit records the first step index (1-based) when focal punished a fake.
+                    if slot in ("upper", "lower") and fkind:
+                        first_punished_is_outgroup = int(fkind != focal_kind)
+                    else:
+                        first_punished_is_outgroup = ""
+                    if self._is_identity_aware():
+                        csv_name = (
+                            f"punish_first_epoch_{epoch}_agent_{agent_id}_"
+                            f"map_{map_name_clean}_{pl}.csv"
+                        )
+                    else:
+                        csv_name = (
+                            f"punish_first_epoch_{epoch}_agent_{agent_id}_"
+                            f"map_{map_name_clean}_partner_{pl}.csv"
+                        )
+                    csv_path = unit_test_dir / csv_name
+                    with open(csv_path, "w", newline="") as f:
+                        w = csv.writer(f)
+                        w.writerow(self.csv_headers)
+                        if self._is_identity_aware():
+                            w.writerow(
+                                [
+                                    epoch,
+                                    agent_id,
+                                    map_file_name,
+                                    focal_kind,
+                                    ex["upper_id"],
+                                    ex["upper_kind"],
+                                    ex["lower_id"],
+                                    ex["lower_kind"],
+                                    slot,
+                                    fkind,
+                                    first_punished_is_outgroup,
+                                    turn_hit,
+                                    d_in,
+                                    d_out,
+                                    d_delta,
+                                    result,
+                                ]
+                            )
+                        else:
+                            w.writerow(
+                                [
+                                    epoch,
+                                    agent_id,
+                                    map_file_name,
+                                    pl,
+                                    focal_kind,
+                                    slot,
+                                    fkind,
+                                    first_punished_is_outgroup,
+                                    turn_hit,
+                                    d_in,
+                                    d_out,
+                                    d_delta,
+                                    result,
+                                ]
+                            )
+                    print(
+                        f"  punish_first - agent {agent_id}, scenario {pl}: "
+                        f"slot={slot}, kind={fkind!r}, turn={turn_hit}, result={result}"
+                    )

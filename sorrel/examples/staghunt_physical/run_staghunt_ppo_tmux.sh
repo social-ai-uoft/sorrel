@@ -1,15 +1,18 @@
 #!/bin/sh
-# Detached tmux session: staghunt_physical main.py (PPO LSTM CPC; run-name-base ends with _size12).
+# Detached tmux session: staghunt_physical main.py (PPO LSTM CPC; run-name-base uses size16 + seed).
 #
 # Hyperparameters (environment variables, optional):
 #   NUM_GROUPS          Number of equal-sized agent kind groups (default: 2). Passed as --num-groups.
 #   NO_PUNISHMENT       If 1, true, or yes: add --no-punishment (default: 0).
-#   SEED                Random seed (default: 2).
+#   SEED                Random seed (default: 2). Also in --run-name-base (..._seedN). Override with --seed.
 #   RESOURCE_DENSITY    Resource density in [0,1] (default: 0.06). Passed as --resource-density.
+#   RESPAWN_RATE        Per-step respawn probability after lag (default: 0.9). Passed as --respawn-rate.
 #
 # Command-line flags (optional; override env for that run):
 #   --density D         Same as --resource-density D.
 #   --resource-density D
+#   --respawn-rate R    Resource respawn probability each step after respawn_lag (0-1).
+#   --seed N            Random seed (overrides SEED env).
 #   -h, --help          Print usage and exit.
 #
 # Positional:
@@ -22,7 +25,9 @@
 #
 # Examples:
 #   RESOURCE_DENSITY=0.15 ./run_staghunt_ppo_tmux.sh
+#   RESPAWN_RATE=0.02 ./run_staghunt_ppo_tmux.sh
 #   ./run_staghunt_ppo_tmux.sh --density 0.15 my_session
+#   ./run_staghunt_ppo_tmux.sh --respawn-rate 0.02 my_session
 #   NUM_GROUPS=1 NO_PUNISHMENT=0 ./run_staghunt_ppo_tmux.sh
 #
 # Repo root is three levels above this script.
@@ -36,12 +41,13 @@ NUM_GROUPS="${NUM_GROUPS:-2}"
 SEED="${SEED:-2}"
 NO_PUNISHMENT="${NO_PUNISHMENT:-0}"
 RESOURCE_DENSITY="${RESOURCE_DENSITY:-0.06}"
+RESPAWN_RATE="${RESPAWN_RATE:-0.9}"
 
 SESSION_NAME=""
 
 usage() {
-	echo "Usage: $0 [--density|--resource-density D] [SESSION_NAME]" >&2
-	echo "Env: NUM_GROUPS NO_PUNISHMENT SEED RESOURCE_DENSITY STAGHUNT_CONDA_ENV" >&2
+	echo "Usage: $0 [--density|--resource-density D] [--respawn-rate R] [--seed N] [SESSION_NAME]" >&2
+	echo "Env: NUM_GROUPS NO_PUNISHMENT SEED RESOURCE_DENSITY RESPAWN_RATE STAGHUNT_CONDA_ENV" >&2
 }
 
 while [ $# -gt 0 ]; do
@@ -53,6 +59,24 @@ while [ $# -gt 0 ]; do
 			exit 1
 		fi
 		RESOURCE_DENSITY="$2"
+		shift 2
+		;;
+	--respawn-rate)
+		if [ "$#" -lt 2 ]; then
+			echo "$0: $1 requires a value" >&2
+			usage
+			exit 1
+		fi
+		RESPAWN_RATE="$2"
+		shift 2
+		;;
+	--seed)
+		if [ "$#" -lt 2 ]; then
+			echo "$0: --seed requires a value" >&2
+			usage
+			exit 1
+		fi
+		SEED="$2"
 		shift 2
 		;;
 	-h|--help)
@@ -95,13 +119,13 @@ fi
 
 # Run-name tag: 0.06 -> density006 (strip decimal point; matches prior naming).
 DENSITY_TAG="$(printf '%s' "$RESOURCE_DENSITY" | tr -d '.')"
-# World/grid size 12 (see main.py world height/width); appended at end of base name.
-RUN_NAME_BASE="${NUM_GROUPS}group_ppo_6a_${PUNISH_TAG}_size10_density${DENSITY_TAG}"
+RESPAWN_TAG="$(printf '%s' "$RESPAWN_RATE" | tr -d '.')"
+RUN_NAME_BASE="${NUM_GROUPS}group_ppo_6a_${PUNISH_TAG}_size16_density${DENSITY_TAG}_rr${RESPAWN_TAG}_seed${SEED}"
 
 if [ -n "$SESSION_NAME" ]; then
 	:
 else
-	SESSION_NAME="sh_${NUM_GROUPS}g_${PUNISH_TAG}_d${DENSITY_TAG}_s${SEED}"
+	SESSION_NAME="sh_${NUM_GROUPS}g_${PUNISH_TAG}_d${DENSITY_TAG}_rr${RESPAWN_TAG}_s${SEED}"
 fi
 
 if ! command -v tmux >/dev/null 2>&1; then
@@ -131,6 +155,7 @@ fi
 PY_CMD="python sorrel/examples/staghunt_physical/main.py \
 --resource-cap-mode initial_count \
 --resource-density ${RESOURCE_DENSITY} \
+--respawn-rate ${RESPAWN_RATE} \
 --run-name-base ${RUN_NAME_BASE} \
 --num-groups ${NUM_GROUPS} \
 --seed ${SEED} \
@@ -145,7 +170,7 @@ tmux new-session -d -s "$SESSION_NAME" -c "$REPO_ROOT" \
 
 echo "Started tmux session: $SESSION_NAME"
 echo "  conda: deactivate until inactive, then activate $STAGHUNT_CONDA_ENV"
-echo "  NUM_GROUPS=$NUM_GROUPS NO_PUNISHMENT=$NO_PUNISH SEED=$SEED RESOURCE_DENSITY=$RESOURCE_DENSITY"
+echo "  NUM_GROUPS=$NUM_GROUPS NO_PUNISHMENT=$NO_PUNISH SEED=$SEED RESOURCE_DENSITY=$RESOURCE_DENSITY RESPAWN_RATE=$RESPAWN_RATE"
 echo "  run-name-base: $RUN_NAME_BASE"
 echo "  Attach: tmux attach -t '$SESSION_NAME'"
 echo "  List:   tmux ls"
