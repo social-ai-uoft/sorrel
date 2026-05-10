@@ -7,7 +7,6 @@ from typing import Tuple, Union
 import numpy as np
 
 from sorrel.examples.state_punishment.agents import StatePunishmentAgent
-from sorrel.models.pytorch.recurrent_ppo import DualHeadRecurrentPPO
 
 from .observation import BanditObservationSpec, BanditObservationState
 from .world import BanditWorldStub
@@ -137,16 +136,11 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
 
         movement_action = None
         voting_action = None
-
-        is_dual_head_ppo = isinstance(self.model, DualHeadRecurrentPPO)
-        if is_dual_head_ppo and getattr(self.model, "use_dual_head", False):
-            if self._last_dual_action is None:
-                dual_action = self.model.get_dual_action()
-                if dual_action is not None:
-                    self._last_dual_action = dual_action
-            if self._last_dual_action is not None:
-                movement_action, voting_action = self._last_dual_action
-                self._last_dual_action = None
+        pair = self._resolve_two_branch_action_indices(action)
+        if pair is not None:
+            move_idx, vote_idx = pair
+            movement_action = move_idx
+            voting_action = vote_idx
 
         # Fallback from flat action index (same structure as StatePunishmentAgent._execute_action)
         if movement_action is None or voting_action is None:

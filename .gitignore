@@ -167,3 +167,4 @@ sorrel/examples/*/argv/
 /sorrel/models/jax
 **/plots/
 *study1_test_one_gen*
+*bandit_study*

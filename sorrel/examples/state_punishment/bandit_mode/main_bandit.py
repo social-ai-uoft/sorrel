@@ -55,24 +55,24 @@ def parse_arguments():
     p.add_argument(
         "--iqn_use_factored_actions",
         action="store_true",
-        help="IQN only: set model.iqn_use_factored_actions (requires --iqn_action_dims; simple bandit only)",
+        help="IQN only: set model.iqn_use_factored_actions (requires --iqn_action_dims; see bandit_mode/validation.py)",
     )
     p.add_argument(
         "--iqn_action_dims",
         type=str,
         default=None,
-        help='Comma-separated dims, e.g. "2,3" when bandit_arms_per_trial=3 (prod must equal K+3)',
+        help='Comma-separated dims: prod K+3 (simple) or [K,3]/[K+1,3] grid-style (K=bandit_arms_per_trial)',
     )
     p.add_argument(
         "--ppo_use_factored_actions",
         action="store_true",
-        help="PPO-LSTM only: set model.ppo_use_factored_actions (requires --ppo_action_dims; simple bandit only)",
+        help="PPO-LSTM only: set model.ppo_use_factored_actions (requires --ppo_action_dims; see bandit_mode/validation.py)",
     )
     p.add_argument(
         "--ppo_action_dims",
         type=str,
         default=None,
-        help='Comma-separated dims for PPO factored head (prod must equal K+3)',
+        help='Comma-separated dims: prod K+3 (simple) or [K,3]/[K+1,3] grid-style (K=bandit_arms_per_trial)',
     )
     # Parity with grid study1 / run_cpc_tmux_study1_job.sh (optional; defaults match create_config)
     p.add_argument(
@@ -150,14 +150,20 @@ def run_experiment(args):
         if args.model_type != "iqn":
             raise SystemExit("--iqn_use_factored_actions requires --model_type iqn")
         if not args.iqn_action_dims:
-            raise SystemExit("--iqn_use_factored_actions requires --iqn_action_dims (prod = bandit_arms_per_trial + 3)")
+            raise SystemExit(
+                "--iqn_use_factored_actions requires --iqn_action_dims "
+                "(prod = K+3 or grid-style [K,3]/[K+1,3]; see bandit_mode/validation.py)"
+            )
         config["model"]["iqn_use_factored_actions"] = True
         config["model"]["iqn_action_dims"] = args.iqn_action_dims
     if args.ppo_use_factored_actions:
         if args.model_type not in ("ppo_lstm", "ppo_lstm_cpc"):
             raise SystemExit("--ppo_use_factored_actions requires --model_type ppo_lstm or ppo_lstm_cpc")
         if not args.ppo_action_dims:
-            raise SystemExit("--ppo_use_factored_actions requires --ppo_action_dims (prod = bandit_arms_per_trial + 3)")
+            raise SystemExit(
+                "--ppo_use_factored_actions requires --ppo_action_dims "
+                "(prod = K+3 or grid-style [K,3]/[K+1,3]; see bandit_mode/validation.py)"
+            )
         config["model"]["ppo_use_factored_actions"] = True
         config["model"]["ppo_action_dims"] = args.ppo_action_dims
 
@@ -170,7 +176,7 @@ def run_experiment(args):
     if args.log_dir is not None:
         log_dir = Path(args.log_dir).expanduser()
     else:
-        log_dir = _STATE_PUNISHMENT_ROOT / "bandit_study1" / run_folder
+        log_dir = _STATE_PUNISHMENT_ROOT / "bandit_study2_v2" / run_folder
 
     anim_dir = _STATE_PUNISHMENT_ROOT / "data" / "anims" / run_folder
     config_dir = _STATE_PUNISHMENT_ROOT / "configs"

@@ -67,10 +67,19 @@ def validate_bandit_config(config: DictConfig) -> None:
         dims = [int(x.strip()) for x in str(dims_raw).split(",") if str(x).strip()]
         if any(d < 1 for d in dims):
             raise ValueError(f"{dims_key} must be positive integers, got {dims_raw!r} -> {dims}")
-        expected = _bandit_simple_flat_action_count(config)
         p = prod(dims)
-        if p != expected:
+        simple_expected = _bandit_simple_flat_action_count(config)
+        # Grid-style factored bandit: (move × vote) with 3 vote bins, move dim K or K+1 (extra noop bin).
+        grid_ok = (
+            len(dims) == 2
+            and int(dims[1]) == 3
+            and int(dims[0]) in (k, k + 1)
+            and p == int(dims[0]) * int(dims[1])
+        )
+        if p != simple_expected and not grid_ok:
             raise ValueError(
-                f"bandit factored actions: prod({dims})={p} must equal simple bandit action count "
-                f"bandit_arms_per_trial + 3 = {expected} (set bandit_arms_per_trial or {dims_key})."
+                f"bandit factored actions: prod({dims})={p} must match either "
+                f"(simple) bandit_arms_per_trial + 3 = {simple_expected}, or "
+                f"(grid-style) [K,3] or [K+1,3] with K=bandit_arms_per_trial ({k}) "
+                f"(e.g. {k},3 -> prod {k * 3}); set bandit_arms_per_trial or {dims_key}."
             )

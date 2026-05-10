@@ -410,6 +410,7 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         self._pending_action: Optional[int] = None
         self._pending_log_prob: Optional[float] = None
         self._pending_value: Optional[float] = None
+        self._last_factored_actions: Optional[Tuple[int, ...]] = None
 
         # Move entire module to device
         self.to(self.device)
@@ -520,6 +521,8 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
         Returns:
             Action index (0 to action_space-1)
         """
+        self._last_factored_actions = None
+
         # Process observation
         state_flat = state.flatten()
         state_tensor = self._process_observation(state_flat)
@@ -561,6 +564,7 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
             
             # Joint log-probability
             joint_log_prob = sum(log_probs_list).item()
+            self._last_factored_actions = tuple(int(a.item()) for a in actions_list)
             
             # Convert to single action index for backward compatibility
             single_action = actions_list[0]
@@ -584,6 +588,10 @@ class RecurrentPPOLSTMCPC(PyTorchModel):
             self._pending_log_prob = log_prob
 
             return int(action.item())
+
+    def get_last_factored_actions(self) -> Optional[Tuple[int, ...]]:
+        """Per-branch indices from the most recent ``take_action`` when factored."""
+        return self._last_factored_actions
 
     def store_memory(
         self,

@@ -368,7 +368,7 @@ def create_config(
             "epsilon_decay": exploration_decay,
             "full_view": False,
             "layer_size": 250,
-            "n_frames": 1,
+            "n_frames": 3,
             "n_step": 3,
             "sync_freq": 200,
             "model_update_freq": 4,

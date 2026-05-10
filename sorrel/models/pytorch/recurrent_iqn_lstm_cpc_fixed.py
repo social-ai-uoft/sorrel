@@ -191,6 +191,9 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         if hasattr(self, 'epsilon'):
             self.base_model.epsilon = self.epsilon
 
+        self.use_factored_actions = self.base_model.use_factored_actions
+        self.action_dims = self.base_model.action_dims
+
         # CPC setup
         self.use_cpc = use_cpc
         self.cpc_weight = cpc_weight if use_cpc else 0.0
@@ -325,6 +328,10 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         # Delegate to base_model.take_action which handles factored actions correctly
         # This matches the approach in iqn_cpc_refactored.py
         return self.base_model.take_action(h_t_np)
+
+    def get_last_factored_actions(self) -> Optional[Tuple[int, ...]]:
+        """Per-branch indices from the last ``base_model.take_action`` (factored IQN only)."""
+        return self.base_model.get_last_factored_actions()
 
     def add_memory(self, state: np.ndarray, action: int, reward: float, done: bool) -> None:
         """
