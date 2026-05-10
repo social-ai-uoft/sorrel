@@ -12,10 +12,10 @@ The payoffs are modeled with the classic Hawk-Dove payoff matrix:
 ### Payoff Matrix
 The rewards are determined by the combination of actions on the Resource entity:
 
-| | Hawk | Dove |
+| | Dove | Hawk |
 |---|---|---|
-| **Hawk** | R (Reward) | S (Sucker) |
-| **Dove** | T (Temptation) | P (Punishment) |
+| **Dove** | R (Reward) | S (Sucker) |
+| **Hawk** | T (Temptation) | P (Punishment) |
 
 Default values:
 - **T** = 2
