@@ -38,7 +38,9 @@ class TreasurehuntAgent(MovingAgent[TreasurehuntWorld]):
 
         model_input = stacked_states.reshape(1, -1)
         action = self.model_take_action(model_input)
-        return action
+        if not isinstance(action, (int, np.integer)):
+            raise TypeError("Expected integer action from model.")
+        return int(action)
 
     def is_done(self, world: TreasurehuntWorld) -> bool:
         """Returns whether this Agent is done."""
