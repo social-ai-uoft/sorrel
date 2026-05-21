@@ -230,7 +230,6 @@ class iRainbowModel(DoublePyTorchModel):
             TAU (float): Network weight soft update rate
             n_quantiles (int): Number of quantiles
         """
-
         # Initialize base ANN parameters
         super().__init__(input_size, action_space, layer_size, epsilon, device, seed)
 
@@ -442,12 +441,6 @@ class iRainbowModel(DoublePyTorchModel):
         Args:
             **kwargs: All local variables are passed into the model
         """
-        # if kwargs["epoch"] > 200 and kwargs["epoch"] % self.model_update_freq == 0:
-        #     kwargs["loss"] = self.train_step()
-        #     if "game_vars" in kwargs:
-        #         kwargs["game_vars"].losses.append(kwargs["loss"])
-        #     else:
-        #         kwargs["losses"] += kwargs["loss"]
 
 
 # ------------------------ #

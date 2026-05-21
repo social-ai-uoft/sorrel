@@ -111,7 +111,6 @@ class PyTorchModel(nn.Module, BaseModel):
         Args:
             file_path: The full path to the model, including file extension.
         """
-
         # Find the last / or \ character
         pattern = re.compile(r"[\\\/]+(?!.*[\\\/])")
         # Split into directory and file name
@@ -202,7 +201,6 @@ class DoublePyTorchModel(PyTorchModel):
         Args:
             file_path: The full path to the model, including file extension.
         """
-
         # Find the last / or \ character
         pattern = re.compile(r"[\\\/]+(?!.*[\\\/])")
         # Split into directory and file name
