@@ -1,0 +1,93 @@
+## LLM Multi-Provider Compatibility
+
+### Goal
+Add support for Google AI (Gemini), Anthropic (Claude), and real OpenAI alongside the existing
+Ollama backend, with minimal changes to the existing code and full backward compatibility.
+
+---
+
+### Files Changed
+
+#### 1. sorrel/models/llm.py
+
+Added a `_OPENAI_COMPATIBLE_PROVIDERS` dict mapping provider names to their base_url and
+API key config:
+- "ollama"    -> http://localhost:11434/v1/   (existing default, api_key="ollama")
+- "openai"    -> real OpenAI API             (reads LLM_API_KEY env var)
+- "gemini"    -> Google's OpenAI-compatible endpoint at
+                https://generativelanguage.googleapis.com/v1beta/openai/
+                (reads LLM_API_KEY env var)
+
+For Anthropic, the native `anthropic` SDK is used (different request/response format):
+- "anthropic" -> uses anthropic.Anthropic client directly (reads LLM_API_KEY or
+                ANTHROPIC_API_KEY env var, requires `pip install anthropic`)
+
+Changes to Client.__init__:
+- Added `provider: str = "ollama"` parameter (default preserves existing behavior)
+- Added `api_key: str | None = None` parameter (if None, reads from env vars or uses default)
+- Anthropic SDK import is wrapped in try/except so it's optional at runtime
+
+Changes to Client.call:
+- Anthropic provider uses `_anthropic_client.messages.create()` (different API format)
+- All other providers use the existing openai-compatible `client.chat.completions.create()`
+- Removed `stop=None` from the create() call (Gemini rejects null values for this field;
+  omitting it preserves the same behavior since None is the default)
+
+Changes to LLM.__init__:
+- Added `provider: str = "ollama"` parameter
+- Added `api_key: str | None = None` parameter
+- Both are forwarded to Client()
+
+#### 2. pyproject.toml
+
+Added `anthropic = ">=0.40.0"` as a dependency for the Anthropic provider.
+Note: if using only Ollama, OpenAI, or Gemini providers, the anthropic package is not
+required (the import is guarded with try/except).
+
+---
+
+### New Files
+
+#### sorrel/examples/llm_api_test/__init__.py
+Empty init file for the test example package.
+
+#### sorrel/examples/llm_api_test/main.py
+Minimal test script verifying the Gemini provider works end-to-end.
+Uses `models/gemini-2.5-flash` via the OpenAI-compatible endpoint.
+Requires `LLM_API_KEY` environment variable.
+
+---
+
+### Usage
+
+Gemini:
+    from sorrel.models.llm import LLM
+    model = LLM(
+        action_space=4,
+        memory_size=100,
+        action_list=["up", "down", "left", "right"],
+        model_name="models/gemini-2.5-flash",
+        instructions="Choose an action.",
+        provider="gemini",
+        # api_key can be omitted if LLM_API_KEY env var is set
+    )
+
+OpenAI:
+    model = LLM(..., model_name="gpt-4o", provider="openai")
+    # reads LLM_API_KEY (or set api_key= directly)
+
+Anthropic:
+    model = LLM(..., model_name="claude-opus-4-6", provider="anthropic")
+    # reads LLM_API_KEY or ANTHROPIC_API_KEY
+    # requires: pip install anthropic
+
+Ollama (unchanged default):
+    model = LLM(..., model_name="llama3", provider="ollama")  # or omit provider=
+
+---
+
+### Testing
+
+Tested with Gemini (models/gemini-2.5-flash) via the OpenAI-compatible API.
+The LLM_API_KEY environment variable was set to a Google AI API key.
+Run: /opt/miniconda3/bin/conda run -n sorrel python sorrel/examples/llm_api_test/main.py
