@@ -8,8 +8,9 @@ from sorrel.buffers import Buffer
 
 
 class BaseModel:
-    """Generic model class for Sorrel. All models should wrap around this
-    implementation.
+    """Generic model class for Sorrel.
+
+    All models should wrap around this implementation.
 
     Attributes:
         input_size: The size of the input.
@@ -41,8 +42,9 @@ class BaseModel:
 
     @abstractmethod
     def take_action(self, state) -> int:
-        """Take an action based on the observed input. Must be implemented by all
-        subclasses of the model.
+        """Take an action based on the observed input.
+
+        Must be implemented by all subclasses of the model.
 
         Args:
             state: The observed input.

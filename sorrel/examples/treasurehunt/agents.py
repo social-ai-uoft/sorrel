@@ -42,7 +42,6 @@ class TreasurehuntAgent(MovingAgent[TreasurehuntWorld]):
 
     def act(self, world: TreasurehuntWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
-
         # Translate the model output to an action string
         action_name = self.action_spec.get_readable_action(action)
 

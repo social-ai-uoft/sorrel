@@ -610,7 +610,6 @@ class VisionTransformer(nn.Module):
         Returns:
             A tensor of cross-entropy loss between the predictions and ground truths.
         """
-
         # Criterion: cross-entropy loss
         loss = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
 
@@ -648,7 +647,6 @@ class VisionTransformer(nn.Module):
             (state_inputs, action_inputs, state_targets, action_targets, batch_agent_ids)
             where batch_agent_ids is a (B,) int64 tensor or None.
         """
-
         # Get from the buffer in the typical format
         # State size: (B, T, C, H, W)
         # Action size: (B, T, 1)
@@ -752,7 +750,6 @@ class VisionTransformer(nn.Module):
         Returns:
             (state_loss, action_loss) as Python floats.
         """
-
         state_inputs, action_inputs, state_targets, action_targets, batch_agent_ids = (
             self.get_batch()
         )
@@ -858,7 +855,6 @@ class VisionTransformer(nn.Module):
         Returns:
             A tuple of state predictions and state targets.
         """
-
         state_inputs, action_inputs, state_targets, action_targets, _ = self.get_batch()
 
         # Get just the first item in the batch
@@ -1178,7 +1174,6 @@ class ViTOneHot(VisionTransformer):
         Returns:
             A tuple of state predictions and state targets.
         """
-
         state_inputs, action_inputs, state_targets, action_targets, _ = self.get_batch()
 
         # Get just the first item in the batch
