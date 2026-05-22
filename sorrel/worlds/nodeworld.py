@@ -95,8 +95,9 @@ class Node:
 
 
 class NodeWorld:
-    """World that represents a graph of nodes. Each node can contain agents and
-    entities.
+    """World that represents a graph of nodes.
+
+    Each node can contain agents and entities.
 
     Attributes:
       struct (dict[str, Node]): The node structure of the world.
