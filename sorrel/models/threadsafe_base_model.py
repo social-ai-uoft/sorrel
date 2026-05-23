@@ -1,4 +1,5 @@
 import threading
+from typing import Any
 
 from sorrel.models.base_model import BaseModel
 from sorrel.models.policy_snapshot import PolicySnapshot
@@ -66,7 +67,7 @@ class ThreadsafeBaseModel(BaseModel):
                 )
             return self.memory.sample(*args, **kwargs)
 
-    def _build_snapshot_locked(self):
+    def _build_snapshot_locked(self) -> Any:
         """Build a snapshot policy while holding ``self._lock``."""
         return self
 
