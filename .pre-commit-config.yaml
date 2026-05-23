@@ -16,12 +16,9 @@ repos:
       - id: isort
         args: ["--profile", "black"]
   - repo: https://github.com/PyCQA/docformatter
-    # temporary workaround as the docformatter people won't create a new release
-    # for error: "expected one of ... but got: 'python_venv'"
-    rev: v1.7.7
+    rev: v1.7.8
     hooks:
       - id: docformatter
-        additional_dependencies: [tomli]
         args: ["--in-place", "--config", "./pyproject.toml", "--black"]
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.21.2

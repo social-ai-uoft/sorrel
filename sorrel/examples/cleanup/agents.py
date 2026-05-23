@@ -98,7 +98,6 @@ class CleanupAgent(MovingAgent[CleanupWorld]):
             world: The world tospawn the beam in.
             action: The action to take.
         """
-
         # Get the tiles above and adjacent to the agent.
         up_vector = Vector(0, 0, layer=1, direction=self.direction)
         forward_vector = Vector(1, 0, direction=self.direction)
