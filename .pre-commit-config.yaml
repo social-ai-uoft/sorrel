@@ -31,10 +31,11 @@ repos:
       - id: pyright
         name: pyright
         entry: pyright
-        language: node
+        language: python
         pass_filenames: false
         types: [python]
-        additional_dependencies: ["pyright"]
+        # pin it so everyone's on the same pyright
+        additional_dependencies: ["pyright==1.1.409"]
         args:
           - --project=pyproject.toml
   # - repo: https://github.com/RobertCraigie/pyright-python
