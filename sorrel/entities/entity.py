@@ -7,8 +7,9 @@ from typing import Optional
 
 
 class Entity[W]:
-    """Base element class. Defines the non-optional initialization parameters for all
-    entities.
+    """Base element class.
+
+    Defines the non-optional initialization parameters for all entities.
 
     Attributes:
         location: The location of the object. It may take on the value of None when the Entity is first initialized.
