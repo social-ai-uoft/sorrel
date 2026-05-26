@@ -88,6 +88,11 @@ addopts = [
   "--import-mode=importlib"
 ]
 
+[tool.pyright]
+venvPath = "."  # look for the venv at ./venv
+venv = "venv"
+reportPrivateImportUsage = "none"  # torch C-ext re-exports, just noise
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
