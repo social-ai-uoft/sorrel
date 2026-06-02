@@ -28,6 +28,9 @@ class ThreadsafeBaseModel(BaseModel):
         with self._lock:
             return self.take_action(*args, **kwargs)
 
+    def take_action(self, state) -> Any:
+        raise NotImplementedError
+
     def threadsafe_train_step(self, *args, **kwargs):
         self._ensure_threadsafe_state()
         with self._lock:

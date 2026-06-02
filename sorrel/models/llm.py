@@ -1,4 +1,5 @@
 import os
+from collections.abc import Iterable
 
 import openai
 
@@ -27,6 +28,14 @@ _OPENAI_COMPATIBLE_PROVIDERS: dict = {
         "env_key": "LLM_API_KEY",
     },
 }
+
+
+def _extract_anthropic_text(content_blocks: Iterable[object]) -> str:
+    for block in content_blocks:
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            return text
+    return ""
 
 
 class Client:
@@ -95,7 +104,7 @@ class Client:
                 messages=self.msg_history,
                 temperature=temperature,
             )
-            content = response.content[0].text
+            content = _extract_anthropic_text(response.content)
         else:
             assert self.client is not None, (
                 "OpenAI client not successfully initialized. Please ensure the "
