@@ -33,7 +33,8 @@ def parse_arguments():
     p.add_argument("--random_policy", action="store_true")
     p.add_argument("--simple_foraging", action="store_true")
     p.add_argument("--fixed_punishment", type=float, default=0.0)
-    p.add_argument("--bandit_arms_per_trial", type=int, default=3)
+    # Default bandit: only resources A and B, and show both every trial.
+    p.add_argument("--bandit_arms_per_trial", type=int, default=2)
     p.add_argument(
         "--run_folder_prefix",
         type=str,
@@ -141,9 +142,9 @@ def run_experiment(args):
     config["experiment"]["max_turns"] = args.max_turns
     config["experiment"]["seed"] = args.seed
     config["experiment"]["bandit_arms_per_trial"] = args.bandit_arms_per_trial
-    # Five resource types; each trial shows bandit_arms_per_trial distinct options sampled from this pool
-    # (e.g. 3 of 5). Requires bandit_arms_per_trial <= len(bandit_pool); see env._sample_options.
-    config["experiment"]["bandit_pool"] = ["A", "B", "C", "D", "E"]
+    # Default bandit pool: only A and B. Requires bandit_arms_per_trial <= len(bandit_pool);
+    # see env._sample_options.
+    config["experiment"]["bandit_pool"] = ["A", "B"]
     config["experiment"]["env_mode"] = "bandit"
 
     if args.iqn_use_factored_actions:
@@ -176,7 +177,7 @@ def run_experiment(args):
     if args.log_dir is not None:
         log_dir = Path(args.log_dir).expanduser()
     else:
-        log_dir = _STATE_PUNISHMENT_ROOT / "bandit_study2_v2" / run_folder
+        log_dir = _STATE_PUNISHMENT_ROOT / "runs_bandit_study1_v3_twoArms" / run_folder
 
     anim_dir = _STATE_PUNISHMENT_ROOT / "data" / "anims" / run_folder
     config_dir = _STATE_PUNISHMENT_ROOT / "configs"

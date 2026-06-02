@@ -333,8 +333,9 @@ def create_config(
             "enable_history_observation": enable_history_observation,
             "history_window_size": history_window_size,
             "env_mode": "grid",
-            "bandit_arms_per_trial": 3,
-            "bandit_pool": ["A", "B", "C", "D", "E"],
+            # Bandit-only defaults (used when env_mode is set to "bandit" by entrypoints).
+            "bandit_arms_per_trial": 2,
+            "bandit_pool": ["A", "B"],
             "seed": None,
         },
         "observation": {

@@ -13,11 +13,12 @@ JOB="$SCRIPT_DIR/run_cpc_tmux_bandit_study1_job.sh"
 
 SEED_START=1
 SEED_END=1
-K_ARMS=3
+# Bandit defaults are now pool=["A","B"], so K must be <= 2 unless you change the pool.
+K_ARMS=2
 
 usage() {
   echo "Usage: $0 [--seed N] [--seed-range START:END] [--arms K]" >&2
-  echo "Examples: $0 --seed 3 --arms 5 | $0 --seed-range 0:10 --arms 3" >&2
+  echo "Examples: $0 --seed 3 --arms 2 | $0 --seed-range 0:10 --arms 2" >&2
 }
 
 while [[ $# -gt 0 ]]; do
@@ -68,13 +69,14 @@ fi
 
 created=()
 for SEED in $(seq "$SEED_START" "$SEED_END"); do
-  s1="bandit_study_1_cpc_01_iqn_k${K_ARMS}_s${SEED}"
+  # s1="bandit_study_1_cpc_01_iqn_k${K_ARMS}_s${SEED}"
   s0="bandit_study_1_cpc_00_iqn_k${K_ARMS}_s${SEED}"
-  tmux new-session -d -s "$s1"
-  tmux send-keys -t "$s1" "bash '$JOB' iqn_01 $SEED $K_ARMS" C-m
+  # tmux new-session -d -s "$s1"
+  # tmux send-keys -t "$s1" "bash '$JOB' iqn_01 $SEED $K_ARMS" C-m
   tmux new-session -d -s "$s0"
   tmux send-keys -t "$s0" "bash '$JOB' iqn_00 $SEED $K_ARMS" C-m
-  created+=("$s1" "$s0")
+  # created+=("$s1" "$s0")
+  created+=("$s0")
 done
 
 echo "Created ${#created[@]} tmux sessions (IQN only): ${created[*]}"

@@ -320,8 +320,10 @@ class StatePunishmentBanditEnv:
             history_window_size=cfg.experiment.get("history_window_size", 10),
             max_turns_per_epoch=cfg.experiment.get("max_turns", 100),
         )
+        pool = list(cfg.experiment.get("bandit_pool", ["A", "B", "C", "D", "E"]))
+        init_options = tuple(pool[:n_arms])
         agent.set_trial_context(
-            tuple(["A"] * n_arms),
+            init_options,
             self.resource_values,
             self.resource_harms,
         )

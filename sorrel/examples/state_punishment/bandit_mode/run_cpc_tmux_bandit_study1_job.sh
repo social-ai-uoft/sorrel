@@ -22,7 +22,8 @@ if ! [[ "$SEED" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-K_ARMS="${3:-3}"
+# Bandit defaults are now pool=["A","B"], so K must be <= 2 unless you change the pool.
+K_ARMS="${3:-2}"
 if ! [[ "$K_ARMS" =~ ^[0-9]+$ ]] || (( K_ARMS < 1 )); then
   echo "bandit_arms_per_trial must be a positive integer, got: $K_ARMS" >&2
   exit 1
