@@ -431,10 +431,9 @@ class StagHuntEnv(Environment[StagHuntWorld]):
         else:
             self._populate_randomly()
 
-    def _populate_randomly(self) -> None:
-        """Populate environment using random generation (original logic)."""
+    def _fill_grid_from_spawn_set(self, spawn_set: set[tuple[int, int, int]]) -> None:
+        """Place walls, Sand, Empty (beam/dynamic). Spawn coords are in spawn_set, not yet resourced."""
         world = self.world
-
         for y, x, layer in np.ndindex(world.map.shape):
             index = (y, x, layer)
             if y == 0 or y == world.height - 1 or x == 0 or x == world.width - 1:
@@ -452,7 +451,7 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                         can_convert = False
                         if not world.random_resource_respawn:
                             # In original mode, check if it's also a resource spawn point
-                            can_convert = (y, x, world.dynamic_layer) in world.resource_spawn_points
+                            can_convert = (y, x, world.dynamic_layer) in spawn_set
                         world.add(index, Sand(can_convert_to_resource=can_convert, respawn_ready=True, resource_type=None))
                 else:
                     # Determine if this Sand can convert to resources
@@ -462,24 +461,74 @@ class StagHuntEnv(Environment[StagHuntWorld]):
                         resource_type = None  # Random type on respawn
                     else:
                         # Original: only resource spawn points can convert
-                        can_convert = (y, x, world.dynamic_layer) in world.resource_spawn_points
+                        can_convert = (y, x, world.dynamic_layer) in spawn_set
                         resource_type = None  # Will be set later if resource spawns here
-                    
+
                     world.add(
                         index, Sand(can_convert_to_resource=can_convert, respawn_ready=True, resource_type=resource_type)
                     )
             elif layer == world.dynamic_layer:
-                # dynamic layer: optionally place initial resources
-                if (y, x, world.dynamic_layer) not in world.agent_spawn_points:
-                    if np.random.random() < world.resource_density:
-                        # choose resource type uniformly at random
-                        world.resource_spawn_points.append((y, x, world.dynamic_layer))
-                    else:
-                        # non-resource locations get Empty entities (attributes inherited from terrain)
-                        world.add(index, Empty())
+                # dynamic layer: leave spawn_set cells for Pass 3 resource placement
+                dynamic_loc = (y, x, world.dynamic_layer)
+                if dynamic_loc not in world.agent_spawn_points and dynamic_loc not in spawn_set:
+                    world.add(index, Empty())
             elif layer == world.beam_layer:
                 # beam layer: initially empty (attributes inherited from terrain)
                 world.add(index, Empty())
+
+    def _populate_randomly(self) -> None:
+        """Populate environment using random generation (original logic)."""
+        world = self.world
+
+        if world.initial_resource_placement_mode == "clustered":
+            world.resource_spawn_points = world.compute_clustered_resource_spawn_points()
+            self._fill_grid_from_spawn_set(set(world.resource_spawn_points))
+        else:
+            for y, x, layer in np.ndindex(world.map.shape):
+                index = (y, x, layer)
+                if y == 0 or y == world.height - 1 or x == 0 or x == world.width - 1:
+                    world.add(index, Wall())
+                elif layer == world.terrain_layer:
+                    # interior cells are spawnable and traversable
+                    if (y, x, world.dynamic_layer) in world.agent_spawn_points:
+                        # Only place Spawn() entities if NOT using random agent spawning
+                        if not world.random_agent_spawning:
+                            world.add(index, Spawn())
+                        else:
+                            # When random spawning, agent spawn points get Sand
+                            # Don't allow resource conversion at agent spawn points (even in random mode)
+                            # to avoid conflicts, even though Empty.transition() checks for agents
+                            can_convert = False
+                            if not world.random_resource_respawn:
+                                # In original mode, check if it's also a resource spawn point
+                                can_convert = (y, x, world.dynamic_layer) in world.resource_spawn_points
+                            world.add(index, Sand(can_convert_to_resource=can_convert, respawn_ready=True, resource_type=None))
+                    else:
+                        # Determine if this Sand can convert to resources
+                        if world.random_resource_respawn:
+                            # Random mode: all non-agent-spawn Sand can convert
+                            can_convert = True
+                            resource_type = None  # Random type on respawn
+                        else:
+                            # Original: only resource spawn points can convert
+                            can_convert = (y, x, world.dynamic_layer) in world.resource_spawn_points
+                            resource_type = None  # Will be set later if resource spawns here
+
+                        world.add(
+                            index, Sand(can_convert_to_resource=can_convert, respawn_ready=True, resource_type=resource_type)
+                        )
+                elif layer == world.dynamic_layer:
+                    # dynamic layer: optionally place initial resources
+                    if (y, x, world.dynamic_layer) not in world.agent_spawn_points:
+                        if np.random.random() < world.resource_density:
+                            # choose resource type uniformly at random
+                            world.resource_spawn_points.append((y, x, world.dynamic_layer))
+                        else:
+                            # non-resource locations get Empty entities (attributes inherited from terrain)
+                            world.add(index, Empty())
+                elif layer == world.beam_layer:
+                    # beam layer: initially empty (attributes inherited from terrain)
+                    world.add(index, Empty())
 
         # randomly populate resources on the dynamic layer according to density
         # Shuffle so that when caps apply, resources are spread across the grid rather than concentrated in first rows

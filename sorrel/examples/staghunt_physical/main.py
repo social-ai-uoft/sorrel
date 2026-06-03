@@ -278,6 +278,13 @@ def run_stag_hunt(
                 "base_rate": 0.01,         # p in p_t = p * n_t / N; max rate when all N neighbors occupied
                 "neighborhood_radius": 1,  # Moore neighborhood radius; N = (2r+1)^2 - 1 = 8 for r=1
             },
+            "initial_resource_placement": {
+                "mode": "clustered",         # uniform | clustered (Euclidean disk patches at reset)
+                "num_patches": 2,
+                "patch_radius": 1.0,
+                "fill_probability": 1.0,
+                "min_center_distance": 5,
+            },
             "cpr_resource_dynamics": {
                 "enabled": False,           # Enable CPR logistic-growth spawn budgets
                 "stag_growth_rate": 1,    # r for stag: intrinsic growth rate per turn
@@ -631,7 +638,7 @@ def run_stag_hunt(
     example_root = Path(__file__).parent
     run_folder = f'{config["experiment"]["run_name"]}_{timestamp}'
     # TensorBoard only: lives next to this package, not under data/
-    log_dir = example_root / "runs_res"/"runs_iqn_tageffect_v8" / run_folder
+    log_dir = example_root / "runs_res"/"runs_ppo_patch_tageffect" / run_folder
     # Artifacts (gifs, models, exports): under data/ with a generic grouping folder
     data_artifacts_parent = Path("runs_tageffect_v8")
     output_dir = example_root / "data" / data_artifacts_parent / run_folder

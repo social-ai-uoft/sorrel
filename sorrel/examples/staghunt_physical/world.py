@@ -339,6 +339,38 @@ class StagHuntWorld(Gridworld):
                 side = 2 * self.neighbor_density_radius + 1
                 self.neighbor_density_N: int = side * side - 1  # exclude center cell
 
+        # Initial resource placement (uniform Bernoulli vs clustered patches at reset)
+        irp_cfg = world_cfg.get("initial_resource_placement", {})
+        self.initial_resource_placement_mode: str = str(irp_cfg.get("mode", "uniform"))
+        if self.initial_resource_placement_mode not in ("uniform", "clustered"):
+            raise ValueError(
+                f"initial_resource_placement.mode must be 'uniform' or 'clustered', "
+                f"got {self.initial_resource_placement_mode!r}"
+            )
+        if self.initial_resource_placement_mode == "clustered":
+            self.initial_num_patches: int = int(irp_cfg.get("num_patches", 4))
+            self.initial_patch_radius: float = float(irp_cfg.get("patch_radius", 2.0))
+            self.initial_patch_fill_probability: float = float(irp_cfg.get("fill_probability", 1.0))
+            _min_dist = irp_cfg.get("min_center_distance", None)
+            self.initial_patch_min_center_distance: float | None = (
+                float(_min_dist) if _min_dist is not None else None
+            )
+            if self.initial_num_patches < 1 or self.initial_patch_radius < 0:
+                raise ValueError(
+                    "initial_resource_placement requires num_patches >= 1 and patch_radius >= 0"
+                )
+            if not (0.0 <= self.initial_patch_fill_probability <= 1.0):
+                raise ValueError(
+                    "initial_resource_placement.fill_probability must be in [0, 1]"
+                )
+            if (
+                self.initial_patch_min_center_distance is not None
+                and self.initial_patch_min_center_distance < 0
+            ):
+                raise ValueError(
+                    "initial_resource_placement.min_center_distance must be >= 0 when set"
+                )
+
         # Appearance switching configuration
         appearance_cfg = world_cfg.get("appearance_switching", {})
         self.appearance_switching_enabled: bool = bool(appearance_cfg.get("enabled", False))
@@ -503,6 +535,60 @@ class StagHuntWorld(Gridworld):
                     if hasattr(entity, "name") and entity.name in ("stag", "hare"):
                         count += 1
         return count
+
+    def compute_clustered_resource_spawn_points(self) -> list[tuple[int, int, int]]:
+        """Build initial resource spawn coordinates as Euclidean disk clusters."""
+        eligible = [
+            (y, x, self.dynamic_layer)
+            for y in range(1, self.height - 1)
+            for x in range(1, self.width - 1)
+            if (y, x, self.dynamic_layer) not in self.agent_spawn_points
+        ]
+        if not eligible:
+            logger.warning("compute_clustered_resource_spawn_points: no eligible cells")
+            return []
+
+        centers: list[tuple[int, int, int]] = []
+        min_dist = self.initial_patch_min_center_distance
+        for _ in range(self.initial_num_patches * 50):
+            if len(centers) >= self.initial_num_patches:
+                break
+            cy, cx, layer = eligible[np.random.randint(len(eligible))]
+            if (cy, cx, layer) in centers:
+                continue
+            if min_dist is not None and any(
+                np.hypot(cy - oy, cx - ox) < min_dist for oy, ox, _ in centers
+            ):
+                continue
+            centers.append((cy, cx, layer))
+
+        if len(centers) < self.initial_num_patches:
+            logger.warning(
+                "compute_clustered_resource_spawn_points: placed %d/%d centers",
+                len(centers),
+                self.initial_num_patches,
+            )
+
+        R = self.initial_patch_radius
+        r_ceil = int(np.ceil(R))
+        fill_p = self.initial_patch_fill_probability
+        agent_spawns = set(self.agent_spawn_points)
+        candidates: set[tuple[int, int, int]] = set()
+        for cy, cx, layer in centers:
+            for dy in range(-r_ceil, r_ceil + 1):
+                for dx in range(-r_ceil, r_ceil + 1):
+                    if np.hypot(dy, dx) > R:
+                        continue
+                    ny, nx = cy + dy, cx + dx
+                    if not (1 <= ny < self.height - 1 and 1 <= nx < self.width - 1):
+                        continue
+                    loc = (ny, nx, layer)
+                    if loc in agent_spawns:
+                        continue
+                    if fill_p < 1.0 and np.random.random() >= fill_p:
+                        continue
+                    candidates.add(loc)
+        return list(candidates)
 
     def _count_stags_actual(self) -> int:
         """Actual count implementation (used for initialization)."""
