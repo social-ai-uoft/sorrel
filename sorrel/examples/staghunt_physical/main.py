@@ -234,8 +234,8 @@ def run_stag_hunt(
             "generation_mode": "random",  # "random" or "ascii_map"
             "ascii_map_file": "test_intention_onlystag.txt",  # only used when generation_mode is "ascii_map"
             # grid dimensions (only used for random generation)
-            "height": 12, # 13
-            "width": 12,
+            "height": 16, # 13
+            "width": 16,
             # number of players in the game
             "num_agents": 4,
             # number of agents to spawn per epoch (defaults to num_agents if not set)
@@ -309,7 +309,7 @@ def run_stag_hunt(
             "beam_radius": 1,                    # With single_tile_attack: lateral half-width; else fan-beam radius
             # Punish beam shape
             "punish_single_tile_attack": True,   # If True, hits tiles directly in front (count = punish_range)
-            "punish_range": 2,                   # Tiles forward when punish_single_tile_attack is True
+            "punish_range": 4,                   # Tiles forward when punish_single_tile_attack is True
             "punish_area_attack": False,         # If True, 3x3 region in front (overrides punish_single_tile_attack)
             "punish_beam_radius": 1,             # Fallback fan-beam radius when neither flag is True
             "include_punish_action": True,  # If True, PUNISH is included in action_spec for RL agents
@@ -631,9 +631,9 @@ def run_stag_hunt(
     example_root = Path(__file__).parent
     run_folder = f'{config["experiment"]["run_name"]}_{timestamp}'
     # TensorBoard only: lives next to this package, not under data/
-    log_dir = example_root / "runs_tageffect_v6" / run_folder
+    log_dir = example_root / "runs_res"/"runs_iqn_tageffect_v8" / run_folder
     # Artifacts (gifs, models, exports): under data/ with a generic grouping folder
-    data_artifacts_parent = Path("runs_tageffect_v6")
+    data_artifacts_parent = Path("runs_tageffect_v8")
     output_dir = example_root / "data" / data_artifacts_parent / run_folder
     log_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
