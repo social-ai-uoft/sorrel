@@ -844,6 +844,14 @@ class iRainbowModelCPC(DoublePyTorchModel):
 
         return iqn_np
 
+    @property
+    def use_factored_actions(self) -> bool:
+        return self.base_model.use_factored_actions
+
+    @property
+    def action_dims(self):
+        return self.base_model.action_dims
+
     def take_action(self, state: np.ndarray) -> int:
         """
         Returns actions for given state as per current policy.
@@ -868,6 +876,10 @@ class iRainbowModelCPC(DoublePyTorchModel):
         else:
             # No CPC - use base model as-is
             return self.base_model.take_action(state)
+
+    def get_last_factored_actions(self) -> Optional[Tuple[int, ...]]:
+        """Per-branch indices from the last ``base_model.take_action`` (factored IQN only)."""
+        return self.base_model.get_last_factored_actions()
 
     def train_step(self, custom_gamma: float = None) -> np.ndarray:
         """

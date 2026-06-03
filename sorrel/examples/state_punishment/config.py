@@ -332,6 +332,11 @@ def create_config(
             "use_window_stats": use_window_stats,
             "enable_history_observation": enable_history_observation,
             "history_window_size": history_window_size,
+            "env_mode": "grid",
+            # Bandit-only defaults (used when env_mode is set to "bandit" by entrypoints).
+            "bandit_arms_per_trial": 2,
+            "bandit_pool": ["A", "B"],
+            "seed": None,
         },
         "observation": {
             "use_slot_based_encoding": use_slot_based_encoding,
@@ -364,7 +369,7 @@ def create_config(
             "epsilon_decay": exploration_decay,
             "full_view": False,
             "layer_size": 250,
-            "n_frames": 1,
+            "n_frames": 3,
             "n_step": 3,
             "sync_freq": 200,
             "model_update_freq": 4,

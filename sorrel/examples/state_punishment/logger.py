@@ -46,10 +46,7 @@ class StatePunishmentLogger:
             # Track encounters and scores for each agent
             total_individual_scores = 0
             total_social_harm_received = 0.0
-            sigma_weights_ff1 = []
-            sigma_weights_advantage = []
-            sigma_weights_value = []
-            
+
             n_envs = len(self.multi_agent_env.individual_envs)
             # Union of action keys so every epoch logs zeros for unused actions (and vote_* for separate-model agents)
             global_action_keys: set[str] = set()
@@ -96,63 +93,11 @@ class StatePunishmentLogger:
                     frequency = agent.action_frequencies.get(action_name, 0)
                     encounter_data[f"Agent_{i}/action_freq_{action_name}"] = frequency
                 
-                # Access sigma_weight and epsilon from PyTorchIQN model
-                # Check if agent uses separate models
+                # Epsilon from PyTorchIQN / separate models (sigma weights omitted — noisy net noise scale)
                 if isinstance(agent, SeparateModelStatePunishmentAgent):
-                    # Separate model agent: log sigma weights and epsilon from both move and vote models
-                    # Move model sigma weights
-                    if hasattr(agent.move_model, 'qnetwork_local') and hasattr(agent.move_model.qnetwork_local, 'ff_1'):
-                        # Get sigma_weight from the first NoisyLinear layer (ff_1)
-                        sigma_weight_ff1 = agent.move_model.qnetwork_local.ff_1.sigma_weight.mean().item()
-                        encounter_data[f"Agent_{i}/move_sigma_weight_ff1"] = sigma_weight_ff1
-                        sigma_weights_ff1.append(sigma_weight_ff1)
-                        
-                        # Get sigma_weight from advantage layer
-                        sigma_weight_adv = agent.move_model.qnetwork_local.advantage.sigma_weight.mean().item()
-                        encounter_data[f"Agent_{i}/move_sigma_weight_advantage"] = sigma_weight_adv
-                        sigma_weights_advantage.append(sigma_weight_adv)
-                        
-                        # Get sigma_weight from value layer
-                        sigma_weight_val = agent.move_model.qnetwork_local.value.sigma_weight.mean().item()
-                        encounter_data[f"Agent_{i}/move_sigma_weight_value"] = sigma_weight_val
-                        sigma_weights_value.append(sigma_weight_val)
-                    
-                    # Vote model sigma weights
-                    if hasattr(agent.vote_model, 'qnetwork_local') and hasattr(agent.vote_model.qnetwork_local, 'ff_1'):
-                        # Get sigma_weight from the first NoisyLinear layer (ff_1)
-                        vote_sigma_weight_ff1 = agent.vote_model.qnetwork_local.ff_1.sigma_weight.mean().item()
-                        encounter_data[f"Agent_{i}/vote_sigma_weight_ff1"] = vote_sigma_weight_ff1
-                        
-                        # Get sigma_weight from advantage layer
-                        vote_sigma_weight_adv = agent.vote_model.qnetwork_local.advantage.sigma_weight.mean().item()
-                        encounter_data[f"Agent_{i}/vote_sigma_weight_advantage"] = vote_sigma_weight_adv
-                        
-                        # Get sigma_weight from value layer
-                        vote_sigma_weight_val = agent.vote_model.qnetwork_local.value.sigma_weight.mean().item()
-                        encounter_data[f"Agent_{i}/vote_sigma_weight_value"] = vote_sigma_weight_val
-                    
-                    # Log epsilon for both models
                     encounter_data[f"Agent_{i}/move_epsilon"] = agent.move_model.epsilon
                     encounter_data[f"Agent_{i}/vote_epsilon"] = agent.vote_model.epsilon
                 else:
-                    # Standard agent: log sigma weights and epsilon from single model
-                    if hasattr(agent.model, 'qnetwork_local') and hasattr(agent.model.qnetwork_local, 'ff_1'):
-                        # Get sigma_weight from the first NoisyLinear layer (ff_1)
-                        sigma_weight_ff1 = agent.model.qnetwork_local.ff_1.sigma_weight.mean().item()
-                        encounter_data[f"Agent_{i}/sigma_weight_ff1"] = sigma_weight_ff1
-                        sigma_weights_ff1.append(sigma_weight_ff1)
-                        
-                        # Get sigma_weight from advantage layer
-                        sigma_weight_adv = agent.model.qnetwork_local.advantage.sigma_weight.mean().item()
-                        encounter_data[f"Agent_{i}/sigma_weight_advantage"] = sigma_weight_adv
-                        sigma_weights_advantage.append(sigma_weight_adv)
-                        
-                        # Get sigma_weight from value layer
-                        sigma_weight_val = agent.model.qnetwork_local.value.sigma_weight.mean().item()
-                        encounter_data[f"Agent_{i}/sigma_weight_value"] = sigma_weight_val
-                        sigma_weights_value.append(sigma_weight_val)
-                    
-                    # Log epsilon for standard agent
                     encounter_data[f"Agent_{i}/epsilon"] = agent.model.epsilon
             
             # Add totals and means to encounter_data
@@ -184,15 +129,6 @@ class StatePunishmentLogger:
                 )
                 encounter_data[f"Total/total_action_freq_{action_name}"] = total_af
                 encounter_data[f"Mean/mean_action_freq_{action_name}"] = total_af / n_envs
-            
-            
-            # Add mean sigma weights across all agents
-            if sigma_weights_ff1:
-                encounter_data["Mean/mean_sigma_weight_ff1"] = sum(sigma_weights_ff1) / len(sigma_weights_ff1)
-            if sigma_weights_advantage:
-                encounter_data["Mean/mean_sigma_weight_advantage"] = sum(sigma_weights_advantage) / len(sigma_weights_advantage)
-            if sigma_weights_value:
-                encounter_data["Mean/mean_sigma_weight_value"] = sum(sigma_weights_value) / len(sigma_weights_value)
 
             # Global punishment level metrics (shared across all agents)
             if hasattr(

@@ -25,7 +25,7 @@ iRainbowModel (contains two IQN networks; one for local and one for target)
 
 # Import base packages
 import random
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -333,6 +333,13 @@ class iRainbowModel(DoublePyTorchModel):
             n_frames=n_frames,
         )
 
+        # Mirror factored config for callers (agent, configs) that read the wrapper model.
+        self.use_factored_actions = use_factored_actions
+        self.action_dims = self.qnetwork_local.action_dims
+
+        # Per-branch indices from the most recent take_action when factored (like PPO dual-head).
+        self._last_factored_actions: Optional[Tuple[int, ...]] = None
+
     def __str__(self):
         return f"iRainbowModel(input_size={np.array(self.input_size).prod() * self.n_frames},action_space={self.action_space})"
 
@@ -345,6 +352,7 @@ class iRainbowModel(DoublePyTorchModel):
         Returns:
             int: The action to take.
         """
+        self._last_factored_actions = None
         # Epsilon-greedy action selection
         if random.random() > self.epsilon:
             torch_state = torch.from_numpy(state)
@@ -358,6 +366,7 @@ class iRainbowModel(DoublePyTorchModel):
                 if self.qnetwork_local.use_factored_actions:
                     qvalues_list = self.qnetwork_local.get_qvalues(torch_state, is_eval=True)
                     actions = tuple(torch.argmax(q, dim=-1).cpu().numpy()[0] for q in qvalues_list)
+                    self._last_factored_actions = tuple(int(a) for a in actions)
                     # Convert to single index for backward compatibility
                     # Encoding: action = move_action * n_vote + vote_action
                     # For action_dims = [5, 3]: move_action ∈ {0,1,2,3,4} (4=noop), vote_action ∈ {0,1,2}
@@ -379,6 +388,7 @@ class iRainbowModel(DoublePyTorchModel):
             if self.qnetwork_local.use_factored_actions:
                 # Random action for each branch
                 actions = tuple(random.choice(range(n_d)) for n_d in self.qnetwork_local.action_dims)
+                self._last_factored_actions = tuple(int(a) for a in actions)
                 # Convert to single index
                 if len(actions) == 2:
                     move_idx, vote_idx = actions
@@ -392,6 +402,14 @@ class iRainbowModel(DoublePyTorchModel):
             else:
                 action = random.choices(np.arange(self.action_space), k=1)
                 return action[0]
+
+    def get_last_factored_actions(self) -> Optional[Tuple[int, ...]]:
+        """Branch indices chosen in the most recent ``take_action`` when factored.
+
+        Matches the per-head argmax (or random branch) before flattening to a single
+        replay index. ``None`` if the last ``take_action`` was not factored.
+        """
+        return self._last_factored_actions
     
     def get_all_qvalues(self, state: np.ndarray) -> np.ndarray:
         """Get Q-values for all actions in the given state.

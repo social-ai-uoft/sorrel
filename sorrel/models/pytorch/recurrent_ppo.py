@@ -428,20 +428,33 @@ class DualHeadRecurrentPPO(PyTorchModel):
             single_action = single_action * multiplier + actions_list[d].item()
         
         return int(single_action)
-    
+
+    def get_last_factored_actions(self) -> Optional[Tuple[int, ...]]:
+        """Per-branch indices from the last ``take_action`` (same contract as factored IQN).
+
+        When ``use_dual_head`` is false, returns ``None`` so the environment uses the flat
+        ``action`` index with composite/simple semantics instead of head-wise decoding.
+        """
+        if not getattr(self, "use_dual_head", True):
+            return None
+        return self._pending_action
+
     def get_dual_action(self) -> Optional[Tuple[int, int]]:
         """
         Get the most recently sampled dual action (move, vote).
-        
-        This method allows the agent to access dual actions directly without
-        needing to convert from single action index back to dual actions.
-        
+
+        Same as :meth:`get_last_factored_actions` for two-branch policies; kept for callers
+        that still use the older name.
+
         Returns:
             Tuple of (move_action, vote_action) if available, None otherwise.
             Only valid immediately after take_action() is called.
         """
-        return self._pending_action
-    
+        fa = self.get_last_factored_actions()
+        if fa is not None and len(fa) == 2:
+            return (int(fa[0]), int(fa[1]))
+        return None
+
     def add_memory_ppo(self, reward: float, done: bool) -> None:
         """
         Add a transition to PPO's rollout memory.

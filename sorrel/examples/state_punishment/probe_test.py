@@ -219,13 +219,7 @@ def run_probe_test(training_env, probe_env, training_epoch: int, probe_epochs: i
             # Action frequency metrics (same as training)
             for action_name, frequency in agent.action_frequencies.items():
                 epoch_metrics[f"Agent_{i}/action_freq_{action_name}"] = frequency
-            
-            # Sigma weights (same as training)
-            if hasattr(agent.model, 'qnetwork_local') and hasattr(agent.model.qnetwork_local, 'ff_1'):
-                epoch_metrics[f"Agent_{i}/sigma_weight_ff1"] = agent.model.qnetwork_local.ff_1.sigma_weight.mean().item()
-                epoch_metrics[f"Agent_{i}/sigma_weight_advantage"] = agent.model.qnetwork_local.advantage.sigma_weight.mean().item()
-                epoch_metrics[f"Agent_{i}/sigma_weight_value"] = agent.model.qnetwork_local.value.sigma_weight.mean().item()
-        
+
         # Global metrics (same as training)
         epoch_metrics["Global/average_punishment_level"] = probe_env.shared_state_system.prob
         epoch_metrics["Global/current_punishment_level"] = probe_env.shared_state_system.prob

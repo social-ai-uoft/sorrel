@@ -1,30 +1,64 @@
 #!/usr/bin/env bash
 # Study 1: same as study 2 but agents can observe punishment level (--punishment_level_accessible).
-# Create four tmux sessions and run CPC experiments (cpc_00/01 x iqn/ppo).
+# Create four tmux sessions per seed and run CPC experiments (cpc_00/01 x iqn/ppo).
 # Run this from the workspace root (parent of sorrel/), or it will cd there.
 
 set -e
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$ROOT"
 
-JOB="$ROOT/sorrel/examples/state_punishment/run_cpc_tmux_study1_job.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+JOB="$SCRIPT_DIR/run_cpc_tmux_study1_job.sh"
 
-# cpc_00_ppo: PPO, cpc_weight 0.0
-tmux new-session -d -s study_1_cpc_00_ppo
-tmux send-keys -t study_1_cpc_00_ppo "bash '$JOB' ppo_00" C-m
+SEED_START=1
+SEED_END=1
 
-# cpc_01_ppo: PPO, cpc_weight 0.1
-tmux new-session -d -s study_1_cpc_01_ppo
-tmux send-keys -t study_1_cpc_01_ppo "bash '$JOB' ppo_01" C-m
+usage() {
+  echo "Usage: $0 [--seed N] [--seed-range START:END]" >&2
+  echo "Examples: $0 --seed 3 | $0 --seed-range 1:2" >&2
+}
 
-# cpc_01_iqn: IQN, cpc_weight 0.1
-tmux new-session -d -s study_1_cpc_01_iqn
-tmux send-keys -t study_1_cpc_01_iqn "bash '$JOB' iqn_01" C-m
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --seed)
+      [[ $# -ge 2 ]] || { usage; exit 1; }
+      SEED_START="$2"
+      SEED_END="$2"
+      shift 2
+      ;;
+    --seed-range)
+      [[ $# -ge 2 ]] || { usage; exit 1; }
+      if [[ "$2" =~ ^([0-9]+)[:\-]([0-9]+)$ ]]; then
+        SEED_START="${BASH_REMATCH[1]}"
+        SEED_END="${BASH_REMATCH[2]}"
+      else
+        echo "Invalid --seed-range '$2' (expected START:END or START-END)" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+done
 
-# cpc_00_iqn: IQN, cpc_weight 0.0
-tmux new-session -d -s study_1_cpc_00_iqn
-tmux send-keys -t study_1_cpc_00_iqn "bash '$JOB' iqn_00" C-m
+if (( SEED_START > SEED_END )); then
+  echo "Invalid seed range: start ($SEED_START) > end ($SEED_END)" >&2
+  exit 1
+fi
 
-echo "Created 4 tmux sessions: study_1_cpc_00_ppo, study_1_cpc_01_ppo, study_1_cpc_01_iqn, study_1_cpc_00_iqn"
-echo "Attach with: tmux attach -t study_1_cpc_00_ppo  (or study_1_cpc_01_ppo, study_1_cpc_01_iqn, study_1_cpc_00_iqn)"
+created=()
+for SEED in $(seq "$SEED_START" "$SEED_END"); do
+  for cond in ppo_00 ppo_01 iqn_01 iqn_00; do
+    s="study_1_${cond}_s${SEED}"
+    tmux new-session -d -s "$s"
+    tmux send-keys -t "$s" "bash '$JOB' $cond $SEED" C-m
+    created+=("$s")
+  done
+done
+
+echo "Created ${#created[@]} tmux sessions: ${created[*]}"
+echo "Attach with: tmux attach -t ${created[0]}"
 echo "List sessions: tmux ls"

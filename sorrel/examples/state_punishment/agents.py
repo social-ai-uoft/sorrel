@@ -118,8 +118,9 @@ class StatePunishmentAgent(Agent):
         self.action_frequencies = {}
         self.action_names = list(action_spec.actions.values())
         
-        # Store dual actions for PPO dual-head mode (avoids conversion)
-        self._last_dual_action: Optional[Tuple[int, int]] = None
+        # Optional stash of (move, vote) branch indices between get_action and act()
+        # (e.g. GRU PPO dual-head); factored IQN usually reads get_last_factored_actions() on the model.
+        self._last_factored_branch_pair: Optional[Tuple[int, int]] = None
         
         # Track social harm received per epoch
         self.social_harm_received_epoch = 0.0
@@ -203,11 +204,13 @@ class StatePunishmentAgent(Agent):
             # PPO handles state conversion internally
             # Works for both dual-head and single-head modes
             action = self.model.take_action(state)
-            # Store dual action for direct access (avoids conversion)
+            # Stash branch tuple for act(); same hook as IQN (get_last_factored_actions).
             if self.model.use_dual_head:
-                dual_action = self.model.get_dual_action()
-                if dual_action is not None:
-                    self._last_dual_action = dual_action
+                gf = getattr(self.model, "get_last_factored_actions", None)
+                if callable(gf):
+                    br = gf()
+                    if br is not None and len(br) == 2:
+                        self._last_factored_branch_pair = (int(br[0]), int(br[1]))
             return action
         elif isinstance(self.model, (RecurrentPPOLSTM, RecurrentPPOLSTMCPC)):
             # PPO LSTM (with or without CPC) uses LSTM for temporal memory, no frame stacking needed
@@ -455,6 +458,45 @@ class StatePunishmentAgent(Agent):
             else:
                 return result[0] if isinstance(result, tuple) else result
 
+    def _resolve_two_branch_action_indices(self, action: int) -> Optional[Tuple[int, int]]:
+        """Return ``(move_branch, vote_branch)`` for two-factor (factored) IQN or PPO policies.
+
+        Order: (1) ``_last_factored_branch_pair`` if ``get_action`` stashed it, (2)
+        ``model.get_last_factored_actions()`` after the last ``take_action`` (IQN, IQN+CPC,
+        recurrent IQN, and dual-head GRU PPO all use this hook). If ``use_factored_actions`` with
+        two ``action_dims`` still leaves indices missing, raise—except GRU PPO with
+        ``use_dual_head`` false, which inverts the flat ``action`` by contract (composite env).
+        """
+        action_dims = getattr(self.model, "action_dims", None)
+        pair: Optional[Tuple[int, int]] = None
+
+        if self._last_factored_branch_pair is not None:
+            pair = self._last_factored_branch_pair
+            self._last_factored_branch_pair = None
+
+        if pair is None:
+            gf = getattr(self.model, "get_last_factored_actions", None)
+            if callable(gf):
+                fa = gf()
+                if fa is not None and len(fa) == 2:
+                    pair = (int(fa[0]), int(fa[1]))
+
+        if pair is None and bool(getattr(self.model, "use_factored_actions", False)):
+            if action_dims is not None and len(action_dims) == 2:
+                # Factored IQN (default) and dual-head policies: never infer from flat action alone.
+                if getattr(self.model, "use_dual_head", True):
+                    raise ValueError(
+                        "Factored two-branch policy requires branch indices from "
+                        "get_last_factored_actions() or _last_factored_branch_pair after take_action; "
+                        f"got none (model={type(self.model).__name__}, action_dims={action_dims})."
+                    )
+                vote_dim = int(action_dims[1])
+                if vote_dim <= 0:
+                    raise ValueError(f"Invalid vote_dim in action_dims: {action_dims}")
+                pair = (int(action) // vote_dim, int(action) % vote_dim)
+
+        return pair
+
     def _execute_action(
         self, action: int, world, state_system=None, social_harm_dict=None, return_info=False
     ) -> Union[float, Tuple[float, dict]]:
@@ -462,31 +504,16 @@ class StatePunishmentAgent(Agent):
         reward = 0.0
         info = {'is_punished': False}
 
-        # For PPO dual-head mode: use stored dual actions directly (avoids conversion)
-        # Try to get dual action directly from model if not already stored
-        is_dual_head_ppo = isinstance(self.model, DualHeadRecurrentPPO)
-        if is_dual_head_ppo and self.model.use_dual_head:
-            if self._last_dual_action is None:
-                # Try to get it directly from model (in case it wasn't stored)
-                dual_action = self.model.get_dual_action()
-                if dual_action is not None:
-                    self._last_dual_action = dual_action
-            
-            if self._last_dual_action is not None:
-                # Use dual actions directly - no conversion needed!
-                movement_action, voting_action = self._last_dual_action
-                # Clear after use (important: clear before executing to avoid reuse)
-                self._last_dual_action = None
-            else:
-                # Dual action not available, fall through to conversion
-                movement_action = None
-                voting_action = None
-        else:
-            # Not dual-head mode, initialize for conversion
-            movement_action = None
-            voting_action = None
-        
-        # Determine movement and voting actions based on mode (fallback if dual action not used)
+        movement_action = None
+        voting_action = None
+        pair = self._resolve_two_branch_action_indices(action)
+        if pair is not None:
+            move_idx, vote_idx = pair
+            # Keep raw branch indices; _execute_movement handles out-of-range moves as no-op.
+            movement_action = move_idx
+            voting_action = vote_idx
+
+        # Determine movement and voting actions based on mode (fallback if dual/factored decode not used)
         if movement_action is None or voting_action is None:
             if self.use_composite_actions:
                 # Composite mode: 13 actions (0-12)
@@ -683,6 +710,8 @@ class StatePunishmentAgent(Agent):
     def _execute_voting(self, voting_action: int, world, state_system=None) -> float:
         """Execute voting action and return reward."""
         if voting_action == 0:  # No vote
+            return 0.0
+        if voting_action not in (1, 2):  # Invalid vote index -> no-op
             return 0.0
 
         # Execute vote
