@@ -43,6 +43,7 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
             entity_list = [
                 "EmptyEntity",
                 "Wall",
+                "Sand",
                 "Gem",
                 "Bone",
                 "Food",
