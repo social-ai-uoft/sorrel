@@ -58,7 +58,6 @@ class Location(tuple):
         Return:
             Location: The resulting location.
         """
-
         # Add a tuple/Location
         if isinstance(other, tuple):
             if len(other) == 2:
@@ -87,7 +86,6 @@ class Location(tuple):
         Returns:
             Location: The resulting location.
         """
-
         if isinstance(other, int):
             return Location(self.x * other, self.y * other, self.z * other)
 
@@ -209,7 +207,6 @@ class Vector:
 
     def __mul__(self, other) -> Vector:
         """Multiply a location by an integer amount."""
-
         if isinstance(other, int):
             return Vector(
                 self.forward * other,
@@ -275,7 +272,6 @@ class Vector:
     def compute(self) -> Location:
         """Given a direction being faced and a number of paces forward / right /
         backward / left, compute the location."""
-
         match (self.direction):
             case 0:  # UP
                 forward, right, backward, left = (

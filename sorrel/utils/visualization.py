@@ -42,7 +42,6 @@ def render_sprite(
     Returns:
         A list of np.ndarrays of C x H x W, determined either by the world size or the vision size.
     """
-
     # If no vision or location is provided, show the whole map (do not centre on the location)
     if vision is None or location is None:
         bounds = (0, world.height - 1, 0, world.width - 1)
