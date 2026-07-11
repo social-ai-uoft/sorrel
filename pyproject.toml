@@ -52,6 +52,8 @@ tensorboard = "^2.21.0"
 einops = "^0.8.1"
 # security pin (transitive via tensorboard); CVE-2026-0994. Capped <7 to avoid major-version bump.
 protobuf = ">=6.33.5,<7"
+# used in examples/chess/agents.py
+requests = "^2.33.0"
 
 [tool.poetry.group.dev]
 optional = true
@@ -68,7 +70,6 @@ sphinxcontrib-autoprogram = "^0.1.8"
 
 # security pins (transitive via Sphinx, myst-nb, pre-commit) per Dependabot
 urllib3 = "^2.7.0"
-requests = "^2.33.0"
 tornado = "^6.5.5"
 virtualenv = "^20.36.1"
 
