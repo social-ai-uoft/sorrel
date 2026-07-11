@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -225,7 +225,14 @@ class TransformerBuffer(Buffer):
 
     def save(self, output_file: str | Path) -> None:
         output_file = Path(output_file)
-        save_dict = dict(
+        # Typed as dict[str, Any] (rather than left to inference) because
+        # np.savez_compressed declares an explicit `allow_pickle: bool` keyword
+        # alongside its `**kwds: ArrayLike` catchall; pyright checks a `**`-splatted
+        # dict's value type against every named keyword parameter (since it can't
+        # prove none of our keys is literally "allow_pickle"), so an inferred
+        # `ndarray | int` value type spuriously fails against `bool`. None of our
+        # keys are ever "allow_pickle" at runtime.
+        save_dict: dict[str, Any] = dict(
             states=self.states,
             actions=self.actions,
             rewards=self.rewards,
@@ -353,7 +360,14 @@ class SavedGames(Buffer):
 
     def save(self, output_file: str | Path) -> None:
         output_file = Path(output_file)
-        save_dict = dict(
+        # Typed as dict[str, Any] (rather than left to inference) because
+        # np.savez_compressed declares an explicit `allow_pickle: bool` keyword
+        # alongside its `**kwds: ArrayLike` catchall; pyright checks a `**`-splatted
+        # dict's value type against every named keyword parameter (since it can't
+        # prove none of our keys is literally "allow_pickle"), so an inferred
+        # `ndarray | int` value type spuriously fails against `bool`. None of our
+        # keys are ever "allow_pickle" at runtime.
+        save_dict: dict[str, Any] = dict(
             states=self.states,
             actions=self.actions,
             rewards=self.rewards,
