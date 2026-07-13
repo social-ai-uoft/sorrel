@@ -4,28 +4,31 @@ import numpy as np
 import torch
 
 from sorrel.action.action_spec import ActionSpec
-from sorrel.environment import Environment
 
 # imports from our example
-from sorrel.examples.treasurehunt.agents import TreasurehuntAgent
-from sorrel.examples.treasurehunt.entities import EmptyEntity, Sand, Wall
-from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_threadsafe.agents import TreasurehuntAgent
+from sorrel.examples.treasurehunt_threadsafe.entities import EmptyEntity, Sand, Wall
+from sorrel.examples.treasurehunt_threadsafe.world import TreasurehuntWorld
 
 # sorrel imports
-from sorrel.models.pytorch import PyTorchIQN
-from sorrel.observation.observation_spec import (
-    OneHotObservationSpec,
-    RGBObservationSpec,
-)
+from sorrel.models.pytorch.iqn_threadsafe import ThreadsafePyTorchIQN
+from sorrel.observation.observation_spec import OneHotObservationSpec
+from sorrel.threadsafe.environment import ThreadsafeEnvironment
 
 # end imports
 
 
 # begin treasurehunt environment
-class TreasurehuntEnv(Environment[TreasurehuntWorld]):
+class TreasurehuntEnv(ThreadsafeEnvironment[TreasurehuntWorld]):
     """The experiment for treasurehunt."""
 
-    def __init__(self, world: TreasurehuntWorld, config: dict) -> None:
+    def __init__(
+        self,
+        world: TreasurehuntWorld,
+        config: dict,
+        shared_model: ThreadsafePyTorchIQN | None = None,
+    ) -> None:
+        self.shared_model = shared_model
         super().__init__(world, config)
 
     # end constructor
@@ -33,11 +36,11 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
     def setup_agents(self):
         """Create the agents for this experiment and assign them to self.agents.
 
-        Requires self.config.model.agent_vision_radius to be defined. Reads agent count
-        from config.model.num_agents (default 2).
+        Requires self.config.model.agent_vision_radius to be defined.
         """
-        agent_num = int(self.config.model.get("num_agents", 2))
+        agent_num = 2
         agents = []
+        shared_model = self.shared_model
         for _ in range(agent_num):
             # create the observation spec
             entity_list = [
@@ -48,29 +51,13 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
                 "Food",
                 "TreasurehuntAgent",
             ]
-            if hasattr(self.config.model, "observation_spec"):
-                obs_spec_type = self.config.model.observation_spec
-            else:
-                obs_spec_type = "onehot"
-            if obs_spec_type == "onehot":
-                observation_spec = OneHotObservationSpec(
-                    entity_list,
-                    full_view=False,
-                    # note that here we require self.config to have the entry model.agent_vision_radius
-                    # don't forget to pass it in as part of config when creating this experiment!
-                    vision_radius=self.config.model.agent_vision_radius,
-                )
-            elif obs_spec_type == "rgb":
-                observation_spec = RGBObservationSpec(
-                    entity_list,
-                    full_view=False,
-                    # note that here we require self.config to have the entry model.agent_vision_radius
-                    # don't forget to pass it in as part of config when creating this experiment!
-                    vision_radius=self.config.model.agent_vision_radius,
-                )
-            else:
-                raise ValueError(f"Unknown observation spec type: {obs_spec_type}")
-
+            observation_spec = OneHotObservationSpec(
+                entity_list,
+                full_view=False,
+                # note that here we require self.config to have the entry model.agent_vision_radius
+                # don't forget to pass it in as part of config when creating this experiment!
+                vision_radius=self.config.model.agent_vision_radius,
+            )
             observation_spec.override_input_size(
                 (int(np.prod(observation_spec.input_size)),)
             )
@@ -78,37 +65,36 @@ class TreasurehuntEnv(Environment[TreasurehuntWorld]):
             # create the action spec
             action_spec = ActionSpec(["up", "down", "left", "right"])
 
-            # create the model
-            model = PyTorchIQN(
-                input_size=observation_spec.input_size,
-                action_space=action_spec.n_actions,
-                layer_size=250,
-                epsilon=0.6,
-                device="cpu",
-                seed=torch.random.seed(),
-                n_frames=5,
-                n_step=3,
-                sync_freq=200,
-                model_update_freq=4,
-                batch_size=64,
-                memory_size=1024,
-                LR=0.00025,
-                TAU=0.001,
-                GAMMA=0.99,
-                n_quantiles=12,
-            )
-            model.memory.extra_data["positions"] = np.zeros(
-                (model.memory.capacity, 2), dtype=np.int64
-            )
+            # Create a single shared model for all agents.
+            if shared_model is None:
+                shared_model = ThreadsafePyTorchIQN(
+                    input_size=observation_spec.input_size,
+                    action_space=action_spec.n_actions,
+                    layer_size=250,
+                    epsilon=0.6,
+                    device="cpu",
+                    seed=torch.random.seed(),
+                    n_frames=5,
+                    n_step=3,
+                    sync_freq=200,
+                    model_update_freq=4,
+                    batch_size=64,
+                    memory_size=1024,
+                    LR=0.00025,
+                    TAU=0.001,
+                    GAMMA=0.99,
+                    n_quantiles=12,
+                )
 
             agents.append(
                 TreasurehuntAgent(
                     observation_spec=observation_spec,
                     action_spec=action_spec,
-                    model=model,
+                    model=shared_model,
                 )
             )
 
+        self.shared_model = shared_model
         self.agents = agents
 
     def populate_environment(self):

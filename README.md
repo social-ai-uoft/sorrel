@@ -37,6 +37,14 @@ pip install sorrel[llm]
 > We recommend you follow these instructions in a fresh conda/virtual environment to keep packages isolated
 > from other environments and/or Python versions. Python 3.12+ is required.
 
+> [!WARNING]
+> On Python 3.14, the `sorrel run` / `sorrel show-logs` CLI (and any example's `main.py`, which is decorated
+> with `@hydra.main`) currently crashes on startup with `ValueError: badly formed help string`. This is an
+> upstream bug in Hydra's argument parser under Python 3.14's stricter `argparse`
+> ([facebookresearch/hydra#3121](https://github.com/facebookresearch/hydra/issues/3121)); a fix is not yet in a
+> stable Hydra release. Sorrel's library code and test suite are unaffected and fully support 3.14 — only the
+> Hydra-based CLI entry point is impacted. Python 3.12 and 3.13 work without this issue.
+
 To create a [virtual environment](https://docs.python.org/3/library/venv.html),
 navigate to your project directory in the terminal and run:
 ```

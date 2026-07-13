@@ -1,9 +1,9 @@
 from datetime import datetime
 from pathlib import Path
 
-from sorrel.examples.treasurehunt.entities import EmptyEntity
-from sorrel.examples.treasurehunt.env import TreasurehuntEnv
-from sorrel.examples.treasurehunt.world import TreasurehuntWorld
+from sorrel.examples.treasurehunt_threadsafe.entities import EmptyEntity
+from sorrel.examples.treasurehunt_threadsafe.env import TreasurehuntEnv
+from sorrel.examples.treasurehunt_threadsafe.world import TreasurehuntWorld
 from sorrel.utils.logging import TensorboardLogger
 
 # begin main
@@ -21,7 +21,6 @@ if __name__ == "__main__":
         "model": {
             "agent_vision_radius": 2,
             "epsilon_decay": 0.0005,
-            "observation_spec": "rgb",  # options: ["rgb", "onehot"]
         },
         "world": {
             "height": 21,

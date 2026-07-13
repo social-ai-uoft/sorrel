@@ -112,6 +112,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+poetry.toml
 
 # Spyder project settings
 .spyderproject

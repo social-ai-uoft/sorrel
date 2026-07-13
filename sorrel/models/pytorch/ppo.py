@@ -43,7 +43,7 @@ class RolloutBuffer(Buffer):
         super().clear()
         self.log_probs = np.zeros(self.capacity, dtype=np.float32)
 
-    def add(self, obs, action, reward, done):
+    def add(self, obs, action, reward, done, **kwargs):
         """Add an experience to the replay buffer.
 
         Args:
@@ -51,6 +51,7 @@ class RolloutBuffer(Buffer):
             action (tuple): A tuple indicating the action taken, and the log probability of the action.
             reward (float): The reward received.
             done (bool): Whether the episode terminated after this step.
+            **kwargs: Additional data to store in the buffer.
         """
         # Unpack action tuple
         action_, log_prob = action

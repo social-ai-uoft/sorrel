@@ -6,6 +6,7 @@ import numpy as np
 from sorrel.action.action_spec import ActionSpec
 from sorrel.entities import Entity
 from sorrel.models import BaseModel
+from sorrel.models.threadsafe_base_model import ThreadsafeBaseModel
 from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.worlds import Gridworld
 
@@ -120,7 +121,36 @@ class Agent[W: Gridworld](Entity[W]):
             reward (float): the reward received by the agent.
             done (bool): whether the episode terminated after this experience.
         """
-        self.model.memory.add(state, action, reward, done)
+        threadsafe_model = (
+            self.model if isinstance(self.model, ThreadsafeBaseModel) else None
+        )
+        if threadsafe_model and "positions" in threadsafe_model.memory.extra_data:
+            threadsafe_model.add_experience(
+                state, action, reward, done, positions=tuple(self.location[:2])
+            )
+        elif "positions" in self.model.memory.extra_data:
+            self.model.memory.add(
+                state, action, reward, done, positions=tuple(self.location[:2])
+            )
+        else:
+            self.model.memory.add(state, action, reward, done)
+
+    def model_take_action(self, state: np.ndarray):
+        """Take an action through optional threadsafe/snapshot model APIs."""
+        threadsafe_model = (
+            self.model if isinstance(self.model, ThreadsafeBaseModel) else None
+        )
+        take_action_from_policy = getattr(self.model, "take_action_from_policy", None)
+        if (
+            callable(take_action_from_policy)
+            and threadsafe_model
+            and threadsafe_model.use_policy_snapshot
+        ):
+            snapshot = threadsafe_model.get_policy_snapshot()
+            return take_action_from_policy(state, snapshot.policy)
+        if threadsafe_model and threadsafe_model.use_threadsafe_model_api:
+            return threadsafe_model.threadsafe_take_action(state)
+        return self.model.take_action(state)
 
     def transition(self, world: W) -> None:
         """Processes a full transition step for the agent.
