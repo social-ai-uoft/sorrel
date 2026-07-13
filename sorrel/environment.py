@@ -132,11 +132,7 @@ class Environment[W: Gridworld]:
         """
         renderer = None
         if output_dir is None:
-            if hasattr(self.config.experiment, "output_dir"):
-                output_dir = Path(self.config.experiment.output_dir)
-            else:
-                output_dir = Path(__file__).parent / "./data/"
-            assert isinstance(output_dir, Path)
+            output_dir = Path(__file__).parent / "./data/"
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         if animate:
@@ -219,11 +215,7 @@ class Environment[W: Gridworld]:
         """Using the existing models, generate a memory buffer for the specified number
         of games."""
         if output_dir is None:
-            if hasattr(self.config.experiment, "output_dir"):
-                output_dir = Path(self.config.experiment.output_dir)
-            else:
-                output_dir = Path(__file__).parent / "./data/"
-            assert isinstance(output_dir, Path)
+            output_dir = Path(__file__).parent / "./data/"
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
@@ -248,14 +240,6 @@ class Environment[W: Gridworld]:
 
         # Setup renderer
         renderer = None
-        if output_dir is None:
-            if hasattr(self.config.experiment, "output_dir"):
-                output_dir = Path(self.config.experiment.output_dir)
-            else:
-                output_dir = Path(__file__).parent / "./data/"
-            assert isinstance(output_dir, Path)
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
         if animate:
             renderer = ImageRenderer(
                 experiment_name=self.__class__.__name__,
