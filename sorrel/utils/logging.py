@@ -73,14 +73,15 @@ class Logger:
             self.additional_values[key].append(value)
 
     def record_turn(self, stats: TurnStats) -> None:
-        """Record per-turn statistics. No-op in base class.
+        """Record per-turn statistics.
 
-        Override in subclasses to stream per-turn data to external systems.
-        :class:`TensorboardLogger` provides a built-in override.
+        No-op in base class.
+                Override in subclasses to stream per-turn data to external systems.
+                :class:`TensorboardLogger` provides a built-in override.
 
-        Args:
-            stats: The :class:`~sorrel.utils.turn_stats.TurnStats` snapshot
-                for the completed turn.
+                Args:
+                    stats: The :class:`~sorrel.utils.turn_stats.TurnStats` snapshot
+                        for the completed turn.
         """
         pass
 
