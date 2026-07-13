@@ -20,7 +20,6 @@ def positional_embedding(
 
     .. note:: A lower value for :attr:`scale[0]` or :attr:`scale[1]` results in a lower resolution. This can mean that embedding values repeat, meaning that locations are not uniquely identified. Higher values of :attr:`scale[0]` or :attr:`scale[1]` result in a longer positional embedding value, but are able to uniquely encode points on a larger grid.
     """
-
     # Initialize embedding list for the given coordinate (x, y)
     x, y = location[0:2]
     grid_size = world.map.shape[0:2]
@@ -101,7 +100,6 @@ def recover_coordinates(
 
     .. warning:: This function expects all embeddings in the grid. If a single embedding or partial list is input, the function will fail.
     """
-
     embedding = embedding.reshape(np.prod(grid_size), -1)
     all_embeddings = generate_positional_embedding(grid_size, scale).reshape(
         np.prod(grid_size), -1
@@ -131,7 +129,6 @@ def test_embeddings(
         grid_size: (tuple[int, int]) A tuple indicating the size of the X and Y axes of the grid.
         scale: (tuple[int, int]) The scale for encoding coordinates in the X and Y dimensions.
     """
-
     # Generate positional embeddings for each grid square
     positional_embeddings = generate_positional_embedding(grid_size, scale)
 

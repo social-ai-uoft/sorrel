@@ -3,10 +3,9 @@
 These classes provide lock-aware behavior without changing default PPO classes.
 """
 
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
-import torch
 
 from sorrel.models.pytorch.ppo import PyTorchPPO, RolloutBuffer
 from sorrel.models.threadsafe_base_model import ThreadsafeBaseModel
@@ -20,9 +19,9 @@ class ThreadsafeRolloutBuffer(RolloutBuffer, ThreadsafeBuffer):
         with self._lock:
             RolloutBuffer.clear(self)
 
-    def add(self, obs, action, reward, done):
+    def add(self, obs, action, reward, done, **kwargs):
         with self._lock:
-            RolloutBuffer.add(self, obs, action, reward, done)
+            RolloutBuffer.add(self, obs, action, reward, done, **kwargs)
 
 
 class ThreadsafePyTorchPPO(PyTorchPPO, ThreadsafeBaseModel):
@@ -38,7 +37,7 @@ class ThreadsafePyTorchPPO(PyTorchPPO, ThreadsafeBaseModel):
         action_space: int,
         layer_size: int,
         epsilon: float,
-        device: str | torch.device,
+        device: str | Any,
         entropy_coef: float,
         eps_clip: float,
         gamma: float,

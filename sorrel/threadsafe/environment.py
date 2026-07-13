@@ -1,3 +1,5 @@
+import numpy as np
+
 from sorrel.agents import Agent
 from sorrel.environment import Environment
 from sorrel.worlds import Gridworld
@@ -20,8 +22,10 @@ class ThreadsafeEnvironment[W: Gridworld](Environment[W]):
             return
         agent.model.end_epoch_action(epoch=epoch)
 
-    def _model_train_step(self, agent: Agent):
+    def _model_train_step(
+        self, agent: Agent
+    ) -> np.ndarray:  # pyright: ignore[reportIncompatibleMethodOverride]
         train_step = getattr(agent.model, "threadsafe_train_step", None)
         if callable(train_step):
-            return train_step()
+            return train_step()  # pyright: ignore[reportReturnType]
         return agent.model.train_step()

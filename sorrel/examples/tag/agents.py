@@ -75,7 +75,6 @@ class TagAgent(MovingAgent[Gridworld]):
 
     def act(self, world: Gridworld, action: int) -> float:
         """Act on the environment, returning the reward."""
-
         # Attempt to move to a new location
         new_location = self.movement(action)
 

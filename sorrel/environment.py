@@ -155,7 +155,8 @@ class Environment[W: Gridworld]:
         )
 
     def _on_turn_end(self, stats: TurnStats) -> None:
-        """Called after every turn with the collected :class:`~sorrel.utils.turn_stats.TurnStats`.
+        """Called after every turn with the collected
+        :class:`~sorrel.utils.turn_stats.TurnStats`.
 
         Default implementation buffers ``stats`` into
         :attr:`_epoch_turn_stats` and delegates to the active logger's
@@ -187,11 +188,7 @@ class Environment[W: Gridworld]:
         if not self._epoch_turn_stats:
             return {}
         all_rewards = np.array(
-            [
-                a.last_reward
-                for ts in self._epoch_turn_stats
-                for a in ts.agent_stats
-            ],
+            [a.last_reward for ts in self._epoch_turn_stats for a in ts.agent_stats],
             dtype=np.float32,
         )
         if all_rewards.size == 0:
@@ -343,6 +340,7 @@ class Environment[W: Gridworld]:
                 capacity=num_games * self.config.experiment.max_turns,
                 obs_shape=agent.observation_spec.input_size,
                 n_frames=n_frames,
+                positions=(2,),
             )
             if hasattr(agent.model, "eval"):
                 agent.model.eval()  # type: ignore

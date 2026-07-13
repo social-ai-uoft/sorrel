@@ -16,9 +16,9 @@ class ThreadsafeBuffer(Buffer):
         super().__init__(capacity=capacity, obs_shape=obs_shape, n_frames=n_frames)
         self._lock = threading.RLock()
 
-    def add(self, obs, action, reward, done):
+    def add(self, obs, action, reward, done, **kwargs):
         with self._lock:
-            super().add(obs, action, reward, done)
+            super().add(obs, action, reward, done, **kwargs)
 
     def add_empty(self):
         with self._lock:

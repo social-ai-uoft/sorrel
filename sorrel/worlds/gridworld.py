@@ -53,14 +53,14 @@ class Gridworld(World):
         This function is used in :func:`self.__init__()`, and may be useful for
         resetting environments.
         """
-
         self.map = np.full((self.height, self.width, self.layers), Entity())
 
         # Define the location of each entity
         for index, x in np.ndenumerate(self.map):
             # we have to make deep copies of default_entity since it's an instance
-            self.map[index] = copy.deepcopy(self.default_entity)
-            self.map[index].location = index
+            entity = copy.deepcopy(self.default_entity)
+            entity.location = index
+            self.map[index] = entity
 
         self.total_reward = 0.0
 

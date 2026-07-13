@@ -19,8 +19,8 @@ from sorrel.models.base_model import BaseModel, RandomModel
 class RandomChessAgent(Agent[Chessboard]):
     """A minimal chess agent.
 
-    The agent observes the full board and selects a random legal move (if any)
-    provided by ``world.legal_moves(colour)``.
+    The agent observes the full board and selects a random legal move (if any) provided
+    by ``world.legal_moves(colour)``.
     """
 
     def __init__(
@@ -65,10 +65,9 @@ class RandomChessAgent(Agent[Chessboard]):
     def is_done(self, world: Chessboard) -> bool:
         """The episode ends when the environment signals ``is_done``.
 
-        ``Environment`` sets ``world.is_done`` after ``max_turns`` or on
-        termination conditions (e.g., an agent is checkmated or stalemated).
+        ``Environment`` sets ``world.is_done`` after ``max_turns`` or on termination
+        conditions (e.g., an agent is checkmated or stalemated).
         """
-
         return world.is_done
 
 
@@ -266,7 +265,6 @@ def make_random_chess_agent(colour: str, world: Chessboard) -> RandomChessAgent:
     Returns:
         RandomChessAgent: the random agent.
     """
-
     entity_list = [
         "EmptySquare",
         "Pawn",

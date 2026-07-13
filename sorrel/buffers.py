@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -57,10 +57,10 @@ class Buffer:
         self.actions[self.idx] = action
         self.rewards[self.idx] = reward
         self.dones[self.idx] = done
-        self.idx = (self.idx + 1) % self.capacity
-        self.size = min(self.size + 1, self.capacity)
         for key, value in kwargs.items():
             self.extra_data[key][self.idx] = value
+        self.idx = (self.idx + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
 
     def add_empty(self):
         """Advancing the id by `self.n_frames`, adding empty frames to the replay
@@ -225,7 +225,14 @@ class TransformerBuffer(Buffer):
 
     def save(self, output_file: str | Path) -> None:
         output_file = Path(output_file)
-        save_dict = dict(
+        # Typed as dict[str, Any] (rather than left to inference) because
+        # np.savez_compressed declares an explicit `allow_pickle: bool` keyword
+        # alongside its `**kwds: ArrayLike` catchall; pyright checks a `**`-splatted
+        # dict's value type against every named keyword parameter (since it can't
+        # prove none of our keys is literally "allow_pickle"), so an inferred
+        # `ndarray | int` value type spuriously fails against `bool`. None of our
+        # keys are ever "allow_pickle" at runtime.
+        save_dict: dict[str, Any] = dict(
             states=self.states,
             actions=self.actions,
             rewards=self.rewards,
@@ -258,7 +265,7 @@ class TransformerBuffer(Buffer):
         output.dones = dones
         output.idx = idx
         output.size = size
-        for key, array in zip(["positions, agent_ids"], [positions, agent_ids]):
+        for key, array in zip(["positions", "agent_ids"], [positions, agent_ids]):
             if array is not None:
                 output.extra_data[key] = array
         return output
@@ -353,7 +360,14 @@ class SavedGames(Buffer):
 
     def save(self, output_file: str | Path) -> None:
         output_file = Path(output_file)
-        save_dict = dict(
+        # Typed as dict[str, Any] (rather than left to inference) because
+        # np.savez_compressed declares an explicit `allow_pickle: bool` keyword
+        # alongside its `**kwds: ArrayLike` catchall; pyright checks a `**`-splatted
+        # dict's value type against every named keyword parameter (since it can't
+        # prove none of our keys is literally "allow_pickle"), so an inferred
+        # `ndarray | int` value type spuriously fails against `bool`. None of our
+        # keys are ever "allow_pickle" at runtime.
+        save_dict: dict[str, Any] = dict(
             states=self.states,
             actions=self.actions,
             rewards=self.rewards,

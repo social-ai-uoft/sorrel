@@ -133,7 +133,6 @@ def visual_field_ascii(
         Or if vision or location is None:
         `(world.height, world.width)`.
     """
-
     # Create an array of equivalent shape to the world map
     new = np.empty_like(world.map, dtype=np.str_)
 

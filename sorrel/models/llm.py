@@ -1,12 +1,16 @@
 import os
+from collections.abc import Iterable
 
-import openai
+try:
+    import openai
+except ImportError:
+    openai = None  # type: ignore[assignment]
 
 from sorrel.buffers import StrBuffer
 from sorrel.models import BaseModel
 
 try:
-    import anthropic as _anthropic_sdk
+    import anthropic as _anthropic_sdk  # type: ignore
 except ImportError:
     _anthropic_sdk = None
 
@@ -29,6 +33,14 @@ _OPENAI_COMPATIBLE_PROVIDERS: dict = {
 }
 
 
+def _extract_anthropic_text(content_blocks: Iterable[object]) -> str:
+    for block in content_blocks:
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            return text
+    return ""
+
+
 class Client:
     def __init__(
         self,
@@ -46,7 +58,7 @@ class Client:
             if _anthropic_sdk is None:
                 raise ImportError(
                     "anthropic package required for Anthropic provider. "
-                    "Install with: pip install anthropic"
+                    "Install with: pip install sorrel[llm] (or `pip install anthropic`)."
                 )
             resolved_key = (
                 api_key
@@ -56,6 +68,11 @@ class Client:
             self._anthropic_client = _anthropic_sdk.Anthropic(api_key=resolved_key)
             self.client = None
         elif provider in _OPENAI_COMPATIBLE_PROVIDERS:
+            if openai is None:
+                raise ImportError(
+                    f"openai package required for {provider!r} provider. "
+                    "Install with: pip install sorrel[llm] (or `pip install openai`)."
+                )
             cfg = _OPENAI_COMPATIBLE_PROVIDERS[provider]
             env_key_val = os.environ.get(cfg["env_key"]) if cfg["env_key"] else None
             resolved_key = api_key or env_key_val or cfg["default_api_key"]
@@ -83,6 +100,11 @@ class Client:
         self.msg_history += [{"role": "user", "content": prompt}]
 
         if self.provider == "anthropic":
+            assert self._anthropic_client is not None, (
+                "Anthropic client not successfully initialized. Please ensure the "
+                "'anthropic' package is installed."
+            )
+
             response = self._anthropic_client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
@@ -90,8 +112,12 @@ class Client:
                 messages=self.msg_history,
                 temperature=temperature,
             )
-            content = response.content[0].text
+            content = _extract_anthropic_text(response.content)
         else:
+            assert self.client is not None, (
+                "OpenAI client not successfully initialized. Please ensure the "
+                "'openai' package is installed and a valid API key is provided."
+            )
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
