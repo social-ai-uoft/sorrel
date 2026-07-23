@@ -6,7 +6,7 @@
 ## Methods
 ```{eval-rst}
 .. automethod:: sorrel.utils.logging.Logger.__init__
-.. automethod:: sorrel.utils.logging.Logger.record_turn
+.. automethod:: sorrel.utils.logging.Logger.record_epoch
 .. automethod:: sorrel.utils.logging.Logger.to_csv
 ```
 
@@ -17,7 +17,7 @@
 
 ## Methods
 ```{eval-rst}
-.. automethod:: sorrel.utils.logging.ConsoleLogger.record_turn
+.. automethod:: sorrel.utils.logging.ConsoleLogger.record_epoch
 ```
 
 # JupyterLogger
@@ -27,7 +27,7 @@
 
 ## Methods
 ```{eval-rst}
-.. automethod:: sorrel.utils.logging.JupyterLogger.record_turn
+.. automethod:: sorrel.utils.logging.JupyterLogger.record_epoch
 ```
 
 # Tensorboard Logger
@@ -38,5 +38,5 @@
 ## Methods
 ```{eval-rst}
 .. automethod:: sorrel.utils.logging.TensorboardLogger.__init__
-.. automethod:: sorrel.utils.logging.TensorboardLogger.record_turn
+.. automethod:: sorrel.utils.logging.TensorboardLogger.record_epoch
 ```
