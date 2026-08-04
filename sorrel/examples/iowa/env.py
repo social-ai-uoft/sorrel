@@ -203,7 +203,7 @@ class GamblingEnv(Environment[GamblingWorld]):
             if logging:
                 if not logger:
                     logger = ConsoleLogger(self.config.experiment.epochs)
-                logger.record_turn(
+                logger.record_epoch(
                     epoch,
                     total_loss,
                     self.world.total_reward,
