@@ -168,7 +168,14 @@ class LLM(BaseModel):
         output = self.client.call(
             prompt=state, system_message=self.instructions, temperature=self.temperature
         )
-        response = output.lower()  # type: ignore
+        if output is None:
+            raise RuntimeError("LLM call returned no content (empty/refused response).")
+        response = output.lower()
+        if response not in self.action_list:
+            raise ValueError(
+                f"LLM returned {response!r}, which is not one of the valid actions "
+                f"{list(self.action_list)}."
+            )
         return self.action_list.index(response)
 
     def format_memories(self, memories):
@@ -192,12 +199,10 @@ class LLM(BaseModel):
           method (str): The method for recall. By default, recency.
         """
         if method == "recency":
-            memories = self.format_memories(
-                self.memory[self.memory.idx - k : self.memory.idx]
-            )
+            start = max(0, self.memory.idx - k)
+            memories = self.format_memories(self.memory[start : self.memory.idx])
             self.stm = "\n\n".join(memories)
         elif method == "frequency":
-            # TODO: Implement frequency-based recall
-            pass
+            raise NotImplementedError("Frequency-based recall is not yet implemented.")
         else:
             raise ValueError(f"Invalid recall method: {method}")

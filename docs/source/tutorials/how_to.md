@@ -128,6 +128,14 @@ record the reward obtained based on the entity at the new location, then try to 
 :pyobject: TreasurehuntAgent.act
 ```
 
+```{note}
+`TreasurehuntAgent` actually extends {class}`sorrel.agents.MovingAgent`, not `Agent` directly — a convenience
+subclass that already implements this exact up/down/left/right movement logic (plus sprite-direction
+bookkeeping) via `MovingAgent.movement()`/`MovingAgent.act()`. We've written it out here to show what `act()`
+does under the hood, but if your agent's movement is entirely standard grid movement, you can extend
+`MovingAgent` and skip implementing `act()` yourself.
+```
+
 Finally, we implement {func}`sorrel.agents.Agent.is_done` by checking if the current turn (tracked by default in [Gridworld.turn](#sorrel.worlds.Gridworld.turn)) 
 exceeds the maximum number of turns. 
 ```{literalinclude} /../../sorrel/examples/treasurehunt/agents.py

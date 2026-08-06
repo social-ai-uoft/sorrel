@@ -42,18 +42,8 @@ class TreasurehuntAgent(MovingAgent[TreasurehuntWorld]):
 
     def act(self, world: TreasurehuntWorld, action: int) -> float:
         """Act on the environment, returning the reward."""
-        # Translate the model output to an action string
-        action_name = self.action_spec.get_readable_action(action)
-
-        new_location = self.location
-        if action_name == "up":
-            new_location = (self.location[0] - 1, self.location[1], self.location[2])
-        if action_name == "down":
-            new_location = (self.location[0] + 1, self.location[1], self.location[2])
-        if action_name == "left":
-            new_location = (self.location[0], self.location[1] - 1, self.location[2])
-        if action_name == "right":
-            new_location = (self.location[0], self.location[1] + 1, self.location[2])
+        # calculate the new location based on the action taken
+        new_location = self.movement(action)
 
         # get reward obtained from object at new_location
         target_object = world.observe(new_location)

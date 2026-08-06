@@ -52,7 +52,7 @@ class Node:
         visible_obs = []
         for node in self.visible:
             for entity in node.entities:
-                visible_obs.append({node.name, entity})
+                visible_obs.append({node.name: entity})
         return visible_obs
 
     def get_adjacent(self) -> list[str]:
@@ -145,10 +145,13 @@ class NodeWorld:
                     return entity
 
     def move(self, entity: Entity, new_location: str) -> bool:
+        if new_location not in self.struct:
+            return False
         for node_name, node in self.struct.items():
             if (node_name,) == entity.location:
-                tmp = node.remove_entity(entity)
-                node.add_entity(entity)
+                node.remove_entity(entity)
+                entity.location = (new_location,)
+                self.struct[new_location].add_entity(entity)
                 return True
         return False
 

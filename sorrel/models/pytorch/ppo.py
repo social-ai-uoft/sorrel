@@ -127,7 +127,7 @@ class ActorCritic(nn.Module):
         Returns:
           tuple[Tensor, Tensor]: The action and action log probability.
         """
-        state_ = torch.tensor(state)
+        state_ = torch.tensor(state, device=next(self.parameters()).device)
         action_probs = self.actor(state_)
         dist = Categorical(action_probs)
 
@@ -181,7 +181,7 @@ class PyTorchPPO(PyTorchModel):
         super().__init__(input_size, action_space, layer_size, epsilon, device, seed)
         ac_input_size = int(np.prod(input_size))
         # Actor-critic network
-        self.policy = ActorCritic(ac_input_size, action_space, layer_size)
+        self.policy = ActorCritic(ac_input_size, action_space, layer_size).to(device)
         # Set up optimizers for actor and critic
         self.optimizer = torch.optim.Adam(
             [
@@ -284,7 +284,7 @@ class PyTorchPPO(PyTorchModel):
             loss.mean().backward()
             self.optimizer.step()
 
-        return loss.mean().detach().numpy()
+        return loss.mean().detach().cpu().numpy()
 
     def save(self, file_path: str | os.PathLike) -> None:
         torch.save(

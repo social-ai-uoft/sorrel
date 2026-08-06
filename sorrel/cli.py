@@ -32,7 +32,8 @@ def run_example(args, extra_args):
         print(f"Error running example '{example_name}': {e}")
         return e.returncode
     except KeyboardInterrupt:
-        pass
+        print(f"Interrupted while running example '{example_name}'.")
+        return 130
 
     return 0
 
@@ -68,7 +69,8 @@ def show_logs(args, extra_args):
         print(f"Error running TensorBoard: {e}")
         return e.returncode
     except KeyboardInterrupt:
-        pass
+        print(f"Interrupted while running TensorBoard for '{example_name}'.")
+        return 130
     except FileNotFoundError:
         print(
             "Error: 'tensorboard' command not found. Please ensure it is installed and in your PATH."

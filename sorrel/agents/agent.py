@@ -42,14 +42,14 @@ class Agent[W: Gridworld](Entity[W]):
         model: BaseModel,
         location=None,
     ):
+        super().__init__()
+
         # initializations based on parameters
         self.observation_spec = observation_spec
         self.action_spec = action_spec
         self.model = model
         self.sprite = Path(__file__).parent / "./assets/hero.png"
         self._location = location
-
-        super().__init__()
 
         # overriding parent default attributes
         self.has_transitions = True
