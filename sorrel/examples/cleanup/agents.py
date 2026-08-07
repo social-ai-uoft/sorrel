@@ -74,6 +74,9 @@ class CleanupAgent(MovingAgent[CleanupWorld]):
         self.direction = 2  # 90 degree rotation: default at 180 degrees (facing down)
         self.encounters = {}
 
+    def reset(self) -> None:
+        self.model.reset()
+
     def pov(self, world: CleanupWorld) -> np.ndarray:
         image = self.observation_spec.observe(world, self.location)
         # flatten the image to get the state
