@@ -203,7 +203,7 @@ class Vector:
         self.layer = layer
 
     def __repr__(self):
-        return f"Vector(direction={self.direction},forward={self.forward},right={self.right},backward={self.backward},left={self.left}"
+        return f"Vector(direction={self.direction},forward={self.forward},right={self.right},backward={self.backward},left={self.left})"
 
     def __str__(self):
         return repr(self)

@@ -1,6 +1,7 @@
 import pprint
 
 from sorrel.entities.entity import Entity
+from sorrel.worlds.base_world import World
 
 
 class Node:
@@ -94,7 +95,7 @@ class Node:
             self.adjacent.append(node)
 
 
-class NodeWorld:
+class NodeWorld(World):
     """World that represents a graph of nodes.
 
     Each node can contain agents and entities.
@@ -154,6 +155,9 @@ class NodeWorld:
                 self.struct[new_location].add_entity(entity)
                 return True
         return False
+
+    def observe(self, target_location: str) -> list[Entity]:
+        return self.struct[target_location].entities
 
     def set_visibility(self, location: str, visible_from: list[str]) -> None:
         for node, value in self.struct.items():

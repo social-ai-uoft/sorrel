@@ -1,7 +1,6 @@
 import os
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from datetime import datetime
-from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
@@ -17,7 +16,7 @@ from sorrel.utils.visualization import ImageRenderer
 from sorrel.worlds import Gridworld
 
 
-class Environment[W: Gridworld]:
+class Environment[W: Gridworld](ABC):
     """An abstract wrapper class for running experiments with agents and environments.
 
     Attributes:
@@ -32,7 +31,7 @@ class Environment[W: Gridworld]:
 
     world: W
     config: DictConfig
-    agents: list[Agent]
+    agents: list[Agent[W]]
     stop_if_done: bool
 
     def __init__(
@@ -106,15 +105,15 @@ class Environment[W: Gridworld]:
         stats = self._collect_turn_stats(epoch)
         self._on_turn_end(stats)
 
-    def _model_start_epoch_action(self, agent: Agent, epoch: int) -> None:
+    def _model_start_epoch_action(self, agent: Agent[W], epoch: int) -> None:
         """Run per-epoch model start hook."""
         agent.model.start_epoch_action(epoch=epoch)
 
-    def _model_end_epoch_action(self, agent: Agent, epoch: int) -> None:
+    def _model_end_epoch_action(self, agent: Agent[W], epoch: int) -> None:
         """Run per-epoch model end hook."""
         agent.model.end_epoch_action(epoch=epoch)
 
-    def _model_train_step(self, agent: Agent):
+    def _model_train_step(self, agent: Agent[W]):
         """Run model train step."""
         return agent.model.train_step()
 
@@ -273,11 +272,9 @@ class Environment[W: Gridworld]:
                 for agent in self.agents:
                     self._model_end_epoch_action(agent, epoch)
 
-                # # At the end of each epoch, train the agents.
-                # with Pool() as pool:
-                #     # Use multiprocessing to train agents in parallel
-                #     models = [agent.model for agent in self.agents]
-                #     total_loss = sum(pool.map(lambda model: model.train_step(), models))
+                # TODO: parallelize per-agent training (multiprocessing/multithreading) across
+                # self.agents. A prior attempt using multiprocessing.Pool was removed as dead/
+                # commented-out code; revisit if training becomes a bottleneck.
                 total_loss = 0
                 for agent in self.agents:
                     total_loss += self._model_train_step(agent)

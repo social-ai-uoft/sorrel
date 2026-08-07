@@ -90,6 +90,12 @@ class ChessApiAgent(Agent[Chessboard]):
     def reset(self) -> None:
         pass
 
+    def pov(self, world: Chessboard) -> np.ndarray:
+        image = self.observation_spec.observe(
+            world, None
+        )  # full view does not need a location
+        return image.reshape(1, -1)
+
     def get_action(self, state: np.ndarray) -> int:
         return 0
 
