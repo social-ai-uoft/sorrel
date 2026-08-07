@@ -89,7 +89,9 @@ class Buffer:
         ]
         for key, value in buffer.extra_data.items():
             if not key in self.extra_data:
-                self.extra_data[key] = np.zeros(self.capacity, dtype=value.dtype)
+                self.extra_data[key] = np.zeros(
+                    (self.capacity, *value.shape[1:]), dtype=value.dtype
+                )
             self.extra_data[key][self.idx : self.idx + buffer_slice_point] = value[
                 :buffer_slice_point
             ]

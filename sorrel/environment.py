@@ -239,72 +239,73 @@ class Environment[W: Gridworld]:
             if not logger:
                 logger = ConsoleLogger(self.config.experiment.epochs)
             self._active_logger = logger
-        for epoch in range(self.config.experiment.epochs + 1):
-            # Reset the environment at the start of each epoch
-            self.reset()
+        try:
+            for epoch in range(self.config.experiment.epochs + 1):
+                # Reset the environment at the start of each epoch
+                self.reset()
 
-            # Determine whether to animate this turn.
-            animate_this_turn = animate and (
-                epoch % self.config.experiment.record_period == 0
-            )
-
-            # start epoch action for each agent model
-            for agent in self.agents:
-                self._model_start_epoch_action(agent, epoch)
-
-            # run the environment for the specified number of turns
-            while not self.turn >= self.config.experiment.max_turns:
-                # renderer should never be None if animate is true; this is just written for pyright to not complain
-                if animate_this_turn and renderer is not None:
-                    renderer.add_image(self.world)
-                self.take_turn(epoch)
-
-                if self.world.is_done and self.stop_if_done:
-                    break
-
-            self.world.is_done = True
-
-            # generate the gif if animation was done
-            if animate_this_turn and renderer is not None:
-                renderer.save_gif(epoch, output_dir / "./gifs/")
-
-            # end epoch action for each agent model
-            for agent in self.agents:
-                self._model_end_epoch_action(agent, epoch)
-
-            # # At the end of each epoch, train the agents.
-            # with Pool() as pool:
-            #     # Use multiprocessing to train agents in parallel
-            #     models = [agent.model for agent in self.agents]
-            #     total_loss = sum(pool.map(lambda model: model.train_step(), models))
-            total_loss = 0
-            for agent in self.agents:
-                total_loss = self._model_train_step(agent)
-
-            # Log the information
-            if logging and self._active_logger is not None:
-                epoch_kwargs = self._aggregate_epoch_stats()
-                self._active_logger.record_epoch(
-                    epoch,
-                    total_loss,
-                    self.world.total_reward,
-                    self.agents[0].model.epsilon,
-                    **epoch_kwargs,
+                # Determine whether to animate this turn.
+                animate_this_turn = animate and (
+                    epoch % self.config.experiment.record_period == 0
                 )
 
-            # update epsilon
-            for i, agent in enumerate(self.agents):
-                if hasattr(self.config.model, "epsilon_decay"):
-                    agent.model.epsilon_decay(self.config.model.epsilon_decay)
-                if epoch % self.config.experiment.record_period == 0:
-                    if hasattr(self.config.model, "save_weights"):
-                        if self.config.model.save_weights:
-                            agent.model.save(
-                                output_dir
-                                / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
-                            )
+                # start epoch action for each agent model
+                for agent in self.agents:
+                    self._model_start_epoch_action(agent, epoch)
 
-        self._active_logger = None
+                # run the environment for the specified number of turns
+                while not self.turn >= self.config.experiment.max_turns:
+                    # renderer should never be None if animate is true; this is just written for pyright to not complain
+                    if animate_this_turn and renderer is not None:
+                        renderer.add_image(self.world)
+                    self.take_turn(epoch)
+
+                    if self.world.is_done and self.stop_if_done:
+                        break
+
+                self.world.is_done = True
+
+                # generate the gif if animation was done
+                if animate_this_turn and renderer is not None:
+                    renderer.save_gif(epoch, output_dir / "./gifs/")
+
+                # end epoch action for each agent model
+                for agent in self.agents:
+                    self._model_end_epoch_action(agent, epoch)
+
+                # # At the end of each epoch, train the agents.
+                # with Pool() as pool:
+                #     # Use multiprocessing to train agents in parallel
+                #     models = [agent.model for agent in self.agents]
+                #     total_loss = sum(pool.map(lambda model: model.train_step(), models))
+                total_loss = 0
+                for agent in self.agents:
+                    total_loss += self._model_train_step(agent)
+
+                # Log the information
+                if logging and self._active_logger is not None:
+                    epoch_kwargs = self._aggregate_epoch_stats()
+                    self._active_logger.record_epoch(
+                        epoch,
+                        total_loss,
+                        self.world.total_reward,
+                        self.agents[0].model.epsilon,
+                        **epoch_kwargs,
+                    )
+
+                # update epsilon
+                for i, agent in enumerate(self.agents):
+                    if hasattr(self.config.model, "epsilon_decay"):
+                        agent.model.epsilon_decay(self.config.model.epsilon_decay)
+                    if epoch % self.config.experiment.record_period == 0:
+                        if hasattr(self.config.model, "save_weights"):
+                            if self.config.model.save_weights:
+                                agent.model.save(
+                                    output_dir
+                                    / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-agent-{i}.pkl"
+                                )
+        finally:
+            self._active_logger = None
 
     def generate_memories(
         self,

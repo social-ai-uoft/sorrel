@@ -11,6 +11,10 @@ class ThreadsafeBaseModel(BaseModel):
     use_threadsafe_model_api = True
     use_policy_snapshot = True
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._ensure_threadsafe_state()
+
     def _ensure_threadsafe_state(self) -> None:
         if not hasattr(self, "_lock"):
             self._lock = threading.RLock()

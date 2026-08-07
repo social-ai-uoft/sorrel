@@ -340,12 +340,12 @@ class iRainbowModel(DoublePyTorchModel):
             )
 
             # Convert to torch tensors
-            states = torch.from_numpy(states)
-            next_states = torch.from_numpy(next_states)
-            actions = torch.from_numpy(actions)
-            rewards = torch.from_numpy(rewards)
-            dones = torch.from_numpy(dones)
-            valid = torch.from_numpy(valid)
+            states = torch.from_numpy(states).to(self.device)
+            next_states = torch.from_numpy(next_states).to(self.device)
+            actions = torch.from_numpy(actions).to(self.device)
+            rewards = torch.from_numpy(rewards).to(self.device)
+            dones = torch.from_numpy(dones).to(self.device)
+            valid = torch.from_numpy(valid).to(self.device)
 
             # REPLACED: as suggested by Gemini, use local network to select action and target network to evaluate it
             # Get max predicted Q values (for next states) from target model
@@ -409,7 +409,7 @@ class iRainbowModel(DoublePyTorchModel):
             # ------------------- update target network ------------------- #
             self.soft_update()
 
-        return loss.detach().numpy()
+        return loss.detach().cpu().numpy()
 
     def soft_update(self) -> None:
         """Soft update model parameters.

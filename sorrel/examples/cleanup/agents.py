@@ -169,8 +169,6 @@ class CleanupAgent(MovingAgent[CleanupWorld]):
                 self.encounters[target_object.kind] = 0
             self.encounters[target_object.kind] += 1
 
-        world.total_reward += reward
-
         # try moving to new_location
         world.move(self, new_location)
 
