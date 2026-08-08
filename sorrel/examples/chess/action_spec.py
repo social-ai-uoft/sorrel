@@ -45,6 +45,6 @@ class ChessActionSpec(ActionSpec):
     @staticmethod
     def algebraic_move(move: str) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
         return (
-            ChessActionSpec.algebraic(move[0:1]),
-            ChessActionSpec.algebraic(move[2:3]),
+            ChessActionSpec.algebraic(move[0:2]),
+            ChessActionSpec.algebraic(move[2:4]),
         )

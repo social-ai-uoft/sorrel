@@ -151,3 +151,7 @@ pyvenv.cfg
 /bin
 /share
 tests/
+
+# Claude Code project files
+CLAUDE.md
+.claude/

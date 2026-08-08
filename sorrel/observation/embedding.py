@@ -34,7 +34,7 @@ def positional_embedding(
         embedding.append(np.cos(freq_x * x))
 
     # Encoding for y dimension at different resolutions
-    for j in range(scale[0]):
+    for j in range(scale[1]):
         freq_y = (
             2 * np.pi * (2**j) / grid_size[1]
         )  # Frequency increases with each scale

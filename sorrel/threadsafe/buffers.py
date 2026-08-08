@@ -12,8 +12,12 @@ from sorrel.buffers import Buffer, TransformerBuffer
 class ThreadsafeBuffer(Buffer):
     """Opt-in threadsafe replay buffer."""
 
-    def __init__(self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1):
-        super().__init__(capacity=capacity, obs_shape=obs_shape, n_frames=n_frames)
+    def __init__(
+        self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1, **kwargs
+    ):
+        super().__init__(
+            capacity=capacity, obs_shape=obs_shape, n_frames=n_frames, **kwargs
+        )
         self._lock = threading.RLock()
 
     def add(self, obs, action, reward, done, **kwargs):

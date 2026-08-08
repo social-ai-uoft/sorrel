@@ -44,7 +44,8 @@ class NoisyLinear(nn.Linear):
         # 3 / in_features is heuristic for the standard deviation.
         std = math.sqrt(3 / self.in_features)
         self.weight.data.uniform_(-std, std)
-        self.bias.data.uniform_(-std, std)
+        if self.bias is not None:
+            self.bias.data.uniform_(-std, std)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         """Sample random noise in the sigma weight and bias buffers."""

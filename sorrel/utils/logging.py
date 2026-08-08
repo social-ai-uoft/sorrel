@@ -69,7 +69,7 @@ class Logger:
         self.rewards.append(reward)
         for key, value in kwargs.items():
             if key not in self.additional_values:
-                self.additional_values[key] = []
+                self.additional_values[key] = [None] * (len(self.losses) - 1)
             self.additional_values[key].append(value)
 
     def record_turn(self, stats: TurnStats) -> None:
@@ -99,12 +99,17 @@ class Logger:
             **self.additional_values,
         }
 
-        with open(file_path, "a") as f:
+        with open(file_path, "a", newline="") as f:
             writer = csv.writer(f)
             if os.stat(file_path).st_size == 0:
                 writer.writerow(list(records.keys()))
             for epoch in range(len(self.losses)):
-                writer.writerow([value[epoch] for value in records.values()])
+                writer.writerow(
+                    [
+                        value[epoch] if epoch < len(value) else ""
+                        for value in records.values()
+                    ]
+                )
 
     @classmethod
     def from_config(cls, config: dict | Mapping):
@@ -251,7 +256,7 @@ class TensorboardLogger(Logger):
         if not "log_dir" in config["experiment"].keys():
             log_dir = (
                 Path(config["experiment"]["output_dir"])
-                / f"./logs/{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}"
+                / f"./logs/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}"
             )
         else:
             log_dir = config["experiment"]["log_dir"]
