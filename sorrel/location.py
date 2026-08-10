@@ -108,9 +108,7 @@ class Location(tuple):
                 other_x, other_y, other_z = other[0], other[1], 0
             else:
                 other_x, other_y, other_z = other[0], other[1], other[2]
-            return (
-                (self.x == other_x) and (self.y == other_y) and (self.z == other_z)
-            )
+            return (self.x == other_x) and (self.y == other_y) and (self.z == other_z)
 
         # Compare a vector
         elif isinstance(other, Vector):
