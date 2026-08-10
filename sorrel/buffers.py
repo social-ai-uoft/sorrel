@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Sequence, overload
 
 import numpy as np
 import torch
@@ -43,7 +43,9 @@ class Buffer:
                 shape = capacity
             self.extra_data[key] = np.zeros(shape, dtype=np.int64)
 
-    def add(self, obs, action, reward, done, **kwargs):
+    def add(
+        self, obs: np.ndarray, action: int, reward: float, done: bool, **kwargs: Any
+    ) -> None:
         """Add an experience to the replay buffer.
 
         Args:
@@ -62,7 +64,7 @@ class Buffer:
         self.idx = (self.idx + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
-    def add_empty(self):
+    def add_empty(self) -> None:
         """Advancing the id by `self.n_frames`, adding empty frames to the replay
         buffer."""
         self.idx = (self.idx + self.n_frames - 1) % self.capacity
@@ -94,7 +96,11 @@ class Buffer:
             self.extra_data[key][:remainder] = value[head : head + remainder]
         self.idx = (self.idx + head + remainder) % self.capacity
 
-    def sample(self, batch_size: int):
+    def sample(
+        self, batch_size: int
+    ) -> tuple[
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+    ]:
         """Sample a batch of experiences from the replay buffer.
 
         Args:
@@ -131,7 +137,7 @@ class Buffer:
         self.idx = 0
         self.size = 0
 
-    def getidx(self):
+    def getidx(self) -> int:
         """Get the current index.
 
         Returns:
@@ -161,7 +167,20 @@ class Buffer:
     def __len__(self):
         return self.size
 
-    def __getitem__(self, idx):
+    @overload
+    def __getitem__(
+        self, idx: int
+    ) -> tuple[np.ndarray, np.integer, np.floating, np.floating]: ...
+    @overload
+    def __getitem__(
+        self, idx: slice
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: ...
+    def __getitem__(
+        self, idx: int | slice
+    ) -> (
+        tuple[np.ndarray, np.integer, np.floating, np.floating]
+        | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    ):
         return (self.states[idx], self.actions[idx], self.rewards[idx], self.dones[idx])
 
     def save(self, output_file: str | Path) -> None:

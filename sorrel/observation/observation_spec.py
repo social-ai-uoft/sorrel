@@ -340,7 +340,7 @@ class AsciiObservationSpec(ObservationSpec[str, Gridworld]):
                 f"({state.shape[0] // 2 + 1}, {state.shape[1] // 2 + 1})" + "\n"
             )
         replacements = {"[": "", "]": "", " ": "", "'": ""}
-        state_string = "State:\n" + np.array_str(state[:, :, -1]).translate(
+        state_string = "State:\n" + np.array_str(state).translate(
             str.maketrans(replacements)
         )
         return loc_string + state_string + "\n" + self.map_legend
@@ -360,11 +360,16 @@ class NodeObservationSpec(ObservationSpec[str, NodeWorld]):
         return {entity: entity for entity in entity_list}
 
     def observe(self, world: NodeWorld, location=None) -> np.ndarray:
-        """Override that returns a dummy observation.
+        """Override that has no array-based implementation.
 
-        TODO: Handle the string or numpy array in a cleaner way?
+        Raises:
+            NotImplementedError: NodeObservationSpec has no array-based
+                observation implementation; use :py:meth:`observe_string()` instead.
         """
-        return np.array([])
+        raise NotImplementedError(
+            "NodeObservationSpec.observe() has no array-based implementation; "
+            "use observe_string() instead."
+        )
 
     def observe_string(self, world: NodeWorld, location: str) -> str:
         verb_conj = ["Nothing is", " is", " are"]
