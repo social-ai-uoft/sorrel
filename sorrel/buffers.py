@@ -72,30 +72,27 @@ class Buffer:
         assert (
             self.obs_shape == buffer.obs_shape
         ), "Cannot add from a buffer with different state shapes."
-        # If the buffer is too long to add to the existing saved game buffer, truncate it
-        buffer_slice_point = min(self.capacity - self.idx, buffer.size)
+        # Split the copy into two segments so it wraps like a ring buffer instead of
+        # truncating at the end of the array.
+        head = min(self.capacity - self.idx, buffer.size)
+        remainder = min(buffer.size - head, self.capacity)
         # Add the S, A, R, D, to the saved game buffer
-        self.states[self.idx : self.idx + buffer_slice_point] = buffer.states[
-            :buffer_slice_point
-        ]
-        self.actions[self.idx : self.idx + buffer_slice_point] = buffer.actions[
-            :buffer_slice_point
-        ]
-        self.rewards[self.idx : self.idx + buffer_slice_point] = buffer.rewards[
-            :buffer_slice_point
-        ]
-        self.dones[self.idx : self.idx + buffer_slice_point] = buffer.dones[
-            :buffer_slice_point
-        ]
+        self.states[self.idx : self.idx + head] = buffer.states[:head]
+        self.states[:remainder] = buffer.states[head : head + remainder]
+        self.actions[self.idx : self.idx + head] = buffer.actions[:head]
+        self.actions[:remainder] = buffer.actions[head : head + remainder]
+        self.rewards[self.idx : self.idx + head] = buffer.rewards[:head]
+        self.rewards[:remainder] = buffer.rewards[head : head + remainder]
+        self.dones[self.idx : self.idx + head] = buffer.dones[:head]
+        self.dones[:remainder] = buffer.dones[head : head + remainder]
         for key, value in buffer.extra_data.items():
             if not key in self.extra_data:
                 self.extra_data[key] = np.zeros(
                     (self.capacity, *value.shape[1:]), dtype=value.dtype
                 )
-            self.extra_data[key][self.idx : self.idx + buffer_slice_point] = value[
-                :buffer_slice_point
-            ]
-        self.idx = (self.idx + buffer_slice_point) % self.capacity
+            self.extra_data[key][self.idx : self.idx + head] = value[:head]
+            self.extra_data[key][:remainder] = value[head : head + remainder]
+        self.idx = (self.idx + head + remainder) % self.capacity
 
     def sample(self, batch_size: int):
         """Sample a batch of experiences from the replay buffer.

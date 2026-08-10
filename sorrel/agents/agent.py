@@ -196,7 +196,9 @@ class MovingAgent[W: Gridworld](Agent[W]):
         """
         # Translate the model output to an action string
         action_name = self.action_spec.get_readable_action(action)
-        self.sprite = self.sprite_directions[self._sprite_direction_index[action_name]]
+        sprite_index = self._sprite_direction_index.get(action_name)
+        if sprite_index is not None:
+            self.sprite = self.sprite_directions[sprite_index]
         new_location = self.location
         if action_name == "up":
             self.direction = 0
