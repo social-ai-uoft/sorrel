@@ -105,15 +105,10 @@ class Location(tuple):
         # Compare a tuple
         if isinstance(other, tuple):
             if len(other) == 2:
-                return (
-                    (self.x == other[0]) and (self.y == other[1]) and (self.dims == 2)
-                )
+                other_x, other_y, other_z = other[0], other[1], 0
             else:
-                return (
-                    (self.x == other[0])
-                    and (self.y == other[1])
-                    and (self.z == other[2])
-                )
+                other_x, other_y, other_z = other[0], other[1], other[2]
+            return (self.x == other_x) and (self.y == other_y) and (self.z == other_z)
 
         # Compare a vector
         elif isinstance(other, Vector):
@@ -128,7 +123,7 @@ class Location(tuple):
             )
 
     def __hash__(self) -> int:
-        return hash(self.to_tuple())
+        return hash((self.x, self.y, self.z))
 
     def __len__(self):
         """Return the dimension of this Location."""
@@ -203,7 +198,7 @@ class Vector:
         self.layer = layer
 
     def __repr__(self):
-        return f"Vector(direction={self.direction},forward={self.forward},right={self.right},backward={self.backward},left={self.left}"
+        return f"Vector(direction={self.direction},forward={self.forward},right={self.right},backward={self.backward},left={self.left})"
 
     def __str__(self):
         return repr(self)

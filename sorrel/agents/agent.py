@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +11,7 @@ from sorrel.observation.observation_spec import ObservationSpec
 from sorrel.worlds import Gridworld
 
 
-class Agent[W: Gridworld](Entity[W]):
+class Agent[W: Gridworld](Entity[W], ABC):
     """An abstract class for agents, a special type of entities.
 
     Note that this is a subclass of :py:class:`agentarium.entities.Entity`.
@@ -173,7 +173,7 @@ class Agent[W: Gridworld](Entity[W]):
         self.add_memory(state, action, reward, done)
 
 
-class MovingAgent[W: Gridworld](Agent):
+class MovingAgent[W: Gridworld](Agent[W]):
     """An agent that implements methods for moving up, down, right, left."""
 
     sprite_directions = [
@@ -182,6 +182,7 @@ class MovingAgent[W: Gridworld](Agent):
         Path(__file__).parent / "./assets/hero-left.png",  # Left
         Path(__file__).parent / "./assets/hero-right.png",  # Right
     ]
+    _sprite_direction_index = {"up": 0, "down": 1, "left": 2, "right": 3}
     direction = 2  # Default: facing down
 
     def movement(self, action: int) -> tuple[int, int, int]:
@@ -195,7 +196,9 @@ class MovingAgent[W: Gridworld](Agent):
         """
         # Translate the model output to an action string
         action_name = self.action_spec.get_readable_action(action)
-        self.sprite = self.sprite_directions[action]
+        sprite_index = self._sprite_direction_index.get(action_name)
+        if sprite_index is not None:
+            self.sprite = self.sprite_directions[sprite_index]
         new_location = self.location
         if action_name == "up":
             self.direction = 0
