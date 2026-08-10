@@ -95,7 +95,7 @@ class Buffer:
             self.extra_data[key][self.idx : self.idx + buffer_slice_point] = value[
                 :buffer_slice_point
             ]
-        self.idx = self.idx + buffer_slice_point
+        self.idx = (self.idx + buffer_slice_point) % self.capacity
 
     def sample(self, batch_size: int):
         """Sample a batch of experiences from the replay buffer.

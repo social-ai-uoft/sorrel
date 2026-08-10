@@ -67,6 +67,9 @@ class Logger:
         self.epsilons.append(epsilon)
         self.losses.append(loss)
         self.rewards.append(reward)
+        for key in self.additional_values:
+            if key not in kwargs:
+                self.additional_values[key].append(None)
         for key, value in kwargs.items():
             if key not in self.additional_values:
                 self.additional_values[key] = [None] * (len(self.losses) - 1)
