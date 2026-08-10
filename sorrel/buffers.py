@@ -98,9 +98,7 @@ class Buffer:
 
     def sample(
         self, batch_size: int
-    ) -> tuple[
-        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
-    ]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Sample a batch of experiences from the replay buffer.
 
         Args:
