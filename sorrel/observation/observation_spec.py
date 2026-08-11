@@ -1,6 +1,6 @@
 import colorsys
 from abc import abstractmethod
-from typing import Sequence
+from typing import NoReturn, Sequence
 
 import numpy as np
 
@@ -87,6 +87,11 @@ class ObservationSpec[T: (np.ndarray, str), W]():
 
         Returns:
             The observation.
+
+        Note:
+            Some subclasses may not support array-based observation and may raise
+            :py:exc:`NotImplementedError` instead of returning; see
+            :py:class:`NodeObservationSpec` for an example.
         """
         pass
 
@@ -359,7 +364,7 @@ class NodeObservationSpec(ObservationSpec[str, NodeWorld]):
         # just create a dict that pairs each entity with itself.
         return {entity: entity for entity in entity_list}
 
-    def observe(self, world: NodeWorld, location=None) -> np.ndarray:
+    def observe(self, world: NodeWorld, location: tuple | None = None) -> NoReturn:
         """Override that has no array-based implementation.
 
         Raises:
