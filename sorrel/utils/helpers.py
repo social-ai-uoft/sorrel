@@ -4,9 +4,6 @@
 
 import random
 
-# Import base packages
-from typing import Any, Sequence
-
 import numpy as np
 import torch
 
@@ -43,38 +40,6 @@ def random_seed() -> int:
     np.random.seed(seed)
     torch.manual_seed(seed)
     return seed
-
-
-def shift(
-    array: np.ndarray, shift: Sequence | np.ndarray, cval: Any = np.nan
-) -> np.ndarray:
-    r"""Returns copy of array shifted by offset, with fill using constant.
-
-    Args:
-        array: The array to shift.
-        shift: A sequence of dimensions equivalent to the array passed into the function.
-        cval: The value to replace any new elements introduced into the offset array. By default, replaces them with nan's.
-
-    Returns:
-        np.ndarray: The shifted array.
-    """
-    offset = np.atleast_1d(shift)
-    assert len(offset) == array.ndim
-    new_array = np.empty_like(array)
-
-    def slice1(o):
-        return slice(o, None) if o >= 0 else slice(0, o)
-
-    new_array[tuple(slice1(o) for o in offset)] = array[
-        tuple(slice1(-o) for o in offset)
-    ]
-
-    for axis, o in enumerate(offset):
-        new_array[
-            (slice(None),) * axis + (slice(0, o) if o >= 0 else slice(o, None),)
-        ] = cval
-
-    return new_array
 
 
 def nearest_2_power(n: int) -> int:

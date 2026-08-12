@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterable
+from typing import Sequence
 
 try:
     import openai
@@ -148,6 +149,7 @@ class LLM(BaseModel):
         max_tokens: int = 4096,
         provider: str = "ollama",
         api_key: str | None = None,
+        obs_shape: Sequence[int] = (11, 11),
         **call_params,
     ):
         super().__init__(1, action_space, memory_size)
@@ -160,7 +162,7 @@ class LLM(BaseModel):
             model_name, max_tokens=max_tokens, provider=provider, api_key=api_key
         )
         self.stm = ""
-        self.memory = StrBuffer(capacity=memory_size, obs_shape=[11, 11])
+        self.memory = StrBuffer(capacity=memory_size, obs_shape=obs_shape)
         self.temperature = temperature
 
     def take_action(self, state) -> int:
@@ -178,15 +180,14 @@ class LLM(BaseModel):
             )
         return self.action_list.index(response)
 
-    def format_memories(self, memories):
+    def format_memories(self, raw_memories):
 
-        states, actions, rewards, dones = memories
-        memories = list(zip(states, actions, rewards, dones))
+        states, actions, rewards, dones = raw_memories
+        memory_tuples = zip(states, actions, rewards, dones)
         memories = [
             f"Memory:\n=======\n{state}\nAction: {action}\nReward: {reward}\nDone: {done}\n"
-            for state, action, reward, done in memories
+            for state, action, reward, done in memory_tuples
         ]
-        print(memories[0])
 
         return memories
 
