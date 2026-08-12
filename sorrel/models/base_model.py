@@ -1,5 +1,5 @@
 import os
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Sequence
 
 import numpy as np
@@ -7,7 +7,7 @@ import numpy as np
 from sorrel.buffers import Buffer
 
 
-class BaseModel:
+class BaseModel(ABC):
     """Generic model class for Sorrel.
 
     All models should wrap around this implementation.
