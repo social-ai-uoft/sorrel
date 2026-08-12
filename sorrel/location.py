@@ -100,15 +100,14 @@ class Location(tuple):
             other (tuple | Vector): A set of coordinates (can be a Location object) or a vector.
 
         Returns:
-            bool: whether this Location has the same dimension and the same values as the other object.
+            bool: whether this Location has the same length and the same values as the other object.
         """
-        # Compare a tuple
+        # Compare a tuple (including another Location) using standard tuple equality,
+        # which requires matching length -- this keeps __eq__ consistent with the
+        # tuple-based __hash__ below (hashes of unequal-length tuples essentially
+        # never collide, so cross-length "equality" would break the hash/eq contract).
         if isinstance(other, tuple):
-            if len(other) == 2:
-                other_x, other_y, other_z = other[0], other[1], 0
-            else:
-                other_x, other_y, other_z = other[0], other[1], other[2]
-            return (self.x == other_x) and (self.y == other_y) and (self.z == other_z)
+            return tuple.__eq__(self, other)
 
         # Compare a vector
         elif isinstance(other, Vector):
@@ -123,7 +122,7 @@ class Location(tuple):
             )
 
     def __hash__(self) -> int:
-        return hash((self.x, self.y, self.z))
+        return tuple.__hash__(self)
 
     def __len__(self):
         """Return the dimension of this Location."""

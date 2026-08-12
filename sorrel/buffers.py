@@ -77,7 +77,7 @@ class Buffer:
         # Split the copy into two segments so it wraps like a ring buffer instead of
         # truncating at the end of the array.
         head = min(self.capacity - self.idx, buffer.size)
-        remainder = min(buffer.size - head, self.capacity)
+        remainder = min(buffer.size - head, self.idx)
         # Add the S, A, R, D, to the saved game buffer
         self.states[self.idx : self.idx + head] = buffer.states[:head]
         self.states[:remainder] = buffer.states[head : head + remainder]
@@ -95,6 +95,7 @@ class Buffer:
             self.extra_data[key][self.idx : self.idx + head] = value[:head]
             self.extra_data[key][:remainder] = value[head : head + remainder]
         self.idx = (self.idx + head + remainder) % self.capacity
+        self.size = min(self.size + head + remainder, self.capacity)
 
     def sample(
         self, batch_size: int
