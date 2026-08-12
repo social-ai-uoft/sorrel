@@ -75,7 +75,7 @@ class IQN(nn.Module):
             .view(1, 1, self.n_cos)
             .to(device)
         )
-        self.register_buffer("pis", pis)
+        self.register_buffer("pis", pis, persistent=False)
         self.device = device
 
         # Network architecture

@@ -208,7 +208,10 @@ class PyTorchPPO(PyTorchModel):
 
         This should truncate the memory based on the length of the game.
         """
-        index_to_truncate = np.nonzero(self.memory.dones)[0][0]
+        done_indices = np.nonzero(self.memory.dones)[0]
+        index_to_truncate = (
+            int(done_indices[0]) if done_indices.size > 0 else self.memory.size - 1
+        )
         self.memory.states = self.memory.states[0 : index_to_truncate + 1]
         self.memory.actions = self.memory.actions[0 : index_to_truncate + 1]
         self.memory.log_probs = self.memory.log_probs[0 : index_to_truncate + 1]  # type: ignore
