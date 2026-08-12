@@ -70,11 +70,12 @@ class IQN(nn.Module):
         self.n_quantiles = n_quantiles
         self.n_cos = 64
         self.layer_size = layer_size
-        self.pis = (
+        pis = (
             torch.FloatTensor([np.pi * i for i in range(1, self.n_cos + 1)])
             .view(1, 1, self.n_cos)
             .to(device)
         )
+        self.register_buffer("pis", pis)
         self.device = device
 
         # Network architecture
@@ -356,15 +357,20 @@ class iRainbowModel(DoublePyTorchModel):
             #     2,
             #     action_indx.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1),
             # ).transpose(1, 2)
-            q_values_next_local, _ = self.qnetwork_local(next_states, self.n_quantiles)
-            action_indx = torch.argmax(
-                q_values_next_local.mean(dim=1), dim=1, keepdim=True
-            )
-            Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
-            Q_targets_next = Q_targets_next.gather(
-                2,
-                action_indx.unsqueeze(-1).expand(self.batch_size, self.n_quantiles, 1),
-            ).transpose(1, 2)
+            with torch.no_grad():
+                q_values_next_local, _ = self.qnetwork_local(
+                    next_states, self.n_quantiles
+                )
+                action_indx = torch.argmax(
+                    q_values_next_local.mean(dim=1), dim=1, keepdim=True
+                )
+                Q_targets_next, _ = self.qnetwork_target(next_states, self.n_quantiles)
+                Q_targets_next = Q_targets_next.gather(
+                    2,
+                    action_indx.unsqueeze(-1).expand(
+                        self.batch_size, self.n_quantiles, 1
+                    ),
+                ).transpose(1, 2)
 
             # Compute Q targets for current states
             Q_targets = rewards.unsqueeze(-1) + (

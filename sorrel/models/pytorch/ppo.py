@@ -113,8 +113,6 @@ class ActorCritic(nn.Module):
             nn.Linear(layer_size, 1),
         )
 
-        self.double()
-
     def forward(self):
         raise NotImplementedError
 
@@ -127,7 +125,9 @@ class ActorCritic(nn.Module):
         Returns:
           tuple[Tensor, Tensor]: The action and action log probability.
         """
-        state_ = torch.tensor(state, device=next(self.parameters()).device)
+        state_ = torch.as_tensor(
+            state, dtype=torch.float32, device=next(self.parameters()).device
+        )
         action_probs = self.actor(state_)
         dist = Categorical(action_probs)
 
@@ -215,7 +215,7 @@ class PyTorchPPO(PyTorchModel):
         self.memory.rewards = self.memory.rewards[0 : index_to_truncate + 1]
         self.memory.dones = self.memory.dones[0 : index_to_truncate + 1]
 
-    def take_action(self, state: np.ndarray) -> tuple:  # type: ignore
+    def take_action(self, state: np.ndarray) -> tuple:
         with torch.no_grad():
             action, log_prob = self.policy.act(state)
 
@@ -235,18 +235,18 @@ class PyTorchPPO(PyTorchModel):
             rewards.insert(0, discounted_reward)
 
         # Normalize the rewards
-        rewards = torch.tensor(rewards, dtype=torch.float64).to(self.device)
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # Convert to tensors and move to device
         assert isinstance(self.memory, RolloutBuffer), "PPO supports only RolloutBuffer"
-        old_states = torch.tensor(self.memory.states, dtype=torch.float64).to(
+        old_states = torch.tensor(self.memory.states, dtype=torch.float32).to(
             self.device
         )
-        old_actions = torch.tensor(self.memory.actions, dtype=torch.float64).to(
+        old_actions = torch.tensor(self.memory.actions, dtype=torch.float32).to(
             self.device
         )
-        old_log_probs = torch.tensor(self.memory.log_probs, dtype=torch.float64).to(
+        old_log_probs = torch.tensor(self.memory.log_probs, dtype=torch.float32).to(
             self.device
         )
 

@@ -5,8 +5,6 @@ These classes provide lock-aware behavior without changing default PPO classes.
 
 from typing import Any, Sequence
 
-import numpy as np
-
 from sorrel.models.pytorch.ppo import PyTorchPPO, RolloutBuffer
 from sorrel.models.threadsafe_base_model import ThreadsafeBaseModel
 from sorrel.threadsafe.buffers import ThreadsafeBuffer
@@ -68,9 +66,4 @@ class ThreadsafePyTorchPPO(PyTorchPPO, ThreadsafeBaseModel):
     def end_epoch_action(self, **kwargs):
         assert isinstance(self.memory, ThreadsafeRolloutBuffer)
         with self.memory._lock:
-            index_to_truncate = np.nonzero(self.memory.dones)[0][0]
-            self.memory.states = self.memory.states[0 : index_to_truncate + 1]
-            self.memory.actions = self.memory.actions[0 : index_to_truncate + 1]
-            self.memory.log_probs = self.memory.log_probs[0 : index_to_truncate + 1]
-            self.memory.rewards = self.memory.rewards[0 : index_to_truncate + 1]
-            self.memory.dones = self.memory.dones[0 : index_to_truncate + 1]
+            super().end_epoch_action(**kwargs)

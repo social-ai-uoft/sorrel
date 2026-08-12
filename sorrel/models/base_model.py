@@ -1,6 +1,6 @@
 import os
 from abc import ABC, abstractmethod
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -41,7 +41,7 @@ class BaseModel(ABC):
         self.epsilon = epsilon
 
     @abstractmethod
-    def take_action(self, state) -> int:
+    def take_action(self, state) -> Any:
         """Take an action based on the observed input.
 
         Must be implemented by all subclasses of the model.
