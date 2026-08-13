@@ -25,16 +25,20 @@ from sorrel.worlds import Gridworld
 
 # Decoded, resized sprite tiles are cached by (sprite path, tile size) so repeated tiles
 # (walls, floors, ...) are only ever read from disk and decoded once per process.
-_sprite_cache: dict[tuple[str, tuple[int, int]], np.ndarray] = {}
+_sprite_cache: dict[tuple[Path, tuple[int, int]], np.ndarray] = {}
 
 
-def _load_tile_rgba(sprite_path: str, tile_size: tuple[int, int]) -> np.ndarray:
+def _load_tile_rgba(sprite_path: Path, tile_size: tuple[int, int]) -> np.ndarray:
     """Load a sprite as an RGBA array, resized to tile_size, caching the result."""
     key = (sprite_path, tile_size)
     tile_array = _sprite_cache.get(key)
     if tile_array is None:
+        # tile_size is (row_size, col_size) i.e. (height, width), matching how it's used to
+        # slice the destination array below; PIL's resize() wants (width, height), so swap.
         tile_image = (
-            img.open(os.path.expanduser(sprite_path)).resize(tile_size).convert("RGBA")
+            img.open(os.path.expanduser(sprite_path))
+            .resize((tile_size[1], tile_size[0]))
+            .convert("RGBA")
         )
         tile_array = np.array(tile_image, dtype=np.uint8)
         _sprite_cache[key] = tile_array
@@ -75,7 +79,7 @@ def render_sprite(
     tile_size = (int(tile_size[0]), int(tile_size[1]))
 
     # Resolved lazily, at most once per call, the first time an out-of-bounds tile is hit.
-    wall_sprite: Optional[str] = None
+    wall_sprite: Optional[Path] = None
 
     # Layer handling...
     # Separate images will be generated per layer. These will be returned as a list and can then be plotted as a list.
