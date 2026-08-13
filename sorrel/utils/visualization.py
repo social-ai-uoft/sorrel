@@ -10,7 +10,6 @@ from typing import Optional, Sequence
 import numpy as np
 from matplotlib import pyplot as plt
 from PIL import Image as img  # this is the module
-from PIL.PngImagePlugin import PngImageFile
 
 # Import sorrel-specific packages
 from sorrel.worlds import Gridworld
@@ -24,11 +23,29 @@ from sorrel.worlds import Gridworld
 # --------------------------- #
 
 
+# Decoded, resized sprite tiles are cached by (sprite path, tile size) so repeated tiles
+# (walls, floors, ...) are only ever read from disk and decoded once per process.
+_sprite_cache: dict[tuple[str, tuple[int, int]], np.ndarray] = {}
+
+
+def _load_tile_rgba(sprite_path: str, tile_size: tuple[int, int]) -> np.ndarray:
+    """Load a sprite as an RGBA array, resized to tile_size, caching the result."""
+    key = (sprite_path, tile_size)
+    tile_array = _sprite_cache.get(key)
+    if tile_array is None:
+        tile_image = (
+            img.open(os.path.expanduser(sprite_path)).resize(tile_size).convert("RGBA")
+        )
+        tile_array = np.array(tile_image, dtype=np.uint8)
+        _sprite_cache[key] = tile_array
+    return tile_array
+
+
 def render_sprite(
     world: Gridworld,
     location: Optional[Sequence] = None,
     vision: Optional[int] = None,
-    tile_size: list[int] | np.ndarray = [16, 16],
+    tile_size: Sequence[int] | np.ndarray = (16, 16),
 ) -> list[np.ndarray]:
     """Render a sprite of (2k + 1, 2k + 1) tiles centered at location, where k=vision.
 
@@ -55,34 +72,23 @@ def render_sprite(
             location[1] + vision_j,
         )
 
+    tile_size = (int(tile_size[0]), int(tile_size[1]))
+
+    # Resolved lazily, at most once per call, the first time an out-of-bounds tile is hit.
+    wall_sprite: Optional[str] = None
+
     # Layer handling...
     # Separate images will be generated per layer. These will be returned as a list and can then be plotted as a list.
     layers = []
     for z in range(world.map.shape[2]):
 
-        image_r = np.zeros(
+        image = np.zeros(
             (
                 (bounds[1] - bounds[0] + 1) * tile_size[0],
                 (bounds[3] - bounds[2] + 1) * tile_size[1],
-            )
-        )
-        image_g = np.zeros(
-            (
-                (bounds[1] - bounds[0] + 1) * tile_size[0],
-                (bounds[3] - bounds[2] + 1) * tile_size[1],
-            )
-        )
-        image_b = np.zeros(
-            (
-                (bounds[1] - bounds[0] + 1) * tile_size[0],
-                (bounds[3] - bounds[2] + 1) * tile_size[1],
-            )
-        )
-        image_a = np.zeros(
-            (
-                (bounds[1] - bounds[0] + 1) * tile_size[0],
-                (bounds[3] - bounds[2] + 1) * tile_size[1],
-            )
+                4,
+            ),
+            dtype=np.uint8,
         )
 
         image_i = 0
@@ -91,53 +97,24 @@ def render_sprite(
         for i in range(bounds[0], bounds[1] + 1):
             for j in range(bounds[2], bounds[3] + 1):
                 if i < 0 or j < 0 or i >= world.map.shape[0] or j >= world.map.shape[1]:
-                    # get wall sprite
-                    wall_sprite = world.get_entities_of_kind("Wall")[0].sprite
-                    # Tile is out of bounds, use wall_app
-                    tile_image = (
-                        img.open(os.path.expanduser(wall_sprite))
-                        .resize(tile_size)
-                        .convert("RGBA")
-                    )
+                    # Tile is out of bounds, use the wall sprite
+                    if wall_sprite is None:
+                        wall_sprite = world.get_entities_of_kind("Wall")[0].sprite
+                    tile_appearance = wall_sprite
                 else:
                     tile_appearance = world.map[i, j, z].sprite
-                    tile_image = (
-                        img.open(os.path.expanduser(tile_appearance))
-                        .resize(tile_size)
-                        .convert("RGBA")
-                    )
 
-                tile_image_array = np.array(tile_image)
-                alpha = tile_image_array[:, :, 3]
-                # tile_image_array[alpha == 0, :3] = 0
-                image_r[
+                image[
                     image_i * tile_size[0] : (image_i + 1) * tile_size[0],
                     image_j * tile_size[1] : (image_j + 1) * tile_size[1],
-                ] = tile_image_array[:, :, 0]
-                image_g[
-                    image_i * tile_size[0] : (image_i + 1) * tile_size[0],
-                    image_j * tile_size[1] : (image_j + 1) * tile_size[1],
-                ] = tile_image_array[:, :, 1]
-                image_b[
-                    image_i * tile_size[0] : (image_i + 1) * tile_size[0],
-                    image_j * tile_size[1] : (image_j + 1) * tile_size[1],
-                ] = tile_image_array[:, :, 2]
-                image_a[
-                    image_i * tile_size[0] : (image_i + 1) * tile_size[0],
-                    image_j * tile_size[1] : (image_j + 1) * tile_size[1],
-                ] = tile_image_array[:, :, 3]
+                    :,
+                ] = _load_tile_rgba(tile_appearance, tile_size)
 
                 image_j += 1
             image_i += 1
             image_j = 0
 
-        # image = make_lupton_rgb(image_r, image_g, image_b, stretch=0.5)
-        image = np.zeros((image_r.shape[0], image_r.shape[1], 4))
-        image[:, :, 0] = image_r
-        image[:, :, 1] = image_g
-        image[:, :, 2] = image_b
-        image[:, :, 3] = image_a
-        layers.append(np.asarray(image, dtype=np.uint8))
+        layers.append(image)
     return layers
 
 
@@ -197,7 +174,7 @@ def image_from_figure(fig) -> img.Image:
 
 
 def animate_gif(
-    frames: Sequence[PngImageFile],
+    frames: Sequence[img.Image],
     filename: str,
     folder: str | os.PathLike,
 ) -> None:
@@ -208,6 +185,9 @@ def animate_gif(
         filename: A filename to save the images to \n
         folder: The path to save the gif to
     """
+    if not frames:
+        raise ValueError("animate_gif() called with no frames to save.")
+
     if not os.path.exists(folder):
         print(f"Directory {folder} does not exist; creating directory.")
     Path(folder).mkdir(parents=True, exist_ok=True)
@@ -231,7 +211,7 @@ class ImageRenderer:
         experiment_name (str): The name of the experiment.
         record_period (int): How often to create an animation.
         num_turns (int): The number of turns per game.
-        frames (list[PngImageFile]): The frames to animate.
+        frames (list[img.Image]): The frames to animate.
     """
 
     def __init__(self, experiment_name: str, record_period: int, num_turns: int):
@@ -245,7 +225,7 @@ class ImageRenderer:
         self.experiment_name = experiment_name
         self.record_period = record_period
         self.num_turns = num_turns
-        self.frames = []
+        self.frames: list[img.Image] = []
 
     def clear(self):
         """Zero out the frames."""
