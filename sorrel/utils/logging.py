@@ -246,9 +246,7 @@ class TensorboardLogger(Logger):
             if isinstance(value, dict):
                 self.writer.add_scalars(f"turn/{key}", value, step)
             elif isinstance(value, np.ndarray) and value.size > 1:
-                per_element = {
-                    str(i): float(v) for i, v in enumerate(value.ravel())
-                }
+                per_element = {str(i): float(v) for i, v in enumerate(value.ravel())}
                 self.writer.add_scalars(f"turn/{key}", per_element, step)
             else:
                 self.writer.add_scalar(f"turn/{key}", float(value), step)
