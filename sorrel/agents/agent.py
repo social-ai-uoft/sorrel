@@ -152,7 +152,7 @@ class Agent[W: Gridworld](Entity[W], ABC):
             return threadsafe_model.threadsafe_take_action(state)
         return self.model.take_action(state)
 
-    def transition(self, world: W) -> None:
+    def transition(self, world: W) -> tuple[int, float, bool]:
         """Processes a full transition step for the agent.
 
         This function does the following:
@@ -163,6 +163,10 @@ class Agent[W: Gridworld](Entity[W], ABC):
 
         Args:
             env (Gridworld): the environment that this agent is acting in.
+
+        Returns:
+            tuple[int, float, bool]: the ``(action, reward, done)`` values computed
+                for this transition.
         """
         state = self.pov(world)
         action = self.get_action(state)
@@ -171,6 +175,7 @@ class Agent[W: Gridworld](Entity[W], ABC):
 
         world.total_reward += reward
         self.add_memory(state, action, reward, done)
+        return action, reward, done
 
 
 class MovingAgent[W: Gridworld](Agent[W]):

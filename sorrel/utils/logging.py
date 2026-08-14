@@ -75,7 +75,7 @@ class Logger:
                 self.additional_values[key] = [None] * (len(self.losses) - 1)
             self.additional_values[key].append(value)
 
-    def record_turn(self, stats: TurnStats) -> None:
+    def record_step(self, stats: TurnStats) -> None:
         """Record per-turn statistics.
 
         No-op in base class.
@@ -214,7 +214,7 @@ class TensorboardLogger(Logger):
                 self.writer.add_scalar(key, value, epoch)
         super().record_epoch(epoch, loss, reward, epsilon, **kwargs)
 
-    def record_turn(self, stats: TurnStats) -> None:
+    def record_step(self, stats: TurnStats) -> None:
         """Write per-turn scalars to TensorBoard using a monotonic global step.
 
         The global step counter (``_global_step``) increments by 1 per turn
@@ -245,6 +245,11 @@ class TensorboardLogger(Logger):
         for key, value in stats.extra.items():
             if isinstance(value, dict):
                 self.writer.add_scalars(f"turn/{key}", value, step)
+            elif isinstance(value, np.ndarray) and value.size > 1:
+                per_element = {
+                    str(i): float(v) for i, v in enumerate(value.ravel())
+                }
+                self.writer.add_scalars(f"turn/{key}", per_element, step)
             else:
                 self.writer.add_scalar(f"turn/{key}", float(value), step)
         self._global_step += 1

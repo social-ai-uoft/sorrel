@@ -86,12 +86,14 @@ class Environment[W: Gridworld](ABC):
         """Performs a full step in the environment.
 
         This function iterates through the environment and performs transition() for
-        each entity, then transitions each agent. After all transitions, calls
-        :meth:`_collect_turn_stats` and :meth:`_on_turn_end` to collect and dispatch
-        per-turn statistics.
+        each entity, then transitions each agent. If an active logger is set, also
+        calls :meth:`collect_turn_stats` and :meth:`on_turn_end` to collect and
+        dispatch per-turn statistics; this is skipped when there is no active logger
+        (e.g. from :meth:`generate_memories`, or when :meth:`run_experiment` is called
+        with ``logging=False``), since there is no consumer for the stats in that case.
 
         Args:
-            epoch: Current epoch index, passed to :meth:`_collect_turn_stats` for
+            epoch: Current epoch index, passed to :meth:`collect_turn_stats` for
                 attribution. Defaults to 0 for backward-compatible callers such as
                 :meth:`generate_memories`.
         """
@@ -100,10 +102,12 @@ class Environment[W: Gridworld](ABC):
             x: Entity
             if x.has_transitions and not isinstance(x, Agent):
                 x.transition(self.world)
-        for agent in self.agents:
-            agent.transition(self.world)
-        stats = self._collect_turn_stats(epoch)
-        self._on_turn_end(stats)
+        agent_results: list[tuple[int, float, bool]] = [
+            agent.transition(self.world) for agent in self.agents
+        ]
+        if self._active_logger is not None:
+            stats = self.collect_turn_stats(epoch, agent_results)
+            self.on_turn_end(stats)
 
     def _model_start_epoch_action(self, agent: Agent[W], epoch: int) -> None:
         """Run per-epoch model start hook."""
@@ -113,39 +117,42 @@ class Environment[W: Gridworld](ABC):
         """Run per-epoch model end hook."""
         agent.model.end_epoch_action(epoch=epoch)
 
-    def _model_train_step(self, agent: Agent[W]):
+    def _model_train_step(self, agent: Agent[W]) -> np.ndarray:
         """Run model train step."""
         return agent.model.train_step()
 
-    def _collect_turn_stats(self, epoch: int) -> TurnStats:
+    def collect_turn_stats(
+        self, epoch: int, agent_results: list[tuple[int, float, bool]]
+    ) -> TurnStats:
         """Collect per-turn statistics after all transitions have run.
 
-        Called automatically by :meth:`take_turn`. Override in subclasses to
-        populate :attr:`~sorrel.utils.turn_stats.TurnStats.extra` with
-        domain-specific metrics. Always call ``super()`` first to obtain the
-        base snapshot, then augment the returned object.
+        Called automatically by :meth:`take_turn` (when an active logger is
+        set). Override in subclasses to populate
+        :attr:`~sorrel.utils.turn_stats.TurnStats.extra` with domain-specific
+        metrics. Always call ``super()`` first to obtain the base snapshot,
+        then augment the returned object.
 
         Args:
             epoch: Current epoch index.
+            agent_results: The ``(action, reward, done)`` tuples returned by
+                each agent's :meth:`~sorrel.agents.agent.Agent.transition`
+                call this turn, in the same order as :attr:`agents`.
 
         Returns:
             A :class:`~sorrel.utils.turn_stats.TurnStats` snapshot for this turn.
         """
-        agent_stats: list[AgentTurnStats] = []
-        for i, agent in enumerate(self.agents):
-            mem = agent.model.memory
-            if mem.size == 0:
-                continue
-            tail = (mem.idx - 1) % mem.capacity
-            agent_stats.append(
-                AgentTurnStats(
-                    agent_id=i,
-                    location=tuple(agent.location),
-                    last_action=int(mem.actions[tail]),
-                    last_reward=float(mem.rewards[tail]),
-                    last_done=bool(mem.dones[tail]),
-                )
+        agent_stats: list[AgentTurnStats] = [
+            AgentTurnStats(
+                agent_id=i,
+                location=tuple(agent.location),
+                last_action=action,
+                last_reward=reward,
+                last_done=done,
             )
+            for i, (agent, (action, reward, done)) in enumerate(
+                zip(self.agents, agent_results)
+            )
+        ]
         return TurnStats(
             epoch=epoch,
             turn=self.turn,
@@ -153,13 +160,13 @@ class Environment[W: Gridworld](ABC):
             agent_stats=agent_stats,
         )
 
-    def _on_turn_end(self, stats: TurnStats) -> None:
+    def on_turn_end(self, stats: TurnStats) -> None:
         """Called after every turn with the collected
         :class:`~sorrel.utils.turn_stats.TurnStats`.
 
         Default implementation buffers ``stats`` into
         :attr:`_epoch_turn_stats` and delegates to the active logger's
-        :meth:`~sorrel.utils.logging.Logger.record_turn` if one is set.
+        :meth:`~sorrel.utils.logging.Logger.record_step` if one is set.
         Override to add side-effects; call ``super()`` to preserve buffering
         and logger dispatch.
 
@@ -169,9 +176,9 @@ class Environment[W: Gridworld](ABC):
         """
         self._epoch_turn_stats.append(stats)
         if self._active_logger is not None:
-            self._active_logger.record_turn(stats)
+            self._active_logger.record_step(stats)
 
-    def _aggregate_epoch_stats(self) -> dict[str, float]:
+    def aggregate_epoch_stats(self) -> dict[str, float]:
         """Aggregate buffered per-turn stats into epoch-level scalars.
 
         Called once per epoch in :meth:`run_experiment`, before
@@ -281,7 +288,7 @@ class Environment[W: Gridworld](ABC):
 
                 # Log the information
                 if logging and self._active_logger is not None:
-                    epoch_kwargs = self._aggregate_epoch_stats()
+                    epoch_kwargs = self.aggregate_epoch_stats()
                     self._active_logger.record_epoch(
                         epoch,
                         total_loss,
