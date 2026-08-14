@@ -5,7 +5,7 @@ from importlib import util
 from pathlib import Path
 
 
-def run_example(args, extra_args):
+def run_example(args: argparse.Namespace, extra_args: list[str]) -> int:
     example_name = args.example
 
     # Check if the example exists
@@ -38,7 +38,7 @@ def run_example(args, extra_args):
     return 0
 
 
-def show_logs(args, extra_args):
+def show_logs(args: argparse.Namespace, extra_args: list[str]) -> int:
     example_name = args.example
 
     # Try to find the example module
@@ -103,7 +103,7 @@ logs_parser = subparsers.add_parser(
 logs_parser.add_argument("example", help="Name of the example (e.g., cleanup, chess).")
 
 
-def main():
+def main() -> None:
     # Parse known args to separate the command/example from the rest
     args, extra_args = parser.parse_known_args()
 
