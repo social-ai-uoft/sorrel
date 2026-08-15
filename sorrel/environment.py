@@ -102,11 +102,10 @@ class Environment[W: Gridworld](ABC):
             x: Entity
             if x.has_transitions and not isinstance(x, Agent):
                 x.transition(self.world)
-        agent_results: list[tuple[int, float, bool]] = [
-            agent.transition(self.world) for agent in self.agents
-        ]
+        for agent in self.agents:
+            agent.transition(self.world)
         if self._active_logger is not None:
-            stats = self.collect_turn_stats(epoch, agent_results)
+            stats = self.collect_turn_stats(epoch)
             self.on_turn_end(stats)
 
     def _model_start_epoch_action(self, agent: Agent[W], epoch: int) -> None:
@@ -121,9 +120,7 @@ class Environment[W: Gridworld](ABC):
         """Run model train step."""
         return agent.model.train_step()
 
-    def collect_turn_stats(
-        self, epoch: int, agent_results: list[tuple[int, float, bool]]
-    ) -> TurnStats:
+    def collect_turn_stats(self, epoch: int) -> TurnStats:
         """Collect per-turn statistics after all transitions have run.
 
         Called automatically by :meth:`take_turn` (when an active logger is
@@ -134,25 +131,25 @@ class Environment[W: Gridworld](ABC):
 
         Args:
             epoch: Current epoch index.
-            agent_results: The ``(action, reward, done)`` tuples returned by
-                each agent's :meth:`~sorrel.agents.agent.Agent.transition`
-                call this turn, in the same order as :attr:`agents`.
 
         Returns:
             A :class:`~sorrel.utils.turn_stats.TurnStats` snapshot for this turn.
         """
-        agent_stats: list[AgentTurnStats] = [
-            AgentTurnStats(
-                agent_id=i,
-                location=tuple(agent.location),
-                last_action=action,
-                last_reward=reward,
-                last_done=done,
+        agent_stats: list[AgentTurnStats] = []
+        for i, agent in enumerate(self.agents):
+            mem = agent.model.memory
+            if mem.size == 0:
+                continue
+            tail = (mem.idx - 1) % mem.capacity
+            agent_stats.append(
+                AgentTurnStats(
+                    agent_id=i,
+                    location=tuple(agent.location),
+                    last_action=int(mem.actions[tail]),
+                    last_reward=float(mem.rewards[tail]),
+                    last_done=bool(mem.dones[tail]),
+                )
             )
-            for i, (agent, (action, reward, done)) in enumerate(
-                zip(self.agents, agent_results)
-            )
-        ]
         return TurnStats(
             epoch=epoch,
             turn=self.turn,

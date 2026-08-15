@@ -189,6 +189,10 @@ class TensorboardLogger(Logger):
         additional_values: A dictionary of optional values to be stored.
     """
 
+    # Above this many elements, a multi-element np.ndarray extra is logged as a
+    # single mean scalar instead of one TensorBoard series per element.
+    _MAX_EXTRA_ARRAY_ELEMENTS = 32
+
     def __init__(self, max_epochs: int, log_dir: str | os.PathLike, *args):
         """Initialize a Tensorboard log.
 
@@ -245,7 +249,14 @@ class TensorboardLogger(Logger):
         for key, value in stats.extra.items():
             if isinstance(value, dict):
                 self.writer.add_scalars(f"turn/{key}", value, step)
-            elif isinstance(value, np.ndarray) and value.size > 1:
+            elif isinstance(value, np.ndarray) and value.size != 1:
+                if value.size == 0:
+                    continue
+                if value.size > self._MAX_EXTRA_ARRAY_ELEMENTS:
+                    self.writer.add_scalar(
+                        f"turn/{key}_mean", float(value.mean()), step
+                    )
+                    continue
                 per_element = {str(i): float(v) for i, v in enumerate(value.ravel())}
                 self.writer.add_scalars(f"turn/{key}", per_element, step)
             else:
