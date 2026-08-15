@@ -54,10 +54,7 @@ class TreasurehuntEnv(ThreadsafeEnvironment[TreasurehuntWorld]):
                 "Food",
                 "TreasurehuntAgent",
             ]
-            if hasattr(self.config.model, "observation_spec"):
-                obs_spec_type = self.config.model.observation_spec
-            else:
-                obs_spec_type = "onehot"
+            obs_spec_type = self.config.model.get("observation_spec", "onehot")
             if obs_spec_type == "onehot":
                 observation_spec = OneHotObservationSpec(
                     entity_list,
