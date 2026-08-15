@@ -319,7 +319,8 @@ class Chessboard(Gridworld):
                 c += dc
 
     def _move_leaves_king_safe(self, start, end, colour: str) -> bool:
-        """Apply start->end on the real board, check king safety, then restore exactly."""
+        """Apply start->end on the real board, check king safety, then restore
+        exactly."""
         moving_piece = self.observe(start)
         row = start[0]
 
