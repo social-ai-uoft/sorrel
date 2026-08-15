@@ -6,18 +6,10 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.entities import Entity
+from sorrel.entities.basic_entities import Wall
 from sorrel.examples.iowa.world import GamblingWorld
 
 # end imports
-
-
-class Wall(Entity[GamblingWorld]):
-    """An entity that represents a wall in the gambling environment."""
-
-    def __init__(self):
-        super().__init__()
-        self.value = -1  # Walls penalize contact
-        self.sprite = Path(__file__).parent / "./assets/wall.png"
 
 
 class Sand(Entity[GamblingWorld]):

@@ -12,7 +12,10 @@ from sorrel.examples.treasurehunt_threadsafe.world import TreasurehuntWorld
 
 # sorrel imports
 from sorrel.models.pytorch.iqn_threadsafe import ThreadsafePyTorchIQN
-from sorrel.observation.observation_spec import OneHotObservationSpec
+from sorrel.observation.observation_spec import (
+    OneHotObservationSpec,
+    RGBObservationSpec,
+)
 from sorrel.threadsafe.environment import ThreadsafeEnvironment
 
 # end imports
@@ -38,7 +41,7 @@ class TreasurehuntEnv(ThreadsafeEnvironment[TreasurehuntWorld]):
 
         Requires self.config.model.agent_vision_radius to be defined.
         """
-        agent_num = 2
+        agent_num = int(self.config.model.get("num_agents", 2))
         agents = []
         shared_model = self.shared_model
         for _ in range(agent_num):
@@ -51,13 +54,29 @@ class TreasurehuntEnv(ThreadsafeEnvironment[TreasurehuntWorld]):
                 "Food",
                 "TreasurehuntAgent",
             ]
-            observation_spec = OneHotObservationSpec(
-                entity_list,
-                full_view=False,
-                # note that here we require self.config to have the entry model.agent_vision_radius
-                # don't forget to pass it in as part of config when creating this experiment!
-                vision_radius=self.config.model.agent_vision_radius,
-            )
+            if hasattr(self.config.model, "observation_spec"):
+                obs_spec_type = self.config.model.observation_spec
+            else:
+                obs_spec_type = "onehot"
+            if obs_spec_type == "onehot":
+                observation_spec = OneHotObservationSpec(
+                    entity_list,
+                    full_view=False,
+                    # note that here we require self.config to have the entry model.agent_vision_radius
+                    # don't forget to pass it in as part of config when creating this experiment!
+                    vision_radius=self.config.model.agent_vision_radius,
+                )
+            elif obs_spec_type == "rgb":
+                observation_spec = RGBObservationSpec(
+                    entity_list,
+                    full_view=False,
+                    # note that here we require self.config to have the entry model.agent_vision_radius
+                    # don't forget to pass it in as part of config when creating this experiment!
+                    vision_radius=self.config.model.agent_vision_radius,
+                )
+            else:
+                raise ValueError(f"Unknown observation spec type: {obs_spec_type}")
+
             observation_spec.override_input_size(
                 (int(np.prod(observation_spec.input_size)),)
             )

@@ -18,6 +18,10 @@ from sorrel.examples.chess.action_spec import ChessActionSpec
 from sorrel.location import Location
 from sorrel.worlds.gridworld import Gridworld
 
+_ROOK_DIRECTIONS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+_BISHOP_DIRECTIONS = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+_QUEEN_DIRECTIONS = _ROOK_DIRECTIONS + _BISHOP_DIRECTIONS
+
 
 class Chessboard(Gridworld):
     """A simple 8x8 chess board.
@@ -175,9 +179,9 @@ class Chessboard(Gridworld):
                     # Sliding pieces
                     directions = []
                     if kind in ("Rook", "Queen"):
-                        directions.extend([(1, 0), (-1, 0), (0, 1), (0, -1)])
+                        directions.extend(_ROOK_DIRECTIONS)
                     if kind in ("Bishop", "Queen"):
-                        directions.extend([(1, 1), (1, -1), (-1, 1), (-1, -1)])
+                        directions.extend(_BISHOP_DIRECTIONS)
                     for dr, dc in directions:
                         rr, cc = r + dr, c + dc
                         while 0 <= rr < self.height and 0 <= cc < self.width:
@@ -292,6 +296,68 @@ class Chessboard(Gridworld):
             return True
         return False
 
+    def _sliding_moves(self, start, row, col, colour, directions, try_add) -> None:
+        """Generate sliding moves (rook/bishop/queen) along the given directions.
+
+        Walks outward from ``(row, col)`` along each ``(dr, dc)`` direction, calling
+        ``try_add(start, end)`` for each reachable empty square and for the first
+        occupied square if it holds an enemy piece, stopping at the first occupied
+        square in each direction.
+        """
+        for dr, dc in directions:
+            r, c = row + dr, col + dc
+            while 0 <= r < self.height and 0 <= c < self.width:
+                end = (r, c, 0)
+                target = self.observe(end)
+                if getattr(target, "kind", None) == "EmptySquare":
+                    try_add(start, end)
+                else:
+                    if getattr(target, "colour") != colour:
+                        try_add(start, end)
+                    break
+                r += dr
+                c += dc
+
+    def _move_leaves_king_safe(self, start, end, colour: str) -> bool:
+        """Apply start->end on the real board, check king safety, then restore exactly."""
+        moving_piece = self.observe(start)
+        row = start[0]
+
+        touched: dict[tuple, object] = {
+            start: copy.deepcopy(self.observe(start)),
+            end: copy.deepcopy(self.observe(end)),
+        }
+
+        # En passant: pawn moving diagonally into an empty square
+        if (
+            getattr(moving_piece, "kind", "") == "Pawn"
+            and getattr(self.observe(end), "kind", None) == "EmptySquare"
+            and start[1] != end[1]
+        ):
+            captured_pos = (start[0], end[1], 0)
+            touched[captured_pos] = copy.deepcopy(self.observe(captured_pos))
+
+        # Castling: king moving two files
+        if getattr(moving_piece, "kind", "") == "King" and abs(end[1] - start[1]) == 2:
+            if end[1] > start[1]:
+                rook_start, rook_end = (row, 7, 0), (row, 5, 0)
+            else:
+                rook_start, rook_end = (row, 0, 0), (row, 3, 0)
+            touched[rook_start] = copy.deepcopy(self.observe(rook_start))
+            touched[rook_end] = copy.deepcopy(self.observe(rook_end))
+
+        saved_last_move = self.last_move
+        try:
+            self.apply_move(start, end)
+            safe = not self.is_check(colour)
+        except Exception:
+            safe = False
+        finally:
+            for loc, snapshot_entity in touched.items():
+                self.map[loc] = snapshot_entity
+            self.last_move = saved_last_move
+        return safe
+
     def legal_moves(self, colour: str) -> list[tuple[Location, Location]]:
         """Return a list of legal moves for the given colour.
 
@@ -357,61 +423,19 @@ class Chessboard(Gridworld):
                                 try_add(start, capture)
 
                 elif kind == "Rook":
-                    directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-                    for dr, dc in directions:
-                        r, c = row + dr, col + dc
-                        while 0 <= r < self.height and 0 <= c < self.width:
-                            end = (r, c, 0)
-                            target = self.observe(end)
-                            if getattr(target, "kind", None) == "EmptySquare":
-                                try_add(start, end)
-                            else:
-                                if getattr(target, "colour") != colour:
-                                    try_add(start, end)
-                                break
-                            r += dr
-                            c += dc
+                    self._sliding_moves(
+                        start, row, col, colour, _ROOK_DIRECTIONS, try_add
+                    )
 
                 elif kind == "Bishop":
-                    directions = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
-                    for dr, dc in directions:
-                        r, c = row + dr, col + dc
-                        while 0 <= r < self.height and 0 <= c < self.width:
-                            end = (r, c, 0)
-                            target = self.observe(end)
-                            if getattr(target, "kind", None) == "EmptySquare":
-                                try_add(start, end)
-                            else:
-                                if getattr(target, "colour") != colour:
-                                    try_add(start, end)
-                                break
-                            r += dr
-                            c += dc
+                    self._sliding_moves(
+                        start, row, col, colour, _BISHOP_DIRECTIONS, try_add
+                    )
 
                 elif kind == "Queen":
-                    directions = [
-                        (1, 0),
-                        (-1, 0),
-                        (0, 1),
-                        (0, -1),
-                        (1, 1),
-                        (1, -1),
-                        (-1, 1),
-                        (-1, -1),
-                    ]
-                    for dr, dc in directions:
-                        r, c = row + dr, col + dc
-                        while 0 <= r < self.height and 0 <= c < self.width:
-                            end = (r, c, 0)
-                            target = self.observe(end)
-                            if getattr(target, "kind", None) == "EmptySquare":
-                                try_add(start, end)
-                            else:
-                                if getattr(target, "colour") != colour:
-                                    try_add(start, end)
-                                break
-                            r += dr
-                            c += dc
+                    self._sliding_moves(
+                        start, row, col, colour, _QUEEN_DIRECTIONS, try_add
+                    )
 
                 elif kind == "Knight":
                     jumps = [
@@ -449,22 +473,15 @@ class Chessboard(Gridworld):
                         if self._can_castle_queenside(colour):
                             try_add(start, (row, 2, 0))
 
-        # If in check, filter moves to those that resolve the check
-        if self.is_check(colour):
-            # Evaluate each move on a deepcopy of the world to see if it removes the check
-            safe_moves: list[tuple[Location, Location]] = []
-            for start, end in moves:
-                # Create a deep copy of the world to test the move
-                world_copy = copy.deepcopy(self)
-                try:
-                    world_copy.apply_move(start, end)
-                except Exception:
-                    # If move fails (shouldn't happen), skip
-                    continue
-                if not world_copy.is_check(colour):
-                    safe_moves.append((start, end))
-            moves = safe_moves
-        return moves
+        # Filter out any pseudo-legal move that would leave (or place) the king
+        # of `colour` in check -- this must run unconditionally, not only when
+        # already in check, since a pinned piece can produce an illegal move
+        # even outside of check.
+        safe_moves: list[tuple[Location, Location]] = []
+        for start, end in moves:
+            if self._move_leaves_king_safe(start, end, colour):
+                safe_moves.append((start, end))
+        return safe_moves
 
     def legal_move_mask(self, colour: str) -> np.ndarray:
         """Return a boolean mask of legal actions for ``ChessActionSpec``.
