@@ -151,6 +151,8 @@ class NodeWorld(World):
         if new_location not in self.struct:
             return False
         current_key = entity.location[0] if entity.location else None
+        if not isinstance(current_key, str):
+            return False
         node = self.struct.get(current_key)
         if node is None:
             return False

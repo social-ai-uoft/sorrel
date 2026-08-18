@@ -51,6 +51,8 @@ from sorrel.models.pytorch.pytorch_base import DoublePyTorchModel
 class IQN(nn.Module):
     """The IQN Q-network."""
 
+    pis: torch.Tensor
+
     def __init__(
         self,
         input_size: Sequence[int],
