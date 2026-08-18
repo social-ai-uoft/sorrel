@@ -116,20 +116,17 @@ class ChessApiAgent(Agent[Chessboard]):
         except Exception as e:
             print(f"Chess API error: {e}. Falling back to random move.")
 
+        start, end = random.choice(legal)
         if best_move_str:
             # Parse move "e2e4" -> start, end
             start_alg = best_move_str[:2]
             end_alg = best_move_str[2:4]
-            start = Location(*ChessActionSpec.algebraic(start_alg))
-            end = Location(*ChessActionSpec.algebraic(end_alg))
+            candidate_start = Location(*ChessActionSpec.algebraic(start_alg))
+            candidate_end = Location(*ChessActionSpec.algebraic(end_alg))
 
             # Verify legality (API might return move for different rule variant or if confused)
-            if not world.is_valid_move(end, self.colour):
-                # Fallback if invalid
-                best_move_str = None
-
-        if not best_move_str:
-            start, end = random.choice(legal)
+            if world.is_valid_move(candidate_end, self.colour):
+                start, end = candidate_start, candidate_end
 
         return world.apply_move(start, end)
 

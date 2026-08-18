@@ -89,6 +89,11 @@ addopts = [
 ]
 
 [tool.pyright]
+# TODO: Poetry creates its venv at ./.venv by default (and its own venv auto-detection
+# only recognizes that exact name), while pyright here looks for ./venv, so pyright
+# can't resolve any installed packages out of the box. Until this is reconciled,
+# locally rename .venv -> venv and add a .venv junction back to it (Windows:
+# `mklink /J .venv venv`) so both tools find their expected path.
 venvPath = "."  # look for the venv at ./venv
 venv = "venv"
 reportPrivateImportUsage = "none"  # torch C-ext re-exports, just noise

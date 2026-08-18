@@ -44,13 +44,19 @@ class Buffer:
             self.extra_data[key] = np.zeros(shape, dtype=np.int64)
 
     def add(
-        self, obs: np.ndarray, action: int, reward: float, done: bool, **kwargs: Any
+        self,
+        obs: np.ndarray,
+        action: int | tuple[int, float],
+        reward: float,
+        done: bool,
+        **kwargs: Any,
     ) -> None:
         """Add an experience to the replay buffer.
 
         Args:
             obs (np.ndarray): The observation/state.
-            action (int): The action taken.
+            action (int | tuple[int, float]): The action taken. Some subclasses (e.g.
+                PPO's RolloutBuffer) record it as a (action, log_prob) tuple instead.
             reward (float): The reward received.
             done (bool): Whether the episode terminated after this step.
             **kwargs: Additional data to store in the buffer.

@@ -30,7 +30,7 @@ class Logger:
     losses: list[float | np.ndarray]
     rewards: list[float | np.ndarray]
     epsilons: list[float | np.ndarray]
-    additional_values: dict[str, list[int | float | np.ndarray]]
+    additional_values: dict[str, list[int | float | np.ndarray | None]]
 
     def __init__(self, max_epochs: int, *args: str):
         """Initialize a log.
