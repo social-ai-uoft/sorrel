@@ -26,7 +26,7 @@ class CleanupWorld(Gridworld):
         self.object_layer = 0
         self.agent_layer = 1
         self.beam_layer = 2
-        self.pollution = 0
+        self.pollution = 0.0
         super().__init__(
             config.env.height, config.env.width, config.env.layers, default_entity
         )

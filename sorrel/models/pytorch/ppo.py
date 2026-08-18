@@ -43,7 +43,14 @@ class RolloutBuffer(Buffer):
         super().clear()
         self.log_probs = np.zeros(self.capacity, dtype=np.float32)
 
-    def add(self, obs, action, reward, done, **kwargs):
+    def add(
+        self,
+        obs: np.ndarray,
+        action: int | tuple[int, float],
+        reward: float,
+        done: bool,
+        **kwargs,
+    ) -> None:
         """Add an experience to the replay buffer.
 
         Args:
@@ -54,6 +61,9 @@ class RolloutBuffer(Buffer):
             **kwargs: Additional data to store in the buffer.
         """
         # Unpack action tuple
+        assert isinstance(
+            action, tuple
+        ), "PPO actions must be (action, log_prob) tuples"
         action_, log_prob = action
 
         self.states[self.idx] = obs

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, overload
 
 import numpy as np
 
@@ -62,15 +62,18 @@ class ThreadsafeBuffer(Buffer):
         with self._lock:
             return super().__len__()
 
-    def __getitem__(self, idx):
+    @overload
+    def __getitem__(
+        self, idx: int
+    ) -> tuple[np.ndarray, np.integer, np.floating, np.floating]: ...
+    @overload
+    def __getitem__(
+        self, idx: slice
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: ...
+    def __getitem__(self, idx: int | slice):
         with self._lock:
             state, action, reward, done = super().__getitem__(idx)
-            return (
-                np.copy(state),
-                np.copy(action),
-                np.copy(reward),
-                np.copy(done),
-            )
+            return (state.copy(), action.copy(), reward.copy(), done.copy())
 
     def save(self, output_file: str | Path) -> None:
         with self._lock:
