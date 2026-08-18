@@ -1,8 +1,7 @@
 import copy
 import os
-import re
 from abc import abstractmethod
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -58,7 +57,7 @@ class PyTorchModel(nn.Module, BaseModel):
         pass
 
     @abstractmethod
-    def take_action(self, state) -> int:
+    def take_action(self, state) -> Any:
         pass
 
     def start_epoch_action(self, **kwargs):
@@ -103,6 +102,11 @@ class PyTorchModel(nn.Module, BaseModel):
             return self._copy_module_snapshot_locked(policy)
         return self
 
+    def _ensure_save_directory(self, file_path: str | os.PathLike) -> None:
+        directory = os.path.dirname(str(file_path))
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory)
+
     def save(self, file_path: str | os.PathLike) -> None:
         """Save the model weights and parameters in the specified location.
 
@@ -111,12 +115,7 @@ class PyTorchModel(nn.Module, BaseModel):
         Args:
             file_path: The full path to the model, including file extension.
         """
-        # Find the last / or \ character
-        pattern = re.compile(r"[\\\/]+(?!.*[\\\/])")
-        # Split into directory and file name
-        directory, filename = pattern.split(str(file_path), maxsplit=1)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
+        self._ensure_save_directory(file_path)
 
         if hasattr(self, "optimizer") and isinstance(
             self.optimizer, torch.optim.Optimizer
@@ -201,12 +200,7 @@ class DoublePyTorchModel(PyTorchModel):
         Args:
             file_path: The full path to the model, including file extension.
         """
-        # Find the last / or \ character
-        pattern = re.compile(r"[\\\/]+(?!.*[\\\/])")
-        # Split into directory and file name
-        directory, filename = pattern.split(str(file_path), maxsplit=1)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
+        self._ensure_save_directory(file_path)
 
         if hasattr(self, "optimizer") and isinstance(
             self.optimizer, torch.optim.Optimizer

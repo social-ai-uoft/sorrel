@@ -100,20 +100,14 @@ class Location(tuple):
             other (tuple | Vector): A set of coordinates (can be a Location object) or a vector.
 
         Returns:
-            bool: whether this Location has the same dimension and the same values as the other object.
+            bool: whether this Location has the same length and the same values as the other object.
         """
-        # Compare a tuple
+        # Compare a tuple (including another Location) using standard tuple equality,
+        # which requires matching length -- this keeps __eq__ consistent with the
+        # tuple-based __hash__ below (hashes of unequal-length tuples essentially
+        # never collide, so cross-length "equality" would break the hash/eq contract).
         if isinstance(other, tuple):
-            if len(other) == 2:
-                return (
-                    (self.x == other[0]) and (self.y == other[1]) and (self.dims == 2)
-                )
-            else:
-                return (
-                    (self.x == other[0])
-                    and (self.y == other[1])
-                    and (self.z == other[2])
-                )
+            return tuple.__eq__(self, other)
 
         # Compare a vector
         elif isinstance(other, Vector):
@@ -128,7 +122,7 @@ class Location(tuple):
             )
 
     def __hash__(self) -> int:
-        return hash(self.to_tuple())
+        return tuple.__hash__(self)
 
     def __len__(self):
         """Return the dimension of this Location."""
@@ -203,7 +197,7 @@ class Vector:
         self.layer = layer
 
     def __repr__(self):
-        return f"Vector(direction={self.direction},forward={self.forward},right={self.right},backward={self.backward},left={self.left}"
+        return f"Vector(direction={self.direction},forward={self.forward},right={self.right},backward={self.backward},left={self.left})"
 
     def __str__(self):
         return repr(self)

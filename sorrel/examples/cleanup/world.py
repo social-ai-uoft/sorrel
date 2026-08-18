@@ -48,4 +48,6 @@ class CleanupWorld(Gridworld):
                 river_tiles += 1
             elif x.kind == "River":
                 river_tiles += 1
+        if river_tiles == 0:
+            return 0.0
         return pollution_tiles / river_tiles

@@ -67,12 +67,15 @@ class Logger:
         self.epsilons.append(epsilon)
         self.losses.append(loss)
         self.rewards.append(reward)
+        for key in self.additional_values:
+            if key not in kwargs:
+                self.additional_values[key].append(None)
         for key, value in kwargs.items():
             if key not in self.additional_values:
                 self.additional_values[key] = [None] * (len(self.losses) - 1)
             self.additional_values[key].append(value)
 
-    def record_turn(self, stats: TurnStats) -> None:
+    def record_step(self, stats: TurnStats) -> None:
         """Record per-turn statistics.
 
         No-op in base class.
@@ -186,6 +189,10 @@ class TensorboardLogger(Logger):
         additional_values: A dictionary of optional values to be stored.
     """
 
+    # Above this many elements, a multi-element np.ndarray extra is logged as a
+    # single mean scalar instead of one TensorBoard series per element.
+    _MAX_EXTRA_ARRAY_ELEMENTS = 32
+
     def __init__(self, max_epochs: int, log_dir: str | os.PathLike, *args):
         """Initialize a Tensorboard log.
 
@@ -211,7 +218,7 @@ class TensorboardLogger(Logger):
                 self.writer.add_scalar(key, value, epoch)
         super().record_epoch(epoch, loss, reward, epsilon, **kwargs)
 
-    def record_turn(self, stats: TurnStats) -> None:
+    def record_step(self, stats: TurnStats) -> None:
         """Write per-turn scalars to TensorBoard using a monotonic global step.
 
         The global step counter (``_global_step``) increments by 1 per turn
@@ -242,6 +249,16 @@ class TensorboardLogger(Logger):
         for key, value in stats.extra.items():
             if isinstance(value, dict):
                 self.writer.add_scalars(f"turn/{key}", value, step)
+            elif isinstance(value, np.ndarray) and value.size != 1:
+                if value.size == 0:
+                    continue
+                if value.size > self._MAX_EXTRA_ARRAY_ELEMENTS:
+                    self.writer.add_scalar(
+                        f"turn/{key}_mean", float(value.mean()), step
+                    )
+                    continue
+                per_element = {str(i): float(v) for i, v in enumerate(value.ravel())}
+                self.writer.add_scalars(f"turn/{key}", per_element, step)
             else:
                 self.writer.add_scalar(f"turn/{key}", float(value), step)
         self._global_step += 1

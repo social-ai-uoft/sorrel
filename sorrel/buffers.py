@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Sequence, overload
 
 import numpy as np
 import torch
@@ -43,7 +43,9 @@ class Buffer:
                 shape = capacity
             self.extra_data[key] = np.zeros(shape, dtype=np.int64)
 
-    def add(self, obs, action, reward, done, **kwargs):
+    def add(
+        self, obs: np.ndarray, action: int, reward: float, done: bool, **kwargs: Any
+    ) -> None:
         """Add an experience to the replay buffer.
 
         Args:
@@ -62,7 +64,7 @@ class Buffer:
         self.idx = (self.idx + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
-    def add_empty(self):
+    def add_empty(self) -> None:
         """Advancing the id by `self.n_frames`, adding empty frames to the replay
         buffer."""
         self.idx = (self.idx + self.n_frames - 1) % self.capacity
@@ -72,32 +74,32 @@ class Buffer:
         assert (
             self.obs_shape == buffer.obs_shape
         ), "Cannot add from a buffer with different state shapes."
-        # If the buffer is too long to add to the existing saved game buffer, truncate it
-        buffer_slice_point = min(self.capacity - self.idx, buffer.size)
+        # Split the copy into two segments so it wraps like a ring buffer instead of
+        # truncating at the end of the array.
+        head = min(self.capacity - self.idx, buffer.size)
+        remainder = min(buffer.size - head, self.idx)
         # Add the S, A, R, D, to the saved game buffer
-        self.states[self.idx : self.idx + buffer_slice_point] = buffer.states[
-            :buffer_slice_point
-        ]
-        self.actions[self.idx : self.idx + buffer_slice_point] = buffer.actions[
-            :buffer_slice_point
-        ]
-        self.rewards[self.idx : self.idx + buffer_slice_point] = buffer.rewards[
-            :buffer_slice_point
-        ]
-        self.dones[self.idx : self.idx + buffer_slice_point] = buffer.dones[
-            :buffer_slice_point
-        ]
+        self.states[self.idx : self.idx + head] = buffer.states[:head]
+        self.states[:remainder] = buffer.states[head : head + remainder]
+        self.actions[self.idx : self.idx + head] = buffer.actions[:head]
+        self.actions[:remainder] = buffer.actions[head : head + remainder]
+        self.rewards[self.idx : self.idx + head] = buffer.rewards[:head]
+        self.rewards[:remainder] = buffer.rewards[head : head + remainder]
+        self.dones[self.idx : self.idx + head] = buffer.dones[:head]
+        self.dones[:remainder] = buffer.dones[head : head + remainder]
         for key, value in buffer.extra_data.items():
             if not key in self.extra_data:
                 self.extra_data[key] = np.zeros(
                     (self.capacity, *value.shape[1:]), dtype=value.dtype
                 )
-            self.extra_data[key][self.idx : self.idx + buffer_slice_point] = value[
-                :buffer_slice_point
-            ]
-        self.idx = self.idx + buffer_slice_point
+            self.extra_data[key][self.idx : self.idx + head] = value[:head]
+            self.extra_data[key][:remainder] = value[head : head + remainder]
+        self.idx = (self.idx + head + remainder) % self.capacity
+        self.size = min(self.size + head + remainder, self.capacity)
 
-    def sample(self, batch_size: int):
+    def sample(
+        self, batch_size: int
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Sample a batch of experiences from the replay buffer.
 
         Args:
@@ -134,7 +136,7 @@ class Buffer:
         self.idx = 0
         self.size = 0
 
-    def getidx(self):
+    def getidx(self) -> int:
         """Get the current index.
 
         Returns:
@@ -164,7 +166,20 @@ class Buffer:
     def __len__(self):
         return self.size
 
-    def __getitem__(self, idx):
+    @overload
+    def __getitem__(
+        self, idx: int
+    ) -> tuple[np.ndarray, np.integer, np.floating, np.floating]: ...
+    @overload
+    def __getitem__(
+        self, idx: slice
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: ...
+    def __getitem__(
+        self, idx: int | slice
+    ) -> (
+        tuple[np.ndarray, np.integer, np.floating, np.floating]
+        | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    ):
         return (self.states[idx], self.actions[idx], self.rewards[idx], self.dones[idx])
 
     def save(self, output_file: str | Path) -> None:

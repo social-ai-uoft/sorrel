@@ -37,7 +37,7 @@ class TurnStats:
             including this turn.
         agent_stats: Per-agent snapshots for this turn.
         extra: Arbitrary researcher-provided metrics. Populated by overriding
-            :meth:`~sorrel.environment.Environment._collect_turn_stats`.
+            :meth:`~sorrel.environment.Environment.collect_turn_stats`.
     """
 
     epoch: int
