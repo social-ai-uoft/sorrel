@@ -179,7 +179,13 @@ class IQN(nn.Module):
 
 class iRainbowModel(DoublePyTorchModel):
     """A combination of IQN with Rainbow, which itself combines priority experience
-    replay, dueling DDQN, distributional DQN, noisy DQN, and multi-step return.
+    replay, dueling DDQN, distributional DQN, and noisy DQN.
+
+    .. note::
+        Multi-step return was part of the original Rainbow design this class is based
+        on, but was intentionally disabled early in this project's history because it
+        showed little/negative effect on performance here. `Buffer` only ever stores
+        and samples 1-step transitions today; see `n_step` below.
 
     Attributes:
         input_size (Sequence[int]): The shape of the state input.
@@ -224,6 +230,9 @@ class iRainbowModel(DoublePyTorchModel):
             device (str | torch.device): Device used for the compute.
             seed (int): Random seed value for replication.
             n_frames (int): Number of timesteps for the state input.
+            n_step (int): Unused by training today (kept for config/call-site
+                compatibility) -- `Buffer` only stores 1-step transitions, so there is
+                no multi-step return to apply this to. See the class docstring.
             batch_size (int): The size of the training batch.
             memory_size (int): The size of the replay memory.
             GAMMA (float): Discount factor
@@ -333,7 +342,11 @@ class iRainbowModel(DoublePyTorchModel):
 
         # REPLACED: as suggested by Gemini, Claude, and GPT
         # if (len(self.memory) // self.n_frames // 2) > self.batch_size:
-        if len(self.memory) > self.batch_size:
+        # NOTE: Buffer.sample() draws `batch_size` indices via
+        # np.random.choice(size - n_frames - 1, batch_size, replace=False), which
+        # requires the buffer to hold at least batch_size + n_frames + 1 transitions
+        # -- not just > batch_size -- or it raises ValueError.
+        if len(self.memory) >= self.batch_size + self.memory.n_frames + 1:
 
             # Sample minibatch
             states, actions, rewards, next_states, dones, valid = self.memory.sample(
@@ -373,8 +386,11 @@ class iRainbowModel(DoublePyTorchModel):
                 ).transpose(1, 2)
 
             # Compute Q targets for current states
+            # NOTE: `rewards`/`Q_targets_next` are 1-step quantities (Buffer.sample()
+            # does not accumulate multi-step returns -- see the class docstring), so
+            # the bootstrap discount must be GAMMA**1, not GAMMA**n_step.
             Q_targets = rewards.unsqueeze(-1) + (
-                self.GAMMA**self.n_step
+                self.GAMMA
                 * Q_targets_next.to(self.device)
                 * (1.0 - dones.unsqueeze(-1))
             )
