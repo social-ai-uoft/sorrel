@@ -315,6 +315,9 @@ class DQNModel(DoublePyTorchModel):
         Args:
             **kwargs: All local variables are passed into the model
         """
+        pass
+
+
 # ------------------------ #
 # endregion                #
 # ------------------------ #
