@@ -135,19 +135,32 @@ class Environment[W: Gridworld](ABC):
         Returns:
             A :class:`~sorrel.utils.turn_stats.TurnStats` snapshot for this turn.
         """
+        # Agents can share a single model (and therefore a single replay buffer),
+        # e.g. a shared threadsafe model in a multi-agent setup. Each such agent
+        # adds exactly one transition to that shared buffer per turn, in the same
+        # order they appear in self.agents, so group them here and read each
+        # agent's own transition by counting back from the buffer's tail instead
+        # of every agent reading the same (most recent) slot.
+        agents_by_memory: dict[int, list[int]] = {}
+        for i, agent in enumerate(self.agents):
+            agents_by_memory.setdefault(id(agent.model.memory), []).append(i)
+
         agent_stats: list[AgentTurnStats] = []
         for i, agent in enumerate(self.agents):
             mem = agent.model.memory
-            if mem.size == 0:
+            sharing = agents_by_memory[id(mem)]
+            offset = len(sharing) - 1 - sharing.index(i)
+            transition = mem.last_transition(offset)
+            if transition is None:
                 continue
-            tail = (mem.idx - 1) % mem.capacity
+            last_action, last_reward, last_done = transition
             agent_stats.append(
                 AgentTurnStats(
                     agent_id=i,
                     location=tuple(agent.location),
-                    last_action=int(mem.actions[tail]),
-                    last_reward=float(mem.rewards[tail]),
-                    last_done=bool(mem.dones[tail]),
+                    last_action=last_action,
+                    last_reward=last_reward,
+                    last_done=last_done,
                 )
             )
         return TurnStats(

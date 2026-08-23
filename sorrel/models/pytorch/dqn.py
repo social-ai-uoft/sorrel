@@ -248,7 +248,11 @@ class DQNModel(DoublePyTorchModel):
         loss = torch.tensor(0.0)
         self.optimizer.zero_grad()
 
-        if len(self.memory) > self.batch_size:
+        # NOTE: Buffer.sample() draws `batch_size` indices via
+        # np.random.choice(size - n_frames - 1, batch_size, replace=False), which
+        # requires the buffer to hold at least batch_size + n_frames + 1 transitions
+        # -- not just > batch_size -- or it raises ValueError.
+        if len(self.memory) >= self.batch_size + self.memory.n_frames + 1:
 
             # Sample minibatch
             states, actions, rewards, next_states, dones, valid = self.memory.sample(
@@ -288,7 +292,7 @@ class DQNModel(DoublePyTorchModel):
             # NOTE: DQN uses only a hard periodic sync (see start_epoch_action);
             # unlike iRainbowModel, there is no soft_update() here.
 
-        return loss.detach().numpy()
+        return loss.detach().cpu().numpy()
 
     def start_epoch_action(self, **kwargs) -> None:
         """Model actions before agent takes an action.

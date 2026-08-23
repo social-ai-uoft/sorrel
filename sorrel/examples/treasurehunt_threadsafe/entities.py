@@ -6,10 +6,18 @@ from pathlib import Path
 import numpy as np
 
 from sorrel.entities import Entity
-from sorrel.entities.basic_entities import Wall
+from sorrel.entities.basic_entities import Wall as _BasicWall
 from sorrel.examples.treasurehunt_threadsafe.world import TreasurehuntWorld
 
 # end imports
+
+
+class Wall(_BasicWall):
+    """A wall in the treasurehunt environment, themed with this example's own sprite."""
+
+    def __init__(self):
+        super().__init__()
+        self.sprite = Path(__file__).parent / "./assets/wall.png"
 
 
 class Sand(Entity[TreasurehuntWorld]):

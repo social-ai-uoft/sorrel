@@ -150,6 +150,27 @@ class Buffer:
         """
         return self.idx
 
+    def last_transition(self, offset: int = 0) -> tuple[int, float, bool] | None:
+        """Get the (action, reward, done) tuple written `offset` entries before the most
+        recently added one.
+
+        Args:
+            offset (int): How many entries back from the most recent to look up.
+                0 (the default) returns the most recent transition.
+
+        Returns:
+            tuple[int, float, bool] | None: The (action, reward, done) tuple, or
+                ``None`` if the buffer holds fewer than ``offset + 1`` entries.
+        """
+        if self.size <= offset:
+            return None
+        tail = (self.idx - 1 - offset) % self.capacity
+        return (
+            int(self.actions[tail]),
+            float(self.rewards[tail]),
+            bool(self.dones[tail]),
+        )
+
     def current_state(self) -> np.ndarray:
         """Get the current state.
 

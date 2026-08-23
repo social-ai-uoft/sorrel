@@ -54,6 +54,10 @@ class ThreadsafeBuffer(Buffer):
         with self._lock:
             return super().getidx()
 
+    def last_transition(self, offset: int = 0):
+        with self._lock:
+            return super().last_transition(offset)
+
     def current_state(self) -> np.ndarray:
         with self._lock:
             return np.copy(super().current_state())

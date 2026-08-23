@@ -82,6 +82,54 @@ def test_train_step_is_noop_before_batch_size_reached():
     assert np.asarray(loss).item() == pytest.approx(0.0)
 
 
+def test_train_step_does_not_crash_when_buffer_just_above_batch_size():
+    """Regression test: Buffer.sample() draws batch_size indices from a population
+    of size - n_frames - 1, so it needs the buffer to hold at least
+    batch_size + n_frames + 1 transitions, not just > batch_size. A buffer at
+    exactly batch_size + 1 transitions must not attempt to sample yet (this used
+    to raise ValueError: Cannot take a larger sample than population)."""
+    model = _make_model(batch_size=4, memory_size=64)
+    _fill_memory(model, n=model.batch_size + 1)  # n=5, n_frames=1 -> population=3
+
+    loss = model.train_step()  # should not raise
+    assert np.asarray(loss).item() == pytest.approx(0.0)
+
+
+def test_train_step_moves_loss_to_cpu_before_numpy(monkeypatch):
+    """Regression test: train_step used to call loss.detach().numpy() without .cpu()
+    first, unlike the identical pattern in iqn.py/ppo.py.
+
+    That crashes with TypeError on a CUDA tensor ("can't convert cuda:0 device type
+    tensor to numpy"). We can't require a GPU in CI, so this simulates the failure by
+    making .numpy() raise unless .cpu() was called on that exact tensor first.
+    """
+    model = _make_model(batch_size=4, memory_size=64)
+    _fill_memory(model, n=30)
+
+    original_cpu = torch.Tensor.cpu
+    original_numpy = torch.Tensor.numpy
+    cpued_ids: set[int] = set()
+
+    def tracking_cpu(self):
+        result = original_cpu(self)
+        cpued_ids.add(id(result))
+        return result
+
+    def guarded_numpy(self):
+        if id(self) not in cpued_ids:
+            raise TypeError(
+                "can't convert cuda:0 device type tensor to numpy. Use "
+                "Tensor.cpu() to copy the tensor to host memory first."
+            )
+        return original_numpy(self)
+
+    monkeypatch.setattr(torch.Tensor, "cpu", tracking_cpu)
+    monkeypatch.setattr(torch.Tensor, "numpy", guarded_numpy)
+
+    loss = model.train_step()  # should not raise
+    assert np.isfinite(np.asarray(loss).item())
+
+
 def test_train_step_updates_weights_and_returns_finite_loss():
     """Once the buffer has enough samples, train_step should run without error, return a
     finite non-negative loss, and actually update the local network's weights."""
