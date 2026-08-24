@@ -208,8 +208,8 @@ if __name__ == "__main__":
     for epoch in range(TRAINING_EPOCHS):
         state_loss, action_loss = model.train_model(mask_type=TRAIN_MASK_TYPE)
 
-        logger.record_turn(
-            epoch=epoch,
+        logger.record_epoch(
+            epoch,
             loss=state_loss + action_loss,
             reward=0.0,
             action_loss=action_loss,

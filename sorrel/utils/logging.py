@@ -12,6 +12,8 @@ import numpy as np
 from IPython.display import clear_output
 from torch.utils.tensorboard.writer import SummaryWriter
 
+from sorrel.utils.turn_stats import TurnStats
+
 
 class Logger:
     """Abstract class for logging.
@@ -28,7 +30,7 @@ class Logger:
     losses: list[float | np.ndarray]
     rewards: list[float | np.ndarray]
     epsilons: list[float | np.ndarray]
-    additional_values: Mapping[str, list[int | float | np.ndarray]]
+    additional_values: dict[str, list[int | float | np.ndarray | None]]
 
     def __init__(self, max_epochs: int, *args: str):
         """Initialize a log.
@@ -45,7 +47,7 @@ class Logger:
         for additional_value in args:
             self.additional_values[additional_value] = []
 
-    def record_turn(
+    def record_epoch(
         self,
         epoch: int,
         loss: float | np.ndarray,
@@ -65,11 +67,26 @@ class Logger:
         self.epsilons.append(epsilon)
         self.losses.append(loss)
         self.rewards.append(reward)
+        for key in self.additional_values:
+            if key not in kwargs:
+                self.additional_values[key].append(None)
         for key, value in kwargs.items():
-            assert (
-                key in self.additional_values.keys()
-            ), "Can only store existing values."
+            if key not in self.additional_values:
+                self.additional_values[key] = [None] * (len(self.losses) - 1)
             self.additional_values[key].append(value)
+
+    def record_step(self, stats: TurnStats) -> None:
+        """Record per-turn statistics.
+
+        No-op in base class.
+                Override in subclasses to stream per-turn data to external systems.
+                :class:`TensorboardLogger` provides a built-in override.
+
+                Args:
+                    stats: The :class:`~sorrel.utils.turn_stats.TurnStats` snapshot
+                        for the completed turn.
+        """
+        pass
 
     def to_csv(self, file_path: str | os.PathLike) -> None:
         """Write the logged data to a CSV file.
@@ -85,12 +102,17 @@ class Logger:
             **self.additional_values,
         }
 
-        with open(file_path, "a") as f:
+        with open(file_path, "a", newline="") as f:
             writer = csv.writer(f)
             if os.stat(file_path).st_size == 0:
                 writer.writerow(list(records.keys()))
             for epoch in range(len(self.losses)):
-                writer.writerow([value[epoch] for value in records.values()])
+                writer.writerow(
+                    [
+                        value[epoch] if epoch < len(value) else ""
+                        for value in records.values()
+                    ]
+                )
 
     @classmethod
     def from_config(cls, config: dict | Mapping):
@@ -117,7 +139,7 @@ class ConsoleLogger(Logger):
         additional_values: A dictionary of optional values to be stored.
     """
 
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+    def record_epoch(self, epoch, loss, reward, epsilon=0, **kwargs):
         loss = np.round(loss, 2)
         # Print beginning of the frame
         if epoch == 0:
@@ -131,7 +153,7 @@ class ConsoleLogger(Logger):
         print(f"╚══════════════╩══════════════╩══════════════╝", end="\r")
         if epoch == self.max_epochs:
             print(f"╚══════════════╩══════════════╩══════════════╝")
-        super().record_turn(epoch, loss, reward, epsilon, **kwargs)
+        super().record_epoch(epoch, loss, reward, epsilon, **kwargs)
 
 
 class JupyterLogger(Logger):
@@ -145,7 +167,7 @@ class JupyterLogger(Logger):
         additional_values: A dictionary of optional values to be stored.
     """
 
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+    def record_epoch(self, epoch, loss, reward, epsilon=0, **kwargs):
         loss = np.round(loss, 2)
         clear_output(wait=True)
         print(f"╔══════════════╦══════════════╦══════════════╗")
@@ -153,7 +175,7 @@ class JupyterLogger(Logger):
             f"║ Epoch:{str(epoch).rjust(6)} ║ Loss:{str(loss).rjust(7)} ║ Reward:{str(reward).rjust(5)} ║"
         )
         print(f"╚══════════════╩══════════════╩══════════════╝")
-        super().record_turn(epoch, loss, reward, epsilon, **kwargs)
+        super().record_epoch(epoch, loss, reward, epsilon, **kwargs)
 
 
 class TensorboardLogger(Logger):
@@ -167,6 +189,10 @@ class TensorboardLogger(Logger):
         additional_values: A dictionary of optional values to be stored.
     """
 
+    # Above this many elements, a multi-element np.ndarray extra is logged as a
+    # single mean scalar instead of one TensorBoard series per element.
+    _MAX_EXTRA_ARRAY_ELEMENTS = 32
+
     def __init__(self, max_epochs: int, log_dir: str | os.PathLike, *args):
         """Initialize a Tensorboard log.
 
@@ -179,8 +205,9 @@ class TensorboardLogger(Logger):
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
         self.writer = SummaryWriter(log_dir=log_dir)
+        self._global_step: int = 0
 
-    def record_turn(self, epoch, loss, reward, epsilon=0, **kwargs):
+    def record_epoch(self, epoch, loss, reward, epsilon=0, **kwargs):
         self.writer.add_scalar("loss", loss, epoch)
         self.writer.add_scalar("score", reward, epoch)
         self.writer.add_scalar("epsilon", epsilon, epoch)
@@ -189,6 +216,52 @@ class TensorboardLogger(Logger):
                 self.writer.add_scalars(key, value, epoch)
             else:
                 self.writer.add_scalar(key, value, epoch)
+        super().record_epoch(epoch, loss, reward, epsilon, **kwargs)
+
+    def record_step(self, stats: TurnStats) -> None:
+        """Write per-turn scalars to TensorBoard using a monotonic global step.
+
+        The global step counter (``_global_step``) increments by 1 per turn
+        across all epochs, providing continuous x-axis resolution in
+        TensorBoard.
+
+        Default scalars written:
+
+        - ``turn/reward_mean`` — mean reward across agents this turn.
+        - ``turn/reward_sum`` — summed reward across agents this turn.
+        - ``turn/agent_reward/<agent_id>`` — per-agent reward this turn.
+        - ``turn/<key>`` — any values in
+          :attr:`~sorrel.utils.turn_stats.TurnStats.extra`.
+
+        Args:
+            stats: The :class:`~sorrel.utils.turn_stats.TurnStats` snapshot
+                for the completed turn.
+        """
+        step = self._global_step
+        if stats.agent_stats:
+            rewards = [a.last_reward for a in stats.agent_stats]
+            self.writer.add_scalar("turn/reward_mean", float(np.mean(rewards)), step)
+            self.writer.add_scalar("turn/reward_sum", float(sum(rewards)), step)
+            per_agent = {
+                f"agent_{a.agent_id}": a.last_reward for a in stats.agent_stats
+            }
+            self.writer.add_scalars("turn/agent_reward", per_agent, step)
+        for key, value in stats.extra.items():
+            if isinstance(value, dict):
+                self.writer.add_scalars(f"turn/{key}", value, step)
+            elif isinstance(value, np.ndarray) and value.size != 1:
+                if value.size == 0:
+                    continue
+                if value.size > self._MAX_EXTRA_ARRAY_ELEMENTS:
+                    self.writer.add_scalar(
+                        f"turn/{key}_mean", float(value.mean()), step
+                    )
+                    continue
+                per_element = {str(i): float(v) for i, v in enumerate(value.ravel())}
+                self.writer.add_scalars(f"turn/{key}", per_element, step)
+            else:
+                self.writer.add_scalar(f"turn/{key}", float(value), step)
+        self._global_step += 1
 
     @classmethod
     def from_config(cls, config: dict | Mapping):
@@ -200,7 +273,7 @@ class TensorboardLogger(Logger):
         if not "log_dir" in config["experiment"].keys():
             log_dir = (
                 Path(config["experiment"]["output_dir"])
-                / f"./logs/{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}"
+                / f"./logs/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}"
             )
         else:
             log_dir = config["experiment"]["log_dir"]

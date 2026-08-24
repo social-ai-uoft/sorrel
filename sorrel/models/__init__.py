@@ -1,6 +1,7 @@
 from sorrel.models.base_model import BaseModel, RandomModel
 from sorrel.models.human_player import HumanPlayer
 from sorrel.models.policy_snapshot import PolicySnapshot
+from sorrel.models.pytorch.dqn import DQNModel as PyTorchDQN
 from sorrel.models.pytorch.iqn import iRainbowModel as PyTorchIQN
 from sorrel.models.pytorch.iqn_threadsafe import ThreadsafePyTorchIQN
 from sorrel.models.pytorch.ppo import PyTorchPPO

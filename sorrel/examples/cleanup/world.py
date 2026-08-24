@@ -26,7 +26,7 @@ class CleanupWorld(Gridworld):
         self.object_layer = 0
         self.agent_layer = 1
         self.beam_layer = 2
-        self.pollution = 0
+        self.pollution = 0.0
         super().__init__(
             config.env.height, config.env.width, config.env.layers, default_entity
         )
@@ -48,4 +48,6 @@ class CleanupWorld(Gridworld):
                 river_tiles += 1
             elif x.kind == "River":
                 river_tiles += 1
+        if river_tiles == 0:
+            return 0.0
         return pollution_tiles / river_tiles

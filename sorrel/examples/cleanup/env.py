@@ -40,6 +40,10 @@ ENTITY_LIST = [
 
 class CleanupEnv(Environment[CleanupWorld]):
 
+    def take_turn(self, epoch: int = 0) -> None:
+        self.world.pollution = self.world.measure_pollution()
+        super().take_turn(epoch)
+
     def setup_agents(self):
         """Set up the agents."""
         agents = []

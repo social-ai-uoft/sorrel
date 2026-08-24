@@ -19,7 +19,6 @@ if __name__ == "__main__":
             "epochs": 1,
             "max_turns": 100,
             "record_period": 1,
-            "output_dir": Path(__file__).parent / "./data",
         },
         "model": {},
         "world": {},
@@ -30,4 +29,4 @@ if __name__ == "__main__":
 
     # Construct the environment and run the experiment.
     env = ChessEnvironment(world, config)
-    env.run_experiment(output_dir=config["experiment"]["output_dir"])
+    env.run_experiment(output_dir=Path(__file__).parent / "./data")

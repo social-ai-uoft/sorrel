@@ -74,6 +74,9 @@ class CleanupAgent(MovingAgent[CleanupWorld]):
         self.direction = 2  # 90 degree rotation: default at 180 degrees (facing down)
         self.encounters = {}
 
+    def reset(self) -> None:
+        self.model.reset()
+
     def pov(self, world: CleanupWorld) -> np.ndarray:
         image = self.observation_spec.observe(world, self.location)
         # flatten the image to get the state
@@ -168,8 +171,6 @@ class CleanupAgent(MovingAgent[CleanupWorld]):
             if target_object.kind not in self.encounters.keys():
                 self.encounters[target_object.kind] = 0
             self.encounters[target_object.kind] += 1
-
-        world.total_reward += reward
 
         # try moving to new_location
         world.move(self, new_location)

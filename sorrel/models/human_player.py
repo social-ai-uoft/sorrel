@@ -43,6 +43,8 @@ class HumanPlayer(BaseModel):
                 "Input size must be a sequence of integers for the human player."
             )
 
+        self.action_space = action_space
+        self.epsilon = 0.0
         self.action_list = np.arange(action_space)
         self.show = show
         self.tile_size = 16

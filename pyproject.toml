@@ -54,6 +54,12 @@ einops = "^0.8.1"
 protobuf = ">=6.33.5,<7"
 # used in examples/chess/agents.py
 requests = "^2.33.0"
+# LLM-based agent support (sorrel/models/llm.py); install via `pip install sorrel[llm]`
+openai = {version = "^1.102.0", optional = true}
+anthropic = {version = ">=0.40.0", optional = true}
+
+[tool.poetry.extras]
+llm = ["openai", "anthropic"]
 
 [tool.poetry.group.dev]
 optional = true
@@ -73,13 +79,6 @@ urllib3 = "^2.7.0"
 tornado = "^6.5.5"
 virtualenv = "^20.36.1"
 
-[tool.poetry.group.llm]
-optional = true
-
-[tool.poetry.group.llm.dependencies]
-openai = "^1.102.0"
-anthropic = ">=0.40.0"
-
 [tool.pytest.ini_options]
 pythonpath = [
   "sorrel"
@@ -90,6 +89,11 @@ addopts = [
 ]
 
 [tool.pyright]
+# TODO: Poetry creates its venv at ./.venv by default (and its own venv auto-detection
+# only recognizes that exact name), while pyright here looks for ./venv, so pyright
+# can't resolve any installed packages out of the box. Until this is reconciled,
+# locally rename .venv -> venv and add a .venv junction back to it (Windows:
+# `mklink /J .venv venv`) so both tools find their expected path.
 venvPath = "."  # look for the venv at ./venv
 venv = "venv"
 reportPrivateImportUsage = "none"  # torch C-ext re-exports, just noise

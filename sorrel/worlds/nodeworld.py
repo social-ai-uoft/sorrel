@@ -1,6 +1,7 @@
 import pprint
 
 from sorrel.entities.entity import Entity
+from sorrel.worlds.base_world import World
 
 
 class Node:
@@ -52,7 +53,7 @@ class Node:
         visible_obs = []
         for node in self.visible:
             for entity in node.entities:
-                visible_obs.append({node.name, entity})
+                visible_obs.append({node.name: entity})
         return visible_obs
 
     def get_adjacent(self) -> list[str]:
@@ -94,7 +95,7 @@ class Node:
             self.adjacent.append(node)
 
 
-class NodeWorld:
+class NodeWorld(World):
     """World that represents a graph of nodes.
 
     Each node can contain agents and entities.
@@ -129,28 +130,39 @@ class NodeWorld:
     def __getitem__(self, idx):
         return self.struct[idx]
 
-    def add(self, target_location: str, entity: Entity):
-        for node_name, node in self.struct.items():
-            if node_name == target_location:
-                entity.location = (target_location,)
-                node.add_entity(entity)
+    def add(self, target_location: str, entity: Entity) -> None:
+        node = self.struct.get(target_location)
+        if node is not None:
+            entity.location = (target_location,)
+            node.add_entity(entity)
 
     def remove(self, target_location: str) -> Entity | None:
-        for node_name, node in self.struct.items():
-            if node_name == target_location:
-                for entity in node.entities:
-                    entity = node.remove_entity(entity)
-                    if entity is not None:
-                        entity.location = (None,)
-                    return entity
+        node = self.struct.get(target_location)
+        if node is None:
+            return None
+        for entity in node.entities:
+            entity = node.remove_entity(entity)
+            if entity is not None:
+                entity.location = (None,)
+            return entity
+        return None
 
     def move(self, entity: Entity, new_location: str) -> bool:
-        for node_name, node in self.struct.items():
-            if (node_name,) == entity.location:
-                tmp = node.remove_entity(entity)
-                node.add_entity(entity)
-                return True
-        return False
+        if new_location not in self.struct:
+            return False
+        current_key = entity.location[0] if entity.location else None
+        if not isinstance(current_key, str):
+            return False
+        node = self.struct.get(current_key)
+        if node is None:
+            return False
+        node.remove_entity(entity)
+        entity.location = (new_location,)
+        self.struct[new_location].add_entity(entity)
+        return True
+
+    def observe(self, target_location: str) -> list[Entity]:
+        return self.struct[target_location].entities
 
     def set_visibility(self, location: str, visible_from: list[str]) -> None:
         for node, value in self.struct.items():

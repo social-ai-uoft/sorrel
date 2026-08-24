@@ -54,10 +54,7 @@ class RandomChessAgent(Agent[Chessboard]):
         legal = world.legal_moves(self.colour)
         if not legal:
             world.is_done = True
-            if world.is_checkmate(self.colour):
-                return -1e9
-            elif world.is_stalemate(self.colour):
-                return 0.0
+            return -1e9 if world.is_check(self.colour) else 0.0
         start, end = random.choice(legal)
         reward = world.apply_move(start, end)
         return reward
@@ -90,18 +87,23 @@ class ChessApiAgent(Agent[Chessboard]):
     def reset(self) -> None:
         pass
 
+    def pov(self, world: Chessboard) -> np.ndarray:
+        image = self.observation_spec.observe(
+            world, None
+        )  # full view does not need a location
+        return image.reshape(1, -1)
+
     def get_action(self, state: np.ndarray) -> int:
+        # The actual move decision is performed in ``act`` (via the
+        # chess-api.com call, with a random-move fallback); we simply return
+        # a dummy integer because the ``Agent`` base class expects an action.
         return 0
 
     def act(self, world: Chessboard, action: int) -> float:
         legal = world.legal_moves(self.colour)
         if not legal:
             world.is_done = True
-            if world.is_checkmate(self.colour):
-                return -1e9
-            elif world.is_stalemate(self.colour):
-                return 0.0
-            return 0.0
+            return -1e9 if world.is_check(self.colour) else 0.0
 
         fen = self._get_fen(world)
         best_move_str = None
@@ -114,28 +116,17 @@ class ChessApiAgent(Agent[Chessboard]):
         except Exception as e:
             print(f"Chess API error: {e}. Falling back to random move.")
 
+        start, end = random.choice(legal)
         if best_move_str:
             # Parse move "e2e4" -> start, end
             start_alg = best_move_str[:2]
             end_alg = best_move_str[2:4]
-            start = Location(*ChessActionSpec.algebraic(start_alg))
-            end = Location(*ChessActionSpec.algebraic(end_alg))
+            candidate_start = Location(*ChessActionSpec.algebraic(start_alg))
+            candidate_end = Location(*ChessActionSpec.algebraic(end_alg))
 
             # Verify legality (API might return move for different rule variant or if confused)
-            if world.is_valid_move(end, self.colour):
-                # Apply move
-                # Note: apply_move takes coordinates.
-                pass
-            else:
-                # Fallback if invalid
-                best_move_str = None
-
-        if not best_move_str:
-            start, end = random.choice(legal)
-        else:
-            # We already parsed it above, but let's do it clean
-            start = Location(*ChessActionSpec.algebraic(best_move_str[:2]))
-            end = Location(*ChessActionSpec.algebraic(best_move_str[2:4]))
+            if world.is_valid_move(candidate_end, self.colour):
+                start, end = candidate_start, candidate_end
 
         return world.apply_move(start, end)
 

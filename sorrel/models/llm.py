@@ -1,7 +1,11 @@
 import os
 from collections.abc import Iterable
+from typing import Sequence
 
-import openai
+try:
+    import openai
+except ImportError:
+    openai = None  # type: ignore[assignment]
 
 from sorrel.buffers import StrBuffer
 from sorrel.models import BaseModel
@@ -55,7 +59,7 @@ class Client:
             if _anthropic_sdk is None:
                 raise ImportError(
                     "anthropic package required for Anthropic provider. "
-                    "Install with: pip install anthropic"
+                    "Install with: pip install sorrel[llm] (or `pip install anthropic`)."
                 )
             resolved_key = (
                 api_key
@@ -65,6 +69,11 @@ class Client:
             self._anthropic_client = _anthropic_sdk.Anthropic(api_key=resolved_key)
             self.client = None
         elif provider in _OPENAI_COMPATIBLE_PROVIDERS:
+            if openai is None:
+                raise ImportError(
+                    f"openai package required for {provider!r} provider. "
+                    "Install with: pip install sorrel[llm] (or `pip install openai`)."
+                )
             cfg = _OPENAI_COMPATIBLE_PROVIDERS[provider]
             env_key_val = os.environ.get(cfg["env_key"]) if cfg["env_key"] else None
             resolved_key = api_key or env_key_val or cfg["default_api_key"]
@@ -140,6 +149,7 @@ class LLM(BaseModel):
         max_tokens: int = 4096,
         provider: str = "ollama",
         api_key: str | None = None,
+        obs_shape: Sequence[int] = (11, 11),
         **call_params,
     ):
         super().__init__(1, action_space, memory_size)
@@ -152,7 +162,7 @@ class LLM(BaseModel):
             model_name, max_tokens=max_tokens, provider=provider, api_key=api_key
         )
         self.stm = ""
-        self.memory = StrBuffer(capacity=memory_size, obs_shape=[11, 11])
+        self.memory = StrBuffer(capacity=memory_size, obs_shape=obs_shape)
         self.temperature = temperature
 
     def take_action(self, state) -> int:
@@ -160,18 +170,24 @@ class LLM(BaseModel):
         output = self.client.call(
             prompt=state, system_message=self.instructions, temperature=self.temperature
         )
-        response = output.lower()  # type: ignore
+        if output is None:
+            raise RuntimeError("LLM call returned no content (empty/refused response).")
+        response = output.lower()
+        if response not in self.action_list:
+            raise ValueError(
+                f"LLM returned {response!r}, which is not one of the valid actions "
+                f"{list(self.action_list)}."
+            )
         return self.action_list.index(response)
 
-    def format_memories(self, memories):
+    def format_memories(self, raw_memories):
 
-        states, actions, rewards, dones = memories
-        memories = list(zip(states, actions, rewards, dones))
+        states, actions, rewards, dones = raw_memories
+        memory_tuples = zip(states, actions, rewards, dones)
         memories = [
             f"Memory:\n=======\n{state}\nAction: {action}\nReward: {reward}\nDone: {done}\n"
-            for state, action, reward, done in memories
+            for state, action, reward, done in memory_tuples
         ]
-        print(memories[0])
 
         return memories
 
@@ -184,12 +200,10 @@ class LLM(BaseModel):
           method (str): The method for recall. By default, recency.
         """
         if method == "recency":
-            memories = self.format_memories(
-                self.memory[self.memory.idx - k : self.memory.idx]
-            )
+            start = max(0, self.memory.idx - k)
+            memories = self.format_memories(self.memory[start : self.memory.idx])
             self.stm = "\n\n".join(memories)
         elif method == "frequency":
-            # TODO: Implement frequency-based recall
-            pass
+            raise NotImplementedError("Frequency-based recall is not yet implemented.")
         else:
             raise ValueError(f"Invalid recall method: {method}")

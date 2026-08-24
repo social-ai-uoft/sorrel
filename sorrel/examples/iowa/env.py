@@ -175,7 +175,7 @@ class GamblingEnv(Environment[GamblingWorld]):
                 # renderer should never be None if animate is true; this is just written for pyright to not complain
                 if animate_this_turn and renderer is not None:
                     renderer.add_image(self.world)
-                self.take_turn()
+                self.take_turn(epoch)
 
             self.world.is_done = True
 
@@ -195,7 +195,7 @@ class GamblingEnv(Environment[GamblingWorld]):
             total_loss = 0
             encounters = {"DeckA": 0, "DeckB": 0, "DeckC": 0, "DeckD": 0}
             for agent in self.agents:
-                total_loss = agent.model.train_step()
+                total_loss += agent.model.train_step()
                 for key in encounters.keys():
                     encounters[key] += agent.encounters[key]
 
@@ -203,7 +203,7 @@ class GamblingEnv(Environment[GamblingWorld]):
             if logging:
                 if not logger:
                     logger = ConsoleLogger(self.config.experiment.epochs)
-                logger.record_turn(
+                logger.record_epoch(
                     epoch,
                     total_loss,
                     self.world.total_reward,
@@ -220,5 +220,5 @@ class GamblingEnv(Environment[GamblingWorld]):
                         os.makedirs(output_dir / "./checkpoints")
                     agent.model.save(
                         output_dir
-                        / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
+                        / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-agent-{i}.pkl"
                     )

@@ -1,9 +1,9 @@
 import os
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from datetime import datetime
-from multiprocessing import Pool
 from pathlib import Path
 
+import numpy as np
 from numpy import ndenumerate
 from omegaconf import DictConfig, OmegaConf
 
@@ -11,11 +11,12 @@ from sorrel.agents import Agent
 from sorrel.buffers import SavedGames
 from sorrel.entities import Entity
 from sorrel.utils.logging import ConsoleLogger, Logger
+from sorrel.utils.turn_stats import AgentTurnStats, TurnStats
 from sorrel.utils.visualization import ImageRenderer
 from sorrel.worlds import Gridworld
 
 
-class Environment[W: Gridworld]:
+class Environment[W: Gridworld](ABC):
     """An abstract wrapper class for running experiments with agents and environments.
 
     Attributes:
@@ -30,7 +31,7 @@ class Environment[W: Gridworld]:
 
     world: W
     config: DictConfig
-    agents: list[Agent]
+    agents: list[Agent[W]]
     stop_if_done: bool
 
     def __init__(
@@ -49,6 +50,8 @@ class Environment[W: Gridworld]:
         self.turn = 0
         self.world.create_world()
         self.stop_if_done = stop_if_done
+        self._epoch_turn_stats: list[TurnStats] = []
+        self._active_logger: Logger | None = None
 
         self.setup_agents()
         self.populate_environment()
@@ -77,12 +80,22 @@ class Environment[W: Gridworld]:
         self.populate_environment()
         for agent in self.agents:
             agent.reset()
+        self._epoch_turn_stats = []
 
-    def take_turn(self) -> None:
+    def take_turn(self, epoch: int = 0) -> None:
         """Performs a full step in the environment.
 
         This function iterates through the environment and performs transition() for
-        each entity, then transitions each agent.
+        each entity, then transitions each agent. If an active logger is set, also
+        calls :meth:`collect_turn_stats` and :meth:`on_turn_end` to collect and
+        dispatch per-turn statistics; this is skipped when there is no active logger
+        (e.g. from :meth:`generate_memories`, or when :meth:`run_experiment` is called
+        with ``logging=False``), since there is no consumer for the stats in that case.
+
+        Args:
+            epoch: Current epoch index, passed to :meth:`collect_turn_stats` for
+                attribution. Defaults to 0 for backward-compatible callers such as
+                :meth:`generate_memories`.
         """
         self.turn += 1
         for _, x in ndenumerate(self.world.map):
@@ -91,18 +104,115 @@ class Environment[W: Gridworld]:
                 x.transition(self.world)
         for agent in self.agents:
             agent.transition(self.world)
+        if self._active_logger is not None:
+            stats = self.collect_turn_stats(epoch)
+            self.on_turn_end(stats)
 
-    def _model_start_epoch_action(self, agent: Agent, epoch: int) -> None:
+    def _model_start_epoch_action(self, agent: Agent[W], epoch: int) -> None:
         """Run per-epoch model start hook."""
         agent.model.start_epoch_action(epoch=epoch)
 
-    def _model_end_epoch_action(self, agent: Agent, epoch: int) -> None:
+    def _model_end_epoch_action(self, agent: Agent[W], epoch: int) -> None:
         """Run per-epoch model end hook."""
         agent.model.end_epoch_action(epoch=epoch)
 
-    def _model_train_step(self, agent: Agent):
+    def _model_train_step(self, agent: Agent[W]) -> np.ndarray:
         """Run model train step."""
         return agent.model.train_step()
+
+    def collect_turn_stats(self, epoch: int) -> TurnStats:
+        """Collect per-turn statistics after all transitions have run.
+
+        Called automatically by :meth:`take_turn` (when an active logger is
+        set). Override in subclasses to populate
+        :attr:`~sorrel.utils.turn_stats.TurnStats.extra` with domain-specific
+        metrics. Always call ``super()`` first to obtain the base snapshot,
+        then augment the returned object.
+
+        Args:
+            epoch: Current epoch index.
+
+        Returns:
+            A :class:`~sorrel.utils.turn_stats.TurnStats` snapshot for this turn.
+        """
+        # Agents can share a single model (and therefore a single replay buffer),
+        # e.g. a shared threadsafe model in a multi-agent setup. Each such agent
+        # adds exactly one transition to that shared buffer per turn, in the same
+        # order they appear in self.agents, so group them here and read each
+        # agent's own transition by counting back from the buffer's tail instead
+        # of every agent reading the same (most recent) slot.
+        agents_by_memory: dict[int, list[int]] = {}
+        for i, agent in enumerate(self.agents):
+            agents_by_memory.setdefault(id(agent.model.memory), []).append(i)
+
+        agent_stats: list[AgentTurnStats] = []
+        for i, agent in enumerate(self.agents):
+            mem = agent.model.memory
+            sharing = agents_by_memory[id(mem)]
+            offset = len(sharing) - 1 - sharing.index(i)
+            transition = mem.last_transition(offset)
+            if transition is None:
+                continue
+            last_action, last_reward, last_done = transition
+            agent_stats.append(
+                AgentTurnStats(
+                    agent_id=i,
+                    location=tuple(agent.location),
+                    last_action=last_action,
+                    last_reward=last_reward,
+                    last_done=last_done,
+                )
+            )
+        return TurnStats(
+            epoch=epoch,
+            turn=self.turn,
+            total_world_reward=float(self.world.total_reward),
+            agent_stats=agent_stats,
+        )
+
+    def on_turn_end(self, stats: TurnStats) -> None:
+        """Called after every turn with the collected
+        :class:`~sorrel.utils.turn_stats.TurnStats`.
+
+        Default implementation buffers ``stats`` into
+        :attr:`_epoch_turn_stats` and delegates to the active logger's
+        :meth:`~sorrel.utils.logging.Logger.record_step` if one is set.
+        Override to add side-effects; call ``super()`` to preserve buffering
+        and logger dispatch.
+
+        Args:
+            stats: The :class:`~sorrel.utils.turn_stats.TurnStats` snapshot
+                for the completed turn.
+        """
+        self._epoch_turn_stats.append(stats)
+        if self._active_logger is not None:
+            self._active_logger.record_step(stats)
+
+    def aggregate_epoch_stats(self) -> dict[str, float]:
+        """Aggregate buffered per-turn stats into epoch-level scalars.
+
+        Called once per epoch in :meth:`run_experiment`, before
+        :meth:`~sorrel.utils.logging.Logger.record_epoch`. The returned dict
+        is forwarded as ``**kwargs`` to ``record_epoch``. Override to produce
+        different aggregations; call ``super()`` and update the result dict.
+
+        Returns:
+            Dict of scalar values keyed by metric name. Default implementation
+            returns mean and max per-agent reward across the epoch's turns.
+            Returns ``{}`` if no turns were recorded.
+        """
+        if not self._epoch_turn_stats:
+            return {}
+        all_rewards = np.array(
+            [a.last_reward for ts in self._epoch_turn_stats for a in ts.agent_stats],
+            dtype=np.float32,
+        )
+        if all_rewards.size == 0:
+            return {}
+        return {
+            "turn_reward_mean": float(all_rewards.mean()),
+            "turn_reward_max": float(all_rewards.max()),
+        }
 
     # TODO: ability to save/load?
     def run_experiment(
@@ -132,11 +242,7 @@ class Environment[W: Gridworld]:
         """
         renderer = None
         if output_dir is None:
-            if hasattr(self.config.experiment, "output_dir"):
-                output_dir = Path(self.config.experiment.output_dir)
-            else:
-                output_dir = Path(__file__).parent / "./data/"
-            assert isinstance(output_dir, Path)
+            output_dir = Path(__file__).parent / "./data/"
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         if animate:
@@ -145,70 +251,75 @@ class Environment[W: Gridworld]:
                 record_period=self.config.experiment.record_period,
                 num_turns=self.config.experiment.max_turns,
             )
-        for epoch in range(self.config.experiment.epochs + 1):
-            # Reset the environment at the start of each epoch
-            self.reset()
+        if logging:
+            if not logger:
+                logger = ConsoleLogger(self.config.experiment.epochs)
+            self._active_logger = logger
+        try:
+            for epoch in range(self.config.experiment.epochs + 1):
+                # Reset the environment at the start of each epoch
+                self.reset()
 
-            # Determine whether to animate this turn.
-            animate_this_turn = animate and (
-                epoch % self.config.experiment.record_period == 0
-            )
-
-            # start epoch action for each agent model
-            for agent in self.agents:
-                self._model_start_epoch_action(agent, epoch)
-
-            # run the environment for the specified number of turns
-            while not self.turn >= self.config.experiment.max_turns:
-                # renderer should never be None if animate is true; this is just written for pyright to not complain
-                if animate_this_turn and renderer is not None:
-                    renderer.add_image(self.world)
-                self.take_turn()
-
-                if self.world.is_done and self.stop_if_done:
-                    break
-
-            self.world.is_done = True
-
-            # generate the gif if animation was done
-            if animate_this_turn and renderer is not None:
-                renderer.save_gif(epoch, output_dir / "./gifs/")
-
-            # end epoch action for each agent model
-            for agent in self.agents:
-                self._model_end_epoch_action(agent, epoch)
-
-            # # At the end of each epoch, train the agents.
-            # with Pool() as pool:
-            #     # Use multiprocessing to train agents in parallel
-            #     models = [agent.model for agent in self.agents]
-            #     total_loss = sum(pool.map(lambda model: model.train_step(), models))
-            total_loss = 0
-            for agent in self.agents:
-                total_loss = self._model_train_step(agent)
-
-            # Log the information
-            if logging:
-                if not logger:
-                    logger = ConsoleLogger(self.config.experiment.epochs)
-                logger.record_turn(
-                    epoch,
-                    total_loss,
-                    self.world.total_reward,
-                    self.agents[0].model.epsilon,
+                # Determine whether to animate this turn.
+                animate_this_turn = animate and (
+                    epoch % self.config.experiment.record_period == 0
                 )
 
-            # update epsilon
-            for i, agent in enumerate(self.agents):
-                if hasattr(self.config.model, "epsilon_decay"):
-                    agent.model.epsilon_decay(self.config.model.epsilon_decay)
-                if epoch % self.config.experiment.record_period == 0:
-                    if hasattr(self.config.model, "save_weights"):
-                        if self.config.model.save_weights:
-                            agent.model.save(
-                                output_dir
-                                / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}-agent-{i}.pkl"
-                            )
+                # start epoch action for each agent model
+                for agent in self.agents:
+                    self._model_start_epoch_action(agent, epoch)
+
+                # run the environment for the specified number of turns
+                while not self.turn >= self.config.experiment.max_turns:
+                    # renderer should never be None if animate is true; this is just written for pyright to not complain
+                    if animate_this_turn and renderer is not None:
+                        renderer.add_image(self.world)
+                    self.take_turn(epoch)
+
+                    if self.world.is_done and self.stop_if_done:
+                        break
+
+                self.world.is_done = True
+
+                # generate the gif if animation was done
+                if animate_this_turn and renderer is not None:
+                    renderer.save_gif(epoch, output_dir / "./gifs/")
+
+                # end epoch action for each agent model
+                for agent in self.agents:
+                    self._model_end_epoch_action(agent, epoch)
+
+                # TODO: parallelize per-agent training (multiprocessing/multithreading) across
+                # self.agents. A prior attempt using multiprocessing.Pool was removed as dead/
+                # commented-out code; revisit if training becomes a bottleneck.
+                total_loss = 0
+                for agent in self.agents:
+                    total_loss += self._model_train_step(agent)
+
+                # Log the information
+                if logging and self._active_logger is not None:
+                    epoch_kwargs = self.aggregate_epoch_stats()
+                    self._active_logger.record_epoch(
+                        epoch,
+                        total_loss,
+                        self.world.total_reward,
+                        self.agents[0].model.epsilon,
+                        **epoch_kwargs,
+                    )
+
+                # update epsilon
+                for i, agent in enumerate(self.agents):
+                    if hasattr(self.config.model, "epsilon_decay"):
+                        agent.model.epsilon_decay(self.config.model.epsilon_decay)
+                    if epoch % self.config.experiment.record_period == 0:
+                        if hasattr(self.config.model, "save_weights"):
+                            if self.config.model.save_weights:
+                                agent.model.save(
+                                    output_dir
+                                    / f"./checkpoints/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-agent-{i}.pkl"
+                                )
+        finally:
+            self._active_logger = None
 
     def generate_memories(
         self,
@@ -219,11 +330,7 @@ class Environment[W: Gridworld]:
         """Using the existing models, generate a memory buffer for the specified number
         of games."""
         if output_dir is None:
-            if hasattr(self.config.experiment, "output_dir"):
-                output_dir = Path(self.config.experiment.output_dir)
-            else:
-                output_dir = Path(__file__).parent / "./data/"
-            assert isinstance(output_dir, Path)
+            output_dir = Path(__file__).parent / "./data/"
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
@@ -248,14 +355,6 @@ class Environment[W: Gridworld]:
 
         # Setup renderer
         renderer = None
-        if output_dir is None:
-            if hasattr(self.config.experiment, "output_dir"):
-                output_dir = Path(self.config.experiment.output_dir)
-            else:
-                output_dir = Path(__file__).parent / "./data/"
-            assert isinstance(output_dir, Path)
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
         if animate:
             renderer = ImageRenderer(
                 experiment_name=self.__class__.__name__,

@@ -1,13 +1,13 @@
 import os
-from abc import abstractmethod
-from typing import Sequence
+from abc import ABC, abstractmethod
+from typing import Any, Sequence
 
 import numpy as np
 
 from sorrel.buffers import Buffer
 
 
-class BaseModel:
+class BaseModel(ABC):
     """Generic model class for Sorrel.
 
     All models should wrap around this implementation.
@@ -41,7 +41,7 @@ class BaseModel:
         self.epsilon = epsilon
 
     @abstractmethod
-    def take_action(self, state) -> int:
+    def take_action(self, state) -> Any:
         """Take an action based on the observed input.
 
         Must be implemented by all subclasses of the model.

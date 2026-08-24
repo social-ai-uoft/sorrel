@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from sorrel.agents import Agent, MovingAgent
+from sorrel.agents import MovingAgent
 from sorrel.location import Location, Vector
 from sorrel.worlds import Gridworld
 

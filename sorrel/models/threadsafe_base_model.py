@@ -11,6 +11,10 @@ class ThreadsafeBaseModel(BaseModel):
     use_threadsafe_model_api = True
     use_policy_snapshot = True
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._ensure_threadsafe_state()
+
     def _ensure_threadsafe_state(self) -> None:
         if not hasattr(self, "_lock"):
             self._lock = threading.RLock()
@@ -71,8 +75,16 @@ class ThreadsafeBaseModel(BaseModel):
             return self.memory.sample(*args, **kwargs)
 
     def _build_snapshot_locked(self) -> Any:
-        """Build a snapshot policy while holding ``self._lock``."""
-        return self
+        """Build a snapshot policy while holding ``self._lock``.
+
+        Subclasses holding mutable policy state (e.g. network weights) must override
+        this to return an isolated copy; the base implementation has no safe generic
+        default to fall back on.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must override _build_snapshot_locked() to "
+            "return an isolated copy of its policy state; there is no safe default."
+        )
 
     def get_policy_snapshot(self) -> PolicySnapshot:
         self._ensure_threadsafe_state()
@@ -84,7 +96,10 @@ class ThreadsafeBaseModel(BaseModel):
         if snapshot is not None:
             if not self._lock.acquire(blocking=False):
                 return snapshot
-            self._lock.release()
+            try:
+                return self._refresh_snapshot_locked()
+            finally:
+                self._lock.release()
 
         with self._lock:
             return self._refresh_snapshot_locked()

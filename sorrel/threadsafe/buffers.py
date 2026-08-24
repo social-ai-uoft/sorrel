@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, overload
 
 import numpy as np
 
@@ -12,8 +12,12 @@ from sorrel.buffers import Buffer, TransformerBuffer
 class ThreadsafeBuffer(Buffer):
     """Opt-in threadsafe replay buffer."""
 
-    def __init__(self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1):
-        super().__init__(capacity=capacity, obs_shape=obs_shape, n_frames=n_frames)
+    def __init__(
+        self, capacity: int, obs_shape: Sequence[int], n_frames: int = 1, **kwargs
+    ):
+        super().__init__(
+            capacity=capacity, obs_shape=obs_shape, n_frames=n_frames, **kwargs
+        )
         self._lock = threading.RLock()
 
     def add(self, obs, action, reward, done, **kwargs):
@@ -50,6 +54,10 @@ class ThreadsafeBuffer(Buffer):
         with self._lock:
             return super().getidx()
 
+    def last_transition(self, offset: int = 0):
+        with self._lock:
+            return super().last_transition(offset)
+
     def current_state(self) -> np.ndarray:
         with self._lock:
             return np.copy(super().current_state())
@@ -58,15 +66,18 @@ class ThreadsafeBuffer(Buffer):
         with self._lock:
             return super().__len__()
 
-    def __getitem__(self, idx):
+    @overload
+    def __getitem__(
+        self, idx: int
+    ) -> tuple[np.ndarray, np.integer, np.floating, np.floating]: ...
+    @overload
+    def __getitem__(
+        self, idx: slice
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: ...
+    def __getitem__(self, idx: int | slice):
         with self._lock:
             state, action, reward, done = super().__getitem__(idx)
-            return (
-                np.copy(state),
-                np.copy(action),
-                np.copy(reward),
-                np.copy(done),
-            )
+            return (state.copy(), action.copy(), reward.copy(), done.copy())
 
     def save(self, output_file: str | Path) -> None:
         with self._lock:

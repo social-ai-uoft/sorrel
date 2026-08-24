@@ -73,7 +73,7 @@ running ```poetry --version``` in your terminal to make sure you have poetry ins
 
 With poetry available, to install Sorrel as a developer, run the following command:
 ```
-poetry install --with dev,llm
+poetry install --with dev --extras llm
 ```
 in the folder containing the ``pyproject.toml`` file.
 

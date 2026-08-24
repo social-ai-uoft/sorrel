@@ -20,7 +20,7 @@ jobs:
         run: |
           pip install poetry
           export POETRY_VIRTUALENVS_CREATE=false
-          poetry install --with llm
+          poetry install --extras llm
       - name: Test with pytest
         run: |
           pytest

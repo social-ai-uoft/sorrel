@@ -616,7 +616,7 @@ class VisionTransformer(nn.Module):
         # Reshape to label outputs: Batch x classes (4 actions + mask) x timesteps
         action_predictions = action_predictions.transpose(1, 2)
         # Reshape to targets: Batch x timesteps
-        action_targets = action_targets.squeeze()
+        action_targets = action_targets.squeeze(-1)
 
         return loss(action_predictions, action_targets)
 
@@ -886,7 +886,7 @@ class VisionTransformer(nn.Module):
 
         NOTE: The model must have the same settings as those
         """
-        checkpoint = torch.load(file_path)
+        checkpoint = torch.load(file_path, map_location=self.device)
 
         self.load_state_dict(checkpoint["model"])
         self.optimizer.load_state_dict(checkpoint["optim"])
@@ -946,6 +946,7 @@ class ViTOneHot(VisionTransformer):
                     * 2,  # Positive and negative output for each channel
                 ),
             )
+        self.state_heads.to(self.device)
 
         # Reinitialize optimizer to include state_heads, which are added
         # after super().__init__() creates the optimizer and would otherwise be excluded.
