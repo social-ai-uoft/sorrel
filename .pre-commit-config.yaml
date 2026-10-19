@@ -6,11 +6,11 @@ ci:
 
 repos:
   - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: 26.5.1
+    rev: 26.10.1
     hooks:
       - id: black-jupyter
   - repo: https://github.com/PyCQA/isort
-    rev: 9.0.0b5
+    rev: 10.0.0b1
     hooks:
       - id: isort
         args: ["--profile", "black"]
@@ -20,7 +20,7 @@ repos:
       - id: docformatter
         args: ["--in-place", "--config", "./pyproject.toml", "--black"]
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
+    rev: v3.22.0
     hooks:
       - id: pyupgrade
         # TODO: remove `--keep-runtime-typing` option
