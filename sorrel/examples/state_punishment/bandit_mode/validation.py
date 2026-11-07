@@ -29,7 +29,7 @@ def validate_bandit_config(config: DictConfig) -> None:
     if config.model.get("use_agent_action_pred", False):
         raise ValueError("bandit mode does not support use_agent_action_pred in v1")
 
-    pool = list(config.experiment.get("bandit_pool", ["A", "B", "C", "D", "E"]))
+    pool = [str(x).strip().upper() for x in config.experiment.get("bandit_pool", ["A", "B", "C", "D", "E"])]
     k = int(config.experiment.get("bandit_arms_per_trial", 3))
     if k > len(pool):
         raise ValueError("bandit_arms_per_trial must be <= len(bandit_pool)")
@@ -37,9 +37,11 @@ def validate_bandit_config(config: DictConfig) -> None:
         raise ValueError("bandit_arms_per_trial must be >= 1")
     if len(pool) < 1:
         raise ValueError("bandit_pool must be non-empty")
+    if len(pool) != len(set(pool)):
+        raise ValueError(f"bandit_pool entries must be unique, got: {pool}")
 
     allowed = {"A", "B", "C", "D", "E"}
-    bad = [x for x in pool if str(x) not in allowed]
+    bad = [x for x in pool if x not in allowed]
     if bad:
         raise ValueError(f"bandit_pool entries must be in {sorted(allowed)}, got: {bad}")
 

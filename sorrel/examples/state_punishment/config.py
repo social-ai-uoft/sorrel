@@ -334,8 +334,12 @@ def create_config(
             "history_window_size": history_window_size,
             "env_mode": "grid",
             # Bandit-only defaults (used when env_mode is set to "bandit" by entrypoints).
+            # Sample K arms from the full A–E pool (order randomized by random.sample).
             "bandit_arms_per_trial": 2,
-            "bandit_pool": ["A", "B"],
+            "bandit_pool": ["A", "B", "C", "D", "E"],
+            # Append last-turn peer choice / punish counts by resource (bandit obs tail).
+            "observe_peer_choice_counts": False,
+            "observe_peer_punish_counts": False,
             "seed": None,
         },
         "observation": {

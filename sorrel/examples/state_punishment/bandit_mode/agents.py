@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 
 from sorrel.examples.state_punishment.agents import StatePunishmentAgent
 
 from .observation import BanditObservationSpec, BanditObservationState
+from .peer_stats import PeerResourceStats
 from .world import BanditWorldStub
 
 
@@ -16,10 +17,14 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
     """Same policy stack as StatePunishmentAgent, but bandit collection instead of grid moves."""
 
     def __init__(self, *args, **kwargs):
+        observe_peer_choice_counts = bool(kwargs.pop("observe_peer_choice_counts", False))
+        observe_peer_punish_counts = bool(kwargs.pop("observe_peer_punish_counts", False))
         super().__init__(*args, **kwargs)
         self.current_options: tuple[str, ...] = ("A", "B", "C")
         self.resource_values: dict[str, float] = {}
         self.resource_harms: dict[str, float] = {}
+        self.observe_peer_choice_counts = observe_peer_choice_counts
+        self.observe_peer_punish_counts = observe_peer_punish_counts
 
     def set_trial_context(
         self,
@@ -39,6 +44,7 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
         punishment_tracker=None,
         current_step: int = 0,
         use_me_encoding: bool = True,
+        peer_resource_stats: Optional[PeerResourceStats] = None,
     ) -> np.ndarray:
         if isinstance(self.observation_spec, BanditObservationSpec):
             image = self.observation_spec.observe(
@@ -76,6 +82,22 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
                     dtype=np.float32,
                 ).reshape(1, -1)
                 extra = np.concatenate([extra, other], axis=1)
+            if peer_resource_stats is not None and (
+                self.observe_peer_choice_counts or self.observe_peer_punish_counts
+            ):
+                choice_counts, punish_counts = peer_resource_stats.get_counts_for(
+                    self.agent_id,
+                    include_choice=self.observe_peer_choice_counts,
+                    include_punish=self.observe_peer_punish_counts,
+                )
+                if choice_counts is not None:
+                    extra = np.concatenate(
+                        [extra, choice_counts.reshape(1, -1)], axis=1
+                    )
+                if punish_counts is not None:
+                    extra = np.concatenate(
+                        [extra, punish_counts.reshape(1, -1)], axis=1
+                    )
             return np.concatenate([visual_field, extra], axis=1)
 
         return super().generate_single_view(

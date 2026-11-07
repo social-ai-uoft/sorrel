@@ -22,7 +22,7 @@ if ! [[ "$SEED" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-# Bandit defaults are now pool=["A","B"], so K must be <= 2 unless you change the pool.
+# Legacy A/B-only studies: pool A,B so K must be <= 2. Omit --bandit_pool to use full A–E.
 K_ARMS="${3:-2}"
 if ! [[ "$K_ARMS" =~ ^[0-9]+$ ]] || (( K_ARMS < 1 )); then
   echo "bandit_arms_per_trial must be a positive integer, got: $K_ARMS" >&2
@@ -37,6 +37,9 @@ COMMON=(
   --max_turns 100
   --seed "$SEED"
   --bandit_arms_per_trial "$K_ARMS"
+  --bandit_pool A,B
+  --no-observe-peer-choice-counts
+  --no-observe-peer-punish-counts
   --social_harm_accessible
   --use_probabilistic_punishment
   --use_predefined_punishment_schedule

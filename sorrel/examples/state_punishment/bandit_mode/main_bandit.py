@@ -33,8 +33,28 @@ def parse_arguments():
     p.add_argument("--random_policy", action="store_true")
     p.add_argument("--simple_foraging", action="store_true")
     p.add_argument("--fixed_punishment", type=float, default=0.0)
-    # Default bandit: only resources A and B, and show both every trial.
+    # Default bandit: sample K arms from A–E (order randomized each trial).
     p.add_argument("--bandit_arms_per_trial", type=int, default=2)
+    p.add_argument(
+        "--bandit_pool",
+        type=str,
+        default="A,B,C,D,E",
+        help="Comma-separated resources to sample from (subset of A–E). Legacy A/B: --bandit_pool A,B",
+    )
+    p.add_argument(
+        "--observe-peer-choice-counts",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="observe_peer_choice_counts",
+        help="Append normalized last-turn peer choice counts over A–E (default: on).",
+    )
+    p.add_argument(
+        "--observe-peer-punish-counts",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="observe_peer_punish_counts",
+        help="Append normalized last-turn peer punish counts over A–E (default: on).",
+    )
     p.add_argument(
         "--run_folder_prefix",
         type=str,
@@ -142,9 +162,10 @@ def run_experiment(args):
     config["experiment"]["max_turns"] = args.max_turns
     config["experiment"]["seed"] = args.seed
     config["experiment"]["bandit_arms_per_trial"] = args.bandit_arms_per_trial
-    # Default bandit pool: only A and B. Requires bandit_arms_per_trial <= len(bandit_pool);
-    # see env._sample_options.
-    config["experiment"]["bandit_pool"] = ["A", "B"]
+    pool = [x.strip().upper() for x in str(args.bandit_pool).split(",") if x.strip()]
+    config["experiment"]["bandit_pool"] = pool
+    config["experiment"]["observe_peer_choice_counts"] = bool(args.observe_peer_choice_counts)
+    config["experiment"]["observe_peer_punish_counts"] = bool(args.observe_peer_punish_counts)
     config["experiment"]["env_mode"] = "bandit"
 
     if args.iqn_use_factored_actions:
@@ -214,7 +235,10 @@ def run_experiment(args):
     print(f"Animations: {anim_dir.resolve()}")
     print(
         f"agents={args.num_agents} epochs={args.epochs} max_turns={args.max_turns} "
-        f"model={args.model_type} composite_actions={args.composite_actions}"
+        f"model={args.model_type} composite_actions={args.composite_actions} "
+        f"pool={pool} K={args.bandit_arms_per_trial} "
+        f"peer_choice_counts={args.observe_peer_choice_counts} "
+        f"peer_punish_counts={args.observe_peer_punish_counts}"
     )
     multi_agent_env.run_experiment(
         animate=False,

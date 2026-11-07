@@ -19,6 +19,7 @@ from sorrel.models.pytorch.recurrent_ppo_lstm_generic import RecurrentPPOLSTM
 
 from .agents import BanditStatePunishmentAgent
 from .observation import BanditObservationSpec
+from .peer_stats import PeerResourceStats
 from .world import BanditWorldStub
 
 
@@ -261,11 +262,17 @@ class StatePunishmentBanditEnv:
             * observation_spec.input_size[2]
             + 3
         )
+        # Tail order must match BanditStatePunishmentAgent.generate_single_view:
+        # scalars(3) → history(4)? → other_punishments(n-1)? → peer_choice(5)? → peer_punish(5)?
+        if cfg.experiment.get("enable_history_observation", False):
+            base_flattened_size += 4
         if cfg.experiment.get("observe_other_punishments", False):
             n_other = int(cfg.experiment.get("total_num_agents", cfg.experiment.num_agents)) - 1
             base_flattened_size += max(0, n_other)
-        if cfg.experiment.get("enable_history_observation", False):
-            base_flattened_size += 4
+        if cfg.experiment.get("observe_peer_choice_counts", False):
+            base_flattened_size += 5
+        if cfg.experiment.get("observe_peer_punish_counts", False):
+            base_flattened_size += 5
         flattened_size = base_flattened_size
 
         obs_dim = (
@@ -319,6 +326,8 @@ class StatePunishmentBanditEnv:
             track_history=cfg.experiment.get("enable_history_observation", False),
             history_window_size=cfg.experiment.get("history_window_size", 10),
             max_turns_per_epoch=cfg.experiment.get("max_turns", 100),
+            observe_peer_choice_counts=cfg.experiment.get("observe_peer_choice_counts", False),
+            observe_peer_punish_counts=cfg.experiment.get("observe_peer_punish_counts", False),
         )
         pool = list(cfg.experiment.get("bandit_pool", ["A", "B", "C", "D", "E"]))
         init_options = tuple(pool[:n_arms])
@@ -363,10 +372,20 @@ class MultiAgentStatePunishmentBanditEnv:
         if any(e.config.experiment.get("observe_other_punishments", False) for e in individual_envs):
             self.punishment_tracker = PunishmentTracker(len(individual_envs))
 
+        self.peer_resource_stats: Optional[PeerResourceStats] = None
+        if any(
+            e.config.experiment.get("observe_peer_choice_counts", False)
+            or e.config.experiment.get("observe_peer_punish_counts", False)
+            for e in individual_envs
+        ):
+            self.peer_resource_stats = PeerResourceStats(len(individual_envs))
+
     def reset(self) -> None:
         self.turn = 0
         self.world.is_done = False
         self.shared_social_harm = {i: 0.0 for i in range(len(self.individual_envs))}
+        if self.peer_resource_stats is not None:
+            self.peer_resource_stats.reset()
         for env in self.individual_envs:
             env.reset()
 
@@ -384,6 +403,8 @@ class MultiAgentStatePunishmentBanditEnv:
         if self.config.experiment.get("randomize_agent_order", False):
             self._rng.shuffle(order)
 
+        need_info = self.punishment_tracker is not None or self.peer_resource_stats is not None
+
         for idx in order:
             env = self.individual_envs[idx]
             agent = env.agents[0]
@@ -396,10 +417,11 @@ class MultiAgentStatePunishmentBanditEnv:
                 self.shared_social_harm,
                 punishment_tracker=self.punishment_tracker,
                 current_step=self.turn,
+                peer_resource_stats=self.peer_resource_stats,
             )
             action = agent.get_action(state)
             info = None
-            if self.punishment_tracker is not None:
+            if need_info:
                 reward, info = agent.act(
                     env.world,
                     action,
@@ -407,8 +429,14 @@ class MultiAgentStatePunishmentBanditEnv:
                     self.shared_social_harm,
                     return_info=True,
                 )
-                if info.get("is_punished", False):
+                if self.punishment_tracker is not None and info.get("is_punished", False):
                     self.punishment_tracker.record_punishment(agent.agent_id)
+                if self.peer_resource_stats is not None:
+                    self.peer_resource_stats.record(
+                        agent.agent_id,
+                        info.get("resource_collected"),
+                        bool(info.get("is_punished", False)),
+                    )
             else:
                 reward = agent.act(
                     env.world,
@@ -432,6 +460,8 @@ class MultiAgentStatePunishmentBanditEnv:
             self.shared_state_system.record_punishment_level()
         if self.punishment_tracker is not None:
             self.punishment_tracker.end_turn()
+        if self.peer_resource_stats is not None:
+            self.peer_resource_stats.end_turn()
 
     def run_experiment(
         self,
