@@ -177,7 +177,7 @@ def run_experiment(args):
     if args.log_dir is not None:
         log_dir = Path(args.log_dir).expanduser()
     else:
-        log_dir = _STATE_PUNISHMENT_ROOT / "runs_bandit_study1_v3_twoArms" / run_folder
+        log_dir = _STATE_PUNISHMENT_ROOT / "runs_bandit_study2_v3_twoArms" / run_folder
 
     anim_dir = _STATE_PUNISHMENT_ROOT / "data" / "anims" / run_folder
     config_dir = _STATE_PUNISHMENT_ROOT / "configs"

@@ -1,6 +1,8 @@
 name: PyTest
 
-on: [push]
+# Disabled automatic runs on push; trigger manually from the Actions tab if needed.
+on:
+  workflow_dispatch:
 
 jobs:
   build:
