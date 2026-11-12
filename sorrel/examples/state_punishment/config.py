@@ -112,8 +112,9 @@ def create_config(
     iqn_use_factored_actions: bool = False,  # Enable factored actions for IQN
     iqn_action_dims: Optional[str] = None,  # Comma-separated action dimensions (e.g., "5,3")
     iqn_factored_target_variant: str = "A",  # Target variant: "A" (shared) or "B" (separate)
-    # IQN CPC parameters
-    iqn_use_cpc: bool = False,  # Enable CPC for IQN models
+    # IQN CPC / recurrent parameters
+    iqn_use_lstm: bool = False,  # Use recurrent IQN (LSTM); CPC only if iqn_use_cpc
+    iqn_use_cpc: bool = False,  # Select recurrent IQN and enable CPC aux loss
     iqn_cpc_horizon: int = 30,  # CPC prediction horizon
     iqn_cpc_weight: float = 1.0,  # Weight for CPC loss
     iqn_cpc_projection_dim: Optional[int] = None,  # CPC projection dimension (None = use hidden_size)
@@ -340,6 +341,9 @@ def create_config(
             # Append last-turn peer choice / punish counts by resource (bandit obs tail).
             "observe_peer_choice_counts": False,
             "observe_peer_punish_counts": False,
+            # Separate condition: append previous-step reward (normalized) to obs.
+            "observe_current_reward": False,
+            "reward_obs_scale": 25.0,
             "seed": None,
         },
         "observation": {
@@ -419,7 +423,8 @@ def create_config(
             "iqn_use_factored_actions": iqn_use_factored_actions if model_type == "iqn" else False,
             "iqn_action_dims": iqn_action_dims if model_type == "iqn" else None,
             "iqn_factored_target_variant": iqn_factored_target_variant if model_type == "iqn" else "A",
-            # IQN CPC parameters
+            # IQN CPC / recurrent parameters
+            "iqn_use_lstm": iqn_use_lstm if model_type == "iqn" else False,
             "iqn_use_cpc": iqn_use_cpc if model_type == "iqn" else False,
             "iqn_cpc_horizon": iqn_cpc_horizon if model_type == "iqn" else None,
             "iqn_cpc_weight": iqn_cpc_weight if model_type == "iqn" else None,

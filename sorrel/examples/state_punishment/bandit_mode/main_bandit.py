@@ -56,6 +56,20 @@ def parse_arguments():
         help="Append normalized last-turn peer punish counts over A–E (default: on).",
     )
     p.add_argument(
+        "--observe-current-reward",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="observe_current_reward",
+        help="Append previous-step reward (scaled) to observations (separate condition; default: off).",
+    )
+    p.add_argument(
+        "--reward-obs-scale",
+        type=float,
+        default=25.0,
+        dest="reward_obs_scale",
+        help="Divide last reward by this scale and clip to [-1, 1] when --observe-current-reward is on.",
+    )
+    p.add_argument(
         "--run_folder_prefix",
         type=str,
         default="bandit",
@@ -126,7 +140,16 @@ def parse_arguments():
     p.add_argument("--cpc_horizon", type=int, default=30)
     p.add_argument("--cpc_weight", type=float, default=1.0)
     p.add_argument("--cpc_sample_size", type=int, default=64)
-    p.add_argument("--iqn_use_cpc", action="store_true", help="Use recurrent IQN + CPC for IQN runs.")
+    p.add_argument(
+        "--iqn_use_lstm",
+        action="store_true",
+        help="Use recurrent IQN (LSTM). CPC only if also --iqn_use_cpc.",
+    )
+    p.add_argument(
+        "--iqn_use_cpc",
+        action="store_true",
+        help="Select recurrent IQN and enable CPC aux loss (implies LSTM).",
+    )
     p.add_argument("--iqn_cpc_horizon", type=int, default=30)
     p.add_argument("--iqn_cpc_weight", type=float, default=1.0)
     p.add_argument("--iqn_cpc_sample_size", type=int, default=64)
@@ -154,6 +177,7 @@ def run_experiment(args):
         cpc_horizon=args.cpc_horizon,
         cpc_weight=args.cpc_weight,
         cpc_sample_size=args.cpc_sample_size,
+        iqn_use_lstm=args.iqn_use_lstm,
         iqn_use_cpc=args.iqn_use_cpc,
         iqn_cpc_horizon=args.iqn_cpc_horizon,
         iqn_cpc_weight=args.iqn_cpc_weight,
@@ -166,6 +190,8 @@ def run_experiment(args):
     config["experiment"]["bandit_pool"] = pool
     config["experiment"]["observe_peer_choice_counts"] = bool(args.observe_peer_choice_counts)
     config["experiment"]["observe_peer_punish_counts"] = bool(args.observe_peer_punish_counts)
+    config["experiment"]["observe_current_reward"] = bool(args.observe_current_reward)
+    config["experiment"]["reward_obs_scale"] = float(args.reward_obs_scale)
     config["experiment"]["env_mode"] = "bandit"
 
     if args.iqn_use_factored_actions:
@@ -196,7 +222,8 @@ def run_experiment(args):
     run_folder = f"{args.run_folder_prefix}_{base_run_name}_{timestamp}"
 
     if args.log_dir is not None:
-        log_dir = Path(args.log_dir).expanduser()
+        # Parent directory; each run still gets its own run_folder subdirectory.
+        log_dir = Path(args.log_dir).expanduser() / run_folder
     else:
         log_dir = _STATE_PUNISHMENT_ROOT / "runs_bandit_study2_v3_twoArms" / run_folder
 
@@ -238,7 +265,8 @@ def run_experiment(args):
         f"model={args.model_type} composite_actions={args.composite_actions} "
         f"pool={pool} K={args.bandit_arms_per_trial} "
         f"peer_choice_counts={args.observe_peer_choice_counts} "
-        f"peer_punish_counts={args.observe_peer_punish_counts}"
+        f"peer_punish_counts={args.observe_peer_punish_counts} "
+        f"observe_current_reward={args.observe_current_reward}"
     )
     multi_agent_env.run_experiment(
         animate=False,

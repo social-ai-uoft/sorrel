@@ -1143,10 +1143,11 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                 agent_action_pred_intermediate_size=env.config.model.get("agent_action_pred_intermediate_size", None),
             )
         else:
-            # Check if CPC is enabled for IQN replacement models
-            iqn_use_cpc = env.config.model.get("iqn_use_cpc", False)
-            
-            if iqn_use_cpc:
+            # Recurrent IQN for replacement: LSTM if either flag; CPC only if iqn_use_cpc
+            iqn_use_cpc = bool(env.config.model.get("iqn_use_cpc", False))
+            iqn_use_lstm = bool(env.config.model.get("iqn_use_lstm", False))
+
+            if iqn_use_cpc or iqn_use_lstm:
                 # Use RecurrentIQNModelCPC for replacement
                 new_model = RecurrentIQNModelCPC(
                     input_size=(flattened_size,),
@@ -1175,7 +1176,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     burn_in_len=env.config.model.get("iqn_burn_in_len", 20),
                     unroll_len=env.config.model.get("iqn_unroll_len", 40),
                     # CPC-specific parameters
-                    use_cpc=True,
+                    use_cpc=iqn_use_cpc,
                     cpc_horizon=env.config.model.get("iqn_cpc_horizon", 30),
                     cpc_weight=env.config.model.get("iqn_cpc_weight", 1.0),
                     cpc_projection_dim=env.config.model.get("iqn_cpc_projection_dim", None),  # Ignored by model but kept for compatibility
@@ -2347,11 +2348,12 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                 # use_factored_actions and action_dims already parsed above
                 factored_target_variant = self.config.model.get("iqn_factored_target_variant", "A")
                 
-                # Check if CPC is enabled for IQN
-                iqn_use_cpc = self.config.model.get("iqn_use_cpc", False)
-                
-                if iqn_use_cpc:
-                    # Use RecurrentIQNModelCPC (recurrent IQN with CPC)
+                # Recurrent IQN: LSTM if either flag; CPC only if iqn_use_cpc
+                iqn_use_cpc = bool(self.config.model.get("iqn_use_cpc", False))
+                iqn_use_lstm = bool(self.config.model.get("iqn_use_lstm", False))
+
+                if iqn_use_cpc or iqn_use_lstm:
+                    # Use RecurrentIQNModelCPC (recurrent IQN; CPC optional)
                     model = RecurrentIQNModelCPC(
                         input_size=(flattened_size,),
                         action_space=action_spec.n_actions,
@@ -2379,7 +2381,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                         burn_in_len=self.config.model.get("iqn_burn_in_len", 20),
                         unroll_len=self.config.model.get("iqn_unroll_len", 40),
                         # CPC-specific parameters
-                        use_cpc=True,
+                        use_cpc=iqn_use_cpc,
                         cpc_horizon=self.config.model.get("iqn_cpc_horizon", 30),
                         cpc_weight=self.config.model.get("iqn_cpc_weight", 1.0),
                         cpc_projection_dim=self.config.model.get("iqn_cpc_projection_dim", None),  # Ignored by model but kept for compatibility

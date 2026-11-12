@@ -19,12 +19,17 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
     def __init__(self, *args, **kwargs):
         observe_peer_choice_counts = bool(kwargs.pop("observe_peer_choice_counts", False))
         observe_peer_punish_counts = bool(kwargs.pop("observe_peer_punish_counts", False))
+        observe_current_reward = bool(kwargs.pop("observe_current_reward", False))
+        reward_obs_scale = float(kwargs.pop("reward_obs_scale", 25.0))
         super().__init__(*args, **kwargs)
         self.current_options: tuple[str, ...] = ("A", "B", "C")
         self.resource_values: dict[str, float] = {}
         self.resource_harms: dict[str, float] = {}
         self.observe_peer_choice_counts = observe_peer_choice_counts
         self.observe_peer_punish_counts = observe_peer_punish_counts
+        self.observe_current_reward = observe_current_reward
+        self.reward_obs_scale = reward_obs_scale if reward_obs_scale > 0 else 25.0
+        self.last_reward = 0.0
 
     def set_trial_context(
         self,
@@ -98,6 +103,13 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
                     extra = np.concatenate(
                         [extra, punish_counts.reshape(1, -1)], axis=1
                     )
+            if self.observe_current_reward:
+                scaled = float(
+                    np.clip(self.last_reward / self.reward_obs_scale, -1.0, 1.0)
+                )
+                extra = np.concatenate(
+                    [extra, np.array([[scaled]], dtype=np.float32)], axis=1
+                )
             return np.concatenate([visual_field, extra], axis=1)
 
         return super().generate_single_view(
@@ -134,14 +146,27 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
             )
             if self.track_history:
                 self.record_reward(-delayed_punishment)
+            total_reward = base_reward - delayed_punishment
+            if self.observe_current_reward:
+                self.last_reward = float(total_reward)
             if return_info:
-                return base_reward - delayed_punishment, base_info
-            return base_reward - delayed_punishment
+                return total_reward, base_info
+            return total_reward
 
         result = self._execute_bandit_core(world, action, state_system, social_harm_dict, return_info)
         if return_info:
-            return result
-        return result[0] if isinstance(result, tuple) else result
+            reward, info = result
+            if self.observe_current_reward:
+                self.last_reward = float(reward)
+            return reward, info
+        reward = result[0] if isinstance(result, tuple) else result
+        if self.observe_current_reward:
+            self.last_reward = float(reward)
+        return reward
+
+    def reset(self) -> None:
+        super().reset()
+        self.last_reward = 0.0
 
     def _execute_bandit_core(
         self,

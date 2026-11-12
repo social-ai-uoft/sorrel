@@ -29,6 +29,8 @@ def _make_agent(
     agent_id: int = 0,
     observe_choice: bool = True,
     observe_punish: bool = True,
+    observe_current_reward: bool = False,
+    reward_obs_scale: float = 25.0,
 ) -> BanditStatePunishmentAgent:
     obs_spec = BanditObservationSpec(n_options=N_ARMS)
     action_names = [f"pick_{j + 1}" for j in range(N_ARMS)] + [
@@ -46,6 +48,8 @@ def _make_agent(
         agent_name=agent_id,
         observe_peer_choice_counts=observe_choice,
         observe_peer_punish_counts=observe_punish,
+        observe_current_reward=observe_current_reward,
+        reward_obs_scale=reward_obs_scale,
     )
     agent.set_trial_context(
         ("A", "B"),
@@ -155,3 +159,61 @@ class TestPoolDefaults:
         resources = {r for pair in seen for r in pair}
         assert resources <= {"A", "B", "C", "D", "E"}
         assert len(resources) >= 3
+
+
+class TestCurrentRewardObservation:
+    def test_flag_off_omits_reward(self) -> None:
+        agent = _make_agent(observe_choice=False, observe_punish=False, observe_current_reward=False)
+        agent.last_reward = 20.0
+        obs = _observe(agent, None)
+        assert obs.shape[0] == BASE_OBS
+
+    def test_appends_scaled_last_reward(self) -> None:
+        agent = _make_agent(
+            observe_choice=False,
+            observe_punish=False,
+            observe_current_reward=True,
+            reward_obs_scale=25.0,
+        )
+        agent.last_reward = 20.0
+        obs = _observe(agent, None)
+        assert obs.shape[0] == BASE_OBS + 1
+        assert obs[-1] == pytest.approx(20.0 / 25.0)
+
+    def test_clips_to_unit_interval(self) -> None:
+        agent = _make_agent(
+            observe_choice=False,
+            observe_punish=False,
+            observe_current_reward=True,
+            reward_obs_scale=25.0,
+        )
+        agent.last_reward = 100.0
+        obs = _observe(agent, None)
+        assert obs[-1] == pytest.approx(1.0)
+        agent.last_reward = -100.0
+        obs = _observe(agent, None)
+        assert obs[-1] == pytest.approx(-1.0)
+
+    def test_act_updates_last_reward(self) -> None:
+        agent = _make_agent(
+            observe_choice=False,
+            observe_punish=False,
+            observe_current_reward=True,
+        )
+        world = BanditWorldStub()
+        ss = MagicMock()
+        ss.calculate_punishment = MagicMock(return_value=0.0)
+        ss.phased_voting_enabled = False
+        reward = agent.act(world, action=0, state_system=ss, social_harm_dict={0: 0.0})
+        assert agent.last_reward == pytest.approx(float(reward))
+        assert reward == pytest.approx(20.0)  # resource A
+
+    def test_with_peer_counts_appends_after(self) -> None:
+        agent = _make_agent(observe_choice=True, observe_punish=True, observe_current_reward=True)
+        agent.last_reward = 12.5
+        stats = PeerResourceStats(2)
+        stats.record(1, "A", False)
+        stats.end_turn()
+        obs = _observe(agent, stats)
+        assert obs.shape[0] == BASE_OBS + 10 + 1
+        assert obs[-1] == pytest.approx(12.5 / 25.0)

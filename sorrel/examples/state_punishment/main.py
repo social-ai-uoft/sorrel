@@ -309,11 +309,16 @@ def parse_arguments():
         help="IQN factored target variant: 'A' (shared target) or 'B' (separate targets) (default: A)"
     )
 
-    # IQN CPC-specific hyperparameters
+    # IQN recurrent / CPC-specific hyperparameters
+    parser.add_argument(
+        "--iqn_use_lstm",
+        action="store_true",
+        help="Use recurrent IQN (LSTM). CPC only if also --iqn_use_cpc (only for iqn model type).",
+    )
     parser.add_argument(
         "--iqn_use_cpc",
         action="store_true",
-        help="Enable Contrastive Predictive Coding (CPC) for IQN models (only for iqn model type)"
+        help="Select recurrent IQN and enable CPC aux loss (implies LSTM; only for iqn model type)",
     )
     parser.add_argument(
         "--iqn_cpc_horizon",
@@ -857,12 +862,12 @@ def run_experiment(args):
     if ppo_action_dims_parsed is not None:
         ppo_action_dims_str = ",".join(map(str, ppo_action_dims_parsed))
     
-    # Validate IQN CPC configuration
-    if args.iqn_use_cpc:
+    # Validate IQN recurrent / CPC configuration
+    if args.iqn_use_cpc or args.iqn_use_lstm:
         if args.model_type != "iqn":
             raise ValueError(
-                f"--iqn_use_cpc is only supported with --model_type=iqn, "
-                f"but got --model_type={args.model_type}"
+                f"--iqn_use_cpc/--iqn_use_lstm only supported with --model_type=iqn, "
+                f"got --model_type={args.model_type}"
             )
     if args.use_next_state_pred:
         if args.model_type not in ["iqn", "ppo_lstm_cpc"]:
@@ -972,7 +977,8 @@ def run_experiment(args):
         iqn_use_factored_actions=args.iqn_use_factored_actions,
         iqn_action_dims=iqn_action_dims_str,
         iqn_factored_target_variant=args.iqn_factored_target_variant,
-        # IQN CPC parameters
+        # IQN CPC / recurrent parameters
+        iqn_use_lstm=args.iqn_use_lstm if args.model_type == "iqn" else False,
         iqn_use_cpc=args.iqn_use_cpc if args.model_type == "iqn" else False,
         iqn_cpc_horizon=args.iqn_cpc_horizon,
         iqn_cpc_weight=args.iqn_cpc_weight,

@@ -127,7 +127,9 @@ def _build_bandit_torch_model(
         )
 
     factored_target_variant = cfg.model.get("iqn_factored_target_variant", "A")
-    if cfg.model.get("iqn_use_cpc", False):
+    iqn_use_cpc = bool(cfg.model.get("iqn_use_cpc", False))
+    iqn_use_lstm = bool(cfg.model.get("iqn_use_lstm", False))
+    if iqn_use_cpc or iqn_use_lstm:
         return RecurrentIQNModelCPC(
             input_size=(flattened_size,),
             action_space=action_spec.n_actions,
@@ -153,7 +155,7 @@ def _build_bandit_torch_model(
             max_episode_length=cfg.model.get("iqn_max_episode_length", 200),
             burn_in_len=cfg.model.get("iqn_burn_in_len", 20),
             unroll_len=cfg.model.get("iqn_unroll_len", 40),
-            use_cpc=True,
+            use_cpc=iqn_use_cpc,
             cpc_horizon=cfg.model.get("iqn_cpc_horizon", 30),
             cpc_weight=cfg.model.get("iqn_cpc_weight", 1.0),
             cpc_projection_dim=cfg.model.get("iqn_cpc_projection_dim", None),
@@ -263,7 +265,8 @@ class StatePunishmentBanditEnv:
             + 3
         )
         # Tail order must match BanditStatePunishmentAgent.generate_single_view:
-        # scalars(3) → history(4)? → other_punishments(n-1)? → peer_choice(5)? → peer_punish(5)?
+        # scalars(3) → history(4)? → other_punishments(n-1)? → peer_choice(5)? →
+        # peer_punish(5)? → current_reward(1)?
         if cfg.experiment.get("enable_history_observation", False):
             base_flattened_size += 4
         if cfg.experiment.get("observe_other_punishments", False):
@@ -273,6 +276,8 @@ class StatePunishmentBanditEnv:
             base_flattened_size += 5
         if cfg.experiment.get("observe_peer_punish_counts", False):
             base_flattened_size += 5
+        if cfg.experiment.get("observe_current_reward", False):
+            base_flattened_size += 1
         flattened_size = base_flattened_size
 
         obs_dim = (
@@ -328,6 +333,8 @@ class StatePunishmentBanditEnv:
             max_turns_per_epoch=cfg.experiment.get("max_turns", 100),
             observe_peer_choice_counts=cfg.experiment.get("observe_peer_choice_counts", False),
             observe_peer_punish_counts=cfg.experiment.get("observe_peer_punish_counts", False),
+            observe_current_reward=cfg.experiment.get("observe_current_reward", False),
+            reward_obs_scale=float(cfg.experiment.get("reward_obs_scale", 25.0)),
         )
         pool = list(cfg.experiment.get("bandit_pool", ["A", "B", "C", "D", "E"]))
         init_options = tuple(pool[:n_arms])
