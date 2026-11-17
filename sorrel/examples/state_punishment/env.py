@@ -1157,7 +1157,7 @@ class MultiAgentStatePunishmentEnv(Environment[StatePunishmentWorld]):
                     epsilon_min=env.config.model.epsilon_min,
                     device=env.config.model.device,
                     seed=int(torch.randint(0, 2**31 - 1, (1,)).item()),  # Fresh random seed
-                    n_frames=1,  # Always 1 for recurrent model
+                    n_frames=int(env.config.model.get("n_frames", 1)),
                     n_step=env.config.model.n_step,
                     sync_freq=env.config.model.sync_freq,
                     model_update_freq=env.config.model.model_update_freq,
@@ -2362,7 +2362,7 @@ class StatePunishmentEnv(Environment[StatePunishmentWorld]):
                         epsilon_min=self.config.model.epsilon_min,
                         device=self.config.model.device,
                         seed=int(torch.randint(0, 2**31 - 1, (1,)).item()) if torch.random.seed() is None else torch.random.seed(),
-                        n_frames=1,  # Always 1 for recurrent model (handles sequences internally)
+                        n_frames=int(self.config.model.get("n_frames", 1)),
                         n_step=self.config.model.n_step,
                         sync_freq=self.config.model.sync_freq,
                         model_update_freq=self.config.model.model_update_freq,

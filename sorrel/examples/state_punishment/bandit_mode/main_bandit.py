@@ -70,6 +70,19 @@ def parse_arguments():
         help="Divide last reward by this scale and clip to [-1, 1] when --observe-current-reward is on.",
     )
     p.add_argument(
+        "--observe-last-action",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="observe_last_action",
+        help="Append previous-step action as a one-hot over the flat action space (default: off).",
+    )
+    p.add_argument(
+        "--n_frames",
+        type=int,
+        default=None,
+        help="Frame-stack length for IQN encoder input (also used by recurrent LSTM IQN).",
+    )
+    p.add_argument(
         "--run_folder_prefix",
         type=str,
         default="bandit",
@@ -192,7 +205,12 @@ def run_experiment(args):
     config["experiment"]["observe_peer_punish_counts"] = bool(args.observe_peer_punish_counts)
     config["experiment"]["observe_current_reward"] = bool(args.observe_current_reward)
     config["experiment"]["reward_obs_scale"] = float(args.reward_obs_scale)
+    config["experiment"]["observe_last_action"] = bool(args.observe_last_action)
     config["experiment"]["env_mode"] = "bandit"
+    if args.n_frames is not None:
+        if int(args.n_frames) < 1:
+            raise SystemExit("--n_frames must be >= 1")
+        config["model"]["n_frames"] = int(args.n_frames)
 
     if args.iqn_use_factored_actions:
         if args.model_type != "iqn":
@@ -266,7 +284,9 @@ def run_experiment(args):
         f"pool={pool} K={args.bandit_arms_per_trial} "
         f"peer_choice_counts={args.observe_peer_choice_counts} "
         f"peer_punish_counts={args.observe_peer_punish_counts} "
-        f"observe_current_reward={args.observe_current_reward}"
+        f"observe_current_reward={args.observe_current_reward} "
+        f"observe_last_action={args.observe_last_action} "
+        f"n_frames={config['model'].get('n_frames')}"
     )
     multi_agent_env.run_experiment(
         animate=False,

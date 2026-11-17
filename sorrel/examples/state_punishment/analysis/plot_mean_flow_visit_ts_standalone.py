@@ -24,8 +24,7 @@ Example (Python API)::
         smooth_window=40,
         last_n_steps=100_000,
         n_time_bins=5000,
-        x_lim=(0.0, 1.0),
-        s_lim=(-0.5, 9.5),
+        auto_lim=True,  # zoom + re-bin to occupied (x,s); --no-auto-lim for fixed box
     )
 
     # Two side-by-side panels, each with several seed trajectories:
@@ -164,6 +163,78 @@ def _prepare_flow_frame(
         out["delta_s"] = out["s"].diff().fillna(0.0)
         out["dx"] = out["x"].diff().fillna(0.0)
     return out
+
+
+def infer_data_axis_limits(
+    frames: Sequence[pd.DataFrame],
+    *,
+    q_low: float = 0.5,
+    q_high: float = 99.5,
+    pad_frac: float = 0.08,
+    expand: float = 2.25,
+    min_x_span: float = 0.05,
+    min_s_span: float = 0.5,
+    x_floor: float | None = 0.0,
+    s_floor: float | None = -0.05,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Choose (x_lim, s_lim) from occupied trajectory mass + padding.
+
+    Uses percentile span across all frames so rare outliers do not dominate,
+    then pads and enforces a minimum span so 15×15 bins remain readable.
+    ``expand`` scales the window about its center (2.25 = two 50% zoom-outs).
+    """
+    xs: list[np.ndarray] = []
+    ss: list[np.ndarray] = []
+    for fr in frames:
+        x = np.asarray(fr["x"], dtype=float)
+        s = np.asarray(fr["s"], dtype=float)
+        m = np.isfinite(x) & np.isfinite(s)
+        if np.any(m):
+            xs.append(x[m])
+            ss.append(s[m])
+    if not xs:
+        return (0.0, 1.0), (-0.5, 9.5)
+
+    x_all = np.concatenate(xs)
+    s_all = np.concatenate(ss)
+    x0 = float(np.percentile(x_all, q_low))
+    x1 = float(np.percentile(x_all, q_high))
+    s0 = float(np.percentile(s_all, q_low))
+    s1 = float(np.percentile(s_all, q_high))
+
+    # Fall back to raw min/max if percentiles collapse.
+    if not np.isfinite(x0) or not np.isfinite(x1) or x1 <= x0:
+        x0, x1 = float(np.min(x_all)), float(np.max(x_all))
+    if not np.isfinite(s0) or not np.isfinite(s1) or s1 <= s0:
+        s0, s1 = float(np.min(s_all)), float(np.max(s_all))
+
+    def _pad(lo: float, hi: float, min_span: float) -> tuple[float, float]:
+        span = max(hi - lo, 0.0)
+        if span < min_span:
+            mid = 0.5 * (lo + hi)
+            lo, hi = mid - 0.5 * min_span, mid + 0.5 * min_span
+            span = hi - lo
+        pad = pad_frac * span
+        lo, hi = lo - pad, hi + pad
+            # Zoom out about center (expand=2.25 → two 50% enlargements).
+        exp = max(float(expand), 1e-6)
+        if exp != 1.0:
+            mid = 0.5 * (lo + hi)
+            half = 0.5 * (hi - lo) * exp
+            lo, hi = mid - half, mid + half
+        return lo, hi
+
+    x_lo, x_hi = _pad(x0, x1, min_x_span)
+    s_lo, s_hi = _pad(s0, s1, min_s_span)
+    if x_floor is not None:
+        x_lo = max(x_lo, float(x_floor))
+    if s_floor is not None:
+        s_lo = max(s_lo, float(s_floor))
+    if x_hi <= x_lo:
+        x_hi = x_lo + min_x_span
+    if s_hi <= s_lo:
+        s_hi = s_lo + min_s_span
+    return (float(x_lo), float(x_hi)), (float(s_lo), float(s_hi))
 
 
 # ---------------------------------------------------------------------------
@@ -402,8 +473,12 @@ def plot_mean_flow_visit_ts(
     last_n_steps: int | None = 100_000,
     smooth_window: int = 40,
     n_time_bins: int = 5000,
-    x_lim: tuple[float, float] = (0.0, 1.0),
-    s_lim: tuple[float, float] = (-0.5, 9.5),
+    x_lim: tuple[float, float] | None = None,
+    s_lim: tuple[float, float] | None = None,
+    auto_lim: bool = True,
+    lim_pad_frac: float = 0.08,
+    lim_expand: float = 2.25,
+    lim_q: tuple[float, float] = (0.5, 99.5),
     x_label: str = "$x$",
     s_label: str = "$s$",
     title: str | None = None,
@@ -435,6 +510,11 @@ def plot_mean_flow_visit_ts(
     x_scale
         Weight on Δx inside the scaled-speed color:
         ``sqrt(Δs² + (x_scale·Δx)²)``.
+    auto_lim
+        If True (default), zoom x/s limits to occupied data mass so the
+        15×15 bins resolve the visited region instead of the full
+        (0,1)×(0,10) box. Explicit ``x_lim``/``s_lim`` still win when set
+        and ``auto_lim`` is False.
     """
     panels = _normalize_panel_input(data)
     panel_names = list(panels.keys())
@@ -451,11 +531,30 @@ def plot_mean_flow_visit_ts(
     n_x_cells = int(n_x_cells if n_x_cells is not None else n_bins)
     n_s_cells = int(n_s_cells if n_s_cells is not None else n_bins)
 
+    # Axis window: default zoom to occupied mass so bins resolve visited cells.
+    if auto_lim:
+        tailed_all = [
+            _tail_df(fr, last_n_steps)
+            for frames in panels.values()
+            for fr in frames
+        ]
+        x_lim, s_lim = infer_data_axis_limits(
+            tailed_all,
+            q_low=float(lim_q[0]),
+            q_high=float(lim_q[1]),
+            pad_frac=float(lim_pad_frac),
+            expand=float(lim_expand),
+        )
+    else:
+        if x_lim is None:
+            x_lim = (0.0, 1.0)
+        if s_lim is None:
+            s_lim = (-0.5, 9.5)
+
     x_min_bin = float(x_lim[0])
     x_max_bin = float(x_lim[1])
     s_min_bin = float(s_lim[0])
     s_max_bin = float(s_lim[1])
-
     cell_x_edges = np.linspace(x_min_bin, x_max_bin, n_x_cells + 1)
     cell_s_edges = np.linspace(s_min_bin, s_max_bin, n_s_cells + 1)
 
@@ -601,6 +700,12 @@ def plot_mean_flow_visit_ts(
         ax.set_box_aspect(1)
         ax.set_xlabel(x_label)
         ax.set_title(name)
+        lim_note = (
+            f"axis zoom: x∈[{x_min_bin:.3g},{x_max_bin:.3g}] "
+            f"s∈[{s_min_bin:.3g},{s_max_bin:.3g}]"
+            if auto_lim
+            else "axis: fixed lims"
+        )
         ax.text(
             0.02,
             0.98,
@@ -609,7 +714,7 @@ def plot_mean_flow_visit_ts(
             f"arrow bins: {n_x_bins}(x)×{n_s_bins}(s)\n"
             f"inset cells: {n_x_cells}(x)×{n_s_cells}(s)\n"
             f"insets: raw visit frac vs time (K={n_time_bins})\n"
-            f"fixed arrow length",
+            f"fixed arrow length\n{lim_note}",
             transform=ax.transAxes,
             va="top",
             fontsize=8,
@@ -676,10 +781,16 @@ def _build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--last-n", type=int, default=100_000, dest="last_n_steps")
     p.add_argument("--n-time-bins", type=int, default=5000)
     p.add_argument("--min-count", type=int, default=1)
-    p.add_argument("--x-min", type=float, default=0.0)
-    p.add_argument("--x-max", type=float, default=1.0)
-    p.add_argument("--s-min", type=float, default=-0.5)
-    p.add_argument("--s-max", type=float, default=9.5)
+    p.add_argument("--x-min", type=float, default=None)
+    p.add_argument("--x-max", type=float, default=None)
+    p.add_argument("--s-min", type=float, default=None)
+    p.add_argument("--s-max", type=float, default=None)
+    p.add_argument(
+        "--auto-lim",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Zoom axes to occupied data mass (default). Use --no-auto-lim for fixed box.",
+    )
     p.add_argument("--x-scale", type=float, default=10.0)
     p.add_argument("--x-label", type=str, default="$x$")
     p.add_argument("--s-label", type=str, default="$s$")
@@ -704,6 +815,26 @@ def main(argv: Sequence[str] | None = None) -> None:
             grouped.setdefault(name, []).append(fr)
         data = grouped
 
+    auto_lim = bool(args.auto_lim)
+    # Any explicit lim disables auto-zoom unless --auto-lim is kept and lims omitted.
+    lims_set = any(
+        v is not None for v in (args.x_min, args.x_max, args.s_min, args.s_max)
+    )
+    if lims_set:
+        auto_lim = False
+    x_lim = (
+        (float(args.x_min if args.x_min is not None else 0.0),
+         float(args.x_max if args.x_max is not None else 1.0))
+        if not auto_lim
+        else None
+    )
+    s_lim = (
+        (float(args.s_min if args.s_min is not None else -0.5),
+         float(args.s_max if args.s_max is not None else 9.5))
+        if not auto_lim
+        else None
+    )
+
     out = plot_mean_flow_visit_ts(
         data,
         args.out,
@@ -712,8 +843,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         last_n_steps=args.last_n_steps,
         n_time_bins=args.n_time_bins,
         min_count=args.min_count,
-        x_lim=(args.x_min, args.x_max),
-        s_lim=(args.s_min, args.s_max),
+        x_lim=x_lim,
+        s_lim=s_lim,
+        auto_lim=auto_lim,
         x_scale=args.x_scale,
         x_label=args.x_label,
         s_label=args.s_label,
@@ -721,7 +853,5 @@ def main(argv: Sequence[str] | None = None) -> None:
         dpi=args.dpi,
     )
     print(f"wrote {out}")
-
-
 if __name__ == "__main__":
     main()

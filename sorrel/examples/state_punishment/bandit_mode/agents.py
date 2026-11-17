@@ -21,6 +21,7 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
         observe_peer_punish_counts = bool(kwargs.pop("observe_peer_punish_counts", False))
         observe_current_reward = bool(kwargs.pop("observe_current_reward", False))
         reward_obs_scale = float(kwargs.pop("reward_obs_scale", 25.0))
+        observe_last_action = bool(kwargs.pop("observe_last_action", False))
         super().__init__(*args, **kwargs)
         self.current_options: tuple[str, ...] = ("A", "B", "C")
         self.resource_values: dict[str, float] = {}
@@ -30,6 +31,8 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
         self.observe_current_reward = observe_current_reward
         self.reward_obs_scale = reward_obs_scale if reward_obs_scale > 0 else 25.0
         self.last_reward = 0.0
+        self.observe_last_action = observe_last_action
+        self.last_action: Optional[int] = None
 
     def set_trial_context(
         self,
@@ -103,6 +106,12 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
                     extra = np.concatenate(
                         [extra, punish_counts.reshape(1, -1)], axis=1
                     )
+            if self.observe_last_action:
+                n = len(self.action_names)
+                oh = np.zeros((1, n), dtype=np.float32)
+                if self.last_action is not None and 0 <= self.last_action < n:
+                    oh[0, self.last_action] = 1.0
+                extra = np.concatenate([extra, oh], axis=1)
             if self.observe_current_reward:
                 scaled = float(
                     np.clip(self.last_reward / self.reward_obs_scale, -1.0, 1.0)
@@ -138,6 +147,8 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
         if 0 <= action < len(self.action_names):
             action_name = self.action_names[action]
             self.action_frequencies[action_name] = self.action_frequencies.get(action_name, 0) + 1
+            if self.observe_last_action:
+                self.last_action = int(action)
 
         if self.delayed_punishment:
             delayed_punishment = self.apply_delayed_punishments()
@@ -167,6 +178,7 @@ class BanditStatePunishmentAgent(StatePunishmentAgent):
     def reset(self) -> None:
         super().reset()
         self.last_reward = 0.0
+        self.last_action = None
 
     def _execute_bandit_core(
         self,

@@ -344,6 +344,8 @@ def create_config(
             # Separate condition: append previous-step reward (normalized) to obs.
             "observe_current_reward": False,
             "reward_obs_scale": 25.0,
+            # Separate condition: append previous-step action one-hot to obs.
+            "observe_last_action": False,
             "seed": None,
         },
         "observation": {

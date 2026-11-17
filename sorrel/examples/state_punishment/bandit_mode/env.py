@@ -138,7 +138,7 @@ def _build_bandit_torch_model(
             epsilon_min=cfg.model.epsilon_min,
             device=cfg.model.device,
             seed=int(torch.randint(0, 2**31 - 1, (1,)).item()),
-            n_frames=1,
+            n_frames=int(cfg.model.get("n_frames", 1)),
             n_step=cfg.model.n_step,
             sync_freq=cfg.model.sync_freq,
             model_update_freq=cfg.model.model_update_freq,
@@ -266,7 +266,7 @@ class StatePunishmentBanditEnv:
         )
         # Tail order must match BanditStatePunishmentAgent.generate_single_view:
         # scalars(3) → history(4)? → other_punishments(n-1)? → peer_choice(5)? →
-        # peer_punish(5)? → current_reward(1)?
+        # peer_punish(5)? → last_action(n_actions)? → current_reward(1)?
         if cfg.experiment.get("enable_history_observation", False):
             base_flattened_size += 4
         if cfg.experiment.get("observe_other_punishments", False):
@@ -276,6 +276,8 @@ class StatePunishmentBanditEnv:
             base_flattened_size += 5
         if cfg.experiment.get("observe_peer_punish_counts", False):
             base_flattened_size += 5
+        if cfg.experiment.get("observe_last_action", False):
+            base_flattened_size += int(action_spec.n_actions)
         if cfg.experiment.get("observe_current_reward", False):
             base_flattened_size += 1
         flattened_size = base_flattened_size
@@ -335,6 +337,7 @@ class StatePunishmentBanditEnv:
             observe_peer_punish_counts=cfg.experiment.get("observe_peer_punish_counts", False),
             observe_current_reward=cfg.experiment.get("observe_current_reward", False),
             reward_obs_scale=float(cfg.experiment.get("reward_obs_scale", 25.0)),
+            observe_last_action=cfg.experiment.get("observe_last_action", False),
         )
         pool = list(cfg.experiment.get("bandit_pool", ["A", "B", "C", "D", "E"]))
         init_options = tuple(pool[:n_arms])

@@ -53,8 +53,9 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
     Recurrent variant of IQN with optional CPC auxiliary task.
 
     Notes:
-    - The replay buffer stores *single* frames (not stacked frames).
-    - Only the most recent frame is encoded during acting.
+    - The replay buffer stores *single* frames.
+    - Encoder input is an optional short stack of the last ``n_frames`` frames
+      (DQN-style), then LSTM integrates over the longer sequence.
     - The base IQN head is created with input_size=(hidden_size,) and n_frames=1.
     - CPC is optional (use_cpc=False for baseline IQN-only training).
     """
@@ -129,6 +130,11 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
 
         # Flattened dimension of a single observation frame
         self._obs_dim = int(np.array(input_size).prod())
+        # Short DQN-style stack fed to the encoder each LSTM step (default 1 = no stack)
+        self.n_stack = max(1, int(n_frames))
+        self._stack_dim = self._obs_dim * self.n_stack
+        # Actor-time history of previous single frames for stacking (length <= n_stack-1)
+        self._act_frame_hist: List[np.ndarray] = []
 
         # Sequence replay buffer (episode-based)
         # Capacity is measured in episodes (per EpisodeBuffer implementation).
@@ -143,9 +149,9 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         self.burn_in_len = int(burn_in_len)
         self.unroll_len = int(unroll_len)
 
-        # Encoder: raw frame -> latent
+        # Encoder: stacked frames -> latent
         # Use Xavier/Kaiming initialization for better gradient flow
-        self.encoder = nn.Linear(self._obs_dim, self.hidden_size)
+        self.encoder = nn.Linear(self._stack_dim, self.hidden_size)
         nn.init.xavier_uniform_(self.encoder.weight)
         nn.init.zeros_(self.encoder.bias)
         self.encoder = self.encoder.to(device)
@@ -282,7 +288,7 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
     # ----------------------------
 
     def _extract_last_frame(self, state: np.ndarray) -> np.ndarray:
-        """Extract the most recent frame from a potentially stacked observation."""
+        """Extract the most recent single frame from a potentially stacked observation."""
         s = state.flatten() if state.ndim > 1 else state
         if s.size >= self._obs_dim:
             return s[-self._obs_dim :].astype(np.float32, copy=True)
@@ -290,6 +296,37 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         out = np.zeros(self._obs_dim, dtype=np.float32)
         out[: s.size] = s.astype(np.float32, copy=False)
         return out
+
+    def _stack_act_frames(self, frame: np.ndarray) -> np.ndarray:
+        """Build length-n_stack vector from actor history + current frame (zero-pad left)."""
+        if self.n_stack == 1:
+            return frame.astype(np.float32, copy=False)
+        hist = list(self._act_frame_hist)
+        need = self.n_stack - 1
+        if len(hist) < need:
+            pad = [np.zeros(self._obs_dim, dtype=np.float32)] * (need - len(hist))
+            hist = pad + hist
+        else:
+            hist = hist[-need:]
+        return np.concatenate(hist + [frame], axis=0).astype(np.float32, copy=False)
+
+    def _stack_sequence_frames(self, states: torch.Tensor) -> torch.Tensor:
+        """Stack along time: (B, L, D) -> (B, L, D * n_stack), zero-pad on the left."""
+        if self.n_stack == 1:
+            return states
+        B, L, D = states.shape
+        n = self.n_stack
+        pad = torch.zeros(B, n - 1, D, device=states.device, dtype=states.dtype)
+        padded = torch.cat([pad, states], dim=1)  # (B, L+n-1, D)
+        x = padded.transpose(1, 2)  # (B, D, L+n-1)
+        u = x.unfold(dimension=2, size=n, step=1)  # (B, D, L, n)
+        return u.permute(0, 2, 3, 1).contiguous().reshape(B, L, n * D)
+
+    def _stack_time_series(self, frames: torch.Tensor) -> torch.Tensor:
+        """Stack along time: (T, D) -> (T, D * n_stack), zero-pad on the left."""
+        if self.n_stack == 1:
+            return frames
+        return self._stack_sequence_frames(frames.unsqueeze(0)).squeeze(0)
 
     def take_action(self, state: np.ndarray, last_action: Optional[int] = None) -> int:
         """
@@ -302,6 +339,7 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
             Selected action index
         """
         frame = self._extract_last_frame(state)
+        stack = self._stack_act_frames(frame)
 
         if self.lstm_hidden is None:
             h0 = torch.zeros(1, 1, self.hidden_size, device=self.device)
@@ -309,9 +347,9 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
             self.lstm_hidden = (h0, c0)
 
         # Update recurrent state (no grad while acting)
-        frame_t = torch.from_numpy(frame.reshape(1, -1)).float().to(self.device)
+        stack_t = torch.from_numpy(stack.reshape(1, -1)).float().to(self.device)
         with torch.no_grad():
-            z_t = self.encoder(frame_t)              # (1, H)
+            z_t = self.encoder(stack_t)              # (1, H)
             if self.use_last_action and self.last_action_embed is not None:
                 idx = last_action if last_action is not None and 0 <= last_action < self.action_space else self.action_space
                 idx_t = torch.full((1,), idx, dtype=torch.long, device=self.device)
@@ -346,8 +384,12 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         """
         frame = self._extract_last_frame(state)
         self.seq_memory.add(frame, action, reward, done)
+        self._act_frame_hist.append(frame)
+        if len(self._act_frame_hist) > max(0, self.n_stack - 1):
+            self._act_frame_hist = self._act_frame_hist[-(self.n_stack - 1) :]
         if done:
             self.lstm_hidden = None
+            self._act_frame_hist = []
 
     # ----------------------------
     # CPC Helper Methods
@@ -398,9 +440,10 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         frames_list = [process_frame(s) for s in raw_states]
         frames_array = np.stack(frames_list, axis=0)  # (T, obs_dim)
         frames_tensor = torch.from_numpy(frames_array).float().to(self.device)
-        
-        # Encode all frames (WITH gradients for CPC)
-        z_seq = self.encoder(frames_tensor)  # (T, hidden_size)
+        stacked = self._stack_time_series(frames_tensor)  # (T, obs_dim * n_stack)
+
+        # Encode stacked frames (WITH gradients for CPC)
+        z_seq = self.encoder(stacked)  # (T, hidden_size)
         if self.use_last_action and self.last_action_embed is not None:
             T = z_seq.size(0)
             sentinel_idx = self.action_space
@@ -719,12 +762,16 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         burn_in = self.burn_in_len
         unroll = self.unroll_len
 
+        # Stack frames once over the full sampled window, then slice burn-in / unroll
+        states_stacked = self._stack_sequence_frames(states_t)  # (B, L, stack_dim)
+        stack_dim = states_stacked.size(-1)
+
         # Burn-in WITHOUT gradients for BOTH encoder and LSTM
         with torch.no_grad():
             if burn_in > 0:
-                # Encode burn-in frames
-                states_burn = states_t[:, :burn_in, :]  # (B, burn_in, obs_dim)
-                states_burn_flat = states_burn.reshape(B * burn_in, obs_dim)
+                # Encode burn-in stacked frames
+                states_burn = states_stacked[:, :burn_in, :]  # (B, burn_in, stack_dim)
+                states_burn_flat = states_burn.reshape(B * burn_in, stack_dim)
                 z_burn_flat = self.encoder(states_burn_flat)  # (B*burn_in, H)
                 z_burn = z_burn_flat.view(B, burn_in, self.hidden_size).permute(1, 0, 2)  # (burn_in, B, H)
                 if self.use_last_action and self.last_action_embed is not None:
@@ -740,8 +787,9 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
                 h_burn, c_burn = h0, c0
 
         # Unroll WITH gradients for both encoder and LSTM
-        states_unroll = states_t[:, burn_in : burn_in + unroll + 1, :]  # (B, unroll+1, obs_dim)
-        states_unroll_flat = states_unroll.reshape(B * (unroll + 1), obs_dim)
+        states_unroll_raw = states_t[:, burn_in : burn_in + unroll + 1, :]  # (B, unroll+1, obs_dim) for NSP
+        states_unroll = states_stacked[:, burn_in : burn_in + unroll + 1, :]  # (B, unroll+1, stack_dim)
+        states_unroll_flat = states_unroll.reshape(B * (unroll + 1), stack_dim)
         z_unroll_flat = self.encoder(states_unroll_flat)  # (B*(unroll+1), H) - WITH gradients
         z_unroll = z_unroll_flat.view(B, unroll + 1, self.hidden_size).permute(1, 0, 2)  # (unroll+1, B, H)
         if self.use_last_action and self.last_action_embed is not None:
@@ -788,7 +836,7 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         next_state_pred_loss = torch.tensor(0.0, device=self.device)
         if self.use_next_state_pred and self.next_state_adapter is not None:
             next_state_pred_loss = self.next_state_adapter.compute_auxiliary_loss(
-                states_unroll=states_unroll,
+                states_unroll=states_unroll_raw,
                 lstm_out=lstm_out,
                 actions_unroll=actions_t[:, burn_in : burn_in + unroll],
             )
@@ -865,6 +913,7 @@ class RecurrentIQNModelCPC(DoublePyTorchModel):
         """Called at the start of each training epoch."""
         self.current_epoch = int(epoch)
         self.lstm_hidden = None
+        self._act_frame_hist = []
         self.base_model.start_epoch_action(epoch=epoch, **kwargs)
 
     def end_epoch_action(self, **kwargs) -> None:

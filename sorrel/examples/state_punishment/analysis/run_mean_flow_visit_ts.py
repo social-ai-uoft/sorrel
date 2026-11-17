@@ -93,10 +93,25 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--n-bins", type=int, default=15)
     p.add_argument("--n-time-bins", type=int, default=5000)
     p.add_argument("--min-count", type=int, default=1)
-    p.add_argument("--x-min", type=float, default=0.0)
-    p.add_argument("--x-max", type=float, default=1.0)
-    p.add_argument("--s-min", type=float, default=-0.5)
-    p.add_argument("--s-max", type=float, default=9.5)
+    p.add_argument(
+        "--auto-lim",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Zoom x/s axes to occupied data mass and re-bin there (default). "
+            "Use --no-auto-lim for the fixed (0,1)×(-0.5,9.5) box."
+        ),
+    )
+    p.add_argument("--x-min", type=float, default=None)
+    p.add_argument("--x-max", type=float, default=None)
+    p.add_argument("--s-min", type=float, default=None)
+    p.add_argument("--s-max", type=float, default=None)
+    p.add_argument(
+        "--lim-expand",
+        type=float,
+        default=2.25,
+        help="With --auto-lim, scale axis window about its center (2.25 = two 50% zoom-outs).",
+    )
     p.add_argument("--x-scale", type=float, default=10.0)
     p.add_argument("--dpi", type=int, default=200)
     p.add_argument(
@@ -268,6 +283,38 @@ def main() -> int:
     ordered_panels = {name: panels[name] for name in panel_order}
     out_png = plots_dir / "study1_vs_study2_mean_flow_visit_ts.png"
     print(f"Plotting {len(ordered_panels)} panel(s) -> {out_png}")
+
+    auto_lim = bool(args.auto_lim)
+    lims_set = any(
+        v is not None for v in (args.x_min, args.x_max, args.s_min, args.s_max)
+    )
+    if lims_set:
+        auto_lim = False
+    x_lim = (
+        (
+            float(args.x_min if args.x_min is not None else 0.0),
+            float(args.x_max if args.x_max is not None else 1.0),
+        )
+        if not auto_lim
+        else None
+    )
+    s_lim = (
+        (
+            float(args.s_min if args.s_min is not None else -0.5),
+            float(args.s_max if args.s_max is not None else 9.5),
+        )
+        if not auto_lim
+        else None
+    )
+    print(
+        "Axis mode: "
+        + (
+            "auto-zoom to occupied (x,s) mass"
+            if auto_lim
+            else f"fixed x_lim={x_lim} s_lim={s_lim}"
+        )
+    )
+
     plot_mean_flow_visit_ts(
         ordered_panels,
         out_png,
@@ -276,8 +323,10 @@ def main() -> int:
         last_n_steps=last_n,
         n_time_bins=args.n_time_bins,
         min_count=args.min_count,
-        x_lim=(args.x_min, args.x_max),
-        s_lim=(args.s_min, args.s_max),
+        x_lim=x_lim,
+        s_lim=s_lim,
+        auto_lim=auto_lim,
+        lim_expand=float(args.lim_expand),
         x_scale=args.x_scale,
         x_label=plot_x_label,
         s_label=args.s_label,
@@ -289,7 +338,6 @@ def main() -> int:
         ),
     )
     print(f"Wrote {out_png}")
-
     meta_csv = out_dir / "mean_flow_run_manifest.csv"
     pd.DataFrame(meta_rows).to_csv(meta_csv, index=False)
     print(f"Wrote {meta_csv}")
@@ -297,6 +345,8 @@ def main() -> int:
     note_path = out_dir / "X_AXIS_NOTE.txt"
     note_path.write_text(
         "Mean-flow / visit-ts x-axis\n"
+        f"Axis zoom: {'auto (occupied mass)' if auto_lim else 'fixed'}\n"
+        f"x_lim={x_lim} s_lim={s_lim} (None => chosen inside plotter)\n"
         "===========================\n"
         f"x_mode: {x_mode}\n"
         f"definition: {x_label_resolved}\n"
