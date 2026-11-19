@@ -76,8 +76,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--last-n",
         type=int,
-        default=100_000,
-        help="Keep only the last N steps (default 100000). Set 0 for full series.",
+        default=20_000,
+        help="Keep only the last N steps (default 20000). Set 0 for full series.",
     )
     p.add_argument(
         "--x-mode",

@@ -22,7 +22,7 @@ Example (Python API)::
         labels=["my condition"],
         n_bins=15,
         smooth_window=40,
-        last_n_steps=100_000,
+        last_n_steps=20_000,
         n_time_bins=5000,
         auto_lim=True,  # zoom + re-bin to occupied (x,s); --no-auto-lim for fixed box
     )
@@ -470,7 +470,7 @@ def plot_mean_flow_visit_ts(
     min_count: int = 1,
     arrow_len: float = 0.05,
     x_scale: float = 10.0,
-    last_n_steps: int | None = 100_000,
+    last_n_steps: int | None = 20_000,
     smooth_window: int = 40,
     n_time_bins: int = 5000,
     x_lim: tuple[float, float] | None = None,
@@ -511,10 +511,10 @@ def plot_mean_flow_visit_ts(
         Weight on Δx inside the scaled-speed color:
         ``sqrt(Δs² + (x_scale·Δx)²)``.
     auto_lim
-        If True (default), zoom x/s limits to occupied data mass so the
-        15×15 bins resolve the visited region instead of the full
-        (0,1)×(0,10) box. Explicit ``x_lim``/``s_lim`` still win when set
-        and ``auto_lim`` is False.
+        If True (default), zoom *x* limits to occupied data mass so the
+        15×15 bins resolve the visited region. Punishment *s* is always
+        bounded to ``[0, 1]``. Explicit ``x_lim`` still wins when set and
+        ``auto_lim`` is False; ``s_lim`` is clamped into ``[0, 1]``.
     """
     panels = _normalize_panel_input(data)
     panel_names = list(panels.keys())
@@ -531,25 +531,33 @@ def plot_mean_flow_visit_ts(
     n_x_cells = int(n_x_cells if n_x_cells is not None else n_bins)
     n_s_cells = int(n_s_cells if n_s_cells is not None else n_bins)
 
-    # Axis window: default zoom to occupied mass so bins resolve visited cells.
+    # Axis window: default zoom x to occupied mass so bins resolve visited cells.
+    # Punishment s is always bounded to [0, 1] (physical range).
     if auto_lim:
         tailed_all = [
             _tail_df(fr, last_n_steps)
             for frames in panels.values()
             for fr in frames
         ]
-        x_lim, s_lim = infer_data_axis_limits(
+        x_lim_auto, _s_lim_auto = infer_data_axis_limits(
             tailed_all,
             q_low=float(lim_q[0]),
             q_high=float(lim_q[1]),
             pad_frac=float(lim_pad_frac),
             expand=float(lim_expand),
         )
+        if x_lim is None:
+            x_lim = x_lim_auto
     else:
         if x_lim is None:
             x_lim = (0.0, 1.0)
-        if s_lim is None:
-            s_lim = (-0.5, 9.5)
+    if s_lim is None:
+        s_lim = (0.0, 1.0)
+    else:
+        # Still clamp explicit s_lim into [0, 1].
+        s_lim = (max(0.0, float(s_lim[0])), min(1.0, float(s_lim[1])))
+        if s_lim[1] <= s_lim[0]:
+            s_lim = (0.0, 1.0)
 
     x_min_bin = float(x_lim[0])
     x_max_bin = float(x_lim[1])
@@ -622,16 +630,28 @@ def plot_mean_flow_visit_ts(
 
     n_panels = len(panel_names)
     fig_w = figsize_per_panel[0] * n_panels + (0.5 if n_panels > 1 else 0.0)
-    fig, axes = plt.subplots(
-        1,
+    fig_h = float(figsize_per_panel[1]) + 3.0
+    fig = plt.figure(figsize=(fig_w, fig_h))
+    # Three stacked bands: figure title | metadata cards | plots (no overlap).
+    gs = fig.add_gridspec(
+        3,
         n_panels,
-        figsize=(fig_w, figsize_per_panel[1]),
-        sharex=True,
-        sharey=True,
-        constrained_layout=True,
+        height_ratios=[1.25, 1.55, 5.0],
+        hspace=0.45,
+        wspace=0.18,
+        left=0.08,
+        right=0.90,
+        top=0.98,
+        bottom=0.07,
     )
-    if n_panels == 1:
-        axes = np.array([axes])
+    ax_title = fig.add_subplot(gs[0, :])
+    ax_title.set_axis_off()
+    info_axes = [fig.add_subplot(gs[1, i]) for i in range(n_panels)]
+    axes = [fig.add_subplot(gs[2, i]) for i in range(n_panels)]
+    for ax in axes[1:]:
+        ax.sharex(axes[0])
+        ax.sharey(axes[0])
+    axes = np.asarray(axes)
 
     s_span = float(s_lim[1] - s_lim[0])
     x_span = float(x_lim[1] - x_lim[0])
@@ -646,7 +666,7 @@ def plot_mean_flow_visit_ts(
         else f"last {int(last_n_steps):,} steps"
     )
 
-    for ax, name, color in zip(axes, panel_names, colors):
+    for ax, ax_info, name, color in zip(axes, info_axes, panel_names, colors):
         S, X, U, V, counts, s_edges, x_edges = fields[name]
         f = visit_f[name]
         mosaic = _visit_mosaic_rgb(f, line_color=color, ymax=y_max)
@@ -696,36 +716,45 @@ def plot_mean_flow_visit_ts(
             pivot="tail",
         )
         ax.set_xlim(*x_lim)
-        ax.set_ylim(*s_lim)
+        ax.set_ylim(0.0, 1.0)
         ax.set_box_aspect(1)
         ax.set_xlabel(x_label)
-        ax.set_title(name)
         lim_note = (
-            f"axis zoom: x∈[{x_min_bin:.3g},{x_max_bin:.3g}] "
-            f"s∈[{s_min_bin:.3g},{s_max_bin:.3g}]"
+            f"axis: x∈[{x_min_bin:.3g},{x_max_bin:.3g}] s∈[0,1]"
             if auto_lim
-            else "axis: fixed lims"
+            else "axis: fixed lims (s∈[0,1])"
         )
-        ax.text(
-            0.02,
-            0.98,
-            f"n_traj={n_seeds_by_panel[name]}\nmin_count={min_count}\n"
-            f"{last_note}\n{smooth_note}\n"
-            f"arrow bins: {n_x_bins}(x)×{n_s_bins}(s)\n"
-            f"inset cells: {n_x_cells}(x)×{n_s_cells}(s)\n"
+        meta = (
+            f"n_traj={n_seeds_by_panel[name]}  min_count={min_count}  "
+            f"{last_note}  {smooth_note}\n"
+            f"arrow bins: {n_x_bins}(x)×{n_s_bins}(s)  "
+            f"inset cells: {n_x_cells}(x)×{n_s_cells}(s)  "
             f"insets: raw visit frac vs time (K={n_time_bins})\n"
-            f"fixed arrow length\n{lim_note}",
-            transform=ax.transAxes,
-            va="top",
-            fontsize=8,
-            color="0.25",
-            zorder=4,
+            f"fixed arrow length  {lim_note}"
+        )
+        ax_info.set_axis_off()
+        ax_info.text(
+            0.0,
+            0.5,
+            f"{name}\n{meta}",
+            transform=ax_info.transAxes,
+            ha="left",
+            va="center",
+            fontsize=7.5,
+            color="0.15",
+            linespacing=1.35,
+            bbox={
+                "facecolor": "white",
+                "edgecolor": "0.75",
+                "boxstyle": "round,pad=0.4",
+                "alpha": 1.0,
+            },
         )
 
     axes[0].set_ylabel(s_label)
     sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
-    cbar = fig.colorbar(sm, ax=axes.ravel().tolist(), fraction=0.03, pad=0.02)
+    cbar = fig.colorbar(sm, ax=list(axes), fraction=0.03, pad=0.02)
     cbar.set_label(rf"scaled speed $\sqrt{{\Delta s^2 + ({x_scale:g}\Delta x)^2}}$")
 
     if title is None:
@@ -736,11 +765,21 @@ def plot_mean_flow_visit_ts(
             f"background = visit fraction vs time on {n_x_cells}×{n_s_cells} cells; "
             f"{last_note}; {smooth_note}"
         )
-    fig.suptitle(title, fontsize=11)
+    ax_title.text(
+        0.5,
+        0.55,
+        title,
+        transform=ax_title.transAxes,
+        ha="center",
+        va="center",
+        fontsize=10,
+        linespacing=1.25,
+    )
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+    # pad_inches keeps title row clear of metadata cards after tight crop.
+    fig.savefig(out_path, dpi=dpi, bbox_inches="tight", pad_inches=0.35)
     plt.close(fig)
     return out_path
 
@@ -778,7 +817,7 @@ def _build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--out", required=True, help="Output PNG path.")
     p.add_argument("--n-bins", type=int, default=15)
     p.add_argument("--smooth", type=int, default=40, dest="smooth_window")
-    p.add_argument("--last-n", type=int, default=100_000, dest="last_n_steps")
+    p.add_argument("--last-n", type=int, default=20_000, dest="last_n_steps")
     p.add_argument("--n-time-bins", type=int, default=5000)
     p.add_argument("--min-count", type=int, default=1)
     p.add_argument("--x-min", type=float, default=None)

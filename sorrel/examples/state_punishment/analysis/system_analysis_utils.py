@@ -859,15 +859,21 @@ def phase_portrait_xy(
     arrow_every: int = 50,
     color_by_time: bool = False,
     connect: bool = False,
+    show_points: bool = True,
     point_size: int = 10,
     line_alpha: float = 0.25,
     point_alpha: float = 0.5,
+    line_width: float = 1.0,
     arrow_scale: float = 1,
+    xlim: Optional[Tuple[float, float]] = None,
+    ylim: Optional[Tuple[float, float]] = None,
     save_path: Optional[str] = None,
     show: bool = True,
     ax=None,
 ):
     """2D phase portrait of (x, y), optionally colored / connected by time order."""
+    from matplotlib.collections import LineCollection
+
     x, y, t = _prepare_xy(x, y, start=start, end=end, step=step)
 
     created_fig = ax is None
@@ -876,14 +882,31 @@ def phase_portrait_xy(
     else:
         fig = ax.figure
 
-    if connect:
-        ax.plot(x, y, linewidth=1, alpha=line_alpha)
+    if connect and len(x) > 1:
+        if color_by_time:
+            pts = np.column_stack([x, y]).reshape(-1, 1, 2)
+            segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
+            lc = LineCollection(
+                segs,
+                cmap="viridis",
+                norm=plt.Normalize(vmin=float(np.nanmin(t)), vmax=float(np.nanmax(t))),
+                linewidths=line_width,
+                alpha=max(line_alpha, 0.7),
+            )
+            lc.set_array(t[:-1])
+            ax.add_collection(lc)
+            fig.colorbar(lc, ax=ax, label="time / episode")
+            ax.autoscale_view()
+        else:
+            ax.plot(x, y, linewidth=line_width, alpha=max(line_alpha, 0.7))
 
-    if color_by_time:
-        sc = ax.scatter(x, y, c=t, s=point_size, alpha=point_alpha)
-        fig.colorbar(sc, ax=ax, label="time / episode")
-    else:
-        ax.scatter(x, y, s=point_size, alpha=point_alpha)
+    if show_points:
+        if color_by_time:
+            sc = ax.scatter(x, y, c=t, s=point_size, alpha=point_alpha)
+            if not connect:
+                fig.colorbar(sc, ax=ax, label="time / episode")
+        else:
+            ax.scatter(x, y, s=point_size, alpha=point_alpha)
 
     if arrows and len(x) > 1:
         idx = np.arange(0, len(x) - 1, arrow_every)
@@ -905,6 +928,10 @@ def phase_portrait_xy(
     ax.set_ylabel(y_name)
     ax.set_title(title)
     ax.grid(alpha=0.3)
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    if ylim is not None:
+        ax.set_ylim(*ylim)
 
     if save_path is not None:
         os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
@@ -930,11 +957,16 @@ def phase_portrait_xyt(
     arrows: bool = False,
     arrow_every: int = 50,
     connect: bool = True,
+    show_points: bool = True,
     point_size: int = 8,
     line_alpha: float = 0.35,
     point_alpha: float = 0.65,
+    line_width: float = 1.2,
     elev: float = 22.0,
     azim: float = -60.0,
+    xlim: Optional[Tuple[float, float]] = None,
+    ylim: Optional[Tuple[float, float]] = None,
+    zlim: Optional[Tuple[float, float]] = None,
     save_path: Optional[str] = None,
     show: bool = True,
     ax=None,
@@ -943,8 +975,10 @@ def phase_portrait_xyt(
 
     When ``time`` is None, uses the sample index (after start/end/step slicing),
     which corresponds to episode/step order for these TensorBoard series.
-    Direction arrows default to off (trajectory path + points only).
+    Direction arrows default to off. Set ``show_points=False`` for trajectory only.
     """
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection
+
     x, y, t = _prepare_xy(x, y, start=start, end=end, step=step, time=time)
 
     created_fig = ax is None
@@ -955,10 +989,24 @@ def phase_portrait_xyt(
         fig = ax.figure
 
     if connect and len(x) > 1:
-        ax.plot(x, y, t, linewidth=1.0, alpha=line_alpha, color="gray")
+        pts = np.column_stack([x, y, t]).reshape(-1, 1, 3)
+        segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
+        lc = Line3DCollection(
+            segs,
+            cmap="viridis",
+            norm=plt.Normalize(vmin=float(np.nanmin(t)), vmax=float(np.nanmax(t))),
+            linewidths=line_width,
+            alpha=max(line_alpha, 0.85),
+        )
+        lc.set_array(t[:-1])
+        ax.add_collection3d(lc)
+        fig.colorbar(lc, ax=ax, shrink=0.7, label=t_name)
+    elif show_points:
+        sc = ax.scatter(x, y, t, c=t, s=point_size, alpha=point_alpha, cmap="viridis")
+        fig.colorbar(sc, ax=ax, shrink=0.7, label=t_name)
 
-    sc = ax.scatter(x, y, t, c=t, s=point_size, alpha=point_alpha, cmap="viridis")
-    fig.colorbar(sc, ax=ax, shrink=0.7, label=t_name)
+    if show_points and connect:
+        ax.scatter(x, y, t, c=t, s=point_size, alpha=point_alpha, cmap="viridis")
 
     if arrows and len(x) > 1:
         idx = np.arange(0, len(x) - 1, arrow_every)
@@ -985,6 +1033,15 @@ def phase_portrait_xyt(
     ax.set_zlabel(t_name)
     ax.set_title(title)
     ax.view_init(elev=elev, azim=azim)
+    x_lo = float(np.nanmin(x)) if xlim is None else float(xlim[0])
+    x_hi = float(np.nanmax(x)) if xlim is None else float(xlim[1])
+    y_lo = float(np.nanmin(y)) if ylim is None else float(ylim[0])
+    y_hi = float(np.nanmax(y)) if ylim is None else float(ylim[1])
+    z_lo = float(np.nanmin(t)) if zlim is None else float(zlim[0])
+    z_hi = float(np.nanmax(t)) if zlim is None else float(zlim[1])
+    ax.set_xlim(x_lo, x_hi)
+    ax.set_ylim(y_lo, y_hi)
+    ax.set_zlim(z_lo, z_hi)
 
     if save_path is not None:
         os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)

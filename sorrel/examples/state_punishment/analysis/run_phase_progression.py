@@ -5,7 +5,11 @@ NOTE — defaults:
   s = Global_average_punishment_level
   x = Mean_mean_a_encounters / sum_r Mean_mean_r_encounters
       (resource A share of total resources extracted; NOT raw A)
-  detrend = linear (after last-N; use --detrend none to keep secular drift)
+  detrend = linear (after windowing; use --detrend none to keep secular drift)
+  start_after = 40000 (keep t >= 40000; use --start-after 0 for full series)
+  last_n = 0 (no tail truncation; optional --last-n N)
+  smooth_w = 10 (use --smooth-w 1 for unsmoothed; --smooth-w 51 for older default)
+  contrast figure: unwrapped θ | raw D | D_smooth | N_rot_smooth
   Override with --x-mode raw_a if absolute A intensity is needed.
 
 Computes angular-consistency metrics, writes per-run diagnostics, a metrics
@@ -86,10 +90,22 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--start-after",
+        type=int,
+        default=40_000,
+        help=(
+            "Drop early burn-in: keep only steps with t >= N "
+            "(default 40000 = all steps after 40000). Set 0 for full series."
+        ),
+    )
+    p.add_argument(
         "--last-n",
         type=int,
-        default=20_000,
-        help="Use only the last N steps (default 20000). Set 0 for full series.",
+        default=0,
+        help=(
+            "Optional tail window: use only the last N steps after --start-after "
+            "(default 0 = no tail truncation)."
+        ),
     )
     p.add_argument(
         "--x-mode",
@@ -107,9 +123,9 @@ def parse_args() -> argparse.Namespace:
         default="linear",
         choices=["none", "linear", "rolling"],
         help=(
-            "Detrend s and x after last-N window, before smoothing/z-score. "
-            "Default linear removes least-squares drift (orbit-focused); "
-            "use none to keep secular change in N_rot/D."
+            "Detrend s and x after start-after/last-N windowing, before "
+            "smoothing/z-score. Default linear removes least-squares drift "
+            "(orbit-focused); use none to keep secular change in N_rot/D."
         ),
     )
     p.add_argument(
@@ -118,7 +134,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Rolling-mean width when --detrend rolling (default ~n/10).",
     )
-    p.add_argument("--smooth-w", type=int, default=51)
+    p.add_argument(
+        "--smooth-w",
+        type=int,
+        default=10,
+        help="Rolling smooth width on s/x before angle (default 10; 1 = unsmoothed).",
+    )
     p.add_argument("--n-surr", type=int, default=0, help="Surrogate nulls (0=off).")
     p.add_argument(
         "--no-standardize",
@@ -208,6 +229,58 @@ def normalize_group_label(label: str) -> str:
     return label
 
 
+def _strip_by_study(
+    ax,
+    table: pd.DataFrame,
+    metric: str,
+    title: str,
+    colors: dict,
+) -> None:
+    groups = [STUDY1, STUDY2]
+    present = [g for g in groups if (table["group"] == g).any()]
+    if not present:
+        present = list(table["group"].astype(str).unique())
+    rng = np.random.default_rng(0)
+    for i, g in enumerate(present):
+        y = table.loc[table["group"] == g, metric].to_numpy(dtype=float)
+        x = rng.normal(i, 0.05, size=len(y))
+        ax.scatter(
+            x,
+            y,
+            s=50,
+            alpha=0.85,
+            color=colors.get(g, f"C{i}"),
+            zorder=3,
+            label=g,
+        )
+        if len(y):
+            ax.hlines(
+                np.nanmean(y),
+                i - 0.25,
+                i + 0.25,
+                colors=colors.get(g, f"C{i}"),
+                lw=1.5,
+                zorder=2,
+            )
+    ax.set_xticks(range(len(present)))
+    ax.set_xticklabels(
+        [
+            (
+                "Study1\nvisible s"
+                if g == STUDY1
+                else "Study2\nhidden s"
+                if g == STUDY2
+                else g
+            )
+            for g in present
+        ],
+        fontsize=9,
+    )
+    ax.set_ylabel(metric)
+    ax.set_title(title)
+    ax.set_xlim(-0.6, len(present) - 0.4)
+
+
 def plot_study_contrast(
     metrics_by_run: Sequence[Dict],
     table: pd.DataFrame,
@@ -216,13 +289,13 @@ def plot_study_contrast(
     show: bool,
     x_note: str = "x = A / total resource encounters",
 ) -> None:
-    """Three-panel Study1 vs Study2 contrast figure."""
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
+    """Four-panel Study1 vs Study2 contrast: unwrapped θ, D, D_smooth, N_rot_smooth."""
+    fig, axes = plt.subplots(1, 4, figsize=(18, 4.5))
 
     colors = {STUDY1: "tab:blue", STUDY2: "tab:orange"}
     labels_drawn = set()
 
-    # Panel 1: unwrapped θ/2π vs step
+    # Panel 1: unwrapped θ/2π vs step (smoothed trajectory when available)
     ax = axes[0]
     for m in metrics_by_run:
         group = m["group"]
@@ -250,46 +323,12 @@ def plot_study_contrast(
     if labels_drawn:
         ax.legend(fontsize=8, loc="best")
 
-    # Panel 2 / 3: D_smooth and N_rot_smooth strip plots
-    for ax, metric, title in (
-        (axes[1], "D_smooth", r"$D_{\mathrm{smooth}}$ by study"),
-        (axes[2], "N_rot_smooth", r"$N_{\mathrm{rot,smooth}}$ by study"),
-    ):
-        groups = [STUDY1, STUDY2]
-        present = [g for g in groups if (table["group"] == g).any()]
-        if not present:
-            present = list(table["group"].astype(str).unique())
-        rng = np.random.default_rng(0)
-        for i, g in enumerate(present):
-            y = table.loc[table["group"] == g, metric].to_numpy(dtype=float)
-            x = rng.normal(i, 0.05, size=len(y))
-            ax.scatter(
-                x,
-                y,
-                s=50,
-                alpha=0.85,
-                color=colors.get(g, f"C{i}"),
-                zorder=3,
-                label=g,
-            )
-            if len(y):
-                ax.hlines(
-                    np.nanmean(y),
-                    i - 0.25,
-                    i + 0.25,
-                    colors=colors.get(g, f"C{i}"),
-                    lw=1.5,
-                    zorder=2,
-                )
-        ax.set_xticks(range(len(present)))
-        ax.set_xticklabels(
-            [("Study1\nvisible s" if g == STUDY1 else "Study2\nhidden s" if g == STUDY2 else g)
-             for g in present],
-            fontsize=9,
-        )
-        ax.set_ylabel(metric)
-        ax.set_title(title)
-        ax.set_xlim(-0.6, len(present) - 0.4)
+    # Panels 2–4: raw D (sensitivity) + smoothed D / N_rot (primary)
+    _strip_by_study(axes[1], table, "D", r"$D$ (raw) by study", colors)
+    _strip_by_study(axes[2], table, "D_smooth", r"$D_{\mathrm{smooth}}$ by study", colors)
+    _strip_by_study(
+        axes[3], table, "N_rot_smooth", r"$N_{\mathrm{rot,smooth}}$ by study", colors
+    )
 
     fig.suptitle(
         f"Study1 (visible s) vs Study2 (hidden s) phase progression\n({x_note})",
@@ -334,6 +373,11 @@ def main() -> int:
         groups = [infer_study_group(r, tag=t) for r, t in zip(runs, tags)]
 
     last_n = None if args.last_n is None or args.last_n <= 0 else int(args.last_n)
+    start_after = (
+        None
+        if args.start_after is None or args.start_after <= 0
+        else int(args.start_after)
+    )
     standardize = not args.no_standardize
     x_mode = args.x_mode
     detrend = args.detrend
@@ -342,7 +386,9 @@ def main() -> int:
 
     print(
         "NOTE: phase x-axis default is A/total resource encounters "
-        f"(--x-mode {x_mode}); detrend={detrend}."
+        f"(--x-mode {x_mode}); detrend={detrend}; "
+        f"start_after={start_after}; last_n={last_n}; "
+        f"smooth_w={args.smooth_w}."
     )
 
     rows = []
@@ -357,6 +403,7 @@ def main() -> int:
             x,
             t=t,
             last_n=last_n,
+            start_after=start_after,
             smooth_w=args.smooth_w,
             standardize=standardize,
             detrend=detrend,
@@ -384,6 +431,7 @@ def main() -> int:
             "N_rot_smooth": m["N_rot_smooth"],
             "smooth_w": m["smooth_w"],
             "last_n": m["last_n"],
+            "start_after": m.get("start_after"),
         }
         if args.n_surr and args.n_surr > 0:
             row["D_surr_mean"] = m.get("D_surr_mean")
@@ -398,6 +446,7 @@ def main() -> int:
                 s,
                 x,
                 last_n=last_n,
+                start_after=start_after,
                 smooth_w=args.smooth_w,
                 standardize=standardize,
                 detrend=detrend,
@@ -414,12 +463,17 @@ def main() -> int:
     print(f"Wrote {metrics_csv}")
 
     contrast_path = plots_dir / "study1_vs_study2_phase_contrast.png"
+    window_note = (
+        f"t>={start_after}" if start_after is not None else "full series"
+    )
+    if last_n is not None:
+        window_note += f", last {last_n}"
     plot_study_contrast(
         metrics_by_run,
         table,
         out_path=contrast_path,
         show=args.show_plots,
-        x_note=f"x = {x_label or x_mode}; detrend={detrend}",
+        x_note=f"x = {x_label or x_mode}; detrend={detrend}; {window_note}",
     )
     print(f"Wrote {contrast_path}")
 
@@ -432,8 +486,14 @@ def main() -> int:
         "s: Global_average_punishment_level\n"
         f"detrend: {detrend}\n"
         f"detrend_rolling_w: {detrend_rolling_w}\n"
+        f"start_after: {start_after}\n"
+        f"last_n: {last_n}\n"
+        f"smooth_w: {args.smooth_w}\n"
         "\n"
-        "Order: last-N window → detrend(s,x) → smooth → z-score → angle.\n"
+        "Order: start-after (t>=N) → optional last-N → detrend(s,x) → "
+        "smooth → z-score → angle.\n"
+        "Default start_after=40000 (all steps from 40000 onward).\n"
+        "Default smooth_w=10; contrast panels include raw D and D_smooth.\n"
         "Default detrend=linear so D/N_rot emphasize cycling rather than\n"
         "secular walks. Use --detrend none to keep drift.\n"
         "\n"

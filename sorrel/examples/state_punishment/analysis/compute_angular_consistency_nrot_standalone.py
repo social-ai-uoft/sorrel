@@ -227,6 +227,7 @@ def phase_progression_metrics(
     *,
     t: Optional[ArrayLike] = None,
     last_n: Optional[int] = None,
+    start_after: Optional[int] = None,
     smooth_w: int = 1,
     standardize: bool = True,
     detrend: str = "linear",
@@ -244,9 +245,12 @@ def phase_progression_metrics(
     s, x : series (same length)
     t : optional time/step axis
     last_n : if set, use only the last N samples after finite filtering
+        (and after ``start_after``)
+    start_after : if set, keep only samples with ``t >= start_after``
+        (drop early burn-in; e.g. 40000 → all steps from 40000 onward)
     smooth_w : rolling mean width applied to s and x before angle (1 = off)
     standardize : z-score s and x before atan2
-    detrend : ``none`` | ``linear`` | ``rolling`` — applied after last_n,
+    detrend : ``none`` | ``linear`` | ``rolling`` — applied after windowing,
         before smoothing. Default ``linear`` removes secular drift so
         D/N_rot reflect cycling more than slow walks.
     detrend_rolling_w : window for ``rolling`` detrend (default ~n/10)
@@ -266,6 +270,10 @@ def phase_progression_metrics(
 
     mask = _finite_mask(s, x, t)
     s, x, t = s[mask], x[mask], t[mask]
+
+    if start_after is not None and int(start_after) > 0:
+        keep = t >= float(start_after)
+        s, x, t = s[keep], x[keep], t[keep]
 
     if last_n is not None and last_n > 0 and len(s) > last_n:
         s, x, t = s[-last_n:], x[-last_n:], t[-last_n:]
@@ -325,6 +333,7 @@ def phase_progression_metrics(
             None if detrend_rolling_w is None else int(detrend_rolling_w)
         ),
         "last_n": None if last_n is None else int(last_n),
+        "start_after": None if start_after is None else int(start_after),
     }
 
     if windowed_w is not None and windowed_w > 1:
@@ -419,7 +428,8 @@ def plot_phase_diagnostics(
     s: ArrayLike,
     x: ArrayLike,
     *,
-    last_n: Optional[int] = 20_000,
+    last_n: Optional[int] = None,
+    start_after: Optional[int] = 40_000,
     smooth_w: int = 51,
     standardize: bool = True,
     detrend: str = "linear",
@@ -434,6 +444,7 @@ def plot_phase_diagnostics(
         x,
         t=t,
         last_n=last_n,
+        start_after=start_after,
         smooth_w=smooth_w,
         standardize=standardize,
         detrend=detrend,

@@ -9,6 +9,16 @@
 #     --mean-flow-arg --x-mode --mean-flow-arg raw_a
 #   Phase detrend defaults to linear; keep secular drift with:
 #     --phase-arg --detrend --phase-arg none
+#   Phase smooth_w defaults to 10; unsmoothed / older widths with:
+#     --phase-arg --smooth-w --phase-arg 1
+#     --phase-arg --smooth-w --phase-arg 51
+#   Phase start-after defaults to 40000 (keep t >= 40000); override with:
+#     --phase-arg --start-after --phase-arg 0
+#   Optional phase last-N (off by default); e.g.:
+#     --phase-arg --last-n --phase-arg 40000
+#   Phase contrast figure panels: unwrapped θ | raw D | D_smooth | N_rot_smooth
+#   Mean-flow last-N defaults to 20000; override with:
+#     --mean-flow-arg --last-n --mean-flow-arg 50000
 #
 # Usage:
 #   ./run_all_analyses.sh RUN [RUN ...]
@@ -349,7 +359,7 @@ fi
 if [[ "$SKIP_PHASE" -eq 0 ]]; then
   echo
   echo "==> Phase-progression (Study1 vs Study2) analysis"
-  echo "    NOTE: x = A/total; detrend=linear by default (override: --phase-arg --detrend none / --x-mode raw_a)"
+  echo "    NOTE: x = A/total; detrend=linear; start-after=40000; smooth_w=10; contrast includes raw D + D_smooth"
   PHASE_CMD=(
     "$PYTHON" "$SCRIPT_DIR/run_phase_progression.py"
     "${COMMON_RUN_ARGS[@]}"
@@ -380,7 +390,7 @@ fi
 if [[ "$SKIP_MEAN_FLOW" -eq 0 ]]; then
   echo
   echo "==> Mean-flow + visit time-series (Study1 vs Study2)"
-  echo "    NOTE: x = A/total resource encounters (default; override with --mean-flow-arg --x-mode raw_a)"
+  echo "    NOTE: x = A/total; last-n=20000 by default (override with --mean-flow-arg --last-n N)"
   MEAN_FLOW_CMD=(
     "$PYTHON" "$SCRIPT_DIR/run_mean_flow_visit_ts.py"
     "${COMMON_RUN_ARGS[@]}"

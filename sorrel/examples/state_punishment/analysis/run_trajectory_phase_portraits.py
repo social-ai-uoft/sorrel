@@ -6,6 +6,8 @@ Covers the analysis_v2.ipynb section
 up to (but not including) spectral band analysis, and adds 2D + 3D
 phase portraits (time/episode as the third axis).
 
+Default phase-portrait y-axis is A/total resource share (not raw A encounters).
+
 Depends on system_analysis_utils.py.
 
 Example (from this directory):
@@ -33,6 +35,7 @@ from scipy.signal import detrend
 from statsmodels.graphics.tsaplots import plot_acf
 
 from system_analysis_utils import (
+    _prepare_xy,
     list_run_dirs,
     load_runs_trajectories,
     phase_portrait_xy,
@@ -101,17 +104,24 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--resource-wsize", type=int, default=2)
     p.add_argument("--metric-wsize", type=int, default=10)
     p.add_argument(
+        "--phase-last-n",
+        type=int,
+        default=40_000,
+        help="Use only the last N steps for phase 2D/3D portraits (default 40000). 0 = full series.",
+    )
+    p.add_argument(
         "--phase-windows",
         nargs="*",
         type=int,
-        default=[1, 100, 200],
-        help="Rolling windows used for phase portraits (notebook: 1, 100, 200).",
+        default=[2, 10],
+        help="Rolling windows used for phase portraits (default: 2, 10).",
     )
     p.add_argument(
         "--phase-y",
         type=str,
-        default="resource_A",
+        default="resource_A_share",
         choices=[
+            "resource_A_share",
             "resource_A",
             "resource_B",
             "resource_C",
@@ -120,7 +130,18 @@ def parse_args() -> argparse.Namespace:
             "social_harm_received",
             "resource_total",
         ],
-        help="Y-axis series for phase portraits (X is always punishment level).",
+        help=(
+            "Y-axis series for phase portraits (X is always punishment level). "
+            "Default resource_A_share = A / total resource encounters."
+        ),
+    )
+    p.add_argument(
+        "--phase-2d",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Write 2D phase portraits (default on). Disable with --no-phase-2d."
+        ),
     )
     p.add_argument(
         "--phase-run-index",
@@ -225,11 +246,11 @@ def plot_resource_trajectories(
     show: bool,
 ) -> None:
     resource_labels = [
-        "Resource A",
-        "Resource B",
-        "Resource C",
-        "Resource D",
-        "Resource E",
+        "A / total",
+        "B / total",
+        "C / total",
+        "D / total",
+        "E / total",
     ]
     resource_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
     resource_keys = [
@@ -246,7 +267,8 @@ def plot_resource_trajectories(
         zip(resource_labels, resource_colors, resource_keys)
     ):
         for count in range(n_runs):
-            series = traj[key][count]
+            total = traj["resource_total"][count].replace(0, np.nan)
+            series = traj[key][count] / total
             axs[i].plot(
                 series[:end].rolling(window=wsize).mean(),
                 label=f"{label}, {condition_tags[count]}",
@@ -255,6 +277,7 @@ def plot_resource_trajectories(
             )
             print(f"{label} / {condition_tags[count]} mean[-2000:]:", series[-2000:end].mean())
         axs[i].set_ylabel(label)
+        axs[i].set_ylim(0, 1)
         axs[i].legend()
 
     axs[-1].set_xlabel("Step")
@@ -321,9 +344,78 @@ def plot_acf_resource_a(
     fig = plt.figure(figsize=(10, 4))
     ax = fig.add_subplot(111)
     plot_acf(signal_d, lags=lags_use, ax=ax)
-    ax.set_title(f"ACF of detrended Resource A (lags={lags_use})")
+    ax.set_title(f"ACF of detrended A / total share (lags={lags_use})")
     fig.tight_layout()
     save_or_show(fig, output_path, show)
+
+
+def _phase_slice_bounds(
+    s: pd.Series,
+    y: pd.Series,
+    t: pd.Series,
+    *,
+    window: int,
+    start: Optional[int],
+    end: Optional[int],
+    step: int,
+) -> Tuple[float, float, float, float, float, float]:
+    s_s = s.rolling(window=window).mean()
+    y_s = y.rolling(window=window).mean()
+    xs, ys, ts = _prepare_xy(s_s, y_s, start=start, end=end, step=step, time=t)
+    return (
+        float(np.nanmin(xs)),
+        float(np.nanmax(xs)),
+        float(np.nanmin(ys)),
+        float(np.nanmax(ys)),
+        float(np.nanmin(ts)),
+        float(np.nanmax(ts)),
+    )
+
+
+def _pad_lim(lo: float, hi: float, pad_frac: float = 0.05) -> Tuple[float, float]:
+    span = hi - lo
+    if not np.isfinite(span) or span <= 0:
+        pad = 0.05 if abs(hi) < 1 else 0.05 * abs(hi)
+        return lo - pad, hi + pad
+    pad = pad_frac * span
+    return lo - pad, hi + pad
+
+
+def compute_shared_phase_limits(
+    traj,
+    run_indices: Sequence[int],
+    y_key: str,
+    windows: Sequence[int],
+    end: Optional[int],
+    step: int,
+    last_n: Optional[int],
+) -> dict:
+    """Union axis ranges across runs (per smooth window) for fair Study1/2 comparison."""
+    shared: dict = {}
+    for w in windows:
+        xs0, xs1, ys0, ys1, ts0, ts1 = [], [], [], [], [], []
+        for idx in run_indices:
+            s = traj["state_punishment_level"][idx]
+            y = traj[y_key][idx]
+            t = traj["steps"][idx]
+            n = int(len(s))
+            start = None
+            end_use = end
+            if last_n is not None and int(last_n) > 0 and n > int(last_n):
+                start = n - int(last_n)
+                end_use = None
+            a0, a1, b0, b1, c0, c1 = _phase_slice_bounds(
+                s, y, t, window=int(w), start=start, end=end_use, step=step
+            )
+            xs0.append(a0); xs1.append(a1)
+            ys0.append(b0); ys1.append(b1)
+            ts0.append(c0); ts1.append(c1)
+        shared[int(w)] = {
+            "xlim": _pad_lim(min(xs0), max(xs1)),
+            "ylim": _pad_lim(min(ys0), max(ys1)),
+            "zlim": _pad_lim(min(ts0), max(ts1)),
+        }
+    return shared
 
 
 def plot_phase_portraits(
@@ -337,12 +429,16 @@ def plot_phase_portraits(
     arrow_every: int,
     output_dir: Path,
     show: bool,
+    make_2d: bool = False,
+    last_n: Optional[int] = 40_000,
+    shared_limits: Optional[dict] = None,
 ) -> None:
     s = traj["state_punishment_level"][run_idx]
     y = traj[y_key][run_idx]
     t = traj["steps"][run_idx]
 
     y_name_map = {
+        "resource_A_share": "x (A / total resources)",
         "resource_A": "resource A encounters",
         "resource_B": "resource B encounters",
         "resource_C": "resource C encounters",
@@ -353,26 +449,49 @@ def plot_phase_portraits(
     }
     y_name = y_name_map.get(y_key, y_key)
 
+    # Prefer last-N window for portraits; fall back to legacy [:end] if last_n off.
+    n = int(len(s))
+    start = None
+    end_use = end
+    last_note = "all steps"
+    if last_n is not None and int(last_n) > 0:
+        ln = int(last_n)
+        if n > ln:
+            start = n - ln
+        end_use = None
+        last_note = f"last {min(n, ln):,} steps"
+
     for w in windows:
         s_smooth = s.rolling(window=w).mean()
         y_smooth = y.rolling(window=w).mean()
         tag = f"{condition_tag.replace(' ', '_')}_w{w}"
+        lims = (shared_limits or {}).get(int(w), {})
+        xlim = lims.get("xlim")
+        ylim = lims.get("ylim")
+        zlim = lims.get("zlim")
 
-        phase_portrait_xy(
-            s_smooth,
-            y_smooth,
-            x_name="punishment strictness s_t",
-            y_name=y_name,
-            title=f"2D phase portrait ({condition_tag}, roll={w})",
-            end=end,
-            step=step,
-            arrows=True,
-            arrow_every=arrow_every,
-            color_by_time=True,
-            connect=True,
-            save_path=str(output_dir / f"phase2d_{tag}.png"),
-            show=show,
-        )
+        if make_2d:
+            phase_portrait_xy(
+                s_smooth,
+                y_smooth,
+                x_name="punishment strictness s_t",
+                y_name=y_name,
+                title=f"2D phase portrait ({condition_tag}, roll={w}; {last_note})",
+                start=start,
+                end=end_use,
+                step=step,
+                arrows=False,
+                arrow_every=arrow_every,
+                color_by_time=True,
+                connect=True,
+                show_points=False,
+                line_width=1.4,
+                line_alpha=0.9,
+                xlim=xlim,
+                ylim=ylim,
+                save_path=str(output_dir / f"phase2d_{tag}.png"),
+                show=show,
+            )
 
         phase_portrait_xyt(
             s_smooth,
@@ -381,15 +500,201 @@ def plot_phase_portraits(
             x_name="punishment strictness s_t",
             y_name=y_name,
             t_name="t (step / episode)",
-            title=f"3D phase portrait ({condition_tag}, roll={w})",
-            end=end,
+            title=f"3D phase portrait ({condition_tag}, roll={w}; {last_note})",
+            start=start,
+            end=end_use,
             step=step,
             arrows=False,
             arrow_every=arrow_every,
             connect=True,
+            show_points=False,
+            line_width=1.4,
+            line_alpha=0.9,
+            xlim=xlim,
+            ylim=ylim,
+            zlim=zlim,
             save_path=str(output_dir / f"phase3d_{tag}.png"),
             show=show,
         )
+
+
+_PHASE_Y_NAMES = {
+    "resource_A_share": "x (A / total resources)",
+    "resource_A": "resource A encounters",
+    "resource_B": "resource B encounters",
+    "resource_C": "resource C encounters",
+    "resource_D": "resource D encounters",
+    "resource_E": "resource E encounters",
+    "social_harm_received": "social harm received",
+    "resource_total": "total resource encounters",
+}
+
+# Discrete level where resource A net value first goes negative
+# (state_system predefined schedule: s=4 "A smaller than 0";
+#  a_value=20, punishment_magnitude=25 → NV_A = 20 - 0.85*25 = -1.25).
+# Logged s_t = prob ∈ [0, 1] with level = round(prob * (num_steps - 1)).
+_A_NET_NEGATIVE_LEVEL = 4
+_NUM_PUNISHMENT_STEPS = 10
+_A_NET_NEGATIVE_S = _A_NET_NEGATIVE_LEVEL / (_NUM_PUNISHMENT_STEPS - 1)  # 4/9 ≈ 0.444
+
+
+def _phase_slice_start_end(
+    n: int, end: Optional[int], last_n: Optional[int]
+) -> Tuple[Optional[int], Optional[int], str]:
+    start = None
+    end_use = end
+    last_note = "all steps"
+    if last_n is not None and int(last_n) > 0:
+        ln = int(last_n)
+        if n > ln:
+            start = n - ln
+        end_use = None
+        last_note = f"last {min(n, ln):,} steps"
+    return start, end_use, last_note
+
+
+def plot_phase_comparison(
+    traj,
+    run_indices: Sequence[int],
+    condition_tags: Sequence[str],
+    y_key: str,
+    windows: Sequence[int],
+    end: Optional[int],
+    step: int,
+    arrow_every: int,
+    output_dir: Path,
+    show: bool,
+    make_2d: bool = True,
+    last_n: Optional[int] = 40_000,
+    shared_limits: Optional[dict] = None,
+) -> None:
+    """Side-by-side Study1 | Study2 phase portraits with shared axis limits."""
+    if len(run_indices) < 2:
+        return
+    # Default: first two selected runs (Study1 vs Study2).
+    pair = list(run_indices[:2])
+    tags = [condition_tags[i] for i in pair]
+    y_name = _PHASE_Y_NAMES.get(y_key, y_key)
+    x_name = "punishment strictness s_t"
+
+    for w in windows:
+        lims = (shared_limits or {}).get(int(w), {})
+        xlim = lims.get("xlim")
+        ylim = lims.get("ylim")
+        zlim = lims.get("zlim")
+        panel_data = []
+        last_notes = []
+        for idx in pair:
+            s = traj["state_punishment_level"][idx]
+            y = traj[y_key][idx]
+            t = traj["steps"][idx]
+            start, end_use, last_note = _phase_slice_start_end(int(len(s)), end, last_n)
+            last_notes.append(last_note)
+            panel_data.append(
+                (
+                    s.rolling(window=w).mean(),
+                    y.rolling(window=w).mean(),
+                    t,
+                    start,
+                    end_use,
+                )
+            )
+        last_note = last_notes[0] if last_notes[0] == last_notes[1] else "last-N window"
+
+        if make_2d:
+            fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+            for i, (ax, (s_sm, y_sm, _t, start, end_use), tag) in enumerate(
+                zip(axes, panel_data, tags)
+            ):
+                phase_portrait_xy(
+                    s_sm,
+                    y_sm,
+                    x_name=x_name,
+                    y_name=y_name,
+                    title=tag.replace("_", " "),
+                    start=start,
+                    end=end_use,
+                    step=step,
+                    arrows=False,
+                    arrow_every=arrow_every,
+                    color_by_time=True,
+                    connect=True,
+                    show_points=False,
+                    line_width=1.4,
+                    line_alpha=0.9,
+                    xlim=xlim,
+                    ylim=ylim,
+                    save_path=None,
+                    show=False,
+                    ax=ax,
+                )
+                # Red line: first level where private net value of A is < 0.
+                ax.axvline(
+                    _A_NET_NEGATIVE_S,
+                    color="red",
+                    linewidth=1.8,
+                    linestyle="--",
+                    zorder=6,
+                    label=(
+                        rf"$NV_A<0$ (level {_A_NET_NEGATIVE_LEVEL}, "
+                        rf"$s={_A_NET_NEGATIVE_S:.3f}$)"
+                        if i == 0
+                        else None
+                    ),
+                )
+            axes[0].legend(loc="upper right", fontsize=8, framealpha=0.9)
+            fig.suptitle(
+                f"2D phase: Study1 vs Study2 (roll={w}; {last_note})",
+                y=1.02,
+            )
+            fig.tight_layout()
+            out = output_dir / f"phase2d_compare_w{w}.png"
+            fig.savefig(out, dpi=150, bbox_inches="tight")
+            if show:
+                plt.show()
+            else:
+                plt.close(fig)
+
+        fig = plt.figure(figsize=(16, 7))
+        for i, ((s_sm, y_sm, t, start, end_use), tag) in enumerate(
+            zip(panel_data, tags)
+        ):
+            ax = fig.add_subplot(1, 2, i + 1, projection="3d")
+            phase_portrait_xyt(
+                s_sm,
+                y_sm,
+                time=t,
+                x_name=x_name,
+                y_name=y_name,
+                t_name="t (step / episode)",
+                title=tag.replace("_", " "),
+                start=start,
+                end=end_use,
+                step=step,
+                arrows=False,
+                arrow_every=arrow_every,
+                connect=True,
+                show_points=False,
+                line_width=1.4,
+                line_alpha=0.9,
+                xlim=xlim,
+                ylim=ylim,
+                zlim=zlim,
+                save_path=None,
+                show=False,
+                ax=ax,
+            )
+        fig.suptitle(
+            f"3D phase: Study1 vs Study2 (roll={w}; {last_note})",
+            y=0.98,
+        )
+        fig.tight_layout()
+        out = output_dir / f"phase3d_compare_w{w}.png"
+        fig.savefig(out, dpi=150, bbox_inches="tight")
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
 
 
 def main() -> None:
@@ -433,7 +738,7 @@ def main() -> None:
 
     if args.acf_lags and args.acf_lags > 0:
         plot_acf_resource_a(
-            traj["resource_A"][0],
+            traj["resource_A_share"][0],
             lags=args.acf_lags,
             output_path=plots_dir / "resource_A_acf.png",
             show=args.show_plots,
@@ -461,6 +766,26 @@ def main() -> None:
                     f"--phase-run-index {idx} out of range "
                     f"for {len(selected)} selected runs"
                 )
+        last_n = (
+            None
+            if args.phase_last_n is None or args.phase_last_n <= 0
+            else int(args.phase_last_n)
+        )
+        shared_limits = compute_shared_phase_limits(
+            traj,
+            phase_indices,
+            y_key=args.phase_y,
+            windows=args.phase_windows,
+            end=args.end,
+            step=args.phase_step,
+            last_n=last_n,
+        )
+        for w, lims in shared_limits.items():
+            print(
+                f"Shared phase limits (roll={w}): "
+                f"s={lims['xlim']}, x={lims['ylim']}, t={lims['zlim']}"
+            )
+        for idx in phase_indices:
             print(f"Phase portraits for [{idx}] {args.condition_tags[idx]}")
             plot_phase_portraits(
                 traj,
@@ -473,6 +798,30 @@ def main() -> None:
                 arrow_every=args.phase_arrow_every,
                 output_dir=plots_dir,
                 show=args.show_plots,
+                make_2d=bool(args.phase_2d),
+                last_n=last_n,
+                shared_limits=shared_limits,
+            )
+        if len(phase_indices) >= 2:
+            print(
+                "Phase comparison panels: "
+                f"{args.condition_tags[phase_indices[0]]} | "
+                f"{args.condition_tags[phase_indices[1]]}"
+            )
+            plot_phase_comparison(
+                traj,
+                run_indices=phase_indices,
+                condition_tags=args.condition_tags,
+                y_key=args.phase_y,
+                windows=args.phase_windows,
+                end=args.end,
+                step=args.phase_step,
+                arrow_every=args.phase_arrow_every,
+                output_dir=plots_dir,
+                show=args.show_plots,
+                make_2d=bool(args.phase_2d),
+                last_n=last_n,
+                shared_limits=shared_limits,
             )
 
     print(f"\nWrote figures under {plots_dir}")

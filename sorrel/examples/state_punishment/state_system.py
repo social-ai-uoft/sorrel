@@ -20,7 +20,7 @@ import random
 #     [0.95, 0.20, 0.15, 0.15, 0.10],  # s = 9
 # ])
 
-# increase the punishment prob for A
+# v1: increase the punishment prob for A
 predefined_punishment_probs = np.array([
     [0.30, 0.00, 0.00, 0.00, 0.00],  # s = 0
     [0.40, 0.05, 0.00, 0.00, 0.00],  # s = 1 (A equal others)
@@ -34,6 +34,19 @@ predefined_punishment_probs = np.array([
     [1.0, 0.20, 0.15, 0.15, 0.10],  # s = 9
 ])
 
+## v2: larger inaccuracy
+# predefined_punishment_probs = np.array([
+#     [0.30, 0.00, 0.00, 0.00, 0.00],  # s = 0
+#     [0.40, 0.1, 0.00, 0.00, 0.00],  # s = 1 (A equal others)
+#     [0.55, 0.15, 0.00, 0.00, 0.00],  # s = 2
+#     [0.70, 0.20, 0.1, 0.00, 0.00],  # s = 3
+#     [0.85, 0.25, 0.15, 0.00, 0.00],  # s = 4 (A smaller than 0)
+#     [0.95, 0.30, 0.20, 0.1, 0.00],  # s = 5
+#     [1.0, 0.35, 0.25, 0.15, 0.00],  # s = 6
+#     [1.0, 0.40, 0.30, 0.20, 0.1],  # s = 7
+#     [1.0, 0.45, 0.35, 0.25, 0.15],  # s = 8
+#     [1.0, 0.50, 0.40, 0.30, 0.2],  # s = 9
+# ])
 # predefined_punishment_probs = np.array([
 #     [0.50, 0.00, 0.00, 0.00, 0.00],  # s = 0
 #     [0.55, 0.05, 0.00, 0.00, 0.00],  # s = 1
