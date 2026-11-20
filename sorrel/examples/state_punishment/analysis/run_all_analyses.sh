@@ -299,7 +299,7 @@ if [[ "$SKIP_REACTIVE" -eq 0 ]]; then
   echo
   echo "==> Reactive-control analysis"
   REACTIVE_CMD=(
-    "$PYTHON" "$SCRIPT_DIR/run_reactive_control_bandit_study2.py"
+    "$PYTHON" "$SCRIPT_DIR/run_reactive_control.py"
     "${COMMON_RUN_ARGS[@]}"
     --output-dir "$REACTIVE_OUT"
   )
